@@ -74,6 +74,15 @@ async function processLead(lead) {
     return { lead_id: lead.id, skipped: 'spam_lint_failed', lint_score: lintResult.score };
   }
 
+  // ANTI-BURST DUPLICATE-CONTENT GUARD: never send the exact same subject+body that already went out
+  // recently. Personalisation should make every draft unique; if two drafts are byte-identical it means
+  // a templating failure, and sending identical mail in volume is the #1 trigger for Gmail spam-foldering.
+  const dupe = pg(`SELECT 1 FROM outreach_drafts WHERE id<>${draft.id} AND draft_subject=${pgEsc(draft.subject)} AND draft_body=${pgEsc(draft.body)} AND send_status='sent' AND sent_at > NOW()-INTERVAL '14 days' LIMIT 1`);
+  if (dupe) {
+    pg(`UPDATE outreach_drafts SET send_status='blocked_duplicate_content' WHERE id=${draft.id}`);
+    return { lead_id: lead.id, skipped: 'duplicate_content_suppressed' };
+  }
+
   // Identity rule: Aman-authored founder pieces (signed "Aman Pareek") MUST send from the
   // aman@ identity for credibility + signature consistency. Detect by signature in the body.
   // Persona-rotated aliases are reserved for high-volume / channel streams (not signed-as-Aman).
@@ -133,14 +142,31 @@ async function run() {
     }
   } catch (_e) {}
   const due = pickDueDrafts();
-  console.log(`Touch scheduler · ${due.length} due drafts · ${new Date().toISOString()}`);
+  // SEND PACING (anti-spam): never burst. Cap the number of real sends per run and space each send
+  // with a randomized human-like gap. GitHub Actions runs this every ~30 min, so a small per-run cap
+  // spreads volume naturally across the day and avoids the rapid-identical-send pattern that lands
+  // mail in spam. All knobs are env-overridable.
+  const MAX_PER_RUN = Math.max(1, Number(process.env.SEND_MAX_PER_RUN || 6));
+  const GAP_MIN_S = Math.max(0, Number(process.env.SEND_GAP_MIN_S || 35));
+  const GAP_MAX_S = Math.max(GAP_MIN_S, Number(process.env.SEND_GAP_MAX_S || 95));
+  const batch = due.slice(0, MAX_PER_RUN);
+  console.log(`Touch scheduler · ${due.length} due · sending up to ${batch.length} this run (cap ${MAX_PER_RUN}, gap ${GAP_MIN_S}-${GAP_MAX_S}s) · ${new Date().toISOString()}`);
   const results = [];
-  for (const lead of due) {
+  let sentThisRun = 0;
+  for (let i = 0; i < batch.length; i++) {
+    const lead = batch[i];
     const r = await processLead(lead);
     results.push(r);
-    console.log(`[${lead.id}] ${lead.company.slice(0,30)} → touch_${r.touch_sent || 'n/a'} ${r.email_id ? 'sent ' + r.email_id : r.skipped || r.error}`);
-    await new Promise(r => setTimeout(r, 1200));
+    console.log(`[${lead.id}] ${lead.company.slice(0,30)} → touch_${r.touch_sent != null ? r.touch_sent : 'n/a'} ${r.email_id ? 'sent ' + r.email_id : r.skipped || r.error}`);
+    if (r.email_id) sentThisRun++;
+    // Randomized gap before the next ACTUAL send (only pace when a real send happened, and never after the last item).
+    if (r.email_id && i < batch.length - 1) {
+      const gapMs = Math.round((GAP_MIN_S + Math.random() * (GAP_MAX_S - GAP_MIN_S)) * 1000);
+      console.log(`  pacing · waiting ${(gapMs / 1000).toFixed(0)}s before next send`);
+      await new Promise(res => setTimeout(res, gapMs));
+    }
   }
+  console.log(`Run complete · real sends: ${sentThisRun} · skipped/blocked: ${results.length - sentThisRun}`);
   return results;
 }
 

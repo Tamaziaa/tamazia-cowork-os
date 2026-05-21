@@ -87,7 +87,9 @@ async function viaMailjet({ to, from, from_name, subject, text, html, messageId 
   const auth = Buffer.from(`${key}:${secret}`).toString('base64');
   const Headers = { 'List-Unsubscribe': listUnsubValue(to, from) };
   if (UNSUB_HTTPS) Headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
-  if (messageId) Headers['Message-ID'] = messageId;
+  // NOTE: Mailjet rejects Message-ID in the Headers collection (send-0011: "Header cannot be
+  // customized using the Headers collection"). Mailjet sets its own Message-ID; reply matching for
+  // Mailjet sends falls back to the returned Mailjet MessageID (relay_email_id) + In-Reply-To/References.
   const r = await fetchWithRetry('https://api.mailjet.com/v3.1/send', {
     method: 'POST', headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ Messages: [{ From: { Email: from, Name: from_name }, To: [{ Email: to }], Subject: subject, TextPart: text, HTMLPart: html || undefined, Headers }] }),
