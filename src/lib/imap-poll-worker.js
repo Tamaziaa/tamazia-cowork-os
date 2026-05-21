@@ -125,6 +125,9 @@ function handleInbound({ mailbox, uid, from_email, to_email, subject, in_reply_t
       pg(`UPDATE email_sequence_state SET next_due_at = NOW() + INTERVAL '7 days', paused_reason='OOO detected', updated_at=NOW() WHERE lead_id=${matched_lead_id}`);
     } else {
       pg(`UPDATE email_sequence_state SET status='replied', paused_reason=${esc(classification)}, updated_at=NOW() WHERE lead_id=${matched_lead_id}`);
+      // mark the lead replied so the cadence stops touching them (belt-and-suspenders with the send gate)
+      pg(`UPDATE leads SET replied=TRUE, last_reply_received_at=NOW(), updated_at=NOW() WHERE id=${matched_lead_id}`);
+      pg(`UPDATE sends SET replied_at=NOW() WHERE lead_id=${matched_lead_id} AND replied_at IS NULL`);
     }
   }
 

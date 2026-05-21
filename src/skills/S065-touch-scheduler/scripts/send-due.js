@@ -21,7 +21,7 @@ function pickDueDrafts() {
   // manually handled. Belt-and-suspenders across BOTH signals: email_sequence_state status and the
   // reply classifier's inbound_emails verdict. This is a legal line (opt-out must be honored), so it
   // is enforced at selection time, not just suppressed downstream.
-  const sql = `SELECT l.id::text, l.company, COALESCE(l.email,'') AS email, l.status, COALESCE(l.next_touch_date::text, '') AS next FROM leads l WHERE l.status LIKE 'touch_%_queued' AND l.email IS NOT NULL AND l.email != '' AND (l.next_touch_date IS NULL OR l.next_touch_date <= CURRENT_DATE) AND COALESCE(l.replied, FALSE) = FALSE AND NOT EXISTS (SELECT 1 FROM email_sequence_state ess WHERE ess.lead_id = l.id AND ess.status IN ('unsubscribed','bounced','manually_handled','opted_out')) AND NOT EXISTS (SELECT 1 FROM inbound_emails ie WHERE ie.matched_lead_id = l.id AND ie.classification IN ('OPT_OUT','BOUNCE','UNSUBSCRIBE')) LIMIT 50`;
+  const sql = `SELECT l.id::text, l.company, COALESCE(l.email,'') AS email, l.status, COALESCE(l.next_touch_date::text, '') AS next FROM leads l WHERE l.status LIKE 'touch_%_queued' AND l.email IS NOT NULL AND l.email != '' AND (l.next_touch_date IS NULL OR l.next_touch_date <= CURRENT_DATE) AND COALESCE(l.replied, FALSE) = FALSE AND NOT EXISTS (SELECT 1 FROM email_sequence_state ess WHERE ess.lead_id = l.id AND ess.status IN ('unsubscribed','bounced','manually_handled','opted_out','replied','completed','nurture_complete')) AND NOT EXISTS (SELECT 1 FROM inbound_emails ie WHERE ie.matched_lead_id = l.id AND ie.classification IN ('OPT_OUT','BOUNCE','UNSUBSCRIBE')) LIMIT 50`;
   const raw = pg(sql);
   if (!raw) return [];
   return raw.split('\n').filter(Boolean).map(l => { const [id, company, email, status, next] = l.split('\t'); return { id: Number(id), company, email, status, next_touch_date: next }; });
@@ -107,6 +107,9 @@ async function processLead(lead) {
   // Persist BOTH the RFC Message-ID we set (matches a reply's In-Reply-To/References for bit-perfect
   // threading) AND the provider's own id. The inbound poller matches replies against either.
   pg(`UPDATE outreach_drafts SET send_status='sent', sent_at=NOW(), draft_metadata = draft_metadata || ${pgEsc(JSON.stringify({ relay_provider: result.provider, relay_email_id: email_id, rfc_message_id: (result.message_id || '').replace(/[<>]/g, ''), from_alias_id: alias.id, from_alias_email: alias.email }))}::jsonb WHERE id=${draft.id}`);
+  // CANONICAL SEND LOG: one source of truth for the dashboard, relay attribution, and reply matching.
+  // The new touch flow previously only updated outreach_drafts, so new sends were invisible in `sends`.
+  pg(`INSERT INTO sends (lead_id, alias_id, recipient, subject, subject_used, message_id, relay_used, relay_name, sent_at, status, delivery_status, touch_number, kind) VALUES (${lead.id}, ${alias.id || 'NULL'}, ${pgEsc(lead.email)}, ${pgEsc(draft.subject)}, ${pgEsc(draft.subject)}, ${pgEsc((result.message_id || '').replace(/[<>]/g, ''))}, ${pgEsc(result.provider)}, ${pgEsc(result.provider)}, NOW(), 'sent', 'sent', ${touch}, 'email')`);
   // Advance lead status + schedule next touch
   if (touch < 3) {
     const days = CADENCE_DAYS[touch + 1] - CADENCE_DAYS[touch];
