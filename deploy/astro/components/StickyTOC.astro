@@ -1,0 +1,35 @@
+---
+interface Section { id: string; label: string; }
+interface Props { sections: Section[]; }
+const { sections } = Astro.props;
+---
+<nav class="sticky-toc" aria-label="Audit table of contents">
+  <ul>
+    {sections.map(s => (<li><a href={`#${s.id}`}>{s.label}</a></li>))}
+  </ul>
+</nav>
+<style>
+  .sticky-toc { position: fixed; top: 0; left: 0; right: 0; z-index: 50; background: rgba(61, 14, 14, 0.95); backdrop-filter: blur(8px); transform: translateY(-100%); transition: transform 240ms ease-out; }
+  .sticky-toc.visible { transform: translateY(0); }
+  .sticky-toc ul { display: flex; gap: 18px; padding: 12px 24px; margin: 0; list-style: none; overflow-x: auto; max-width: 1140px; margin: 0 auto; }
+  .sticky-toc a { color: var(--tamazia-surface); text-decoration: none; font-size: 0.88rem; white-space: nowrap; padding: 4px 0; border-bottom: 2px solid transparent; transition: border-color 200ms; }
+  .sticky-toc a:hover, .sticky-toc a.active { border-bottom-color: var(--tamazia-gold); color: var(--tamazia-gold); }
+</style>
+<script is:inline>
+  (function () {
+    var nav = document.querySelector('.sticky-toc');
+    if (!nav) return;
+    window.addEventListener('scroll', function () { if (window.scrollY > 240) nav.classList.add('visible'); else nav.classList.remove('visible'); }, { passive: true });
+    var sections = document.querySelectorAll('section[id]');
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            nav.querySelectorAll('a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id); });
+          }
+        });
+      }, { threshold: 0.4 });
+      sections.forEach(function (s) { io.observe(s); });
+    }
+  })();
+</script>

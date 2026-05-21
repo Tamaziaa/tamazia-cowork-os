@@ -1,0 +1,16 @@
+{{alias_first_name}} · Tamazia
+
+Aman Pareek
+International Business Lawyer
+Founder, Tamazia
+Tamazia Ltd, C1, Barking Wharf Square, Barking, IG11 7ZQ
+London, United Kingdom
+Company number: {{company_number}} | ICO Registration: {{ico_number}}
+{{eu_rep_line}}
+
+This Regulatory Signal Scan is powered by Tamazia.
+Frameworks are trained on publicly available regulatory sources by AI and reviewed by Aman Pareek, International Business Lawyer.
+Framework version: {{framework_version}} | Last review: {{framework_review_date}}
+This scan identifies publicly visible signals only. It is not legal advice and is not a substitute for review by qualified counsel in your jurisdiction. Recommendations should be confirmed with your legal advisor before action.
+
+Unsubscribe: {{unsubscribe_url}}

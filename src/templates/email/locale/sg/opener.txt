@@ -1,0 +1,3 @@
+{{first_name}}, a quick PECR observation on {{firm}}.
+
+When I reviewed the public pages, the analytics tag fires before cookie consent is accepted. The 2024 ICO sweep treats this as a P0 PECR Reg 6 issue with a measurable rankings impact.

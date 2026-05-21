@@ -1,0 +1,16 @@
+.env
+.env.*
+*.env
+SECRET-KEYS.md
+docs/API-KEYS-REGISTRY.md
+node_modules/
+client_email_files/
+backups/
+logs/
+*.log
+*.pem
+*.key
+uploads/
+.DS_Store
+INFRASTRUCTURE-INVENTORY.md
+confirmations/

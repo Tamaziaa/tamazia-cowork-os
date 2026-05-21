@@ -1,0 +1,20 @@
+---
+interface Props { frameworkVersion: string; }
+const { frameworkVersion } = Astro.props;
+const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+---
+<section id="disclaimer" class="disclaimer">
+  <div class="container">
+    <h2>About this scan</h2>
+    <p>This Regulatory Signal Scan is produced by Tamazia's automated audit engine. It checks public-facing pages against {frameworkVersion ? `framework version ${frameworkVersion}` : 'the current framework version'} of UK and EU compliance rules drawn from regulator publications (ICO, SRA, FCA, CQC, MHRA, GPhC, RICS, Charity Commission, Ofgem, CAA, ORR, Ofcom, ASA, HSE, FSA, CMA, Trading Standards, NCSC).</p>
+    <p>It is not legal advice. It is a structured signal that the website may not satisfy obligations that a regulator could examine in an audit. Tamazia recommends running findings past your compliance officer or external counsel before publishing changes. For Tamazia's regulated jurisdictions: UK, EU member states, USA, UAE.</p>
+    <p class="meta">Generated {dateStr} · Framework v{frameworkVersion || 'current'} · No personal data is collected or stored beyond aggregated engagement metrics with hashed IP.</p>
+  </div>
+</section>
+<style>
+  .disclaimer { padding: 64px 24px; background: var(--tamazia-burgundy); color: rgba(248, 245, 239, 0.85); font-size: 0.92rem; }
+  .container { max-width: 880px; margin: 0 auto; }
+  h2 { font-family: "Editorial New", serif; font-size: 1.8rem; margin: 0 0 20px; color: var(--tamazia-gold); }
+  p { margin: 0 0 14px; line-height: 1.65; }
+  .meta { font-size: 0.82rem; color: rgba(248, 245, 239, 0.55); padding-top: 16px; border-top: 1px solid rgba(200, 166, 100, 0.2); }
+</style>

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Drop-in psql shim using pg8000 under the hood.
+# Allows verification commands written with `psql "$NEON_URL" -tA -c "..."` to work
+# even when libpq / postgresql-client is not installed.
+SHIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec python3 "${SHIM_DIR}/lib/psql-shim.py" "$@"

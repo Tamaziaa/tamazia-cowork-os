@@ -1,0 +1,74 @@
+---
+// InterventionTimeline.astro · 12-week Gantt assembled from pointer.tamazia.timeline_sprint.
+import type { Pointer } from '../types/AuditPayload';
+interface Props { pointers: Pointer[]; }
+const { pointers } = Astro.props;
+
+const SPRINT_ORDER = ['Trust Signals','Compliance Pass','Deliverability','Security Baseline','Core SEO','Architecture','Technical SEO','Tracking & Attribution','Accessibility','Content & Authority'];
+const WEEK_RANGES: Record<string, [number, number]> = {
+  'Trust Signals':           [1, 1],
+  'Compliance Pass':         [1, 2],
+  'Deliverability':          [1, 1],
+  'Security Baseline':       [1, 2],
+  'Core SEO':                [2, 4],
+  'Architecture':            [3, 6],
+  'Technical SEO':           [3, 5],
+  'Tracking & Attribution':  [4, 5],
+  'Accessibility':           [4, 6],
+  'Content & Authority':     [5, 12]
+};
+
+const sprints = SPRINT_ORDER.map(s => {
+  const matches = (pointers || []).filter(p => p.tamazia?.timeline_sprint === s);
+  return { sprint: s, range: WEEK_RANGES[s] || [1, 12], pointers: matches };
+}).filter(s => s.pointers.length > 0);
+---
+<section id="timeline" class="timeline">
+  <div class="container">
+    <h2>Your 12-week intervention timeline</h2>
+    <p class="lede">Assembled from the engine's per-pointer routing. Sprints overlap where Tamazia runs in parallel; the colour bar shows the active weeks per sprint.</p>
+    <div class="gantt">
+      <div class="weeks-header" aria-hidden="true">
+        {Array.from({ length: 12 }, (_, i) => <span class="week">W{i + 1}</span>)}
+      </div>
+      {sprints.map(s => (
+        <div class="row">
+          <div class="row-label">
+            <strong>{s.sprint}</strong>
+            <span class="row-meta">{s.pointers.length} item{s.pointers.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="row-bar">
+            {Array.from({ length: 12 }, (_, i) => {
+              const week = i + 1;
+              const active = week >= s.range[0] && week <= s.range[1];
+              const isStart = week === s.range[0];
+              const isEnd = week === s.range[1];
+              return (<span class={`cell ${active ? 'on' : ''} ${isStart ? 'start' : ''} ${isEnd ? 'end' : ''}`}></span>);
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+<style>
+  .timeline { padding: 96px 24px; background: var(--tamazia-burgundy); color: var(--tamazia-surface); }
+  .container { max-width: 1140px; margin: 0 auto; }
+  h2 { font-family: "Editorial New", serif; font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 12px; color: var(--tamazia-surface); }
+  .lede { font-size: 1.15rem; color: rgba(248, 245, 239, 0.75); margin: 0 0 40px; max-width: 64ch; }
+  .gantt { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 24px; }
+  .weeks-header { display: grid; grid-template-columns: 280px repeat(12, 1fr); gap: 4px; padding-bottom: 12px; border-bottom: 1px solid rgba(200, 166, 100, 0.25); margin-bottom: 16px; }
+  .weeks-header { grid-template-columns: 280px repeat(12, 1fr); }
+  .weeks-header .week { font-size: 0.75rem; color: rgba(200, 166, 100, 0.7); text-align: center; letter-spacing: 0.04em; }
+  .weeks-header span:first-child { grid-column: 1; }
+  .row { display: grid; grid-template-columns: 280px repeat(12, 1fr); gap: 4px; align-items: center; padding: 10px 0; }
+  .row-label { padding-right: 16px; }
+  .row-label strong { display: block; color: var(--tamazia-gold); font-family: "Editorial New", serif; font-size: 1.05rem; }
+  .row-meta { font-size: 0.8rem; color: rgba(248, 245, 239, 0.55); }
+  .row-bar { display: contents; }
+  .cell { height: 22px; border-radius: 3px; background: rgba(248, 245, 239, 0.05); }
+  .cell.on { background: var(--tamazia-gold); }
+  .cell.start { border-top-left-radius: 12px; border-bottom-left-radius: 12px; }
+  .cell.end { border-top-right-radius: 12px; border-bottom-right-radius: 12px; }
+  @media (max-width: 880px) { .weeks-header, .row { grid-template-columns: 1fr; gap: 8px; } .row-bar { display: flex; gap: 4px; } .cell { flex: 1; min-height: 12px; } }
+</style>

@@ -1,0 +1,85 @@
+{
+  "version": "10.0.0",
+  "generated_at": "2026-05-20",
+  "axes_documentation": {
+    "intent": "1=informational, 10=transactional buying-intent",
+    "regulatory_complexity": "1=simple, 10=heavy multi-regulator overlap",
+    "tamazia_fit": "1=marginal, 10=ideal Tamazia delivery",
+    "competitive_density": "1=sparse, 10=overcrowded"
+  },
+  "sectors": {
+    "law-firms": [
+      { "title": "personal injury solicitors", "intent": 9, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 9, "score": 36, "sic_uk": "69109" },
+      { "title": "family law solicitors", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 8, "score": 34, "sic_uk": "69109" },
+      { "title": "commercial litigation lawyers", "intent": 8, "regulatory_complexity": 9, "tamazia_fit": 10, "competitive_density": 7, "score": 34 },
+      { "title": "employment law solicitors", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 8, "score": 34 },
+      { "title": "private client solicitors", "intent": 8, "regulatory_complexity": 8, "tamazia_fit": 10, "competitive_density": 6, "score": 32 },
+      { "title": "wills and probate solicitors", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 8, "score": 34 },
+      { "title": "conveyancing solicitors", "intent": 9, "regulatory_complexity": 7, "tamazia_fit": 8, "competitive_density": 9, "score": 33 },
+      { "title": "immigration solicitors", "intent": 9, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 8, "score": 35 },
+      { "title": "international arbitration counsel", "intent": 7, "regulatory_complexity": 10, "tamazia_fit": 8, "competitive_density": 4, "score": 29, "lexquity_overlay": true },
+      { "title": "construction lawyers", "intent": 8, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 7, "score": 33 },
+      { "title": "medical negligence solicitors", "intent": 9, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 8, "score": 35 },
+      { "title": "criminal defence solicitors", "intent": 9, "regulatory_complexity": 9, "tamazia_fit": 8, "competitive_density": 9, "score": 35 },
+      { "title": "intellectual property lawyers", "intent": 8, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 7, "score": 32 },
+      { "title": "tax lawyers", "intent": 8, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 6, "score": 32 },
+      { "title": "regulatory and compliance lawyers", "intent": 8, "regulatory_complexity": 10, "tamazia_fit": 10, "competitive_density": 5, "score": 33 }
+    ],
+    "barristers": [
+      { "title": "commercial barristers", "intent": 7, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 6, "score": 31 },
+      { "title": "tax barristers", "intent": 7, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 5, "score": 30 },
+      { "title": "family law barristers", "intent": 7, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 7, "score": 31 },
+      { "title": "criminal barristers", "intent": 7, "regulatory_complexity": 9, "tamazia_fit": 8, "competitive_density": 7, "score": 31 },
+      { "title": "international arbitration barristers", "intent": 6, "regulatory_complexity": 10, "tamazia_fit": 9, "competitive_density": 4, "score": 29, "lexquity_overlay": true }
+    ],
+    "accounting": [
+      { "title": "tax accountants", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 9, "score": 35 },
+      { "title": "audit firms", "intent": 7, "regulatory_complexity": 10, "tamazia_fit": 9, "competitive_density": 7, "score": 33 },
+      { "title": "forensic accountants", "intent": 7, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 5, "score": 30 },
+      { "title": "international tax advisers", "intent": 7, "regulatory_complexity": 10, "tamazia_fit": 9, "competitive_density": 5, "score": 31 },
+      { "title": "outsourced finance directors", "intent": 8, "regulatory_complexity": 7, "tamazia_fit": 8, "competitive_density": 7, "score": 30 }
+    ],
+    "healthcare": [
+      { "title": "aesthetic clinics", "intent": 9, "regulatory_complexity": 9, "tamazia_fit": 10, "competitive_density": 9, "score": 37 },
+      { "title": "dermatology clinics", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 8, "score": 34 },
+      { "title": "private GP clinics", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 8, "score": 34 },
+      { "title": "fertility clinics", "intent": 9, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 7, "score": 34 },
+      { "title": "hair transplant clinics", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 8, "score": 34 },
+      { "title": "cosmetic dental practices", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 9, "score": 35 },
+      { "title": "weight loss clinics", "intent": 9, "regulatory_complexity": 10, "tamazia_fit": 10, "competitive_density": 9, "score": 38 },
+      { "title": "mental health clinics", "intent": 8, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 7, "score": 33 },
+      { "title": "private psychiatry", "intent": 8, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 6, "score": 32 },
+      { "title": "private gastroenterology", "intent": 8, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 6, "score": 31 },
+      { "title": "private orthopaedic surgeons", "intent": 8, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 7, "score": 32 },
+      { "title": "regenerative medicine clinics", "intent": 8, "regulatory_complexity": 10, "tamazia_fit": 9, "competitive_density": 6, "score": 33 }
+    ],
+    "real-estate": [
+      { "title": "luxury real estate agents", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 9, "score": 35 },
+      { "title": "build-to-rent operators", "intent": 8, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 6, "score": 31 },
+      { "title": "student accommodation operators (PBSA)", "intent": 8, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 6, "score": 31 },
+      { "title": "off-plan property developers", "intent": 8, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 7, "score": 33 },
+      { "title": "commercial real estate agents", "intent": 8, "regulatory_complexity": 7, "tamazia_fit": 8, "competitive_density": 8, "score": 31 },
+      { "title": "mixed-use developers", "intent": 7, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 6, "score": 31 },
+      { "title": "international property brokers", "intent": 8, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 7, "score": 33 }
+    ],
+    "hospitality": [
+      { "title": "boutique hotels", "intent": 9, "regulatory_complexity": 7, "tamazia_fit": 10, "competitive_density": 8, "score": 34 },
+      { "title": "luxury hotels", "intent": 9, "regulatory_complexity": 7, "tamazia_fit": 10, "competitive_density": 9, "score": 35 },
+      { "title": "resort hotels", "intent": 9, "regulatory_complexity": 7, "tamazia_fit": 9, "competitive_density": 8, "score": 33 },
+      { "title": "private members clubs", "intent": 8, "regulatory_complexity": 7, "tamazia_fit": 9, "competitive_density": 6, "score": 30 },
+      { "title": "heritage hotels", "intent": 8, "regulatory_complexity": 7, "tamazia_fit": 9, "competitive_density": 6, "score": 30 }
+    ],
+    "finance": [
+      { "title": "wealth managers", "intent": 9, "regulatory_complexity": 10, "tamazia_fit": 10, "competitive_density": 9, "score": 38 },
+      { "title": "private banks", "intent": 8, "regulatory_complexity": 10, "tamazia_fit": 9, "competitive_density": 7, "score": 34 },
+      { "title": "fintech founders", "intent": 7, "regulatory_complexity": 10, "tamazia_fit": 9, "competitive_density": 8, "score": 34 },
+      { "title": "investment advisers", "intent": 9, "regulatory_complexity": 10, "tamazia_fit": 9, "competitive_density": 8, "score": 36 },
+      { "title": "pension consultants", "intent": 8, "regulatory_complexity": 10, "tamazia_fit": 9, "competitive_density": 7, "score": 34 }
+    ],
+    "ecommerce": [
+      { "title": "luxury ecommerce brands", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 9, "score": 35 },
+      { "title": "DTC consumer brands", "intent": 9, "regulatory_complexity": 8, "tamazia_fit": 9, "competitive_density": 9, "score": 35 },
+      { "title": "international ecommerce groups", "intent": 8, "regulatory_complexity": 9, "tamazia_fit": 9, "competitive_density": 8, "score": 34 }
+    ]
+  }
+}

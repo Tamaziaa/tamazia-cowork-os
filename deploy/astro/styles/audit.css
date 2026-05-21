@@ -1,0 +1,36 @@
+/* Phase 6.5 audit micro-site v7 · design tokens. */
+:root {
+  --tamazia-burgundy: #3D0E0E;
+  --tamazia-gold:     #C8A664;
+  --tamazia-body:     #1F2937;
+  --tamazia-surface:  #F8F5EF;
+
+  --severity-p0-bg: #3D0E0E; --severity-p0-text: #C8A664;
+  --severity-p1-bg: #C8A664; --severity-p1-text: #3D0E0E;
+  --severity-p2-bg: #1F2937; --severity-p2-text: #F8F5EF;
+
+  --score-good: #2E7D32;
+  --score-warn: #C8A664;
+  --score-bad:  #B91C1C;
+}
+
+body.audit-page {
+  margin: 0; padding: 0;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  color: var(--tamazia-body);
+  background: white;
+  line-height: 1.55;
+}
+
+body.audit-page h1, body.audit-page h2, body.audit-page h3 {
+  font-family: "Editorial New", "Times New Roman", serif;
+  font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.audit-page *, body.audit-page *::before, body.audit-page *::after {
+    animation-duration: 0.001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001s !important;
+  }
+}

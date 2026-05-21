@@ -1,0 +1,74 @@
+---
+// FindingsList.astro · drill-down of every accepted pointer grouped by bucket.
+import type { Pointer, Bucket } from '../types/AuditPayload';
+import { BUCKET_LABELS } from '../types/AuditPayload';
+interface Props { groups: Record<Bucket, Pointer[]>; }
+const { groups } = Astro.props;
+const order: Bucket[] = ['compliance','seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
+const active = order.filter(b => (groups[b] || []).length > 0);
+---
+<section id="findings" class="findings-list">
+  <div class="container">
+    <h2>Every finding, by dimension</h2>
+    <p class="lede">{active.length} active dimensions · {Object.values(groups).flat().length} pointers in total. Click a dimension to expand.</p>
+    {active.map(b => (
+      <details class="bucket-block" open={b === 'compliance'}>
+        <summary>
+          <span class="bucket-name">{BUCKET_LABELS[b]}</span>
+          <span class="bucket-count">{groups[b].length} finding{groups[b].length === 1 ? '' : 's'}</span>
+          <span class="bucket-sev">
+            {groups[b].filter(p => p.severity === 'P0').length > 0 && <span class="dot p0">{groups[b].filter(p => p.severity === 'P0').length} P0</span>}
+            {groups[b].filter(p => p.severity === 'P1').length > 0 && <span class="dot p1">{groups[b].filter(p => p.severity === 'P1').length} P1</span>}
+            {groups[b].filter(p => p.severity === 'P2').length > 0 && <span class="dot p2">{groups[b].filter(p => p.severity === 'P2').length} P2</span>}
+          </span>
+        </summary>
+        <ol class="pointer-list">
+          {groups[b].map(p => (
+            <li class={`pointer sev-${p.severity.toLowerCase()}`}>
+              <div class="pointer-head">
+                <span class={`sev sev-${p.severity.toLowerCase()}`}>{p.severity}</span>
+                {p.citation && <span class="citation">{p.citation}</span>}
+              </div>
+              <p class="fact">{p.fact}</p>
+              <p class="recommendation"><strong>Tamazia fix:</strong> {p.recommendation}</p>
+              <div class="links">
+                {p.evidence_url && <a href={p.evidence_url} target="_blank" rel="noopener" data-track="evidence_click">Evidence ↗</a>}
+                {p.tamazia?.fix_anchor && <a href={p.tamazia.fix_anchor} data-track="tamazia_fix_click">How we fix this →</a>}
+                {p.tamazia?.timeline_sprint && <span class="meta">⏱ {p.tamazia.timeline_weeks} · {p.tamazia.timeline_sprint}</span>}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </details>
+    ))}
+  </div>
+</section>
+<style>
+  .findings-list { padding: 96px 24px; background: white; }
+  .container { max-width: 1140px; margin: 0 auto; }
+  h2 { font-family: "Editorial New", serif; font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 12px; color: var(--tamazia-burgundy); }
+  .lede { font-size: 1.1rem; color: var(--tamazia-body); margin: 0 0 32px; }
+  .bucket-block { background: var(--tamazia-surface); border-radius: 8px; padding: 20px 28px; margin-bottom: 16px; }
+  .bucket-block summary { display: flex; gap: 16px; align-items: center; cursor: pointer; padding: 4px 0; }
+  .bucket-name { font-family: "Editorial New", serif; font-size: 1.4rem; color: var(--tamazia-burgundy); }
+  .bucket-count { color: rgba(31, 41, 55, 0.6); font-size: 0.95rem; }
+  .bucket-sev { margin-left: auto; display: flex; gap: 8px; }
+  .dot { font-size: 0.8rem; padding: 3px 9px; border-radius: 10px; }
+  .dot.p0 { background: var(--severity-p0-bg); color: var(--severity-p0-text); }
+  .dot.p1 { background: var(--severity-p1-bg); color: var(--severity-p1-text); }
+  .dot.p2 { background: var(--severity-p2-bg); color: var(--severity-p2-text); }
+  .pointer-list { list-style: none; padding: 16px 0 0; margin: 0; }
+  .pointer { padding: 16px 0; border-bottom: 1px solid rgba(0,0,0,0.08); }
+  .pointer:last-child { border-bottom: none; }
+  .pointer-head { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+  .sev { padding: 3px 9px; border-radius: 4px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; }
+  .sev.sev-p0 { background: var(--severity-p0-bg); color: var(--severity-p0-text); }
+  .sev.sev-p1 { background: var(--severity-p1-bg); color: var(--severity-p1-text); }
+  .sev.sev-p2 { background: var(--severity-p2-bg); color: var(--severity-p2-text); }
+  .citation { font-family: "Inter", monospace; font-size: 0.8rem; background: rgba(61,14,14,0.08); color: var(--tamazia-burgundy); padding: 3px 8px; border-radius: 4px; }
+  .fact { margin: 0 0 8px; font-size: 0.98rem; line-height: 1.55; }
+  .recommendation { margin: 0 0 8px; font-size: 0.95rem; color: rgba(31, 41, 55, 0.85); line-height: 1.55; }
+  .links { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .links a { font-size: 0.9rem; color: var(--tamazia-burgundy); text-decoration: none; font-weight: 600; }
+  .meta { font-size: 0.85rem; color: rgba(31, 41, 55, 0.65); }
+</style>

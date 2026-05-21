@@ -1,0 +1,50 @@
+---
+// AuditCover.astro · 100vh hero with score + sector + jurisdiction + framework version.
+import type { ScanMeta } from '../types/AuditPayload';
+import { scoreColor } from '../types/AuditPayload';
+interface Props { meta: ScanMeta; company?: string; }
+const { meta, company } = Astro.props;
+const score100 = Math.round((meta.specificity_score || 0) * 100);
+const generatedAt = new Date(meta.generated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+---
+<section id="cover" class="audit-cover">
+  <div class="cover-inner">
+    <p class="eyebrow">Regulatory Signal Scan</p>
+    <h1 class="cover-headline">{company || meta.domain}</h1>
+    <div class="cover-meta">
+      <span>{meta.sector} · {meta.country}</span>
+      <span>·</span>
+      <span>Scanned {generatedAt}</span>
+      <span>·</span>
+      <span>Framework v{meta.framework_version}</span>
+    </div>
+    <div class="cover-score">
+      <div class="score-ring" style={`--score-color:${scoreColor(meta.specificity_score)}`}>
+        <span class="score-number">{score100}</span>
+        <span class="score-suffix">/100</span>
+      </div>
+      <div class="score-meta">
+        <p><strong>{meta.pointer_count_p0}</strong> P0 findings · <strong>{meta.pointer_count_p1}</strong> P1 · <strong>{meta.pointer_count_p2}</strong> P2</p>
+        <p>{meta.buckets_active} of 10 audit dimensions active · {meta.rules_evaluated} compliance rules evaluated</p>
+        <p>Frameworks routed: {meta.frameworks_routed.slice(0, 6).join(' · ')}</p>
+      </div>
+    </div>
+    <a class="cover-cta" href="#top-findings">See the top findings ↓</a>
+  </div>
+</section>
+<style>
+  .audit-cover { background: linear-gradient(140deg, var(--tamazia-burgundy) 0%, #1a0606 100%); color: var(--tamazia-surface); min-height: 92vh; display: grid; place-items: center; padding: 96px 24px; }
+  .cover-inner { max-width: 980px; width: 100%; }
+  .eyebrow { font-family: "Inter", sans-serif; font-size: 0.95rem; color: var(--tamazia-gold); letter-spacing: 0.16em; text-transform: uppercase; margin: 0 0 12px; }
+  .cover-headline { font-family: "Editorial New", serif; font-size: clamp(2.5rem, 6vw, 5.5rem); line-height: 1.05; margin: 0 0 24px; color: var(--tamazia-surface); }
+  .cover-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 1rem; color: rgba(248, 245, 239, 0.7); margin-bottom: 48px; }
+  .cover-score { display: grid; grid-template-columns: auto 1fr; gap: 32px; align-items: center; padding: 28px 0; border-top: 1px solid rgba(200, 166, 100, 0.25); border-bottom: 1px solid rgba(200, 166, 100, 0.25); }
+  .score-ring { width: 160px; height: 160px; border-radius: 50%; border: 6px solid var(--score-color); display: grid; place-items: center; background: rgba(0, 0, 0, 0.2); }
+  .score-number { font-size: 3.5rem; font-weight: 600; color: var(--tamazia-surface); font-family: "Editorial New", serif; }
+  .score-suffix { font-size: 1rem; color: rgba(248, 245, 239, 0.6); }
+  .score-meta p { margin: 6px 0; font-size: 1rem; line-height: 1.5; }
+  .score-meta strong { color: var(--tamazia-gold); }
+  .cover-cta { display: inline-block; margin-top: 40px; padding: 14px 32px; background: var(--tamazia-gold); color: var(--tamazia-burgundy); font-weight: 600; text-decoration: none; border-radius: 4px; transition: transform 200ms; }
+  .cover-cta:hover { transform: translateY(-2px); }
+  @media (max-width: 720px) { .cover-score { grid-template-columns: 1fr; } .score-ring { width: 120px; height: 120px; } .score-number { font-size: 2.5rem; } }
+</style>

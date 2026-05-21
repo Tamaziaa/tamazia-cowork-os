@@ -1,0 +1,69 @@
+{
+  "_meta": {
+    "version": "2026-05-19",
+    "scope": "2026-2027 calendar dates per primary Tamazia target markets",
+    "notes": "Religious holidays (Eid, Diwali, Ramadan) require annual refresh per Phase 13 task. Compose-body checks lead.country before scheduling sends; skips if today is in the country's list."
+  },
+  "UK": [
+    {"date":"2026-01-01","name":"New Year's Day"},
+    {"date":"2026-04-03","name":"Good Friday"},
+    {"date":"2026-04-06","name":"Easter Monday"},
+    {"date":"2026-05-04","name":"Early May Bank Holiday"},
+    {"date":"2026-05-25","name":"Spring Bank Holiday"},
+    {"date":"2026-08-31","name":"Summer Bank Holiday"},
+    {"date":"2026-12-25","name":"Christmas Day"},
+    {"date":"2026-12-28","name":"Boxing Day (in lieu)"},
+    {"date":"2027-01-01","name":"New Year's Day"},
+    {"date":"2027-03-26","name":"Good Friday"}
+  ],
+  "US": [
+    {"date":"2026-01-01","name":"New Year's Day"},
+    {"date":"2026-01-19","name":"Martin Luther King Jr. Day"},
+    {"date":"2026-02-16","name":"Presidents Day"},
+    {"date":"2026-05-25","name":"Memorial Day"},
+    {"date":"2026-06-19","name":"Juneteenth"},
+    {"date":"2026-07-03","name":"Independence Day (observed)"},
+    {"date":"2026-09-07","name":"Labor Day"},
+    {"date":"2026-10-12","name":"Columbus Day"},
+    {"date":"2026-11-11","name":"Veterans Day"},
+    {"date":"2026-11-26","name":"Thanksgiving"},
+    {"date":"2026-12-25","name":"Christmas Day"}
+  ],
+  "UAE": [
+    {"date":"2026-01-01","name":"New Year's Day"},
+    {"date":"2026-03-19","name":"Eid al-Fitr (observed start, ~3 days)"},
+    {"date":"2026-03-20","name":"Eid al-Fitr"},
+    {"date":"2026-05-26","name":"Eid al-Adha (observed, ~3 days)"},
+    {"date":"2026-06-16","name":"Hijri New Year"},
+    {"date":"2026-08-25","name":"Prophet's Birthday"},
+    {"date":"2026-12-02","name":"UAE National Day"},
+    {"date":"2026-12-03","name":"UAE National Day (continued)"},
+    {"_note_ramadan":"2026-02-17 to 2026-03-18 — reduced send frequency window, no early-morning sends"}
+  ],
+  "EU": [
+    {"date":"2026-01-01","name":"New Year's Day (most member states)"},
+    {"date":"2026-04-03","name":"Good Friday (most)"},
+    {"date":"2026-04-06","name":"Easter Monday (most)"},
+    {"date":"2026-05-01","name":"Labour Day (most)"},
+    {"date":"2026-12-25","name":"Christmas Day (all)"},
+    {"date":"2026-12-26","name":"Saint Stephen's Day (most)"}
+  ],
+  "SG": [
+    {"date":"2026-01-01","name":"New Year's Day"},
+    {"date":"2026-02-17","name":"Chinese New Year"},
+    {"date":"2026-02-18","name":"Chinese New Year (day 2)"},
+    {"date":"2026-04-03","name":"Good Friday"},
+    {"date":"2026-05-01","name":"Labour Day"},
+    {"date":"2026-05-31","name":"Vesak Day"},
+    {"date":"2026-08-09","name":"National Day"},
+    {"date":"2026-12-25","name":"Christmas Day"}
+  ],
+  "IN": [
+    {"date":"2026-01-26","name":"Republic Day"},
+    {"date":"2026-03-05","name":"Holi"},
+    {"date":"2026-08-15","name":"Independence Day"},
+    {"date":"2026-10-02","name":"Gandhi Jayanti"},
+    {"date":"2026-11-08","name":"Diwali"},
+    {"date":"2026-12-25","name":"Christmas Day"}
+  ]
+}

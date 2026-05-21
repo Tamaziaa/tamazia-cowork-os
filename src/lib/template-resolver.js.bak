@@ -1,0 +1,275 @@
+// Phase 6.6 · Template placeholder resolver.
+// Reads the 4 finalised touches from template_variants, resolves every {placeholder}
+// against the lead's data + the engine's personalisation pointers + the sector resolver.
+//
+// CLI:
+//   node src/lib/template-resolver.js --lead-id 14 --touch 0
+//   node src/lib/template-resolver.js --lead-id 14 --all   (renders all 4 touches)
+//
+// Used by:
+//   - scripts/pre-send-pipeline.js to materialise per-client emails
+//   - n8n W2 to read the body straight from client_email_files at send time
+
+const path = require('path');
+const fs = require('fs');
+const { execFileSync } = require('child_process');
+
+const ROOT = path.resolve(__dirname, '..', '..');
+function pgPath() { return path.resolve(ROOT, 'scripts', 'psql'); }
+function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return null; try { return execFileSync(pgPath(), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; } }
+function esc(v) { if (v === null || v === undefined) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
+
+const auditBuilder = require('../skills/S025-audit-page-builder/scripts/build.js');
+
+function getTemplate(touch) {
+  const raw = pg(`SELECT id, subject_template, body_template FROM template_variants WHERE touch=${touch} AND variant_letter='A' AND active=TRUE LIMIT 1`);
+  if (!raw) return null;
+  const tabIdx1 = raw.indexOf('\t');
+  const tabIdx2 = raw.indexOf('\t', tabIdx1 + 1);
+  if (tabIdx1 === -1 || tabIdx2 === -1) return null;
+  return { id: Number(raw.slice(0, tabIdx1)), subject: raw.slice(tabIdx1 + 1, tabIdx2), body: raw.slice(tabIdx2 + 1) };
+}
+
+function getLead(leadId) {
+  const sql = `SELECT id, COALESCE(company,''), COALESCE(domain,''), COALESCE(sector,''), COALESCE(jurisdiction,'UK'), COALESCE(contact_first,''), COALESCE(city,''), COALESCE(audit_url,''), personalisation_pointers::text, COALESCE(personalisation_quality_score::text, '') FROM leads WHERE id=${leadId}`;
+  const raw = pg(sql);
+  if (!raw) return null;
+  const parts = raw.split('\t');
+  let pointers = [];
+  try { pointers = parts[8] ? JSON.parse(parts[8]) : []; } catch (_e) {}
+  return {
+    id: Number(parts[0]), company: parts[1], domain: parts[2], sector: parts[3], country: parts[4],
+    contact_first: parts[5] || 'there', city: parts[6] || jurisdictionToCountryName(parts[4]),
+    audit_url: parts[7], pointers, quality_score: parts[9] ? Number(parts[9]) : null
+  };
+}
+
+function getSectorResolver(sector) {
+  const raw = pg(`SELECT sector_niche, laws_summary, compliance_cost_estimate, seo_uplift_estimate, primary_regulator, regulator_consequence FROM sector_template_resolver WHERE sector=${esc(sector || 'professional-services')}`);
+  if (!raw) {
+    // Fall back to professional-services
+    const fb = pg(`SELECT sector_niche, laws_summary, compliance_cost_estimate, seo_uplift_estimate, primary_regulator, regulator_consequence FROM sector_template_resolver WHERE sector='professional-services'`);
+    if (!fb) return null;
+    const [niche, laws, cc, seo, reg, conseq] = fb.split('\t');
+    return { sector_niche: niche, laws_summary: laws, compliance_cost_estimate: cc, seo_uplift_estimate: seo, primary_regulator: reg, regulator_consequence: conseq };
+  }
+  const [niche, laws, cc, seo, reg, conseq] = raw.split('\t');
+  return { sector_niche: niche, laws_summary: laws, compliance_cost_estimate: cc, seo_uplift_estimate: seo, primary_regulator: reg, regulator_consequence: conseq };
+}
+
+function getAliasFirstName(aliasId) {
+  if (!aliasId) return 'Aman';
+  const raw = pg(`SELECT first_name FROM aliases WHERE id=${aliasId}`);
+  return raw || 'Aman';
+}
+
+function jurisdictionToCountryName(j) {
+  const map = { 'UK': 'the UK', 'GB': 'the UK', 'GBR': 'the UK', 'US': 'the US', 'USA': 'the US', 'AE': 'the UAE', 'UAE': 'the UAE', 'DE': 'Germany', 'FR': 'France', 'NL': 'the Netherlands', 'IE': 'Ireland', 'ES': 'Spain', 'IT': 'Italy', 'SE': 'Sweden', 'DK': 'Denmark', 'PL': 'Poland', 'PT': 'Portugal', 'BE': 'Belgium', 'AT': 'Austria' };
+  return map[String(j || '').toUpperCase()] || 'the UK';
+}
+
+function titleCase(s) { return String(s || '').split(/\s+/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '); }
+function capitalise(s) { s = String(s || '').trim(); if (!s) return ''; return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function currentMonthYear() {
+  const d = new Date();
+  return d.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+}
+
+function extractPointerSummary(pointers) {
+  // Top 2 P0 compliance + top 2 P0 SEO + technical_seo + content_depth findings, summarised as a sentence.
+  const compliance = (pointers || []).filter(p => p.bucket === 'compliance' && p.severity === 'P0').slice(0, 2);
+  const seoBuckets = ['seo', 'technical_seo', 'content_depth'];
+  const seo = (pointers || []).filter(p => seoBuckets.includes(p.bucket) && p.severity === 'P0').slice(0, 2);
+  const items = [];
+  for (const c of compliance) items.push(shortenFact(c.fact));
+  for (const s of seo) items.push(shortenFact(s.fact));
+  if (items.length === 0) {
+    const allP0 = (pointers || []).filter(p => p.severity === 'P0').slice(0, 4);
+    for (const p of allP0) items.push(shortenFact(p.fact));
+  }
+  if (items.length === 0) return 'a clean baseline on the visible pages, with a few P1 lifts available on schema markup and meta tags';
+  return items.join('; ');
+}
+// Clean a fact string for email rendering: strip the bare URL, collapse whitespace, cap length.
+function shortenFact(fact) {
+  let s = String(fact || '').replace(/\s+/g, ' ').trim();
+  // Engine output is "{framework} {code} miss on https://domain/path: description."
+  // Drop the URL fragment so emails read cleanly.
+  s = s.replace(/\s+miss on\s+https?:\/\/[^\s:]+\s*:\s*/i, ' miss: ');
+  s = s.replace(/\s+on\s+https?:\/\/[^\s:]+/g, '');
+  if (s.length > 140) s = s.slice(0, 137) + '...';
+  return s;
+}
+
+function topFinding(pointers, bucketFilter) {
+  const filtered = bucketFilter ? (pointers || []).filter(p => bucketFilter.includes(p.bucket)) : (pointers || []);
+  const sorted = filtered.sort((a, b) => sevRank(a.severity) - sevRank(b.severity) || ((b.quality || 0) - (a.quality || 0)));
+  return sorted[0] || null;
+}
+function sevRank(s) { return s === 'P0' ? 0 : s === 'P1' ? 1 : 2; }
+
+function topFiveFindings(pointers) {
+  const sorted = (pointers || []).sort((a, b) => sevRank(a.severity) - sevRank(b.severity) || ((b.quality || 0) - (a.quality || 0)));
+  const out = [];
+  // First 3 P0 then 2 SEO (prefer top from seo/technical_seo/content_depth)
+  for (const p of sorted) {
+    if (p.severity === 'P0' && out.length < 3) out.push(p);
+  }
+  const seoTop = sorted.filter(p => ['seo', 'technical_seo', 'content_depth'].includes(p.bucket) && !out.includes(p));
+  for (const p of seoTop) {
+    if (out.length < 5) out.push(p);
+  }
+  while (out.length < 5) out.push({ fact: 'Additional finding available in the full audit', citation: '', severity: 'P2' });
+  return out;
+}
+
+function resolveAuditUrl(lead) {
+  // Phase 6.6 · always use the clean slug; the old hash+sig URL is migrated
+  const slug = (lead.company || lead.domain || 'firm').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+  return `https://tamazia.co.uk/audit/${slug}-complimentary-audit`;
+}
+
+function pagePathFor(pointers) {
+  const p = topFinding(pointers, ['compliance']);
+  if (!p || !p.evidence_url) return 'the privacy page';
+  try {
+    const pathname = new URL(p.evidence_url).pathname;
+    if (!pathname || pathname === '/') return 'the home page';
+    return `the ${pathname.replace(/^\/|\/$/g, '')} page`;
+  } catch (_e) { return 'the privacy page'; }
+}
+
+function topCompliancetopic(pointers) {
+  const p = topFinding(pointers, ['compliance']);
+  if (!p) return 'data-subject rights disclosure';
+  const c = (p.citation || '').split(/\s+/)[0];
+  const topicMap = {
+    'UK_GDPR_A13': 'the Article 13 transparency disclosure',
+    'UK_PECR': 'the PECR consent mechanism',
+    'UK_ICO_COOKIES': 'the cookie banner reject-all path',
+    'UK_SRA_COC': 'the SRA Transparency price-display',
+    'UK_FCA_CONC25': 'the CONC 2.5 risk warning placement',
+    'UK_FOS_FSCS': 'the FOS / FSCS disclosure',
+    'UK_CQC': 'the CQC registration disclosure',
+    'UK_MHRA': 'the MHRA prescribing information link',
+    'UK_RICS': 'the RICS client-money protection statement',
+    'UK_ARLA': 'the Tenant Fees Act payment transparency',
+    'UK_CHARITY_COMMISSION': 'the registered charity-number disclosure',
+    'UK_OFGEM': 'the Energy Ombudsman escalation route',
+    'UK_OFCOM': 'the broadcasting licence disclosure',
+    'UK_FSA': 'the Food Hygiene Rating disclosure',
+    'UK_CMA': 'the DMCCA pricing transparency'
+  };
+  return topicMap[c] || (p.citation ? `the ${p.citation} disclosure` : 'the headline compliance disclosure');
+}
+
+function topSeoTopic(pointers) {
+  const p = topFinding(pointers, ['seo', 'technical_seo', 'content_depth']);
+  if (!p) return 'on-page schema markup and meta-tag optimisation';
+  const fact = String(p.fact || '').toLowerCase();
+  // Fact-pattern detection
+  if (/no <h1>|missing h1|heading hierarchy/.test(fact)) return 'restoring the missing h1 ranking signal';
+  if (/meta description/.test(fact)) return 'rewriting the meta description for click-through';
+  if (/thin content|word count|less than \d{2,} words/.test(fact)) return 'expanding home-page content to the 1,200-word ranking depth';
+  if (/schema|json-ld|json ld|structured data/.test(fact)) return 'adding Organization and Service schema for AI search citability';
+  if (/page too heavy|core web vitals|lcp|cls|inp/.test(fact)) return 'cutting JS weight to fix Core Web Vitals';
+  if (/alt text|images? missing alt/.test(fact)) return 'adding alt text to lift accessibility and image-search rankings';
+  if (/canonical/.test(fact)) return 'fixing the canonical tag to avoid duplicate-content dilution';
+  if (/sitemap|robots/.test(fact)) return 'publishing a proper XML sitemap so crawlers index every page';
+  if (/internal link/.test(fact)) return 'strengthening the internal link graph for crawl efficiency';
+  if (/redirect chain|long redirect/.test(fact)) return 'collapsing the redirect chain so Google reaches the live page in one hop';
+  if (/e-?e-?a-?t|author byline|credential/.test(fact)) return 'lifting E-E-A-T signals via author bylines and credentials';
+  if (/soft 404|soft-404/.test(fact)) return 'fixing soft-404 patterns that bloat the index';
+  return 'on-page SEO and schema markup';
+}
+
+function compileFindingLine(p) {
+  // Engine facts already begin with the citation when applicable; do not double-prefix.
+  return shortenFact(p && p.fact);
+}
+
+function resolve({ lead_id, touch, alias_id }) {
+  const lead = getLead(lead_id);
+  if (!lead) throw new Error(`lead ${lead_id} not found`);
+  const template = getTemplate(touch);
+  if (!template) throw new Error(`no active template for touch ${touch}`);
+  const resolver = getSectorResolver(lead.sector);
+  const auditUrl = resolveAuditUrl(lead);
+  const alias_first = getAliasFirstName(alias_id);
+
+  const top5 = topFiveFindings(lead.pointers);
+  const tokens = {
+    '{firm}': lead.company || lead.domain,
+    '{first_name}': titleCase(lead.contact_first) || 'there',
+    '{sector_niche}': resolver?.sector_niche || lead.sector || 'regulated firms',
+    '{country}': jurisdictionToCountryName(lead.country),
+    '{city}': lead.city || jurisdictionToCountryName(lead.country),
+    '{month}': currentMonthYear(),
+    '{domain}': lead.domain,
+    '{tamazia_url}': 'https://tamazia.co.uk',
+    '{audit_url}': auditUrl,
+    '{3_sector_specific_laws}': resolver?.laws_summary || 'UK GDPR, EU AI Act and ICO PECR',
+    '{2_compliance_pointers_and_2_seo_pointers_in_summary}': extractPointerSummary(lead.pointers),
+    '{p0_finding_1}': compileFindingLine(top5[0]),
+    '{p0_finding_2}': compileFindingLine(top5[1]),
+    '{p0_finding_3}': compileFindingLine(top5[2]),
+    '{seo_finding_1}': compileFindingLine(top5[3]),
+    '{seo_finding_2}': compileFindingLine(top5[4]),
+    '{top_p0_compliance_topic}': topCompliancetopic(lead.pointers),
+    '{top_p0_compliance_topic_clause}': capitalise(topCompliancetopic(lead.pointers)),
+    '{top_seo_topic}': topSeoTopic(lead.pointers),
+    '{top_seo_topic_clause}': capitalise(topSeoTopic(lead.pointers)),
+    '{compliance_cost_estimate}': resolver?.compliance_cost_estimate || '£25k to £250k in fines',
+    '{seo_uplift_estimate}': resolver?.seo_uplift_estimate || '30-50% of recoverable organic visibility',
+    '{page_path}': pagePathFor(lead.pointers),
+    '{regulator_name}': resolver?.primary_regulator || 'the ICO',
+    '{regulator_consequence}': resolver?.regulator_consequence || 'a regulatory enforcement notice',
+    '{alias_first_name}': alias_first
+  };
+
+  let subject = template.subject;
+  let body = template.body;
+  for (const k of Object.keys(tokens)) {
+    const v = tokens[k];
+    subject = subject.split(k).join(v);
+    body = body.split(k).join(v);
+  }
+  // Trim any leading/trailing whitespace introduced by $body$ blocks
+  body = body.trim();
+  return { lead_id: lead.id, touch, template_id: template.id, subject, body, audit_url: auditUrl, tokens_resolved: Object.keys(tokens).length };
+}
+
+// CLI
+function parseArgs(argv) {
+  const out = { all: false };
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--lead-id') out.lead_id = Number(argv[++i]);
+    else if (argv[i] === '--touch') out.touch = Number(argv[++i]);
+    else if (argv[i] === '--alias-id') out.alias_id = Number(argv[++i]);
+    else if (argv[i] === '--all') out.all = true;
+  }
+  return out;
+}
+
+if (require.main === module) {
+  const opts = parseArgs(process.argv.slice(2));
+  if (!opts.lead_id) { console.error('Usage: template-resolver.js --lead-id N [--touch 0|1|2|3 | --all] [--alias-id N]'); process.exit(2); }
+  if (opts.all) {
+    for (const t of [0, 1, 2, 3]) {
+      const r = resolve({ lead_id: opts.lead_id, touch: t, alias_id: opts.alias_id });
+      console.log(`\n========== TOUCH ${t} ==========`);
+      console.log(`Subject: ${r.subject}\n`);
+      console.log(r.body);
+      console.log(`\n---\n[lead=${r.lead_id} template=${r.template_id} tokens=${r.tokens_resolved} audit=${r.audit_url}]`);
+    }
+  } else {
+    const r = resolve({ lead_id: opts.lead_id, touch: opts.touch || 0, alias_id: opts.alias_id });
+    console.log(`Subject: ${r.subject}\n`);
+    console.log(r.body);
+    console.log(`\n---\n[lead=${r.lead_id} template=${r.template_id} tokens=${r.tokens_resolved}]`);
+  }
+}
+
+module.exports = { resolve, getLead, getSectorResolver, getTemplate };
