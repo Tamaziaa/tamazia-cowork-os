@@ -81,10 +81,15 @@ async function getData() {
     q(`SELECT l.id, l.company, COALESCE(l.website,''), COALESCE(l.sector,''), COALESCE(l.jurisdiction,''), COALESCE(l.scrape_query,'') FROM leads l WHERE l.scrape_stream='organic_top100' AND COALESCE(l.verify_status,'pending')='pending' ORDER BY l.scraped_at DESC NULLS LAST, l.id DESC LIMIT 300`)
   ]);
   const contacted = await count(`SELECT COUNT(DISTINCT lead_id) FROM sends`);
+  // REAL vs TEST: count only genuine prospects so the cockpit tells the truth (test/seed/investor excluded).
+  const realWhere = `COALESCE(acquisition_channel,'') NOT ILIKE '%test%' AND COALESCE(acquisition_channel,'') NOT ILIKE '%seed%' AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal')`;
+  const realLeads = await count(`SELECT COUNT(*) FROM leads WHERE ${realWhere}`);
+  const realSent = await count(`SELECT COUNT(*) FROM sends s JOIN leads l ON l.id=s.lead_id WHERE ${realWhere.replace(/acquisition_channel/g, 'l.acquisition_channel').replace(/lead_type/g, 'l.lead_type')}`);
+  const realReplies = await count(`SELECT COUNT(*) FROM inbound_emails ie JOIN leads l ON l.id=ie.matched_lead_id WHERE ${realWhere.replace(/acquisition_channel/g, 'l.acquisition_channel').replace(/lead_type/g, 'l.lead_type')}`);
   const health = await q(`SELECT check_key, category, status, COALESCE(detail,''), COALESCE(metric::text,''), to_char(checked_at,'MM-DD HH24:MI') FROM system_health ORDER BY CASE status WHEN 'fail' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END, category, check_key`);
   return {
     health,
-    kpi: { total, sent, replies, repliesNew, liPending, igPending, aggReview, organicVerify, qualified, auditsToMint, contacted, bounces },
+    kpi: { total, sent, replies, repliesNew, liPending, igPending, aggReview, organicVerify, qualified, auditsToMint, contacted, bounces, realLeads, realSent, realReplies },
     funnel: [['Sourced', total], ['Qualified', qualified], ['Contacted', contacted], ['Replied', replies]],
     stages, qualityDist, sources, sectors, sendVol, relayUse, aliasHealth, scrapeRuns,
     replyList, pendingLi, pendingIg, recentSent, aggressive, sponsored, organicPending
@@ -242,7 +247,7 @@ function badge(id){if(id==='health'){var f=(D.health||[]).filter(function(r){ret
 function show(id){TABS.forEach(function(t){document.getElementById(t[0]).classList.add('hide')});document.getElementById(id).classList.remove('hide');document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('active',t.dataset.id===id)})}
 function boot(){
   document.getElementById('tabs').innerHTML=TABS.map(function(t){return '<div class="tab'+(t[0]==='today'?' active':'')+'" data-id="'+t[0]+'" onclick="show(\\''+t[0]+'\\')">'+t[1]+badge(t[0])+'</div>'}).join('');
-  document.getElementById('sub').textContent=n(D.kpi.total)+' leads · '+n(D.kpi.sent)+' sent · '+n(D.kpi.replies)+' replies · '+(D.kpi.repliesNew+D.kpi.liPending+D.kpi.igPending+D.kpi.aggReview+D.kpi.organicVerify)+' items need you';
+  document.getElementById('sub').innerHTML='<b>REAL</b> prospects '+n(D.kpi.realLeads)+' · real sent <b>'+n(D.kpi.realSent)+'</b> · real replies '+n(D.kpi.realReplies)+'  <span class=muted>(incl. test: '+n(D.kpi.total)+' leads, '+n(D.kpi.sent)+' sent)</span> · '+(D.kpi.repliesNew+D.kpi.liPending+D.kpi.igPending+D.kpi.aggReview+D.kpi.organicVerify)+' items need you';
   document.getElementById('today').innerHTML=renderToday();
   document.getElementById('health').innerHTML=renderHealth();
   document.getElementById('replies').innerHTML=renderReplies();

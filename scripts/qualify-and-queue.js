@@ -42,7 +42,8 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
     if (q.pass) {
       passed++;
       // If a Touch-0 draft exists, enter the auto-send cadence
-      const hasDraft = pg(`SELECT 1 FROM outreach_drafts WHERE lead_id=${lead.id} AND draft_metadata->>'touch'='0' AND send_status='pending' LIMIT 1`);
+      // B6 gate: never queue a draft that still contains an unfilled token ({firm}, [Decision Maker Name], etc.)
+      const hasDraft = pg(`SELECT 1 FROM outreach_drafts WHERE lead_id=${lead.id} AND draft_metadata->>'touch'='0' AND send_status='pending' AND draft_body !~ '\\{[a-zA-Z_]+\\}' AND draft_body !~ '\\[[A-Za-z ]+\\]' LIMIT 1`);
       if (hasDraft) { pg(`UPDATE leads SET status='touch_0_queued', next_touch_date=CURRENT_DATE WHERE id=${lead.id}`); queued++; }
     } else { failed++; }
     console.log(`  ${lead.domain.padEnd(30)} score=${q.score} ${q.pass ? 'PASS' : 'fail'}${q.fit ? ' [FIT]' : ''}`);
