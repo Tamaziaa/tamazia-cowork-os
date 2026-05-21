@@ -1,0 +1,69 @@
+---
+// ComplianceInventory.astro · table of frameworks routed + rule hits/misses summary.
+import type { Pointer } from '../types/AuditPayload';
+interface Props { pointers: Pointer[]; frameworksRouted: string[]; }
+const { pointers, frameworksRouted } = Astro.props;
+
+// Group pointers by framework_short (first token of citation)
+const byFramework: Record<string, Pointer[]> = {};
+for (const p of pointers || []) {
+  const fw = (p.citation || '').split(/\s+/)[0] || 'OTHER';
+  (byFramework[fw] = byFramework[fw] || []).push(p);
+}
+const REGULATOR: Record<string, string> = {
+  'UK_GDPR_A13': 'ICO', 'UK_PECR': 'ICO', 'UK_ICO_COOKIES': 'ICO', 'EU_GDPR': 'EU DPAs',
+  'UK_SRA_COC': 'SRA', 'UK_BSB': 'BSB', 'UK_ICAEW': 'ICAEW', 'UK_ACCA': 'ACCA', 'UK_FRC': 'FRC', 'UK_HMRC_AML': 'HMRC',
+  'UK_CQC': 'CQC', 'UK_MHRA': 'MHRA', 'UK_GPHC': 'GPhC', 'UK_ABPI': 'PMCPA', 'UK_GDC': 'GDC',
+  'UK_FCA_CONC25': 'FCA', 'UK_PRA': 'PRA', 'UK_PSR': 'PSR', 'UK_FOS_FSCS': 'FCA', 'UK_ABI': 'ABI',
+  'UK_RICS': 'RICS', 'UK_ARLA': 'Propertymark', 'UK_TPO': 'TPOS',
+  'UK_OFSTED': 'Ofsted', 'UK_DFE': 'DfE', 'UK_OFS': 'OfS',
+  'UK_CHARITY_COMMISSION': 'Charity Commission', 'UK_FUNDRAISING_REG': 'Fundraising Regulator', 'UK_HMRC_GIFTAID': 'HMRC',
+  'UK_OFGEM': 'Ofgem', 'UK_CAA': 'CAA', 'UK_ORR': 'ORR', 'UK_DVSA': 'DVSA',
+  'UK_OFCOM': 'Ofcom', 'UK_ASA_CAP': 'ASA', 'UK_IPSO': 'IPSO',
+  'UK_HSE': 'HSE', 'UK_UKCA': 'OPSS', 'UK_ENV_AGENCY': 'Environment Agency', 'UK_FSA': 'FSA',
+  'UK_LICENSING_ACT': 'Licensing Authority', 'UK_CMA': 'CMA', 'UK_TRADING_STANDARDS': 'Trading Standards',
+  'UK_NCSC_CYBER_ESSENTIALS': 'NCSC', 'UK_DSIT_NIS2': 'DSIT', 'US_FTC': 'FTC'
+};
+---
+<section id="compliance" class="compliance-inventory">
+  <div class="container">
+    <h2>Regulatory compliance inventory</h2>
+    <p class="lede">Frameworks routed for your sector and jurisdiction. Each row shows how many rules the engine evaluated and how many your site missed.</p>
+    <div class="frameworks">
+      <p><strong>Routed:</strong> {frameworksRouted.join(' · ')}</p>
+    </div>
+    <table>
+      <thead><tr><th>Framework</th><th>Regulator</th><th class="num">Misses found</th><th class="num">P0</th><th class="num">P1</th><th class="num">P2</th></tr></thead>
+      <tbody>
+        {Object.keys(byFramework).sort().map(fw => {
+          const list = byFramework[fw];
+          return (
+            <tr>
+              <td><code>{fw}</code></td>
+              <td>{REGULATOR[fw] || '—'}</td>
+              <td class="num">{list.length}</td>
+              <td class="num p0">{list.filter(p => p.severity === 'P0').length}</td>
+              <td class="num p1">{list.filter(p => p.severity === 'P1').length}</td>
+              <td class="num p2">{list.filter(p => p.severity === 'P2').length}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+</section>
+<style>
+  .compliance-inventory { padding: 96px 24px; background: white; }
+  .container { max-width: 1140px; margin: 0 auto; }
+  h2 { font-family: "Editorial New", serif; font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 12px; color: var(--tamazia-burgundy); }
+  .lede { font-size: 1.1rem; color: var(--tamazia-body); margin: 0 0 24px; max-width: 64ch; }
+  .frameworks { background: var(--tamazia-surface); padding: 14px 18px; border-radius: 6px; margin-bottom: 32px; font-family: "Inter", monospace; font-size: 0.92rem; }
+  table { width: 100%; border-collapse: collapse; font-family: "Inter", sans-serif; }
+  th, td { padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08); text-align: left; }
+  th { background: var(--tamazia-burgundy); color: var(--tamazia-surface); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code { background: rgba(61,14,14,0.08); color: var(--tamazia-burgundy); padding: 2px 6px; border-radius: 3px; font-family: "Inter", monospace; font-size: 0.85rem; }
+  td.p0 { color: #B91C1C; font-weight: 700; }
+  td.p1 { color: var(--tamazia-gold); font-weight: 600; }
+  td.p2 { color: rgba(31, 41, 55, 0.55); }
+</style>

@@ -1,0 +1,71 @@
+{
+  "em_dashes": ["—", "–", " -- "],
+  "openers_must_not_start_with": [
+    "i hope this",
+    "i hope you",
+    "hope this finds you",
+    "i'm reaching out",
+    "i am reaching out",
+    "i wanted to",
+    "i'm writing to",
+    "i am writing to",
+    "my name is",
+    "dear sir or madam",
+    "to whom it may concern",
+    "i trust this email finds",
+    "just checking in",
+    "following up on",
+    "touching base",
+    "circling back",
+    "quick question",
+    "quick chat"
+  ],
+  "body_phrases": [
+    "synergy",
+    "synergies",
+    "game changer",
+    "game-changer",
+    "revolutionary",
+    "revolutionize",
+    "revolutionise",
+    "disrupt",
+    "disrupting",
+    "thought leader",
+    "best in class",
+    "world class",
+    "world-class",
+    "industry leading",
+    "state of the art",
+    "cutting edge",
+    "guarantee",
+    "guaranteed results",
+    "100% success",
+    "i'd love to",
+    "i would love to"
+  ],
+  "subject_blockers": [
+    "free",
+    "guarantee",
+    "!!",
+    "$",
+    "£"
+  ],
+  "url_shorteners": [
+    "bit.ly",
+    "ow.ly",
+    "tinyurl.com",
+    "t.co",
+    "is.gd"
+  ],
+  "gated_clients": [
+    "burberry",
+    "marriott",
+    "hilton",
+    "nhs",
+    "deloitte",
+    "pwc",
+    "kpmg",
+    "ernst & young",
+    "mckinsey"
+  ]
+}

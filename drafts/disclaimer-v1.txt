@@ -1,0 +1,4 @@
+This Regulatory Signal Scan is powered by Tamazia.
+Frameworks are trained on publicly available regulatory sources by AI and reviewed by Aman Pareek, International Business Lawyer.
+Framework version: {version} | Last review: {date}
+This scan identifies publicly visible signals only. It is not legal advice and is not a substitute for review by qualified counsel in your jurisdiction. Recommendations should be confirmed with your legal advisor before action.

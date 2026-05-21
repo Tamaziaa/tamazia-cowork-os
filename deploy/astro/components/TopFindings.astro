@@ -1,0 +1,67 @@
+---
+// TopFindings.astro · the 3 P0 cards that hook the reader above the fold.
+import type { Pointer } from '../types/AuditPayload';
+import { BUCKET_LABELS } from '../types/AuditPayload';
+interface Props { pointers: Pointer[]; }
+const { pointers } = Astro.props;
+const top = (pointers || []).slice(0, 3);
+---
+<section id="top-findings" class="top-findings">
+  <div class="container">
+    <h2>The three things to fix first</h2>
+    <p class="lede">Surfaced by the engine, ranked by regulatory and SEO exposure. Each maps to a concrete intervention in the timeline below.</p>
+    <div class="cards">
+      {top.length === 0 && (
+        <p class="empty">No P0 findings detected on this scan. Your top 3 from P1/P2 are listed in the full findings section.</p>
+      )}
+      {top.map((p, i) => (
+        <article class="card">
+          <header>
+            <span class="sev p0">{p.severity}</span>
+            <span class="bucket">{BUCKET_LABELS[p.bucket] || p.bucket}</span>
+          </header>
+          <h3>{p.fact}</h3>
+          <p class="recommendation"><strong>Fix:</strong> {p.recommendation}</p>
+          <footer>
+            {p.citation && <span class="citation">{p.citation}</span>}
+            {p.evidence_url && <a href={p.evidence_url} target="_blank" rel="noopener" class="evidence" data-track="evidence_click">Evidence ↗</a>}
+            {p.tamazia?.fix_anchor && (
+              <a href={p.tamazia.fix_anchor} class="fix-link" data-track="tamazia_fix_click">How Tamazia fixes this →</a>
+            )}
+          </footer>
+          {p.tamazia && (
+            <div class="meta-row">
+              <span class="pill timeline">⏱ {p.tamazia.timeline_weeks} · {p.tamazia.timeline_sprint}</span>
+              <span class="pill tier">£{p.tamazia.tier_price_gbp.toLocaleString('en-GB')} · {p.tamazia.tier}</span>
+            </div>
+          )}
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+<style>
+  .top-findings { padding: 96px 24px; background: var(--tamazia-burgundy); color: var(--tamazia-surface); }
+  .container { max-width: 1140px; margin: 0 auto; }
+  .top-findings h2 { font-family: "Editorial New", serif; font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 12px; color: var(--tamazia-surface); }
+  .lede { font-size: 1.15rem; color: rgba(248, 245, 239, 0.75); margin: 0 0 48px; max-width: 64ch; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+  .card { background: var(--tamazia-surface); color: var(--tamazia-body); border-radius: 8px; padding: 28px; display: flex; flex-direction: column; transition: transform 200ms; }
+  .card:hover { transform: translateY(-4px); }
+  .card header { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+  .sev { padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.04em; }
+  .sev.p0 { background: var(--severity-p0-bg); color: var(--severity-p0-text); }
+  .bucket { font-size: 0.85rem; color: rgba(31, 41, 55, 0.7); letter-spacing: 0.06em; text-transform: uppercase; }
+  .card h3 { font-family: "Editorial New", serif; font-size: 1.25rem; line-height: 1.4; margin: 0 0 16px; }
+  .recommendation { font-size: 0.95rem; line-height: 1.55; margin: 0 0 20px; flex-grow: 1; }
+  .card footer { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid rgba(0, 0, 0, 0.08); }
+  .citation { font-family: "Inter", monospace; font-size: 0.8rem; color: var(--tamazia-burgundy); background: rgba(61, 14, 14, 0.08); padding: 3px 8px; border-radius: 4px; }
+  .evidence, .fix-link { font-size: 0.9rem; text-decoration: none; }
+  .evidence { color: var(--tamazia-body); }
+  .fix-link { color: var(--tamazia-burgundy); font-weight: 600; margin-left: auto; }
+  .meta-row { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 12px; }
+  .pill { font-size: 0.8rem; padding: 4px 10px; border-radius: 12px; }
+  .pill.timeline { background: rgba(61, 14, 14, 0.08); color: var(--tamazia-burgundy); }
+  .pill.tier { background: var(--tamazia-gold); color: var(--tamazia-burgundy); font-weight: 600; }
+  .empty { padding: 32px; background: rgba(248, 245, 239, 0.05); border-radius: 8px; }
+</style>

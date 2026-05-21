@@ -1,0 +1,502 @@
+// tamazia-audit-worker.js · v8 (Phase 6.9)
+// Cloudflare Worker · audit.tamazia.co.uk/audit/<slug>-complimentary-audit
+//
+// Design brief (Aman 2026-05-20):
+//   - Compact. Visible at a glance. No P0/P1 jargon, use red/amber/green.
+//   - Lawyer-grade language. Cite the actual regulation section, the actual regulator.
+//   - Batch breaches by framework. One Tamazia fix line per breach.
+//   - Real Tamazia pricing: Foundation £2,500 · Authority £4,500 · Enterprise £9,500.
+//   - Real 4-week sprint structure: Technical · Compliance · Off-Page · GBP+Content.
+//   - Book URL: https://tamazia.co.uk/book/
+
+const AUDITS = __AUDIT_DATA__;
+
+const BUCKET_LABELS = {
+  compliance: 'Regulatory compliance',
+  seo: 'On-page SEO',
+  technical_seo: 'Technical SEO',
+  content_depth: 'Content + E-E-A-T authority',
+  security: 'Security headers',
+  accessibility: 'Accessibility (WCAG)',
+  tls_dns: 'Email + DNS hygiene',
+  website: 'Website architecture',
+  public_records: 'Public records + trust signals',
+  ad_intel: 'Tracking + analytics'
+};
+
+// Map raw severity → human label, colour, weight (descending)
+const SEV_META = {
+  P0: { label: 'Critical', color: '#B91C1C', weight: 3 },
+  P1: { label: 'High',     color: '#C8A664', weight: 2 },
+  P2: { label: 'Standard', color: '#2E7D32', weight: 1 }
+};
+
+// Framework display map: code → { name, regulator, citation_root }
+const FRAMEWORK_META = {
+  'UK_GDPR_A13':           { name: 'UK GDPR Article 13',                      regulator: 'ICO',                 root: 'https://ico.org.uk/' },
+  'UK_PECR':               { name: 'PECR · Privacy & Electronic Communications', regulator: 'ICO',              root: 'https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/' },
+  'UK_ICO_COOKIES':        { name: 'ICO Cookies Guidance',                    regulator: 'ICO',                 root: 'https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/' },
+  'EU_GDPR':               { name: 'EU GDPR · Regulation (EU) 2016/679',     regulator: 'EU Supervisory Authorities', root: 'https://gdpr-info.eu/' },
+  'UK_DPA_2018':           { name: 'Data Protection Act 2018',                 regulator: 'ICO',                 root: 'https://www.legislation.gov.uk/ukpga/2018/12/' },
+  'EU_EPRIVACY':           { name: 'ePrivacy Regulation (proposed)',          regulator: 'EU + national DPAs',  root: 'https://eur-lex.europa.eu/' },
+  'EU_AI_ACT':             { name: 'EU AI Act',                               regulator: 'EU AI Office',        root: 'https://artificialintelligenceact.eu/' },
+  'US_CCPA':               { name: 'California CCPA/CPRA',                    regulator: 'California Privacy Protection Agency', root: 'https://cppa.ca.gov/' },
+  'UK_SRA_COC':            { name: 'SRA Code of Conduct + Transparency Rules', regulator: 'SRA',                root: 'https://www.sra.org.uk/solicitors/standards-regulations/' },
+  'UK_BSB':                { name: 'BSB Handbook',                            regulator: 'BSB',                 root: 'https://www.barstandardsboard.org.uk/' },
+  'UK_FCA_CONC25':         { name: 'FCA CONC 2.5 + Consumer Duty',             regulator: 'FCA',                 root: 'https://www.handbook.fca.org.uk/handbook/CONC/2/5.html' },
+  'UK_FCA_MAR':            { name: 'FCA MAR',                                  regulator: 'FCA',                 root: 'https://www.handbook.fca.org.uk/handbook/MAR.pdf' },
+  'UK_PRA':                { name: 'PRA Rulebook',                             regulator: 'PRA',                 root: 'https://www.bankofengland.co.uk/prudential-regulation' },
+  'UK_FOS_FSCS':           { name: 'FOS + FSCS Disclosure',                    regulator: 'FCA',                 root: 'https://www.financial-ombudsman.org.uk/' },
+  'UK_PSR':                { name: 'Payment Systems Regulator',                regulator: 'PSR',                 root: 'https://www.psr.org.uk/' },
+  'UK_ABI':                { name: 'ABI Code of Practice',                     regulator: 'ABI',                 root: 'https://www.abi.org.uk/' },
+  'UK_CQC':                { name: 'CQC Fundamental Standards',                regulator: 'CQC',                 root: 'https://www.cqc.org.uk/' },
+  'UK_MHRA':               { name: 'MHRA Human Medicines Regs 2012',           regulator: 'MHRA',                root: 'https://www.gov.uk/government/organisations/medicines-and-healthcare-products-regulatory-agency' },
+  'UK_GPHC':               { name: 'GPhC Standards',                            regulator: 'GPhC',                root: 'https://www.pharmacyregulation.org/' },
+  'UK_ABPI':               { name: 'ABPI Code · PMCPA',                         regulator: 'PMCPA',               root: 'https://www.pmcpa.org.uk/' },
+  'UK_GDC':                { name: 'GDC Standards',                             regulator: 'GDC',                 root: 'https://www.gdc-uk.org/' },
+  'UK_RICS':               { name: 'RICS Rules of Conduct',                     regulator: 'RICS',                root: 'https://www.rics.org/' },
+  'UK_ARLA':               { name: 'ARLA Propertymark / Tenant Fees Act 2019', regulator: 'Propertymark',        root: 'https://www.propertymark.co.uk/' },
+  'UK_TPO':                { name: 'The Property Ombudsman',                    regulator: 'TPO',                 root: 'https://www.tpos.co.uk/' },
+  'UK_OFSTED':             { name: 'Ofsted Inspection Framework',               regulator: 'Ofsted',              root: 'https://www.gov.uk/government/organisations/ofsted' },
+  'UK_DFE':                { name: 'DfE statutory guidance',                    regulator: 'DfE',                 root: 'https://www.gov.uk/government/organisations/department-for-education' },
+  'UK_OFS':                { name: 'Office for Students',                       regulator: 'OfS',                 root: 'https://www.officeforstudents.org.uk/' },
+  'UK_CHARITY_COMMISSION': { name: 'Charity Commission',                        regulator: 'Charity Commission',  root: 'https://www.gov.uk/government/organisations/charity-commission' },
+  'UK_FUNDRAISING_REG':    { name: 'Fundraising Regulator',                     regulator: 'Fundraising Regulator', root: 'https://www.fundraisingregulator.org.uk/' },
+  'UK_HMRC_GIFTAID':       { name: 'HMRC Gift Aid',                             regulator: 'HMRC',                root: 'https://www.gov.uk/donating-to-charity/gift-aid' },
+  'UK_OFGEM':              { name: 'Ofgem Standards of Conduct',                regulator: 'Ofgem',               root: 'https://www.ofgem.gov.uk/' },
+  'UK_CAA':                { name: 'Civil Aviation Authority',                  regulator: 'CAA',                 root: 'https://www.caa.co.uk/' },
+  'UK_ORR':                { name: 'Office of Rail and Road',                   regulator: 'ORR',                 root: 'https://www.orr.gov.uk/' },
+  'UK_DVSA':               { name: 'Driver and Vehicle Standards Agency',       regulator: 'DVSA',                root: 'https://www.gov.uk/dvsa' },
+  'UK_OFCOM':              { name: 'Ofcom Broadcasting Code',                   regulator: 'Ofcom',               root: 'https://www.ofcom.org.uk/' },
+  'UK_ASA_CAP':            { name: 'ASA / CAP Code',                            regulator: 'ASA',                 root: 'https://www.asa.org.uk/' },
+  'UK_IPSO':               { name: 'IPSO Editors Code',                         regulator: 'IPSO',                root: 'https://www.ipso.co.uk/' },
+  'UK_HSE':                { name: 'Health and Safety Executive',               regulator: 'HSE',                 root: 'https://www.hse.gov.uk/' },
+  'UK_UKCA':               { name: 'UKCA Conformity Marking',                   regulator: 'OPSS',                root: 'https://www.gov.uk/guidance/using-the-ukca-marking' },
+  'UK_ENV_AGENCY':         { name: 'Environment Agency Permits',                regulator: 'Environment Agency',  root: 'https://www.gov.uk/government/organisations/environment-agency' },
+  'UK_FSA':                { name: 'Food Standards Agency',                     regulator: 'FSA',                 root: 'https://www.food.gov.uk/' },
+  'UK_LICENSING_ACT':      { name: 'Licensing Act 2003',                         regulator: 'Licensing Authority', root: 'https://www.gov.uk/guidance/licensing-act-2003-explanatory-notes' },
+  'UK_CMA':                { name: 'CMA · DMCC Act 2024',                       regulator: 'CMA',                 root: 'https://www.gov.uk/government/organisations/competition-and-markets-authority' },
+  'UK_TRADING_STANDARDS':  { name: 'Trading Standards · CTSI',                  regulator: 'Trading Standards',   root: 'https://www.tradingstandards.uk/' },
+  'UK_NCSC_CYBER_ESSENTIALS': { name: 'NCSC Cyber Essentials',                  regulator: 'NCSC',                root: 'https://www.ncsc.gov.uk/cyberessentials/' },
+  'UK_DSIT_NIS2':          { name: 'NIS Regulations',                            regulator: 'DSIT',                root: 'https://www.gov.uk/government/publications/nis-regulations' },
+  'US_FTC':                { name: 'FTC Act Section 5',                          regulator: 'FTC',                 root: 'https://www.ftc.gov/' },
+  'US_SEC_REG_FD':         { name: 'SEC Regulation FD',                          regulator: 'SEC',                 root: 'https://www.sec.gov/' },
+  'US_HIPAA':              { name: 'HIPAA Privacy Rule (45 CFR 164)',           regulator: 'HHS OCR',             root: 'https://www.hhs.gov/hipaa/' },
+  'US_ADA':                { name: 'ADA Title III Digital Accessibility',       regulator: 'DOJ',                 root: 'https://www.ada.gov/' },
+  'UAE_PDPL':              { name: 'UAE Federal Decree-Law No. 45 of 2021',     regulator: 'UAE Data Office',     root: 'https://u.ae/' },
+  'UAE_RERA':              { name: 'RERA Law No. 7 of 2013 · Trakheesi',        regulator: 'RERA Dubai',          root: 'https://dubailand.gov.ae/' },
+  'GOOGLE_EEAT':           { name: 'Google E-E-A-T Quality Rater Guidelines',   regulator: 'Google Search',       root: 'https://developers.google.com/search/docs/fundamentals/creating-helpful-content' }
+};
+
+// Tamazia fix one-liners per finding pattern.
+const TAMAZIA_FIX_LIBRARY = {
+  // SEO
+  'missing_h1':            'Tamazia injects a single keyword-targeted H1 in week 1, restores heading hierarchy across the site.',
+  'heading_hierarchy_broken': 'Tamazia restructures the heading hierarchy site-wide so H1 → H2 → H3 reads cleanly for crawlers and assistive tech.',
+  'missing_canonical':     'Tamazia adds self-referential canonicals on every indexable page, preventing duplicate-content dilution.',
+  'thin_content':          'Tamazia commissions sector-aligned content built to the 1,200-word ranking depth, reviewed by counsel before publication.',
+  'missing_description':   'Tamazia writes 150-160 character meta descriptions with the primary keyword and a CTA for every commercial page.',
+  'long_description':      'Tamazia trims the meta description to under 160 characters so the SERP snippet does not truncate.',
+  'short_title':           'Tamazia extends the title tag to 55-60 characters with the primary keyword leading.',
+  'long_title':            'Tamazia trims the title tag under 65 characters so it renders fully in SERPs.',
+  'missing_schema':        'Tamazia ships Organization, Service and where applicable LocalBusiness JSON-LD to lift AI-search citability across ChatGPT, Claude, Gemini and Perplexity.',
+  'no_org_schema':         'Tamazia ships Organization + Service JSON-LD on every commercial page so AI engines can cite the brand directly.',
+  'images_missing_alt':    'Tamazia adds descriptive alt text site-wide, lifting accessibility and image-search rankings simultaneously.',
+  'missing_viewport':      'Tamazia ships the responsive viewport tag so mobile-first indexing works.',
+  'missing_sitemap':       'Tamazia generates an XML sitemap covering every indexable URL and submits to Search Console + Bing Webmaster.',
+  'missing_robots':        'Tamazia publishes a /robots.txt referencing the sitemap so crawlers find every page.',
+  'soft_404':              'Tamazia configures the edge to return real 404 status for unknown paths, stopping index bloat.',
+  // Technical SEO
+  'long_redirect_chain':   'Tamazia collapses the redirect chain to a single 301 so Google reaches the live page in one hop.',
+  'no_security_txt':       'Tamazia publishes /.well-known/security.txt per RFC 9116 to document the vulnerability-disclosure route.',
+  'mixed_content':         'Tamazia rewrites every http:// reference to https:// or protocol-relative form so browsers do not block resources.',
+  'no_resource_hints':     'Tamazia adds preconnect and preload hints for fonts and the LCP image so perceived load improves materially.',
+  'missing_hreflang_x_default': 'Tamazia adds hreflang x-default so non-mapped locales land on the right page.',
+  // Content
+  'no_eeat_markers':       'Tamazia lifts E-E-A-T signals: author bylines with credentials, named-expert authorship, citation to regulator and statute.',
+  'stale_copyright':       'Tamazia auto-renders the copyright year via template so the footer never drifts.',
+  'generic_anchor_text':   'Tamazia rewrites generic anchors ("click here", "read more") to describe the link target so both SEO and accessibility improve.',
+  'few_authoritative_citations': 'Tamazia cites the regulator, the statute and the official guidance on every published piece, lifting topical authority.',
+  'reading_grade_too_high': 'Tamazia simplifies the content to grade 10-12 readability while keeping technical depth on sub-pages.',
+  'faq_content_without_schema': 'Tamazia wraps Q&A blocks in FAQPage JSON-LD so Google can surface them as rich results.',
+  // Security
+  'missing_strict_transport_security': 'Tamazia configures HSTS at the edge with max-age=31536000 and includeSubDomains.',
+  'missing_content_security_policy':   'Tamazia publishes a Content-Security-Policy starting from default-src \\u0027self\\u0027, blocking injected scripts.',
+  'missing_x_frame_options':           'Tamazia sets X-Frame-Options: DENY or CSP frame-ancestors to stop clickjacking.',
+  'missing_x_content_type_options':    'Tamazia sets X-Content-Type-Options: nosniff so browsers cannot mis-classify scripts.',
+  'missing_referrer_policy':           'Tamazia sets Referrer-Policy: strict-origin-when-cross-origin so referrer leaks stop.',
+  // TLS/DNS
+  'missing_spf':           'Tamazia publishes a TXT SPF record matching every sending platform and ending with -all.',
+  'missing_dmarc':         'Tamazia publishes DMARC at p=quarantine, monitors rua reports, then moves to p=reject.',
+  'dmarc_p_none':          'Tamazia tightens DMARC to p=quarantine for 30 days then p=reject once aligned.',
+  'dnssec_unsigned':       'Tamazia enables DNSSEC at the registrar so DNS responses cannot be spoofed.',
+  'no_ipv6':               'Tamazia turns on IPv6 at the edge provider so ~45% of Google traffic reaches the site over modern transport.',
+  // Compliance generic
+  '_compliance_default':   'Tamazia drafts the required disclosure under the founder\\u2019s LLM-trained review and publishes within seven days.',
+};
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function fixFor(p) {
+  const id = (p.id || p.code || '').toLowerCase();
+  if (id && TAMAZIA_FIX_LIBRARY[id]) return TAMAZIA_FIX_LIBRARY[id];
+  // Fall back: look up by fact-pattern
+  const fact = String(p.fact || '').toLowerCase();
+  for (const k of Object.keys(TAMAZIA_FIX_LIBRARY)) {
+    if (k.startsWith('_')) continue;
+    if (fact.includes(k.replace(/_/g, ' '))) return TAMAZIA_FIX_LIBRARY[k];
+  }
+  if (p.bucket === 'compliance') return TAMAZIA_FIX_LIBRARY._compliance_default;
+  return p.recommendation || 'Tamazia fixes this in the four-week audit sprint.';
+}
+
+function severityBand(score) {
+  if (score == null) return { label: 'Not yet measured', color: '#94A3B8' };
+  if (score >= 0.85) return { label: 'Healthy', color: '#2E7D32' };
+  if (score >= 0.65) return { label: 'Watch list', color: '#C8A664' };
+  return { label: 'Action needed', color: '#B91C1C' };
+}
+
+// Tier recommendation per Tamazia real pricing.
+function recommendTier(p0, totalPointers) {
+  if (p0 >= 6 || totalPointers >= 40) return { name: 'Enterprise', price: 9500, weeks: '12+ weeks', desc: 'Multi-jurisdiction · listed / pre-IPO / international groups' };
+  if (p0 >= 2 || totalPointers >= 15) return { name: 'Authority',  price: 4500, weeks: '8 weeks',  desc: 'Multi-location · 3-10 partners · regional groups' };
+  return { name: 'Foundation', price: 2500, weeks: '4 weeks', desc: 'Single location · independent firms and brands' };
+}
+
+function batchByFramework(pointers) {
+  // Group compliance pointers by framework, others by bucket
+  const compByFramework = {};
+  const otherByBucket = {};
+  for (const p of pointers || []) {
+    if (p.bucket === 'compliance') {
+      const code = (p.citation || '').split(/\s+/)[0] || 'OTHER';
+      (compByFramework[code] = compByFramework[code] || []).push(p);
+    } else {
+      (otherByBucket[p.bucket] = otherByBucket[p.bucket] || []).push(p);
+    }
+  }
+  // Sort each group by severity
+  const sortBySev = arr => arr.sort((a, b) => (SEV_META[b.severity]?.weight || 0) - (SEV_META[a.severity]?.weight || 0));
+  for (const k of Object.keys(compByFramework)) sortBySev(compByFramework[k]);
+  for (const k of Object.keys(otherByBucket)) sortBySev(otherByBucket[k]);
+  return { compByFramework, otherByBucket };
+}
+
+function renderTopFindings(pointers) {
+  // Pick top 3 critical (P0) breaches as the hook.
+  const critical = (pointers || []).filter(p => p.severity === 'P0').slice(0, 3);
+  if (critical.length === 0) {
+    const p1 = (pointers || []).filter(p => p.severity === 'P1').slice(0, 3);
+    if (p1.length === 0) return '';
+    critical.push(...p1);
+  }
+  return `
+    <section id="top" style="padding:64px 24px;background:linear-gradient(180deg,#3D0E0E 0,#2A0C14 100%);color:#F8F5EF">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.78rem;color:#C8A664;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 8px">Three things to fix first</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:2.2rem;margin:0 0 24px;line-height:1.15">The regulatory exposure on this site, ranked.</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+          ${critical.map((p, i) => {
+            const meta = FRAMEWORK_META[(p.citation || '').split(/\s+/)[0]];
+            const sev = SEV_META[p.severity] || SEV_META.P2;
+            return `
+              <article style="background:#F8F5EF;color:#1F2937;border-radius:6px;padding:18px 20px;border-left:4px solid ${sev.color}">
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+                  <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;color:${sev.color};text-transform:uppercase">${sev.label}</span>
+                  ${meta ? `<span style="font-size:0.72rem;color:#6b6b6b">· ${escapeHtml(meta.regulator)}</span>` : ''}
+                </div>
+                <h3 style="font-family:'Times New Roman',serif;font-size:1.02rem;margin:0 0 8px;line-height:1.35">${escapeHtml(p.fact)}</h3>
+                <p style="font-size:0.86rem;margin:0;line-height:1.5;color:#3D0E0E"><strong>Tamazia fix:</strong> ${escapeHtml(fixFor(p))}</p>
+                ${p.citation ? `<p style="margin:8px 0 0;font-family:monospace;font-size:0.74rem;color:#6b6b6b">Cite: ${escapeHtml(p.citation)}</p>` : ''}
+              </article>`;
+          }).join('')}
+        </div>
+      </div>
+    </section>`;
+}
+
+function renderDimensionsGrid(buckets) {
+  const order = ['compliance','seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
+  return `
+    <section id="dimensions" style="padding:64px 24px;background:#F8F5EF">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.78rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 8px">Ten audit dimensions</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:2.2rem;margin:0 0 24px;color:#3D0E0E">Where the site stands. Where Tamazia takes it.</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+          ${order.map(b => {
+            const v = buckets?.[b];
+            const band = severityBand(v?.mean_score);
+            const score = v ? Math.round((v.mean_score || 0) * 100) : null;
+            return `
+              <div style="background:white;border-radius:6px;padding:14px 16px;border-top:3px solid ${band.color}">
+                <p style="margin:0 0 6px;font-size:0.74rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase">${escapeHtml(BUCKET_LABELS[b])}</p>
+                <p style="margin:0;font-size:1.6rem;font-family:'Times New Roman',serif;color:${band.color};font-weight:600">${score != null ? score + '/100' : '—'}</p>
+                <p style="margin:4px 0 0;font-size:0.74rem;color:#6b6b6b">${v ? v.n + ' finding' + (v.n === 1 ? '' : 's') : 'No findings'} · <span style="color:${band.color}">${band.label}</span></p>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </section>`;
+}
+
+function renderFrameworkBatches(pointers) {
+  const { compByFramework, otherByBucket } = batchByFramework(pointers);
+  const frameworkCodes = Object.keys(compByFramework).sort((a, b) => {
+    const sa = compByFramework[a].some(p => p.severity === 'P0') ? 0 : 1;
+    const sb = compByFramework[b].some(p => p.severity === 'P0') ? 0 : 1;
+    return sa - sb;
+  });
+  if (frameworkCodes.length === 0 && Object.keys(otherByBucket).length === 0) {
+    return `<section style="padding:64px 24px;background:white"><div style="max-width:1100px;margin:0 auto"><p style="font-size:1rem;color:#1F2937">No regulatory breaches detected. SEO and technical findings shown above. Tamazia would still run the four-week audit to confirm and extend coverage.</p></div></section>`;
+  }
+  return `
+    <section id="compliance" style="padding:64px 24px;background:white">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.78rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 8px">Regulatory breaches, by framework</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:2.2rem;margin:0 0 8px;color:#3D0E0E">Every finding cited against the regulator that examines it.</h2>
+        <p style="font-size:0.95rem;color:#6b6b6b;margin:0 0 24px;max-width:64ch">Below, every breach is grouped by the framework that applies, the regulator that enforces it, and the one-line Tamazia fix. Red = action needed within this engagement. Amber = within the next quarter. Green = a watch-list item.</p>
+        ${frameworkCodes.map(code => {
+          const list = compByFramework[code];
+          const meta = FRAMEWORK_META[code] || { name: code, regulator: 'See guidance', root: '#' };
+          const crit = list.filter(p => p.severity === 'P0').length;
+          const high = list.filter(p => p.severity === 'P1').length;
+          const std  = list.filter(p => p.severity === 'P2').length;
+          return `
+            <details open style="background:#F8F5EF;border-radius:6px;padding:14px 20px;margin-bottom:10px;border-left:4px solid ${SEV_META[list[0].severity]?.color || '#94A3B8'}">
+              <summary style="cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Times New Roman',serif;font-size:1.15rem;color:#3D0E0E;font-weight:600">${escapeHtml(meta.name)}</span>
+                <a href="${escapeHtml(meta.root)}" target="_blank" rel="noopener" style="font-size:0.78rem;color:#6b6b6b;text-decoration:underline">${escapeHtml(meta.regulator)} ↗</a>
+                <span style="margin-left:auto;display:flex;gap:6px">
+                  ${crit ? `<span style="background:#B91C1C;color:white;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:600">${crit} critical</span>` : ''}
+                  ${high ? `<span style="background:#C8A664;color:#3D0E0E;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:600">${high} high</span>` : ''}
+                  ${std  ? `<span style="background:#2E7D32;color:white;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:600">${std} standard</span>` : ''}
+                </span>
+              </summary>
+              <ol style="list-style:none;padding:14px 0 0;margin:0">
+                ${list.map(p => {
+                  const sev = SEV_META[p.severity] || SEV_META.P2;
+                  return `
+                    <li style="padding:12px 0;border-top:1px solid rgba(0,0,0,0.06)">
+                      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+                        <span style="width:8px;height:8px;border-radius:50%;background:${sev.color};display:inline-block"></span>
+                        <span style="font-family:monospace;font-size:0.74rem;color:#6b6b6b">${escapeHtml(p.citation || code)}</span>
+                      </div>
+                      <p style="margin:0 0 4px;font-size:0.92rem;color:#1F2937;line-height:1.45">${escapeHtml(p.fact)}</p>
+                      <p style="margin:0;font-size:0.86rem;color:#3D0E0E;line-height:1.45"><strong>Tamazia fix:</strong> ${escapeHtml(fixFor(p))}</p>
+                    </li>`;
+                }).join('')}
+              </ol>
+            </details>`;
+        }).join('')}
+      </div>
+    </section>`;
+}
+
+function renderSeoBatches(pointers) {
+  const { otherByBucket } = batchByFramework(pointers);
+  const order = ['seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
+  const active = order.filter(b => (otherByBucket[b] || []).length > 0);
+  if (active.length === 0) return '';
+  return `
+    <section id="seo-section" style="padding:64px 24px;background:#F8F5EF">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.78rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 8px">SEO + technical findings, by dimension</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:2.2rem;margin:0 0 24px;color:#3D0E0E">Each finding ships with the exact Tamazia fix.</h2>
+        ${active.map(b => {
+          const list = otherByBucket[b];
+          const crit = list.filter(p => p.severity === 'P0').length;
+          const high = list.filter(p => p.severity === 'P1').length;
+          const std  = list.filter(p => p.severity === 'P2').length;
+          return `
+            <details style="background:white;border-radius:6px;padding:14px 20px;margin-bottom:10px;border-left:4px solid ${SEV_META[list[0].severity]?.color || '#94A3B8'}"${b === 'seo' ? ' open' : ''}>
+              <summary style="cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Times New Roman',serif;font-size:1.1rem;color:#3D0E0E;font-weight:600">${escapeHtml(BUCKET_LABELS[b])}</span>
+                <span style="font-size:0.84rem;color:#6b6b6b">${list.length} finding${list.length === 1 ? '' : 's'}</span>
+                <span style="margin-left:auto;display:flex;gap:6px">
+                  ${crit ? `<span style="background:#B91C1C;color:white;padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:600">${crit} critical</span>` : ''}
+                  ${high ? `<span style="background:#C8A664;color:#3D0E0E;padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:600">${high} high</span>` : ''}
+                  ${std  ? `<span style="background:#2E7D32;color:white;padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:600">${std} standard</span>` : ''}
+                </span>
+              </summary>
+              <ol style="list-style:none;padding:12px 0 0;margin:0">
+                ${list.map(p => {
+                  const sev = SEV_META[p.severity] || SEV_META.P2;
+                  return `
+                    <li style="padding:10px 0;border-top:1px solid rgba(0,0,0,0.06)">
+                      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+                        <span style="width:8px;height:8px;border-radius:50%;background:${sev.color};display:inline-block"></span>
+                        <span style="font-size:0.74rem;color:#6b6b6b">${sev.label}</span>
+                      </div>
+                      <p style="margin:0 0 4px;font-size:0.92rem;color:#1F2937;line-height:1.45">${escapeHtml(p.fact)}</p>
+                      <p style="margin:0;font-size:0.86rem;color:#3D0E0E;line-height:1.45"><strong>Tamazia fix:</strong> ${escapeHtml(fixFor(p))}</p>
+                    </li>`;
+                }).join('')}
+              </ol>
+            </details>`;
+        }).join('')}
+      </div>
+    </section>`;
+}
+
+function renderSprint(p0Count) {
+  return `
+    <section id="sprint" style="padding:64px 24px;background:linear-gradient(180deg,#3D0E0E 0,#2A0C14 100%);color:#F8F5EF">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.78rem;color:#C8A664;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 8px">The four-week Tamazia audit, applied to this site</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:2.2rem;margin:0 0 24px;line-height:1.15">From regulatory baseline to revenue impact.</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+          <div style="background:rgba(248,245,239,0.06);padding:18px 20px;border-radius:6px;border-top:3px solid #C8A664">
+            <p style="margin:0 0 6px;font-size:0.74rem;color:#C8A664;letter-spacing:0.04em;text-transform:uppercase">Week 01 · Technical</p>
+            <p style="margin:0;font-size:0.9rem;line-height:1.5;color:rgba(248,245,239,0.85)">Every crawlable page reviewed. Core Web Vitals · redirect chains · crawl errors · robots.txt · schema. Prioritised fix doc shipped to the dev team.</p>
+          </div>
+          <div style="background:rgba(248,245,239,0.06);padding:18px 20px;border-radius:6px;border-top:3px solid #C8A664">
+            <p style="margin:0 0 6px;font-size:0.74rem;color:#C8A664;letter-spacing:0.04em;text-transform:uppercase">Week 02 · Compliance</p>
+            <p style="margin:0;font-size:0.9rem;line-height:1.5;color:rgba(248,245,239,0.85)">Every page reviewed against the sector regulatory framework. ICO, FCA, MHRA, SRA, ASA, RERA, HIPAA, SEC. Every word edited before publication.</p>
+          </div>
+          <div style="background:rgba(248,245,239,0.06);padding:18px 20px;border-radius:6px;border-top:3px solid #C8A664">
+            <p style="margin:0 0 6px;font-size:0.74rem;color:#C8A664;letter-spacing:0.04em;text-transform:uppercase">Week 03 · Off-page</p>
+            <p style="margin:0;font-size:0.9rem;line-height:1.5;color:rgba(248,245,239,0.85)">Backlink profile audited. Toxic links suppressed. Domain authority benchmarked against competitors. Editorial-link plan built.</p>
+          </div>
+          <div style="background:rgba(248,245,239,0.06);padding:18px 20px;border-radius:6px;border-top:3px solid #C8A664">
+            <p style="margin:0 0 6px;font-size:0.74rem;color:#C8A664;letter-spacing:0.04em;text-transform:uppercase">Week 04 · GBP + content</p>
+            <p style="margin:0;font-size:0.9rem;line-height:1.5;color:rgba(248,245,239,0.85)">Google Business Profile optimised. Social signals locked. Content calendar reviewed by counsel before any commission.</p>
+          </div>
+        </div>
+        <p style="margin:24px 0 0;font-size:0.88rem;color:rgba(248,245,239,0.7)"><strong style="color:#C8A664">Month 2:</strong> content published, backlink campaign live, rankings tracked.&nbsp; <strong style="color:#C8A664">Month 3:</strong> revenue attributed in GA4.&nbsp; <strong style="color:#C8A664">Months 4-6:</strong> revenue impact arrives. ${p0Count >= 6 ? 'Given the ' + p0Count + ' critical findings here, expect the Enterprise mandate.' : p0Count >= 2 ? 'Given the ' + p0Count + ' critical findings here, expect the Authority mandate.' : 'Given a clean baseline here, expect the Foundation mandate.'}</p>
+      </div>
+    </section>`;
+}
+
+function renderInvestment(p0Count, totalPointers) {
+  const rec = recommendTier(p0Count, totalPointers);
+  const tiers = [
+    { name: 'Foundation', price: 2500, weeks: '4 weeks', desc: 'Single location · independent firms and brands.', for: 'Sole solicitors. Single-clinic practices. Boutique single-property hotels. Estate agencies with one office.' },
+    { name: 'Authority',  price: 4500, weeks: '8 weeks',  desc: '3-10 partners · multi-location groups · multi-jurisdiction.', for: 'Healthcare groups across 2-8 locations. PBSA operators. Boutique hotel groups. Mid-market law firms.' },
+    { name: 'Enterprise', price: 9500, weeks: '12+ weeks', desc: 'International groups · pre-IPO · listed companies.', for: 'Multi-jurisdiction law firms. Listed companies. International hotel groups. FCA + DFSA + SEC dual-regulated.' }
+  ];
+  return `
+    <section id="investment" style="padding:64px 24px;background:white">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.78rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 8px">Recommended investment</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:2.2rem;margin:0 0 12px;color:#3D0E0E">Based on ${p0Count} critical finding${p0Count === 1 ? '' : 's'} here, Tamazia recommends ${rec.name}.</h2>
+        <p style="font-size:0.95rem;color:#6b6b6b;margin:0 0 24px;max-width:64ch">All three mandates begin with the full audit included at no extra cost. Pilot rate (£${rec.name === 'Authority' ? '3,600' : rec.price.toLocaleString('en-GB')}/month for the first six months) on Authority engagements with a six-month commitment.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+          ${tiers.map(t => `
+            <article style="background:${t.name === rec.name ? '#3D0E0E' : '#F8F5EF'};color:${t.name === rec.name ? '#F8F5EF' : '#1F2937'};border-radius:6px;padding:22px 20px;${t.name === rec.name ? 'box-shadow:0 12px 28px rgba(61,14,14,0.18)' : ''}">
+              ${t.name === rec.name ? '<p style="margin:0 0 6px;font-size:0.7rem;color:#C8A664;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Recommended for this site</p>' : ''}
+              <h3 style="font-family:\'Times New Roman\',serif;font-size:1.45rem;margin:0 0 6px;color:${t.name === rec.name ? '#F8F5EF' : '#3D0E0E'}">${t.name}</h3>
+              <p style="margin:0 0 4px;font-size:1.7rem;font-family:\'Times New Roman\',serif;color:${t.name === rec.name ? '#C8A664' : '#3D0E0E'};font-weight:600">From £${t.price.toLocaleString('en-GB')}<span style="font-size:0.8rem;opacity:0.7"> /month</span></p>
+              <p style="margin:0 0 12px;font-size:0.8rem;color:${t.name === rec.name ? 'rgba(248,245,239,0.7)' : '#6b6b6b'}">${escapeHtml(t.weeks)} · ${escapeHtml(t.desc)}</p>
+              <p style="margin:0 0 14px;font-size:0.84rem;line-height:1.5;color:${t.name === rec.name ? 'rgba(248,245,239,0.85)' : '#1F2937'}">${escapeHtml(t.for)}</p>
+              <a href="https://tamazia.co.uk/book/" style="display:block;padding:11px 16px;background:${t.name === rec.name ? '#C8A664' : '#3D0E0E'};color:${t.name === rec.name ? '#3D0E0E' : '#F8F5EF'};text-decoration:none;text-align:center;border-radius:4px;font-weight:600;font-size:0.86rem">Speak with the founder →</a>
+            </article>`).join('')}
+        </div>
+        <p style="margin:18px 0 0;font-size:0.78rem;color:#6b6b6b">Six-month commitment unlocks pilot rate on Authority. No long-term contracts. Ninety-day rolling. All work belongs to the client once paid.</p>
+      </div>
+    </section>`;
+}
+
+function renderTrustBar(meta) {
+  return `
+    <section style="background:#1F2937;color:#F8F5EF;padding:16px 24px;font-size:0.8rem">
+      <div style="max-width:1100px;margin:0 auto;display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+        <span style="color:#C8A664">£110M+ generated for clients</span>
+        <span>·</span>
+        <span>200+ frameworks reviewed every campaign</span>
+        <span>·</span>
+        <span>Zero compliance incidents · Kamat Hotels (NSE) · CG Oncology (Nasdaq: CGON) · Meraas (Dubai Holding)</span>
+        <span style="margin-left:auto">Framework v${escapeHtml(meta?.framework_version || '1.0.0')}</span>
+      </div>
+    </section>`;
+}
+
+function renderCover(audit) {
+  const meta = audit.scan_meta;
+  const company = audit.company;
+  const score = Math.round((meta?.specificity_score || 0) * 100);
+  const band = severityBand(meta?.specificity_score);
+  const dateStr = meta?.generated_at ? new Date(meta.generated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  return `
+    <section id="cover" style="background:#3D0E0E;color:#F8F5EF;padding:56px 24px 40px">
+      <div style="max-width:1100px;margin:0 auto;display:grid;grid-template-columns:auto 1fr;gap:36px;align-items:center">
+        <div>
+          <div style="width:140px;height:140px;border-radius:50%;border:5px solid ${band.color};display:grid;place-items:center;background:rgba(0,0,0,0.18)">
+            <span style="font-family:'Times New Roman',serif;font-size:3rem;font-weight:600">${score}</span>
+          </div>
+          <p style="text-align:center;margin:8px 0 0;font-size:0.78rem;color:${band.color};font-weight:600;letter-spacing:0.04em;text-transform:uppercase">${escapeHtml(band.label)}</p>
+        </div>
+        <div>
+          <p style="margin:0 0 6px;font-size:0.74rem;color:#C8A664;letter-spacing:0.18em;text-transform:uppercase">Regulatory Signal Scan · Tamazia</p>
+          <h1 style="font-family:'Times New Roman',serif;font-size:clamp(1.8rem,4vw,2.8rem);margin:0 0 8px;line-height:1.1">${escapeHtml(company)}</h1>
+          <p style="margin:0;font-size:0.92rem;color:rgba(248,245,239,0.7)">${escapeHtml(audit.sector || 'Sector pending')} · ${escapeHtml(audit.country || 'UK')} · ${escapeHtml(audit.city || 'London')} · ${dateStr ? 'Scanned ' + dateStr : ''}</p>
+          <p style="margin:14px 0 0;font-size:1rem;line-height:1.55;color:#F8F5EF;max-width:60ch">${meta.pointer_count_p0} critical · ${meta.pointer_count - meta.pointer_count_p0} other findings across ${Object.keys(meta.buckets || {}).length} of 10 audit dimensions. Every breach below is cited against the regulator that examines it, with the Tamazia fix on the same line.</p>
+          <p style="margin:14px 0 0">
+            <a href="#top" style="display:inline-block;padding:11px 22px;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:600;border-radius:4px;font-size:0.88rem">Show me the three critical fixes ↓</a>
+            <a href="https://tamazia.co.uk/book/" style="display:inline-block;margin-left:8px;padding:11px 22px;border:1px solid #C8A664;color:#C8A664;text-decoration:none;font-weight:600;border-radius:4px;font-size:0.88rem">Book a strategy call</a>
+          </p>
+        </div>
+      </div>
+    </section>`;
+}
+
+function renderDisclaimer(meta) {
+  return `
+    <section style="padding:36px 24px;background:#1F2937;color:rgba(248,245,239,0.7);font-size:0.78rem;line-height:1.55">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="margin:0 0 8px;color:#C8A664;letter-spacing:0.06em;text-transform:uppercase;font-size:0.72rem">About this scan</p>
+        <p style="margin:0 0 8px">Produced by Tamazia's regulatory + SEO audit engine. Framework version ${escapeHtml(meta?.framework_version || '1.0.0')}. Public-facing pages reviewed against the citations shown above.</p>
+        <p style="margin:0">This is a marketing diagnostic, not legal advice and does not create a solicitor-client relationship. Where regulatory risk is identified, consult a regulated solicitor or barrister. Tamazia Ltd, C1, Barking Wharf Square, London, IG11 7ZQ.</p>
+      </div>
+    </section>`;
+}
+
+function renderPage(audit) {
+  const meta = audit.scan_meta || {};
+  const pointers = audit.pointers || [];
+  const company = audit.company;
+  const title = `${company} · Regulatory Signal Scan · Tamazia`;
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml('Live regulatory + SEO audit for ' + (audit.domain || company) + '. ' + meta.pointer_count_p0 + ' critical findings. Generated by Tamazia.')}">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:0;font-family:Inter,system-ui,-apple-system,sans-serif;color:#1F2937;background:#fff;line-height:1.55}
+  h1,h2,h3{font-family:'Times New Roman',serif;font-weight:500}
+  a:hover{opacity:0.85}
+  details > summary{list-style:none}
+  details > summary::-webkit-details-marker{display:none}
+  details > summary::after{content:"▾";margin-left:6px;font-size:0.78rem;color:#6b6b6b;transition:transform .15s}
+  details[open] > summary::after{transform:rotate(180deg)}
+</style>
+</head><body>
+${renderCover(audit)}
+${renderTrustBar(meta)}
+${renderTopFindings(pointers)}
+${renderDimensionsGrid(meta.buckets || {})}
+${renderFrameworkBatches(pointers)}
+${renderSeoBatches(pointers)}
+${renderSprint(meta.pointer_count_p0)}
+${renderInvestment(meta.pointer_count_p0, meta.pointer_count)}
+${renderDisclaimer(meta)}
+</body></html>`;
+}
+
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    const match = url.pathname.match(/^\/audit\/([a-z0-9-]+?)(?:-complimentary-audit)?\/?$/i);
+    if (!match) return new Response('audit not found at ' + url.pathname, { status: 404, headers: { 'content-type': 'text/plain' } });
+    const slug = match[1].replace(/-complimentary-audit$/i, '');
+    const audit = AUDITS[slug];
+    if (!audit) return new Response('audit not minted for ' + slug, { status: 404, headers: { 'content-type': 'text/plain' } });
+    return new Response(renderPage(audit), { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=300', 'x-tamazia-audit': 'v8-worker' } });
+  }
+};

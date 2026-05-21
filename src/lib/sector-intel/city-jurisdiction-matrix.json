@@ -1,0 +1,32 @@
+{
+  "version": "10.0.0",
+  "generated_at": "2026-05-20",
+  "cells": [
+    { "city": "London", "jurisdiction": "UK", "sectors": ["law-firms","finance","fintech","real-estate","healthcare","hospitality","ecommerce"], "regulators": ["ICO","FCA","SRA","CMA","MHRA"], "gdp_rank": 1, "tamazia_fit": 10 },
+    { "city": "Manchester", "jurisdiction": "UK", "sectors": ["law-firms","real-estate","healthcare","hospitality","ecommerce"], "regulators": ["ICO","FCA","SRA","CMA"], "gdp_rank": 6, "tamazia_fit": 9 },
+    { "city": "Edinburgh", "jurisdiction": "UK", "sectors": ["finance","fintech","law-firms","education"], "regulators": ["ICO","FCA","SRA"], "gdp_rank": 7, "tamazia_fit": 9 },
+    { "city": "Birmingham", "jurisdiction": "UK", "sectors": ["law-firms","real-estate","healthcare","manufacturing"], "regulators": ["ICO","FCA","SRA","CMA"], "gdp_rank": 4, "tamazia_fit": 8 },
+    { "city": "Leeds", "jurisdiction": "UK", "sectors": ["law-firms","finance","fintech"], "regulators": ["ICO","FCA","SRA"], "gdp_rank": 5, "tamazia_fit": 7 },
+    { "city": "Bristol", "jurisdiction": "UK", "sectors": ["fintech","law-firms","healthcare"], "regulators": ["ICO","FCA","SRA"], "gdp_rank": 8, "tamazia_fit": 7 },
+    { "city": "Cambridge", "jurisdiction": "UK", "sectors": ["education","fintech","healthcare"], "regulators": ["ICO","OfS","MHRA"], "gdp_rank": 12, "tamazia_fit": 7 },
+    { "city": "Oxford", "jurisdiction": "UK", "sectors": ["education","healthcare","law-firms"], "regulators": ["ICO","OfS","MHRA","SRA"], "gdp_rank": 13, "tamazia_fit": 7 },
+    { "city": "Glasgow", "jurisdiction": "UK", "sectors": ["finance","law-firms"], "regulators": ["ICO","FCA","SRA"], "gdp_rank": 9, "tamazia_fit": 6 },
+    { "city": "New York", "jurisdiction": "US", "sectors": ["finance","fintech","law-firms","real-estate","hospitality","ecommerce","healthcare"], "regulators": ["SEC","FTC","NYDFS","FCC"], "gdp_rank": 1, "tamazia_fit": 10 },
+    { "city": "San Francisco", "jurisdiction": "US", "sectors": ["fintech","ecommerce","healthcare","education"], "regulators": ["SEC","FTC","CPPA"], "gdp_rank": 2, "tamazia_fit": 9 },
+    { "city": "Los Angeles", "jurisdiction": "US", "sectors": ["ecommerce","real-estate","healthcare","hospitality","entertainment"], "regulators": ["FTC","CPPA","CCPA"], "gdp_rank": 4, "tamazia_fit": 8 },
+    { "city": "Chicago", "jurisdiction": "US", "sectors": ["finance","law-firms","manufacturing","healthcare"], "regulators": ["SEC","FTC","BIPA"], "gdp_rank": 5, "tamazia_fit": 8 },
+    { "city": "Boston", "jurisdiction": "US", "sectors": ["healthcare","education","fintech","pharma"], "regulators": ["FTC","HHS","FDA"], "gdp_rank": 7, "tamazia_fit": 8 },
+    { "city": "Miami", "jurisdiction": "US", "sectors": ["real-estate","fintech","hospitality"], "regulators": ["SEC","FTC"], "gdp_rank": 12, "tamazia_fit": 7 },
+    { "city": "Paris", "jurisdiction": "EU", "country": "FR", "sectors": ["luxury","ecommerce","finance","hospitality"], "regulators": ["CNIL","ESMA","ACPR"], "gdp_rank": 1, "tamazia_fit": 9 },
+    { "city": "Berlin", "jurisdiction": "EU", "country": "DE", "sectors": ["fintech","ecommerce","saas"], "regulators": ["BfDI","BaFin","ESMA"], "gdp_rank": 2, "tamazia_fit": 9 },
+    { "city": "Munich", "jurisdiction": "EU", "country": "DE", "sectors": ["finance","manufacturing","insurance"], "regulators": ["BfDI","BaFin"], "gdp_rank": 3, "tamazia_fit": 8 },
+    { "city": "Frankfurt", "jurisdiction": "EU", "country": "DE", "sectors": ["finance","fintech","insurance"], "regulators": ["BaFin","ESMA","ECB"], "gdp_rank": 4, "tamazia_fit": 8 },
+    { "city": "Amsterdam", "jurisdiction": "EU", "country": "NL", "sectors": ["fintech","ecommerce","hospitality"], "regulators": ["AP","AFM"], "gdp_rank": 5, "tamazia_fit": 8 },
+    { "city": "Madrid", "jurisdiction": "EU", "country": "ES", "sectors": ["finance","real-estate","hospitality"], "regulators": ["AEPD","CNMV"], "gdp_rank": 6, "tamazia_fit": 7 },
+    { "city": "Milan", "jurisdiction": "EU", "country": "IT", "sectors": ["finance","luxury","fashion"], "regulators": ["Garante","Consob","ESMA"], "gdp_rank": 7, "tamazia_fit": 7 },
+    { "city": "Dublin", "jurisdiction": "EU", "country": "IE", "sectors": ["fintech","ecommerce","pharma"], "regulators": ["DPC","CBI"], "gdp_rank": 9, "tamazia_fit": 8 },
+    { "city": "Dubai", "jurisdiction": "UAE", "sectors": ["real-estate","hospitality","finance","luxury"], "regulators": ["RERA","DFSA","DTCM","Trakheesi"], "gdp_rank": 1, "tamazia_fit": 10 },
+    { "city": "Abu Dhabi", "jurisdiction": "UAE", "sectors": ["finance","real-estate","energy"], "regulators": ["ADGM","FSRA","SCA"], "gdp_rank": 2, "tamazia_fit": 9 },
+    { "city": "Singapore", "jurisdiction": "SG", "sectors": ["finance","fintech","law-firms","arbitration"], "regulators": ["MAS","PDPC","SIAC"], "gdp_rank": 1, "tamazia_fit": 9, "lexquity_overlay": true }
+  ]
+}

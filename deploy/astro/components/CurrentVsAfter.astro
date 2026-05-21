@@ -1,0 +1,45 @@
+---
+// CurrentVsAfter.astro · the killer side-by-side table.
+import type { ScanMeta, Bucket } from '../types/AuditPayload';
+import { BUCKET_LABELS, projectedAfterScore, scoreColor } from '../types/AuditPayload';
+interface Props { buckets: ScanMeta['buckets']; }
+const { buckets } = Astro.props;
+const order: Bucket[] = ['compliance','seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
+const rows = order.map(b => {
+  const cur = buckets[b]?.mean_score ?? 0;
+  const after = projectedAfterScore(cur);
+  return { bucket: b, label: BUCKET_LABELS[b], cur, after, delta: after - cur };
+});
+---
+<section id="before-after" class="before-after">
+  <div class="container">
+    <h2>Current vs after Tamazia</h2>
+    <p class="lede">Twelve-week intervention. Compliance first, then technical SEO, then content depth, then security. Every delta below is a measurable lift the engine can re-verify on follow-up scans.</p>
+    <table>
+      <thead>
+        <tr><th>Dimension</th><th class="num">Today</th><th class="num">After 12 weeks</th><th class="num">Δ</th></tr>
+      </thead>
+      <tbody>
+        {rows.map(r => (
+          <tr>
+            <td>{r.label}</td>
+            <td class="num" style={`color:${scoreColor(r.cur)}`}>{Math.round(r.cur * 100)}</td>
+            <td class="num" style={`color:${scoreColor(r.after)}`}>{Math.round(r.after * 100)}</td>
+            <td class="num delta">+{Math.round(r.delta * 100)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</section>
+<style>
+  .before-after { padding: 96px 24px; background: var(--tamazia-surface); }
+  .container { max-width: 1140px; margin: 0 auto; }
+  h2 { font-family: "Editorial New", serif; font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 12px; color: var(--tamazia-burgundy); }
+  .lede { font-size: 1.15rem; color: var(--tamazia-body); max-width: 64ch; margin: 0 0 40px; }
+  table { width: 100%; border-collapse: collapse; font-family: "Inter", sans-serif; }
+  th, td { padding: 14px 18px; border-bottom: 1px solid rgba(0,0,0,0.1); }
+  th { background: var(--tamazia-burgundy); color: var(--tamazia-surface); text-align: left; font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.delta { color: #2E7D32; font-weight: 700; }
+</style>

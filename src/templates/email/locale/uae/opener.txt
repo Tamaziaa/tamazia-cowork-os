@@ -1,0 +1,3 @@
+{{first_name}}, a PDPL observation on {{firm}}.
+
+When I reviewed the public pages, the analytics tag fires before any consent banner is shown. UAE PDPL Article 14 and the UAE Data Office guidance both treat this as a P0 disclosure issue with consequences for rankings.

@@ -1,0 +1,54 @@
+---
+// InvestmentTiers.astro · the recommendation that converts. P0 count → tier.
+import type { Pointer } from '../types/AuditPayload';
+interface Props { pointers: Pointer[]; }
+const { pointers } = Astro.props;
+const p0Count = (pointers || []).filter(p => p.severity === 'P0').length;
+
+const tiers = [
+  { name: 'Foundation', price: 1500, weeks: '4 weeks', for: 'Sites with light gaps · P0 < 2', includes: ['Compliance audit (single jurisdiction)','Core on-page SEO fixes','Schema.org Organization markup','Sitemap + robots.txt remediation'], anchor: 'https://tamazia.co.uk/investment#foundation' },
+  { name: 'Authority',  price: 3500, weeks: '8 weeks', for: 'Sites with material gaps · 2-4 P0', includes: ['Everything in Foundation','Multi-framework compliance pass','Technical SEO + Core Web Vitals','Security headers + HSTS preload','Content depth + E-E-A-T uplift'], anchor: 'https://tamazia.co.uk/investment#authority' },
+  { name: 'Dominator',  price: 7500, weeks: '12 weeks', for: 'Sites with severe gaps · 5+ P0', includes: ['Everything in Authority','Full WCAG 2.1 AA pass','Email deliverability hardening (SPF / DMARC / DKIM)','Accessibility + DNSSEC + IPv6','Backlink + authority push','Bi-weekly engine re-scan'], anchor: 'https://tamazia.co.uk/investment#dominator' }
+];
+const recommended = p0Count >= 5 ? 'Dominator' : (p0Count >= 2 ? 'Authority' : 'Foundation');
+---
+<section id="investment" class="investment">
+  <div class="container">
+    <h2>Recommended investment</h2>
+    <p class="lede">Based on {p0Count} P0 finding{p0Count === 1 ? '' : 's'} in this scan, the recommended tier is <strong>{recommended}</strong>. Three options for full transparency.</p>
+    <div class="tiers">
+      {tiers.map(t => (
+        <article class={`tier ${t.name === recommended ? 'recommended' : ''}`}>
+          {t.name === recommended && <span class="badge">Recommended for this site</span>}
+          <h3>{t.name}</h3>
+          <p class="price">£{t.price.toLocaleString('en-GB')}</p>
+          <p class="weeks">{t.weeks} · {t.for}</p>
+          <ul>
+            {t.includes.map(item => <li>{item}</li>)}
+          </ul>
+          <a class="cta" href={`${t.anchor.split('#')[0]}/contact#book?tier=${t.name.toLowerCase()}`} data-track={`tier_click_${t.name.toLowerCase()}`}>Book a discovery call · {t.name} →</a>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+<style>
+  .investment { padding: 96px 24px; background: var(--tamazia-surface); }
+  .container { max-width: 1140px; margin: 0 auto; }
+  h2 { font-family: "Editorial New", serif; font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 12px; color: var(--tamazia-burgundy); }
+  .lede { font-size: 1.15rem; color: var(--tamazia-body); margin: 0 0 40px; max-width: 64ch; }
+  .lede strong { color: var(--tamazia-burgundy); }
+  .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; align-items: stretch; }
+  .tier { background: white; padding: 32px 28px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); display: flex; flex-direction: column; position: relative; }
+  .tier.recommended { border: 2px solid var(--tamazia-gold); transform: scale(1.02); box-shadow: 0 20px 40px rgba(61, 14, 14, 0.12); }
+  .badge { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: var(--tamazia-gold); color: var(--tamazia-burgundy); padding: 5px 14px; border-radius: 14px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+  .tier h3 { font-family: "Editorial New", serif; font-size: 1.8rem; margin: 0 0 8px; color: var(--tamazia-burgundy); }
+  .price { font-size: 2.4rem; font-family: "Editorial New", serif; color: var(--tamazia-burgundy); margin: 0 0 4px; }
+  .weeks { font-size: 0.95rem; color: rgba(31, 41, 55, 0.65); margin: 0 0 20px; }
+  .tier ul { list-style: none; padding: 0; margin: 0 0 24px; flex-grow: 1; }
+  .tier li { padding: 8px 0 8px 24px; position: relative; font-size: 0.95rem; line-height: 1.45; }
+  .tier li::before { content: '✓'; position: absolute; left: 0; color: var(--tamazia-gold); font-weight: 700; }
+  .cta { display: block; padding: 14px 20px; background: var(--tamazia-burgundy); color: var(--tamazia-surface); text-decoration: none; text-align: center; border-radius: 4px; font-weight: 600; transition: transform 200ms; }
+  .tier.recommended .cta { background: var(--tamazia-gold); color: var(--tamazia-burgundy); }
+  .cta:hover { transform: translateY(-2px); }
+</style>

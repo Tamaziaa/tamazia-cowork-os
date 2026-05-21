@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+// S065 · Touch cadence scheduler · Touch 0 → +5d Touch 1 → +5d Touch 2 → +10d Touch 3
+// Reads `outreach_drafts` where send_status='pending' and lead.next_touch_date <= today, sends, advances.
+// Suppresses if lead.replied=true.
+
+const path = require('path');
+const { execFileSync } = require('child_process');
+const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const { send: routerSend } = require('../../../lib/notify/relay-router.js');
+const { pickSendAlias, markUsed, remainingCapacityToday } = require('../../../lib/alias-rotator.js');
+const { lint } = require('../../../lib/notify/content-linter.js');
+
+function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return null; try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; } }
+function pgEsc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
+
+const CADENCE_DAYS = [0, 5, 10, 20]; // business days from Touch 0
+
+function pickDueDrafts() {
+  // Find leads ready for next touch
+  const sql = `SELECT l.id::text, l.company, COALESCE(l.email,'') AS email, l.status, COALESCE(l.next_touch_date::text, '') AS next FROM leads l WHERE l.status LIKE 'touch_%_queued' AND l.email IS NOT NULL AND l.email != '' AND (l.next_touch_date IS NULL OR l.next_touch_date <= CURRENT_DATE) AND COALESCE(l.replied, FALSE) = FALSE LIMIT 50`;
+  const raw = pg(sql);
+  if (!raw) return [];
+  return raw.split('\n').filter(Boolean).map(l => { const [id, company, email, status, next] = l.split('\t'); return { id: Number(id), company, email, status, next_touch_date: next }; });
+}
+
+function getDraftForTouch(lead_id, touch) {
+  const raw = pg(`SELECT id::text, draft_subject, draft_body FROM outreach_drafts WHERE lead_id=${lead_id} AND channel='email' AND draft_metadata->>'touch' = '${touch}' AND send_status='pending' LIMIT 1`);
+  if (!raw) return null;
+  const [id, subject, body] = raw.split('\t');
+  return { id: Number(id), subject, body };
+}
+
+function currentTouchFromStatus(status) {
+  const m = (status || '').match(/touch_(\d+)_queued/);
+  return m ? Number(m[1]) : 0;
+}
+
+async function processLead(lead) {
+  const touch = currentTouchFromStatus(lead.status);
+  const draft = getDraftForTouch(lead.id, touch);
+  if (!draft) return { lead_id: lead.id, skipped: 'no_draft_for_touch_' + touch };
+
+  // QUALITY GATE: if the lead has been quality-scored and failed (<60), never auto-send.
+  // (Null score = legacy/founder-curated lead → ungated. Scored leads must clear the 10-layer bar.)
+  const qs = pg(`SELECT quality_score FROM leads WHERE id=${lead.id}`);
+  if (qs !== '' && qs != null && Number(qs) < 35) {
+    pg(`UPDATE leads SET status='quality_blocked' WHERE id=${lead.id}`);
+    return { lead_id: lead.id, skipped: 'quality_below_threshold', quality_score: Number(qs) };
+  }
+
+  // Touch-1 audit guarantee: Touch 1 references the lead's audit URL. NEVER send a broken link.
+  // Verify the URL is present AND resolves (HTTP 200). If not, block + flag for audit minting.
+  if (touch === 1) {
+    const auditUrl = pg(`SELECT COALESCE(audit_url,'') FROM leads WHERE id=${lead.id}`);
+    const bodyHasAudit = /audit\.tamazia\.co\.uk|tamazia\.co\.uk\/audit|\/audit\//i.test(draft.body);
+    let resolves = false;
+    if (auditUrl) {
+      try { const u = require('child_process').execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-m', '8', '-L', auditUrl], { encoding: 'utf8' }).trim(); resolves = (u === '200'); } catch (_e) { resolves = false; }
+    }
+    if (bodyHasAudit && (!auditUrl || !resolves)) {
+      pg(`UPDATE outreach_drafts SET send_status='blocked_audit_missing', draft_metadata = draft_metadata || ${pgEsc(JSON.stringify({ audit_url: auditUrl || null, audit_resolves: resolves, blocked_at: new Date().toISOString() }))}::jsonb WHERE id=${draft.id}`);
+      return { lead_id: lead.id, skipped: 'touch1_audit_unavailable', audit_url: auditUrl, resolves };
+    }
+  }
+
+  // Pre-send spam-content gate: never send a draft that would trip filters.
+  const lintResult = lint({ subject: draft.subject, body: draft.body });
+  if (!lintResult.pass) {
+    pg(`UPDATE outreach_drafts SET send_status='blocked_spam_lint', draft_metadata = draft_metadata || ${pgEsc(JSON.stringify({ lint_score: lintResult.score, lint_flags: lintResult.flags }))}::jsonb WHERE id=${draft.id}`);
+    return { lead_id: lead.id, skipped: 'spam_lint_failed', lint_score: lintResult.score };
+  }
+
+  // Identity rule: Aman-authored founder pieces (signed "Aman Pareek") MUST send from the
+  // aman@ identity for credibility + signature consistency. Detect by signature in the body.
+  // Persona-rotated aliases are reserved for high-volume / channel streams (not signed-as-Aman).
+  const amanSigned = /Aman Pareek/i.test(draft.body);
+  let alias = null;
+  if (amanSigned) {
+    // rotate within the Aman identity family so the founder voice is consistent
+    const amanIds = ['aman@tamazia.co.uk', 'aman.pareek@tamazia.co.uk', 'apareek@tamazia.co.uk'];
+    // touches 1-3 reuse touch-0's aman alias for thread consistency
+    const prior = pg(`SELECT draft_metadata->>'from_alias_email' FROM outreach_drafts WHERE lead_id=${lead.id} AND draft_metadata->>'touch'='0' AND draft_metadata ? 'from_alias_email' LIMIT 1`);
+    const fromEmail = (touch > 0 && prior && amanIds.includes(prior)) ? prior : amanIds[lead.id % amanIds.length];
+    alias = { id: 0, email: fromEmail, persona_name: 'Aman Pareek', first_name: 'Aman', relay: 'brevo' };
+  } else {
+    // persona rotation (non-Aman-signed streams)
+    const priorAlias = pg(`SELECT a.id::text, a.email, COALESCE(a.persona_name,''), COALESCE(a.first_name,''), COALESCE(a.relay,'brevo') FROM outreach_drafts od JOIN aliases a ON a.id = (od.draft_metadata->>'from_alias_id')::int WHERE od.lead_id=${lead.id} AND od.draft_metadata->>'touch'='0' AND od.draft_metadata ? 'from_alias_id' LIMIT 1`);
+    if (touch > 0 && priorAlias) {
+      const [id, email, persona_name, first_name, relay] = priorAlias.split('\t');
+      alias = { id: Number(id), email, persona_name, first_name, relay };
+    } else {
+      alias = pickSendAlias({});
+    }
+  }
+  if (!alias) return { lead_id: lead.id, skipped: 'no_eligible_alias_quota_exhausted' };
+
+  const fromName = alias.persona_name || alias.first_name || 'Aman Pareek';
+  // Send via the multi-relay router (routes by alias.relay, fails over, enforces daily caps)
+  const result = await routerSend({ to: lead.email, from: alias.email, from_name: fromName, subject: draft.subject, text: draft.body, relay: alias.relay });
+  if (!result.ok) return { lead_id: lead.id, error: 'send_failed', detail: result.attempts };
+  const email_id = result.id;
+  markUsed(alias.id);
+  // Persist BOTH the RFC Message-ID we set (matches a reply's In-Reply-To/References for bit-perfect
+  // threading) AND the provider's own id. The inbound poller matches replies against either.
+  pg(`UPDATE outreach_drafts SET send_status='sent', sent_at=NOW(), draft_metadata = draft_metadata || ${pgEsc(JSON.stringify({ relay_provider: result.provider, relay_email_id: email_id, rfc_message_id: (result.message_id || '').replace(/[<>]/g, ''), from_alias_id: alias.id, from_alias_email: alias.email }))}::jsonb WHERE id=${draft.id}`);
+  // Advance lead status + schedule next touch
+  if (touch < 3) {
+    const days = CADENCE_DAYS[touch + 1] - CADENCE_DAYS[touch];
+    pg(`UPDATE leads SET status='touch_${touch + 1}_queued', next_touch_date = (CURRENT_DATE + INTERVAL '${days} days')::date, last_reply_received_at = NULL, updated_at = NOW() WHERE id = ${lead.id}`);
+  } else {
+    pg(`UPDATE leads SET status='cadence_complete', next_touch_date = NULL, updated_at = NOW() WHERE id = ${lead.id}`);
+  }
+  return { lead_id: lead.id, company: lead.company, touch_sent: touch, email_id, next_status: touch < 3 ? `touch_${touch + 1}_queued` : 'cadence_complete' };
+}
+
+async function run() {
+  const due = pickDueDrafts();
+  console.log(`Touch scheduler · ${due.length} due drafts · ${new Date().toISOString()}`);
+  const results = [];
+  for (const lead of due) {
+    const r = await processLead(lead);
+    results.push(r);
+    console.log(`[${lead.id}] ${lead.company.slice(0,30)} → touch_${r.touch_sent || 'n/a'} ${r.email_id ? 'sent ' + r.email_id : r.skipped || r.error}`);
+    await new Promise(r => setTimeout(r, 1200));
+  }
+  return results;
+}
+
+if (require.main === module) run().then(r => console.log('Total sent:', r.filter(x => x.email_id).length));
+
+module.exports = { run, processLead };

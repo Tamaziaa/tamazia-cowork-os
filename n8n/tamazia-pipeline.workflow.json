@@ -1,0 +1,103 @@
+{
+  "name": "Tamazia Outreach Pipeline (orchestrator)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "cronExpression", "expression": "5 0 * * *" } ] } },
+      "id": "cron-daily-reset",
+      "name": "00:05 Daily warmup reset",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [ 240, 120 ]
+    },
+    {
+      "parameters": { "command": "cd /Users/amanigga/Desktop/TAMAZIA-REBUILD/COWORK-OS-EXECUTION && node src/lib/alias-rotator.js --reset" },
+      "id": "exec-reset",
+      "name": "alias-rotator --reset",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [ 480, 120 ]
+    },
+    {
+      "parameters": { "rule": { "interval": [ { "field": "cronExpression", "expression": "0 9-17 * * 1-5" } ] } },
+      "id": "cron-send",
+      "name": "Hourly (9-17 Mon-Fri) send window",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [ 240, 320 ]
+    },
+    {
+      "parameters": { "command": "cd /Users/amanigga/Desktop/TAMAZIA-REBUILD/COWORK-OS-EXECUTION && node src/skills/S065-touch-scheduler/scripts/send-due.js" },
+      "id": "exec-send",
+      "name": "S065 send-due (rotated, linted, routed)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [ 480, 320 ]
+    },
+    {
+      "parameters": { "rule": { "interval": [ { "field": "cronExpression", "expression": "*/5 * * * *" } ] } },
+      "id": "cron-imap",
+      "name": "Every 5 min IMAP poll",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [ 240, 520 ]
+    },
+    {
+      "parameters": { "command": "cd /Users/amanigga/Desktop/TAMAZIA-REBUILD/COWORK-OS-EXECUTION && node scripts/zoho-imap-poll.js" },
+      "id": "exec-imap",
+      "name": "Zoho IMAP poll + classify",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [ 480, 520 ]
+    },
+    {
+      "parameters": { "rule": { "interval": [ { "field": "cronExpression", "expression": "0 6 * * *" } ] } },
+      "id": "cron-source",
+      "name": "06:00 Daily sourcing + enrich",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [ 240, 720 ]
+    },
+    {
+      "parameters": { "command": "cd /Users/amanigga/Desktop/TAMAZIA-REBUILD/COWORK-OS-EXECUTION && node scripts/run-deep-research-batch.js 10" },
+      "id": "exec-research",
+      "name": "S063 deep-research + draft 10",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [ 480, 720 ]
+    },
+    {
+      "parameters": { "command": "cd /Users/amanigga/Desktop/TAMAZIA-REBUILD/COWORK-OS-EXECUTION && node scripts/build-crm-dashboard.js" },
+      "id": "exec-dashboard",
+      "name": "Rebuild CRM dashboard",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [ 720, 720 ]
+    },
+    {
+      "parameters": { "rule": { "interval": [ { "field": "cronExpression", "expression": "0 8 * * 1" } ] } },
+      "id": "cron-health",
+      "name": "Mon 08:00 alias health + capacity",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [ 240, 920 ]
+    },
+    {
+      "parameters": { "command": "cd /Users/amanigga/Desktop/TAMAZIA-REBUILD/COWORK-OS-EXECUTION && node src/skills/S016-alias-health-monitor/scripts/*.js; node src/lib/notify/relay-router.js --capacity" },
+      "id": "exec-health",
+      "name": "S016 health + relay capacity report",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [ 480, 920 ]
+    }
+  ],
+  "connections": {
+    "00:05 Daily warmup reset": { "main": [ [ { "node": "alias-rotator --reset", "type": "main", "index": 0 } ] ] },
+    "Hourly (9-17 Mon-Fri) send window": { "main": [ [ { "node": "S065 send-due (rotated, linted, routed)", "type": "main", "index": 0 } ] ] },
+    "Every 5 min IMAP poll": { "main": [ [ { "node": "Zoho IMAP poll + classify", "type": "main", "index": 0 } ] ] },
+    "06:00 Daily sourcing + enrich": { "main": [ [ { "node": "S063 deep-research + draft 10", "type": "main", "index": 0 } ] ] },
+    "S063 deep-research + draft 10": { "main": [ [ { "node": "Rebuild CRM dashboard", "type": "main", "index": 0 } ] ] },
+    "Mon 08:00 alias health + capacity": { "main": [ [ { "node": "S016 health + relay capacity report", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1", "saveDataErrorExecution": "all", "saveExecutionProgress": true },
+  "meta": { "description": "Tamazia outreach orchestrator. 6 scheduled branches: daily warmup reset, hourly send window (linted+rotated+routed), 5-min reply poll, daily sourcing+research+dashboard, weekly health+capacity. Uses Execute Command nodes against the local engine. Self-healing via per-script retries; failures saved for audit." }
+}

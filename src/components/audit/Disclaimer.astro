@@ -1,0 +1,79 @@
+---
+// Disclaimer.astro — reusable Regulatory Signal Scan disclaimer block.
+// Used on every /audit/{slug}/{hash} page footer and in PDF exports (via Playwright header/footer template).
+//
+// Props (all optional with sensible defaults):
+//   frameworkVersion: string  // pulled from framework_versions table at build time in real flow
+//   lastReviewed:     string  // ISO date
+//   icoNumber:        string  // ICO registration; placeholder until issued
+//   companyNumber:    string  // Companies House number; placeholder until confirmed
+//   euRepLine:        string  // empty by default; populated when recipient is in EU
+//
+// Aman Pareek, International Business Lawyer signed off.
+
+interface Props {
+  frameworkVersion?: string;
+  lastReviewed?: string;
+  icoNumber?: string;
+  companyNumber?: string;
+  euRepLine?: string;
+}
+
+const {
+  frameworkVersion = '1.0.0',
+  lastReviewed = new Date().toISOString().slice(0, 10),
+  icoNumber = '{ico_number_pending}',
+  companyNumber = 'PENDING_COMPANIES_HOUSE_CONFIRMATION',
+  euRepLine = '',
+} = Astro.props as Props;
+---
+
+<aside class="rss-disclaimer" aria-label="Regulatory Signal Scan disclaimer">
+  <p>
+    This Regulatory Signal Scan is powered by Tamazia.
+    Frameworks are trained on publicly available regulatory sources by AI and reviewed by
+    <strong>Aman Pareek, International Business Lawyer</strong>.
+  </p>
+  <p>
+    Framework version: <span class="rss-mono">{frameworkVersion}</span>
+    &nbsp;|&nbsp; Last reviewed: <span class="rss-mono">{lastReviewed}</span>
+  </p>
+  <p>
+    This scan identifies publicly visible signals only. It is
+    <strong>not legal advice</strong> and is not a substitute for review by qualified counsel in your jurisdiction.
+    Recommendations should be confirmed with your legal advisor before action.
+  </p>
+  <p class="rss-small">
+    Reply STOP to unsubscribe. We process your data under legitimate interest (GDPR Article 6(1)(f)) for B2B outreach.
+    <br/>
+    Privacy Policy: <a href="https://tamazia.co.uk/privacy">tamazia.co.uk/privacy</a>
+    &nbsp;|&nbsp; Terms: <a href="https://tamazia.co.uk/terms">tamazia.co.uk/terms</a>
+  </p>
+  <p class="rss-small">
+    Tamazia, C1 Barking Wharf Square, Barking, IG11 7ZQ, London, United Kingdom.
+    <br/>
+    Company number: <span class="rss-mono">{companyNumber}</span>
+    &nbsp;|&nbsp; ICO Registration: <span class="rss-mono">{icoNumber}</span>
+    {euRepLine && <><br/><span>{euRepLine}</span></>}
+  </p>
+</aside>
+
+<style>
+  .rss-disclaimer {
+    border-top: 1px solid #e5e7eb;
+    margin-top: 32px;
+    padding: 16px 0;
+    font-size: 12px;
+    color: #6b7280;
+    line-height: 1.55;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .rss-disclaimer p { margin: 0 0 8px 0; }
+  .rss-disclaimer strong { color: #111; }
+  .rss-mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; }
+  .rss-small { font-size: 11px; color: #9ca3af; }
+  .rss-disclaimer a { color: #6b7280; }
+  @media print {
+    .rss-disclaimer { border-top: 1px solid #000; color: #000; }
+  }
+</style>

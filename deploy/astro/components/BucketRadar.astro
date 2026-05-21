@@ -1,0 +1,70 @@
+---
+// BucketRadar.astro · 10-axis radar chart (current vs projected after Tamazia).
+import type { ScanMeta, Bucket } from '../types/AuditPayload';
+import { BUCKET_LABELS, projectedAfterScore } from '../types/AuditPayload';
+interface Props { buckets: ScanMeta['buckets']; score: number; }
+const { buckets, score } = Astro.props;
+const order: Bucket[] = ['compliance','seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
+const data = order.map(b => ({ bucket: b, label: BUCKET_LABELS[b], current: buckets[b]?.mean_score ?? 0, after: projectedAfterScore(buckets[b]?.mean_score ?? 0), pointers: buckets[b]?.n ?? 0 }));
+---
+<section id="scores" class="bucket-radar">
+  <div class="container">
+    <h2>Your 10-dimension audit score</h2>
+    <p class="lede">Where you are today (red) versus where Tamazia will take you (gold) after a 12-week engagement.</p>
+    <div class="radar-wrap">
+      <canvas id="bucket-radar-chart" width="640" height="640" aria-label="Audit dimensions radar chart"></canvas>
+      <table class="radar-table">
+        <thead><tr><th>Dimension</th><th>Now</th><th>After Tamazia</th><th>Δ</th><th>Pointers</th></tr></thead>
+        <tbody>
+          {data.map(row => (
+            <tr>
+              <td>{row.label}</td>
+              <td class="cur">{Math.round(row.current * 100)}</td>
+              <td class="after">{Math.round(row.after * 100)}</td>
+              <td class="delta">+{Math.round((row.after - row.current) * 100)}</td>
+              <td>{row.pointers}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+<script define:vars={{ data }}>
+  // Lazy-load Chart.js from CDN only when this section enters viewport
+  function init() {
+    const ctx = document.getElementById('bucket-radar-chart');
+    if (!ctx || typeof Chart === 'undefined') return;
+    new Chart(ctx, {
+      type: 'radar',
+      data: {
+        labels: data.map(d => d.label),
+        datasets: [
+          { label: 'Current', data: data.map(d => Math.round(d.current * 100)), backgroundColor: 'rgba(185, 28, 28, 0.18)', borderColor: '#B91C1C', borderWidth: 2, pointBackgroundColor: '#B91C1C' },
+          { label: 'After Tamazia', data: data.map(d => Math.round(d.after * 100)), backgroundColor: 'rgba(200, 166, 100, 0.25)', borderColor: '#C8A664', borderWidth: 2, pointBackgroundColor: '#C8A664' }
+        ]
+      },
+      options: { responsive: true, animation: { duration: 600 }, scales: { r: { min: 0, max: 100, ticks: { stepSize: 25 }, pointLabels: { font: { size: 12 } } } }, plugins: { legend: { position: 'top' } } }
+    });
+  }
+  if (!window.Chart) {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    s.onload = init; document.head.appendChild(s);
+  } else { init(); }
+</script>
+<style>
+  .bucket-radar { padding: 96px 24px; background: var(--tamazia-surface); }
+  .container { max-width: 1140px; margin: 0 auto; }
+  .bucket-radar h2 { font-family: "Editorial New", serif; font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 12px; color: var(--tamazia-burgundy); }
+  .lede { font-size: 1.15rem; color: var(--tamazia-body); margin: 0 0 48px; max-width: 64ch; }
+  .radar-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+  canvas { max-width: 100%; height: auto !important; }
+  .radar-table { width: 100%; border-collapse: collapse; font-family: "Inter", sans-serif; font-size: 0.95rem; }
+  .radar-table th, .radar-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(0,0,0,0.08); }
+  .radar-table th { background: rgba(61, 14, 14, 0.05); color: var(--tamazia-burgundy); font-weight: 600; }
+  .radar-table .cur { color: #B91C1C; font-weight: 600; }
+  .radar-table .after { color: var(--tamazia-gold); font-weight: 600; }
+  .radar-table .delta { color: #2E7D32; font-weight: 600; }
+  @media (max-width: 880px) { .radar-wrap { grid-template-columns: 1fr; } }
+</style>
