@@ -16,7 +16,9 @@ run() { echo "[$(TS)] >> $1"; eval "$1" 2>&1 | tail -3; echo "[$(TS)] done: $1";
   run "node scripts/enrich-and-queue-channels.js 8"                     # enrich 8 leads (contacts/socials)
   run "node scripts/run-deep-research-batch.js 6"                       # S063 deep research: news + brand pointers + Touch 0
   run "node scripts/verify-contacts.js 25"                              # FREE email verify (Hunter+DIY, £0) → verify_status/contact_confidence
+  run "node scripts/dedupe-leads.js"                                    # suppress duplicate-domain leads (non-destructive)
   run "node scripts/qualify-and-queue.js 12"                            # 10-layer quality gate → auto-send queue
+  run "node scripts/health-check.js"                                    # self-diagnostic: 30 adverse-scenario probes → system_health
   run "node scripts/build-crm-dashboard.js"                             # dashboard refresh
   echo "===== CYCLE END $(TS) ====="
 } >> "$LOG" 2>&1

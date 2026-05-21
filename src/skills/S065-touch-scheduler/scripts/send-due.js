@@ -17,7 +17,11 @@ const CADENCE_DAYS = [0, 5, 10, 20]; // business days from Touch 0
 
 function pickDueDrafts() {
   // Find leads ready for next touch
-  const sql = `SELECT l.id::text, l.company, COALESCE(l.email,'') AS email, l.status, COALESCE(l.next_touch_date::text, '') AS next FROM leads l WHERE l.status LIKE 'touch_%_queued' AND l.email IS NOT NULL AND l.email != '' AND (l.next_touch_date IS NULL OR l.next_touch_date <= CURRENT_DATE) AND COALESCE(l.replied, FALSE) = FALSE LIMIT 50`;
+  // COMPLIANCE HARD-GATE: never auto-send to a lead that has opted out, hard-bounced, or been
+  // manually handled. Belt-and-suspenders across BOTH signals: email_sequence_state status and the
+  // reply classifier's inbound_emails verdict. This is a legal line (opt-out must be honored), so it
+  // is enforced at selection time, not just suppressed downstream.
+  const sql = `SELECT l.id::text, l.company, COALESCE(l.email,'') AS email, l.status, COALESCE(l.next_touch_date::text, '') AS next FROM leads l WHERE l.status LIKE 'touch_%_queued' AND l.email IS NOT NULL AND l.email != '' AND (l.next_touch_date IS NULL OR l.next_touch_date <= CURRENT_DATE) AND COALESCE(l.replied, FALSE) = FALSE AND NOT EXISTS (SELECT 1 FROM email_sequence_state ess WHERE ess.lead_id = l.id AND ess.status IN ('unsubscribed','bounced','manually_handled','opted_out')) AND NOT EXISTS (SELECT 1 FROM inbound_emails ie WHERE ie.matched_lead_id = l.id AND ie.classification IN ('OPT_OUT','BOUNCE','UNSUBSCRIBE')) LIMIT 50`;
   const raw = pg(sql);
   if (!raw) return [];
   return raw.split('\n').filter(Boolean).map(l => { const [id, company, email, status, next] = l.split('\t'); return { id: Number(id), company, email, status, next_touch_date: next }; });
@@ -114,6 +118,17 @@ async function processLead(lead) {
 }
 
 async function run() {
+  // REPUTATION AUTO-PAUSE: if the recent (7d) bounce rate is dangerous, halt this cycle's sending to
+  // protect domain/relay reputation. Fail-open — if the probe errors, sending proceeds (never block
+  // business on a monitoring bug).
+  try {
+    const rs = Number(pg(`SELECT COUNT(*) FROM sends WHERE sent_at > NOW()-INTERVAL '7 days'`) || 0);
+    const rb = Number(pg(`SELECT COUNT(*) FROM bounce_events WHERE received_at > NOW()-INTERVAL '7 days'`) || 0);
+    if (rs >= 20 && rb / rs >= 0.08) {
+      console.log(`HALT: 7d bounce rate ${(rb / rs * 100).toFixed(1)}% (>=8%) — sending paused this cycle to protect reputation`);
+      return [{ halted: true, bounce_rate_7d: +(rb / rs * 100).toFixed(1), recent_sent: rs, recent_bounce: rb }];
+    }
+  } catch (_e) {}
   const due = pickDueDrafts();
   console.log(`Touch scheduler · ${due.length} due drafts · ${new Date().toISOString()}`);
   const results = [];
