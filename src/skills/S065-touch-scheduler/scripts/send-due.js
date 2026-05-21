@@ -130,6 +130,15 @@ async function processLead(lead) {
 }
 
 async function run() {
+  // MANUAL SEND PAUSE (kill-switch): system_state.paused='true' halts ALL sending immediately.
+  // Used to hold the queue while a human approves the first real email, or to stop sends instantly.
+  try {
+    const paused = pg(`SELECT value FROM system_state WHERE key='paused'`);
+    if (String(paused || '').trim().toLowerCase() === 'true') {
+      console.log('HALT: system_state.paused=true — sending is manually paused (awaiting approval / kill-switch).');
+      return [{ halted: true, reason: 'manual_pause' }];
+    }
+  } catch (_e) {}
   // REPUTATION AUTO-PAUSE: if the recent (7d) bounce rate is dangerous, halt this cycle's sending to
   // protect domain/relay reputation. Fail-open — if the probe errors, sending proceeds (never block
   // business on a monitoring bug).
