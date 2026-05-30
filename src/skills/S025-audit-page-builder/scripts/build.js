@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const { scanSite } = require(require('path').resolve(__dirname, '..', '..', '..', '..', 'src', 'lib', 'audit', 'site-scan.js'));
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 function pgPath() { return path.resolve(ROOT, 'scripts', 'psql'); }
@@ -63,7 +64,7 @@ function verifySignedUrl(url) {
 
 // Build the payload that the Astro page will hydrate. Pulls applicable frameworks + rules
 // via the existing jurisdiction-router. Keeps the payload portable (JSON) so versioning is easy.
-function buildPayload({ domain, sector, country, lead_id }) {
+async function buildPayload({ domain, sector, country, lead_id, env }) {
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   const frameworks = router.routeJurisdictions({ country, sector });
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';
@@ -75,8 +76,15 @@ function buildPayload({ domain, sector, country, lead_id }) {
     return { framework_short, rule_id, severity, description, citation_url };
   }) : [];
 
+  // Real, evidence-tied site scan (self-healing — returns partial on any failure, never throws)
+  let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false };
+  try { scan = await scanSite({ domain, sector, env }); } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
+  const sevRank = { P0: 0, P1: 1, P2: 2 };
+  const findings = [...(scan.pointers || [])].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
+  const threeFindings = findings.slice(0, 3);
+
   return {
-    schema_version: 'v1',
+    schema_version: 'v2',
     domain,
     sector,
     country,
@@ -85,10 +93,13 @@ function buildPayload({ domain, sector, country, lead_id }) {
     framework_last_reviewed: lr,
     applicable_frameworks: frameworks,
     rules,
+    // Evidence-tied findings from the real site scan — surfaced at top level so any renderer can read them
+    pointers: findings,
+    scan: { scanned_at: scan.scanned_at, reachable: scan.reachable, final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null },
     sections: {
       cover:                 { firm: domain.replace(/^www\./, '').split('.')[0], generated_at: new Date().toISOString() },
-      three_findings:        { items_placeholder: 3 },
-      current_vs_after:      { rows_placeholder: 8 },
+      three_findings:        { items: threeFindings, count: findings.length },
+      current_vs_after:      { rows: findings.slice(0, 8).map(p => ({ current: p.fact, after: p.tamazia_fix_short, severity: p.severity })) },
       compliance_inventory:  { count: rules.length, p0: rules.filter(r => r.severity === 'P0').length, p1: rules.filter(r => r.severity === 'P1').length, p2: rules.filter(r => r.severity === 'P2').length },
       seo_opportunity:       { uplift_estimate_pct: 24 },
       competitive_benchmark: { competitors_placeholder: 3 },
@@ -100,7 +111,7 @@ function buildPayload({ domain, sector, country, lead_id }) {
   };
 }
 
-function build({ lead_id, domain, sector, country, company }) {
+async function build({ lead_id, domain, sector, country, company, env }) {
   if (!domain || !sector) throw new Error('domain and sector required');
   const slug = slugify(company || domain.split('.')[0]);
   let hash = generateHash();
@@ -110,7 +121,7 @@ function build({ lead_id, domain, sector, country, company }) {
     if (!exists) break;
     hash = generateHash();
   }
-  const payload = buildPayload({ domain, sector, country: country || 'UK', lead_id });
+  const payload = await buildPayload({ domain, sector, country: country || 'UK', lead_id, env: env || process.env });
   const expSeconds = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
   const signed = signUrl({ slug, hash, lead_id, expSeconds });
 
@@ -136,7 +147,7 @@ if (require.main === module) {
   const argv = process.argv.slice(2);
   const opts = parseArgs(argv);
   if (!opts.domain) { console.error('Usage: build.js --lead-id N --domain X --sector Y [--country UK] [--company Name]'); process.exit(2); }
-  console.log(JSON.stringify(build(opts), null, 2));
+  build(opts).then(r => console.log(JSON.stringify(r, null, 2))).catch(e => { console.error(e); process.exit(1); });
 }
 
 module.exports = { build, slugify, generateHash, signUrl, verifySignedUrl, buildPayload };
