@@ -1,0 +1,4 @@
+# Python deps for the Tamazia engine. The DB layer (scripts/lib/psql-shim.py) talks to Neon
+# Postgres via pg8000 (pure-Python driver, no libpq needed). Without this the whole engine
+# runs green but writes nothing. Do not remove.
+pg8000>=1.30.0
