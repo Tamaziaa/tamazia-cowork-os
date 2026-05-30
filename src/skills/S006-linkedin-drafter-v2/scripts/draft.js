@@ -27,12 +27,8 @@ function loadMutualIntros() {
 }
 
 function pickIntro(intros, sector) {
-  // Match intro affiliation to sector
-  if (['hospitality', 'food'].includes(sector)) return intros.find(i => /Kamat/i.test(i.name)) || intros[0];
-  if (['healthcare', 'pharma', 'dental'].includes(sector)) return intros.find(i => /CG Oncology/i.test(i.name)) || intros[0];
-  if (['real-estate'].includes(sector)) return intros.find(i => /Meraas/i.test(i.name)) || intros[0];
-  if (['law-firms', 'barristers'].includes(sector)) return intros.find(i => /Manuel/i.test(i.name)) || intros[0];
-  return intros[0];
+  // ANONYMISED (founder policy): client names are NEVER emitted in outreach. No named intros.
+  return null;
 }
 
 const SECTOR_HOOK = {
