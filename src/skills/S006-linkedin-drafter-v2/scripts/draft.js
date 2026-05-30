@@ -49,7 +49,7 @@ function buildConnectionRequest(lead) {
   const first = lead.first_name || 'there';
   const hook = SECTOR_HOOK[lead.sector] || 'Your sector regulator is active right now';
   // 200-char LinkedIn limit
-  return `Hi ${first} — Tamazia is the only SEO firm that puts every campaign through 200+ laws before publication. ${hook}. Open to swapping notes?`.slice(0, 295);
+  return `Hi ${first} — Tamazia is the only SEO firm that puts every campaign through 400+ laws before publication. ${hook}. Open to swapping notes?`.slice(0, 295);
 }
 
 function buildMessage(lead, intro, ad_intel) {
