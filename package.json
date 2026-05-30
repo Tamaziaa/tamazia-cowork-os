@@ -1,0 +1,11 @@
+{
+  "name": "tamazia-cowork-os",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tamazia Cowork OS engine. Node scripts use built-ins only; deps kept minimal so npm install never fails the cycle.",
+  "scripts": {
+    "cycle": "bash scripts/run-engine-cycle.sh",
+    "pulse": "node scripts/intel-pulse.js"
+  },
+  "dependencies": {}
+}
