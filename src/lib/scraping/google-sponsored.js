@@ -63,7 +63,8 @@ function ingestSponsored(q, sponsoredUrls) {
                 'ad_intelligence_google', ${esc('commercial_' + q.sector)}, 'sourced', TRUE, 60, NOW())`);
     inserted++;
   }
-  if (inserted) pg(`INSERT INTO audit_events (kind, detail) VALUES ('google_sponsored_ingest', ${esc(q.query + ' → ' + inserted + ' ad-runners')}) ON CONFLICT DO NOTHING`);
+  // Log the ingest to sourcing_runs (audit_events is for audit-page engagement, not scraper logs).
+  if (inserted) pg(`INSERT INTO sourcing_runs (source, sector, query, records_found, records_new, status, ended_at) VALUES ('google_sponsored', ${esc(q.sector)}, ${esc(q.query)}, ${inserted}, ${inserted}, 'completed', NOW())`);
   return inserted;
 }
 
