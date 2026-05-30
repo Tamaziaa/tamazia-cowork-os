@@ -38,12 +38,16 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
     let q;
     try { q = await scoreLead(lead); } catch (e) { console.log(`  ${lead.domain} score err: ${e.message}`); continue; }
     pg(`UPDATE leads SET quality_score=${q.score}, quality_fit=${q.fit ? 'TRUE' : 'FALSE'}, quality_layers=${esc(JSON.stringify(q.layers))}::jsonb, quality_scored_at=NOW(),
+        personalisation_pointers = COALESCE(personalisation_pointers,'{}'::jsonb) || ${esc(JSON.stringify({ top_finding: (q.compliance_gaps && q.compliance_gaps[0]) || (q.seo_gaps && q.seo_gaps[0]) || '', fit: q.fit }))}::jsonb,
         lifecycle_stage=${q.pass ? "'qualified'" : "'low_quality'"} WHERE id=${lead.id}`);
     if (q.pass) {
       passed++;
       // If a Touch-0 draft exists, enter the auto-send cadence
       // B6 gate: never queue a draft that still contains an unfilled token ({firm}, [Decision Maker Name], etc.)
-      const hasDraft = pg(`SELECT 1 FROM outreach_drafts WHERE lead_id=${lead.id} AND draft_metadata->>'touch'='0' AND send_status='pending' AND draft_body !~ '\\{[a-zA-Z_]+\\}' AND draft_body !~ '\\[[A-Za-z ]+\\]' LIMIT 1`);
+      // V2 Phase-2 gate: ONLY auto-cold-contact firms that genuinely NEED us (FIT) or an exceptional score.
+      // Non-FIT passes remain 'qualified' for manual review, never auto-cold-mailed.
+      const contactWorthy = q.fit || q.score >= 70;
+      const hasDraft = contactWorthy && pg(`SELECT 1 FROM outreach_drafts WHERE lead_id=${lead.id} AND draft_metadata->>'touch'='0' AND send_status='pending' AND draft_body !~ '\\{[a-zA-Z_]+\\}' AND draft_body !~ '\\[[A-Za-z ]+\\]' LIMIT 1`);
       if (hasDraft) { pg(`UPDATE leads SET status='touch_0_queued', next_touch_date=CURRENT_DATE WHERE id=${lead.id}`); queued++; }
     } else { failed++; }
     console.log(`  ${lead.domain.padEnd(30)} score=${q.score} ${q.pass ? 'PASS' : 'fail'}${q.fit ? ' [FIT]' : ''}`);
