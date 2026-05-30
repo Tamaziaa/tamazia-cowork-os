@@ -49,16 +49,16 @@ function buildConnectionRequest(lead) {
   const first = lead.first_name || 'there';
   const hook = SECTOR_HOOK[lead.sector] || 'Your sector regulator is active right now';
   // 200-char LinkedIn limit
-  return `Hi ${first} — Tamazia is the only SEO firm that puts every campaign through 400+ laws before publication. ${hook}. Open to swapping notes?`.slice(0, 295);
+  return `Hi ${first}, Tamazia is the only SEO firm that puts every campaign through 400+ laws before publication. ${hook}. Open to swapping notes?`.slice(0, 295);
 }
 
 function buildMessage(lead, intro, ad_intel) {
   const first = lead.first_name || lead.company.split(' ')[0];
   const sectorHook = SECTOR_HOOK[lead.sector] || 'your regulator is active';
   const adNote = ad_intel && ad_intel.platforms_count >= 1
-    ? `\n\nWe also picked up ${ad_intel.platforms.join(' + ')} pixels on ${lead.domain || lead.company} which says your team is investing in paid acquisition — but every paid landing page is a compliance surface too.`
+    ? `\n\nWe also picked up ${ad_intel.platforms.join(' + ')} pixels on ${lead.domain || lead.company} which says your team is investing in paid acquisition, but every paid landing page is a compliance surface too.`
     : '';
-  const introNote = intro ? `\n\n${intro.name} (${intro.company}) was one of our reference engagements — happy to share specifics if useful.` : '';
+  const introNote = intro ? `\n\n${intro.name} (${intro.company}) was one of our reference engagements, happy to share specifics if useful.` : '';
   const auditLink = lead.audit_url
     ? `\n\nWe ran a free compliance + SEO + AI-visibility audit on ${lead.domain || lead.company}. Findings here: ${lead.audit_url}`
     : '';
@@ -81,12 +81,12 @@ function buildVoiceScript(lead) {
   const first = lead.first_name || lead.company.split(' ')[0];
   const sectorHook = SECTOR_HOOK[lead.sector] || 'your regulator is active right now';
   // ≤30s = ~75 words spoken
-  return `Hi ${first}, Aman from Tamazia. Quick voice note rather than a wall of text. ${sectorHook} and I noticed your team is publishing without the regulatory review most firms in ${lead.sector || 'this sector'} are missing. I'd love to walk you through what we found in 20 minutes. No sales, no pitch deck — just the findings. Let me know.`;
+  return `Hi ${first}, Aman from Tamazia. Quick voice note rather than a wall of text. ${sectorHook} and I noticed your team is publishing without the regulatory review most firms in ${lead.sector || 'this sector'} are missing. I'd love to walk you through what we found in 20 minutes. No sales, no pitch deck, just the findings. Let me know.`;
 }
 
 function buildPostComment(lead, recent_post_topic) {
   // Engagement comment to warm before connection. Acceptable copy.
-  return `Helpful framing. The compliance angle on ${recent_post_topic || lead.sector || 'this'} is the one most teams miss — ICO / FCA / SRA / MHRA / CMA all running sweeps in parallel right now. Curious if you've seen the same pattern.`;
+  return `Helpful framing. The compliance angle on ${recent_post_topic || lead.sector || 'this'} is the one most teams miss, ICO / FCA / SRA / MHRA / CMA all running sweeps in parallel right now. Curious if you've seen the same pattern.`;
 }
 
 function saveDraft(lead_id, channel, draft_body, metadata, draft_subject) {
