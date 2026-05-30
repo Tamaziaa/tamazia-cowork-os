@@ -1,0 +1,30 @@
+name: Source hot leads (on demand)
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Comma sources: serp-top,reddit,youtube,x-ads,social-ads (or "all")'
+        default: 'serp-top'
+      max:
+        description: 'Max leads to fully process'
+        default: '25'
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet -r requirements.txt
+      - name: Materialise .env
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Source leads
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          SRC='${{ github.event.inputs.source }}'
+          if [ "$SRC" = "all" ]; then FLAG="--all"; else FLAG="--source $SRC"; fi
+          node scripts/source-leads.js $FLAG --max '${{ github.event.inputs.max }}'

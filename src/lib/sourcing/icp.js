@@ -17,7 +17,7 @@ const SECTORS = {
 };
 
 // Hard excludes — never a Tamazia client (platforms, marketplaces, directories, gov, news, social).
-const EXCLUDE = /(facebook|instagram|twitter|x\.com|linkedin|youtube|tiktok|pinterest|reddit|google|bing|yelp|tripadvisor|booking\.com|expedia|trustpilot|yell|yellowpages|thomsonlocal|checkatrade|wikipedia|gov\.|\.gov|nhs\.uk|amazon|ebay|etsy|indeed|glassdoor|reed\.co|rightmove|zoopla|justeat|deliveroo|ubereats|companieshouse|crunchbase|bbc\.|news|medium\.com|wordpress|wixsite|blogspot)/i;
+const EXCLUDE = /(facebook|instagram|twitter|x\.com|linkedin|youtube|tiktok|pinterest|reddit|google|bing|yelp|tripadvisor|booking\.com|expedia|trustpilot|yell|yellowpages|thomsonlocal|checkatrade|wikipedia|gov\.|\.gov|nhs\.uk|amazon|ebay|etsy|indeed|glassdoor|reed\.co|rightmove|zoopla|justeat|deliveroo|ubereats|companieshouse|crunchbase|bbc\.|news|medium\.com|wordpress|wixsite|blogspot|\.ac\.uk|\.edu$|legal500|chambers(student|-and-partners|\.com)|lawsociety|sra\.org|findlaw|avvo|lawyers\.com|solicitors\.guru|prospects\.ac|targetjobs|totaljobs|monster\.|cv-library|bark\.com|threebestrated|clutch\.co|g2\.com|capterra|trustradius|\bdirectory\b|\bdirectories\b|comparethe|compareni|moneysupermarket|gocompare|which\.co|wikihow|quora|stackexchange|pinterest|\.wiki|justia|nolo|martindale|superlawyers|ratemds|healthgrades|zocdoc|doctify|whatclinic|treatwell|fresha)/i;
 
 // Served geographies (TLD + country names). UK, UAE, USA, EU, wider Middle East.
 const GEO = {

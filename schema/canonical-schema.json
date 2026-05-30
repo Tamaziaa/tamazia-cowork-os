@@ -3640,6 +3640,108 @@
 "default": "false",
 "notnull": false,
 "identity": false
+},
+"hot_score": {
+"type": "integer",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"fit": {
+"type": "boolean",
+"default": "false",
+"notnull": false,
+"identity": false
+},
+"fit_score": {
+"type": "integer",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"contact_name": {
+"type": "varchar(255)",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"contact_linkedin": {
+"type": "text",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"emails": {
+"type": "jsonb",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"decision_makers": {
+"type": "jsonb",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"top_finding": {
+"type": "text",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"audit_slug": {
+"type": "varchar(120)",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"audit_hash": {
+"type": "varchar(16)",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"channel_email_ready": {
+"type": "boolean",
+"default": "false",
+"notnull": false,
+"identity": false
+},
+"channel_linkedin_ready": {
+"type": "boolean",
+"default": "false",
+"notnull": false,
+"identity": false
+},
+"channel_instagram_ready": {
+"type": "boolean",
+"default": "false",
+"notnull": false,
+"identity": false
+},
+"platform": {
+"type": "varchar(40)",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"country": {
+"type": "varchar(80)",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"sourced_at": {
+"type": "timestamptz",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"source_permalink": {
+"type": "text",
+"default": null,
+"notnull": false,
+"identity": false
 }
 },
 "pk": [
