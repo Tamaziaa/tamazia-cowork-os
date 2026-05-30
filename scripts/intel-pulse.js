@@ -37,7 +37,7 @@ function gather() {
     health_score: one(`SELECT metric FROM system_health WHERE check_key='_overall'`),
     health_fails: many(`SELECT check_key||' — '||COALESCE(detail,'') FROM system_health WHERE status='fail' AND check_key<>'_overall'`),
     health_warns: many(`SELECT check_key||' — '||COALESCE(detail,'') FROM system_health WHERE status='warn'`),
-    funnel: many(`SELECT lifecycle_stage||':'||COUNT(*) FROM leads WHERE lifecycle_stage IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 6`)
+    funnel: many(`SELECT lifecycle_stage||':'||COUNT(*) FROM leads WHERE lifecycle_stage IS NOT NULL GROUP BY lifecycle_stage ORDER BY COUNT(*) DESC LIMIT 6`)
     // EXTERNAL SOURCES (wire as connected): gsc_clicks, gsc_top_queries, ga_sessions, form_leads_24h, crm_new_deals
   };
 }
