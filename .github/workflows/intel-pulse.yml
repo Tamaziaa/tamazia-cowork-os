@@ -2,7 +2,7 @@ name: Tamazia hourly intel pulse
 # PhD-level analysis of the live pipeline every hour -> Slack + Telegram (summary + improvements + critical flags).
 on:
   schedule:
-    - cron: "0 * * * *"   # top of every hour
+    - cron: "0 * * * *"
   workflow_dispatch: {}
 concurrency:
   group: intel-pulse
@@ -16,8 +16,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Install deps
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Node deps
         run: npm install --omit=dev || true
+      - name: Install Python deps (pg8000 for DB shim)
+        run: python -m pip install --quiet -r requirements.txt
       - name: Materialise .env from secret
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Run intel pulse
