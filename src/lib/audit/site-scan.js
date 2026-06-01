@@ -93,6 +93,9 @@ async function pageSpeed(domain, key) {
       lcp_ms: num('largest-contentful-paint'),
       cls: num('cumulative-layout-shift'),
       tbt_ms: num('total-blocking-time'),
+      fcp_ms: num('first-contentful-paint'),
+      audits: Object.values(a).filter(x => x && x.score !== null && x.score < 0.9 && ['binary','numeric','metricSavings'].includes(x.scoreDisplayMode))
+        .map(x => ({ id: x.id, title: x.title || '', description: String(x.description || '').replace(/\s*\[[^\]]*\]\([^)]*\)/g, '').trim(), score: x.score, displayValue: x.displayValue || '', items: (x.details && x.details.items && x.details.items.length) || 0 })),
     };
   } catch (_e) { return null; }
 }
@@ -180,6 +183,70 @@ function pointersFromSignals(sig, psi, sector) {
   return out;
 }
 
+// PageSpeed/Lighthouse audit -> Tamazia finding map (word-by-word SEO + technical + accessibility bracket).
+const PSI_MAP = {
+  'is-crawlable': ['seo','P0','Tamazia removes the indexing blockers so Google can rank these pages at all.'],
+  'http-status-code': ['seo','P1','Tamazia fixes the non-200 status codes that stop pages being indexed.'],
+  'document-title': ['seo','P1','Tamazia writes unique, keyword-led title tags for every page.'],
+  'meta-description': ['seo','P1','Tamazia writes a compelling meta description for every page to lift click-through.'],
+  'link-text': ['seo','P2','Tamazia rewrites generic link text into descriptive, keyword-rich anchors.'],
+  'crawlable-anchors': ['seo','P1','Tamazia makes every link crawlable so equity and discovery flow.'],
+  'robots-txt': ['seo','P2','Tamazia publishes a valid robots.txt pointing crawlers at the sitemap.'],
+  'hreflang': ['seo','P2','Tamazia adds correct hreflang for each market you serve.'],
+  'canonical': ['seo','P2','Tamazia sets correct canonical tags to consolidate ranking signals.'],
+  'image-alt': ['seo','P2','Tamazia adds descriptive alt text to every image (SEO + accessibility).'],
+  'font-size': ['seo','P2','Tamazia fixes mobile font legibility.'],
+  'tap-targets': ['seo','P2','Tamazia sizes mobile tap targets so users can act.'],
+  'structured-data': ['ai_visibility','P1','Tamazia ships full Schema.org structured data so search and AI engines can parse you.'],
+  'largest-contentful-paint': ['technical_seo','P1','Tamazia cuts LCP below 2.5s (image, server and render-path optimisation).'],
+  'first-contentful-paint': ['technical_seo','P2','Tamazia speeds first paint via critical CSS and render-path fixes.'],
+  'cumulative-layout-shift': ['technical_seo','P1','Tamazia eliminates layout shift with sized media and reserved space.'],
+  'total-blocking-time': ['technical_seo','P2','Tamazia reduces main-thread blocking via JS splitting and deferral.'],
+  'speed-index': ['technical_seo','P2','Tamazia speeds visual completion of the page.'],
+  'interactive': ['technical_seo','P2','Tamazia reduces time-to-interactive.'],
+  'render-blocking-resources': ['technical_seo','P2','Tamazia removes render-blocking CSS and JavaScript.'],
+  'render-blocking-insight': ['technical_seo','P2','Tamazia removes render-blocking requests.'],
+  'unused-javascript': ['technical_seo','P2','Tamazia strips unused JavaScript from the critical path.'],
+  'unused-css-rules': ['technical_seo','P2','Tamazia removes unused CSS.'],
+  'total-byte-weight': ['technical_seo','P2','Tamazia compresses and trims total page weight.'],
+  'server-response-time': ['technical_seo','P2','Tamazia improves server response time (TTFB).'],
+  'uses-text-compression': ['technical_seo','P2','Tamazia enables text compression.'],
+  'modern-image-formats': ['technical_seo','P2','Tamazia serves modern image formats (WebP/AVIF).'],
+  'uses-responsive-images': ['technical_seo','P2','Tamazia serves correctly sized responsive images.'],
+  'redirects': ['technical_seo','P2','Tamazia removes redirect chains that slow first load.'],
+  'cache-insight': ['technical_seo','P2','Tamazia sets efficient cache lifetimes for static assets.'],
+  'image-delivery-insight': ['technical_seo','P2','Tamazia optimises image delivery (size, format, compression).'],
+  'document-latency-insight': ['technical_seo','P2','Tamazia reduces document request latency.'],
+  'lcp-discovery-insight': ['technical_seo','P2','Tamazia fixes LCP resource discovery so the main content loads sooner.'],
+  'network-dependency-tree-insight': ['technical_seo','P2','Tamazia flattens the network dependency chain.'],
+  'unsized-images': ['technical_seo','P2','Tamazia adds explicit width and height to images to stop layout shift.'],
+  'color-contrast': ['accessibility','P1','Tamazia fixes colour contrast to WCAG 2.1 AA (also an Equality Act / EAA exposure).'],
+  'select-name': ['accessibility','P2','Tamazia labels every form control for screen readers.'],
+  'frame-title': ['accessibility','P2','Tamazia titles all iframes.'],
+  'target-size': ['accessibility','P2','Tamazia sizes touch targets to WCAG 2.5.5.'],
+  'label': ['accessibility','P1','Tamazia associates labels with every input.'],
+  'link-name': ['accessibility','P2','Tamazia gives every link an accessible name.'],
+  'heading-order': ['accessibility','P2','Tamazia fixes the heading hierarchy.'],
+  'html-has-lang': ['accessibility','P2','Tamazia sets the page language attribute.'],
+  'deprecations': ['technical_seo','P2','Tamazia removes deprecated browser APIs.'],
+  'errors-in-console': ['technical_seo','P2','Tamazia clears the JavaScript console errors.'],
+};
+function psiPointers(psi) {
+  if (!psi || !Array.isArray(psi.audits)) return [];
+  const out = [];
+  for (const au of psi.audits) {
+    const map = PSI_MAP[au.id] || ['technical_seo', 'P2', 'Tamazia resolves this as part of the technical SEO workstream.'];
+    const [bucket, baseSev, fix] = map;
+    const sev = au.score === 0 ? baseSev : (baseSev === 'P0' ? 'P1' : baseSev === 'P1' ? (au.score < 0.5 ? 'P1' : 'P2') : 'P2');
+    const ev = au.displayValue ? au.displayValue : (au.items ? au.items + ' element(s) affected' : 'measured by Google PageSpeed (mobile)');
+    out.push(P(bucket, sev, au.title,
+      au.title,
+      (au.description || '') + ' Measured live by Google PageSpeed Insights on your mobile site.',
+      fix,
+      'Google PageSpeed (mobile) · ' + au.id + ' · ' + ev));
+  }
+  return out;
+}
 async function scanSite({ domain, sector, env }) {
   const clean = String(domain || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
   const page = await getHtml('https://' + clean);
@@ -200,6 +267,7 @@ async function scanSite({ domain, sector, env }) {
     exists('https://' + clean + '/llms.txt'),
   ]);
   const pointers = pointersFromSignals(sig, psi, sector || '');
+  for (const pp of psiPointers(psi)) pointers.push(pp);
   if (robots === false) pointers.push(P('technical_seo', 'P2', 'robots.txt', 'No robots.txt found.', 'Search and AI crawlers have no crawl directives, and you cannot point them at your sitemap, slowing how fast new pages get indexed.', 'Tamazia publishes a robots.txt that points crawlers at the sitemap.', 'GET /robots.txt · 404'));
   if (sitemap === false) pointers.push(P('technical_seo', 'P2', 'XML sitemap', 'No sitemap.xml found.', 'Without a sitemap, search engines discover pages slowly and may miss deep content entirely.', 'Tamazia generates and submits an XML sitemap.', 'GET /sitemap.xml · 404'));
   if (llms === false) pointers.push(P('ai_visibility', 'P2', 'llms.txt', 'No llms.txt file.', 'llms.txt is the emerging standard that tells AI assistants how to represent your firm. Publishing one puts you ahead of peers who have not.', 'Tamazia publishes a curated llms.txt.', 'GET /llms.txt · 404'));
@@ -238,4 +306,4 @@ async function scanSite({ domain, sector, env }) {
   };
 }
 
-module.exports = { scanSite, extractSignals, pointersFromSignals };
+module.exports = { scanSite, extractSignals, pointersFromSignals, psiPointers, pageSpeed };
