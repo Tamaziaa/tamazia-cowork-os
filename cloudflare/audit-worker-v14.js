@@ -151,7 +151,22 @@ function adapt(row) {
   })).sort((a, b) => (SEV[a.severity] ?? 3) - (SEV[b.severity] ?? 3));
   const rules = (p.rules || []).map(r => ({ code: r.framework_short, rule_id: r.rule_id, severity: r.severity, description: r.description, url: r.citation_url, fw: fwFor(null, r.framework_short) }));
   const frameworks = p.applicable_frameworks || [];
-  return { company, domain, sector, country: row.country || p.country || 'UK', markets, signals, psi, pointers, rules, frameworks, reachable: !!(p.scan && p.scan.reachable) };
+  let rawGroups = p.framework_groups;
+  if (!Array.isArray(rawGroups) || !rawGroups.length) {
+    // Fallback: group pointers on the fly (old payloads minted before framework_groups existed).
+    const gm = {};
+    for (const x of (p.pointers || [])) {
+      const key = x.framework_short || x.citation || x.bucket || 'Other';
+      if (!gm[key]) gm[key] = { key, label: x.framework_short ? String(x.framework_short).replace(/^(UK|EU|US|AE|DE|FR)_/, '$1 ').replace(/_/g, ' ') : (x.citation || key), bucket: x.bucket || 'compliance', framework_short: x.framework_short || null, severity: x.severity || 'P3', fine_low_gbp: null, fine_high_gbp: null, citation_url: x.citation_url || '', items: [] };
+      const g = gm[key]; g.items.push({ severity: x.severity, fact: x.fact || x.layman_explanation, why: x.layman_explanation, fix: x.tamazia_fix_short || x.recommendation, evidence: x.evidence || x.evidence_url, citation_url: x.citation_url, fine_low_gbp: x.fine_low_gbp, fine_high_gbp: x.fine_high_gbp });
+      if ((SEV[x.severity] ?? 3) < (SEV[g.severity] ?? 3)) g.severity = x.severity;
+      if (x.fine_high_gbp && (!g.fine_high_gbp || x.fine_high_gbp > g.fine_high_gbp)) { g.fine_high_gbp = x.fine_high_gbp; g.fine_low_gbp = x.fine_low_gbp || g.fine_low_gbp; }
+      if (!g.citation_url && x.citation_url) g.citation_url = x.citation_url;
+    }
+    rawGroups = Object.values(gm).map(x => ({ ...x, count: x.items.length })).sort((a, b) => (SEV[a.severity] ?? 3) - (SEV[b.severity] ?? 3) || (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0) || b.count - a.count);
+  }
+  const groups = rawGroups.map(g => ({ ...g, fw: fwFor(g.label, g.framework_short) }));
+  return { company, domain, sector, country: row.country || p.country || 'UK', markets, signals, psi, pointers, groups, rules, frameworks, reachable: !!(p.scan && p.scan.reachable) };
 }
 
 // ================= CHARTS (inline SVG, no deps) =================
@@ -186,6 +201,46 @@ function sevChips(p0, p1, p2) {
 }
 
 // ================= SECTIONS =================
+// ONE framework = ONE collapsible box. Sub-issues merged inside. Severity tiers: big-red (P0) -> orange (P1) -> grey (P2/P3).
+function frameworkBox(g) {
+  const sev = g.severity || 'P2';
+  const tier = sev === 'P0' ? { col: '#B91C1C', lab: 'CRITICAL', bw: '6px', bg: '#FBF1F0' }
+             : sev === 'P1' ? { col: '#E67E22', lab: 'HIGH', bw: '5px', bg: '#FEF7EF' }
+             : sev === 'P2' ? { col: '#6b7280', lab: 'STANDARD', bw: '3px', bg: '#fff' }
+             :                { col: '#9ca3af', lab: 'MINOR', bw: '3px', bg: '#fff' };
+  const f = g.fw ? FW[g.fw] : null;
+  const reg = f ? f.reg : '';
+  const fineStr = gbp(g.fine_high_gbp) ? (gbp(g.fine_low_gbp) ? gbp(g.fine_low_gbp) + ' to ' + gbp(g.fine_high_gbp) : 'up to ' + gbp(g.fine_high_gbp)) : (f ? f.maxFine : '');
+  const ruling = f ? f.ruling : '';
+  const url = g.citation_url || (f ? f.root : '');
+  const titleSize = sev === 'P0' ? '1.16rem' : sev === 'P1' ? '1.05rem' : '0.98rem';
+  const open = sev === 'P0' ? ' open' : '';
+  const items = (g.items || []).map(it => `
+      <div style="border-top:1px solid #eee;padding-top:10px;margin-top:10px">
+        <p style="margin:0;font-weight:600;font-size:0.9rem;color:#3D0E0E;line-height:1.35">${esc(it.fact)}</p>
+        ${it.evidence ? `<p style="margin:4px 0 0;font-size:0.72rem;color:#6b6b6b">On your site: ${esc(it.evidence)}</p>` : ''}
+        ${it.why ? `<p style="margin:5px 0 0;font-size:0.8rem;color:#1F2937;line-height:1.5"><strong style="color:${tier.col}">Why it is a problem:</strong> ${esc(it.why)}</p>` : ''}
+        ${it.fix ? `<p style="margin:5px 0 0;font-size:0.8rem;color:#14532d;line-height:1.5"><strong>How Tamazia fixes it:</strong> ${esc(it.fix)}</p>` : ''}
+      </div>`).join('');
+  return `<details${open} style="border:1px solid #e5e7eb;border-left:${tier.bw} solid ${tier.col};border-radius:6px;margin:0 0 10px;background:${tier.bg}">
+    <summary style="cursor:pointer;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <span style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+        <span style="background:${tier.col};color:#fff;font-size:0.6rem;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:0.03em">${tier.lab}</span>
+        <span style="font-family:'Times New Roman',serif;font-size:${titleSize};font-weight:600;color:#3D0E0E">${esc(g.label)}</span>
+        <span style="font-size:0.7rem;color:#6b6b6b">${g.count} issue${g.count > 1 ? 's' : ''}${reg ? ' · ' + esc(reg) : ''}</span>
+      </span>
+      <span style="white-space:nowrap;text-align:right">${fineStr ? `<span style="font-size:0.74rem;font-weight:700;color:${tier.col}">${esc(fineStr)}</span>` : ''}<span class="chev" style="color:#9ca3af;font-size:0.8rem;margin-left:8px">▾</span></span>
+    </summary>
+    <div style="padding:0 16px 14px">
+      ${items}
+      ${(reg || fineStr || url || ruling) ? `<p style="margin:12px 0 0;font-size:0.74rem;color:#1F2937;border-top:1px dashed #ddd;padding-top:8px">${reg ? `<strong>Regulator:</strong> ${esc(reg)}` : ''}${fineStr ? ` · <strong>Maximum exposure:</strong> ${esc(fineStr)}` : ''}${url ? ` · <a href="${esc(url)}" style="color:#3D0E0E">read the law →</a>` : ''}</p>` : ''}
+      ${ruling ? `<p style="margin:5px 0 0;font-size:0.72rem;color:#6b6b6b;font-style:italic">Recent enforcement: ${esc(ruling)}</p>` : ''}
+    </div>
+  </details>`;
+}
+function groupsForSection(m, kind) {
+  return (m.groups || []).filter(g => kind === 'compliance' ? isCompliance(g.bucket) : kind === 'ai' ? isAI(g.bucket) : isSEO(g.bucket));
+}
 function findingCard(p) {
   const f = p.fw ? FW[p.fw] : null;
   const sevCol = p.severity === 'P0' ? '#B91C1C' : p.severity === 'P1' ? '#E67E22' : '#6b7280';
@@ -233,8 +288,8 @@ function renderRegulatory(m) {
   const body = `
     <p style="font-size:0.84rem;color:#1F2937;line-height:1.55;margin:0 0 12px">These are the regulators and laws that apply to a <strong>${esc(m.sector)}</strong> serving <strong>${esc((m.markets.regions || ['UK']).join(', ') || 'UK')}</strong>. Only laws that bind you are shown. Every published word on ${esc(m.domain)} is read against them.</p>
     <div style="margin:0 0 16px">${lawChips || '<span style="font-size:0.74rem;color:#6b6b6b">Framework catalogue loading from your operating markets.</span>'}</div>
-    ${cps.length ? `<p style="font-size:0.7rem;color:#3D0E0E;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin:0 0 8px">Where you are exposed today</p>${cps.map(findingCard).join('')}`
-      : `<p style="font-size:0.82rem;color:#6b6b6b">No compliance gaps were extractable on this scan. The re-scan at engagement start runs the full catalogue word-by-word.</p>`}`;
+    ${(() => { const gp = groupsForSection(m, 'compliance'); return gp.length ? `<p style="font-size:0.7rem;color:#3D0E0E;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin:0 0 8px">Where you are exposed today \u2014 ${gp.length} framework${gp.length>1?'s':''}, biggest risk first</p>${gp.map(frameworkBox).join('')}`
+      : `<p style="font-size:0.82rem;color:#6b6b6b">No compliance gaps were extractable on this scan. The re-scan at engagement start runs the full catalogue word-by-word.</p>`; })()}`;
   return sectionShell('regulatory', 'Section 1 · Regulatory compliance', `${esc(m.company)} against the laws that bind it`, sc, body);
 }
 
@@ -255,7 +310,7 @@ function renderAI(m) {
   const aiFindings = m.pointers.filter(p => isAI(p.bucket));
   const body = `
     <p style="font-size:0.84rem;color:#1F2937;line-height:1.55;margin:0 0 12px">Buyers increasingly ask ChatGPT, Claude, Perplexity, Gemini and Google’s AI overview for a <strong>${esc(m.sector)}</strong>. To be cited, an AI engine must be able to read and trust your site. Here is what it finds on ${esc(m.domain)}:</p>
-    ${aiFindings.map(findingCard).join('')}
+    ${groupsForSection(m, 'ai').map(frameworkBox).join('')}
     <div style="display:grid;gap:10px">${checks.map(c => `
       <div style="display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start;background:${c.ok ? '#F2F8F2' : '#FBF1F0'};border-radius:6px;padding:10px 12px">
         <span style="font-size:1.1rem;color:${c.ok ? '#2E7D32' : '#B91C1C'}">${c.ok ? '✓' : '✕'}</span>
@@ -277,11 +332,11 @@ function renderSEO(m) {
   const body = `
     <p style="font-size:0.84rem;color:#1F2937;line-height:1.55;margin:0 0 12px">What search engines and buyers hit when they land on ${esc(m.domain)}, and what it costs you in rankings and revenue.</p>
     ${cwv}
-    ${sps.length ? sps.map(findingCard).join('') : '<p style="font-size:0.82rem;color:#6b6b6b">No on-page or technical SEO gaps were extractable on this scan.</p>'}`;
+    ${(() => { const gp = groupsForSection(m, 'seo'); return gp.length ? gp.map(frameworkBox).join('') : '<p style="font-size:0.82rem;color:#6b6b6b">No on-page or technical SEO gaps were extractable on this scan.</p>'; })()}`;
   return sectionShell('seo', 'Section 3 · SEO + technical', `What is costing ${esc(m.company)} rankings and revenue`, sc, body);
 }
 
-function renderHero(m, overall, grade, t, topRegs) {
+function renderHero(m, overall, grade, t, topRegs, exposure) {
   return `<section style="background:#3D0E0E;color:#F8F5EF;padding:30px 24px"><div style="max-width:1080px;margin:0 auto">
     <p style="font-size:0.72rem;letter-spacing:0.2em;text-transform:uppercase;color:#C8A664;margin:0 0 14px;font-weight:700">Tamazia · Personalised regulatory + AI visibility + SEO audit · ${esc(m.country)}</p>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center">
@@ -291,6 +346,12 @@ function renderHero(m, overall, grade, t, topRegs) {
         <p style="margin:0 0 14px;font-size:0.84rem;color:rgba(248,245,239,0.75)">${esc(m.sector)} · ${esc(m.domain)} · markets: ${esc((m.markets.regions || ['UK']).join(', ') || 'UK')} · 400+ framework catalogue</p>
         <div style="background:rgba(248,245,239,0.06);border-radius:8px;padding:14px 16px">${trajectoryBars(t)}</div>
       </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:16px">
+      <div style="background:rgba(185,28,28,0.16);border:1px solid rgba(185,28,28,0.4);border-radius:8px;padding:11px 13px"><p style="margin:0;font-family:'Times New Roman',serif;font-size:1.6rem;font-weight:600;color:#fff">${exposure.critN}</p><p style="margin:0;font-size:0.68rem;color:rgba(248,245,239,0.75);text-transform:uppercase;letter-spacing:0.04em">Critical frameworks</p></div>
+      <div style="background:rgba(230,126,34,0.14);border:1px solid rgba(230,126,34,0.4);border-radius:8px;padding:11px 13px"><p style="margin:0;font-family:'Times New Roman',serif;font-size:1.6rem;font-weight:600;color:#fff">${exposure.highN}</p><p style="margin:0;font-size:0.68rem;color:rgba(248,245,239,0.75);text-transform:uppercase;letter-spacing:0.04em">High-risk frameworks</p></div>
+      <div style="background:rgba(248,245,239,0.06);border:1px solid rgba(248,245,239,0.18);border-radius:8px;padding:11px 13px"><p style="margin:0;font-family:'Times New Roman',serif;font-size:1.6rem;font-weight:600;color:#C8A664">${exposure.fineStr || '—'}</p><p style="margin:0;font-size:0.68rem;color:rgba(248,245,239,0.75);text-transform:uppercase;letter-spacing:0.04em">Top single-law exposure</p></div>
+      <div style="background:rgba(248,245,239,0.06);border:1px solid rgba(248,245,239,0.18);border-radius:8px;padding:11px 13px"><p style="margin:0;font-family:'Times New Roman',serif;font-size:1.6rem;font-weight:600;color:#fff">${exposure.total}</p><p style="margin:0;font-size:0.68rem;color:rgba(248,245,239,0.75);text-transform:uppercase;letter-spacing:0.04em">Frameworks flagged</p></div>
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;align-items:center">
       <a href="${BOOK}" style="display:inline-block;padding:12px 20px;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:700;border-radius:4px;font-size:0.84rem">Book the founder call →</a>
@@ -305,12 +366,17 @@ function renderPage(m) {
   const overallScore = sectionScore(m.pointers).score;
   const grade = gradeOf(overallScore);
   const t = trajectory(overallScore);
-  const topRegs = Array.from(new Set(reg.map(p => p.fw && FW[p.fw] ? FW[p.fw].reg : null).filter(Boolean))).slice(0, 3);
+  const G = m.groups || [];
+  const critN = G.filter(g => g.severity === 'P0').length;
+  const highN = G.filter(g => g.severity === 'P1').length;
+  const maxFine = G.reduce((mx, g) => Math.max(mx, g.fine_high_gbp || 0), 0);
+  const exposure = { critN, highN, total: G.length, fineStr: gbp(maxFine) || '' };
+  const topRegs = Array.from(new Set(G.map(g => g.fw && FW[g.fw] ? FW[g.fw].reg : null).filter(Boolean))).slice(0, 4);
   const title = `${m.company} · Regulatory + AI + SEO audit · Tamazia`;
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${esc(title)}</title>
-<style>*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;color:#1F2937;background:#fff;line-height:1.5}h1,h2{font-family:'Times New Roman',serif;font-weight:500}a:hover{opacity:0.85}</style>
+<style>*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;color:#1F2937;background:#fff;line-height:1.5}h1,h2{font-family:'Times New Roman',serif;font-weight:500}a:hover{opacity:0.85}summary::-webkit-details-marker{display:none}summary::marker{content:''}details[open] .chev{transform:rotate(180deg);display:inline-block}</style>
 </head><body>
-${renderHero(m, overallScore, grade, t, topRegs)}
+${renderHero(m, overallScore, grade, t, topRegs, exposure)}
 ${renderRegulatory(m)}
 ${renderAI(m)}
 ${renderSEO(m)}
@@ -340,7 +406,7 @@ export default {
     let html;
     try { html = renderPage(adapt(res.row)); }
     catch (e) { return new Response('Audit render error.', { status: 500, headers: { 'content-type': 'text/plain' } }); }
-    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v14-live' } });
+    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v15-grouped' } });
   }
 };
 
