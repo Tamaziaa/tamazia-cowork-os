@@ -19,6 +19,8 @@ run() { echo "[$(TS)] >> $1"; eval "$1" 2>&1 | tail -3; echo "[$(TS)] done: $1";
   run "node scripts/verify-contacts.js 25"                              # FREE email verify (Hunter+DIY, £0) → verify_status/contact_confidence
   run "node scripts/dedupe-leads.js"                                    # suppress duplicate-domain leads (non-destructive)
   run "node scripts/qualify-and-queue.js 12"                            # 10-layer quality gate → auto-send queue
+  run "node scripts/refresh-pipeline.js"                                 # Phase D: decay stale scores + refresh stale rankings + re-enroll stale enrichment
+  run "node scripts/buying-signals.js 10"                                # Phase D: watch prospect sites for hiring/pricing/redesign -> auto hot re-score
   run "node scripts/build-rank-insights.js 15"                            # Touch-0 SOUL: gated below-top-5 keyword-gap insight per lead
   run "node scripts/render-touches.js 15"                                # S064: render the gated 4-touch cadence (Touch-0 rankings) for FIT leads BEFORE export
   run "node scripts/mystrika-export.js 1000"                            # B02 export FIT leads -> Mystrika CSV + social CSV
