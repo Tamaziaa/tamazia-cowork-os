@@ -92,6 +92,9 @@ inv('UK-only law no EU_AI_ACT even with AI', !get(['UK'],'law-firms',{uses_ai:tr
 inv('UK+EU law with AI HAS EU_AI_ACT', get(['UK','DE'],'law-firms',{uses_ai:true},AI_TEXT).includes('EU_AI_ACT'));
 inv('Singapore-only => GLOBAL-only (no UK/EU/US frameworks)', get(['SG'],'saas',{},'').every(fw=>(fvJ[fw]||'')==='GLOBAL'));
 
+inv('law firm excludes pharma/accounting/energy/aviation frameworks', !['UK_ABPI','UK_ACCA','UK_OFGEM','UK_CAA','UK_GDC','UK_RICS','UK_MHRA','UK_CQC','UK_FSA','UK_OFSTED'].some(f=>get(['UK'],'law-firms',{},'').includes(f)));
+inv('pharma firm INCLUDES UK_MHRA/ABPI', get(['UK'],'pharma',{},'').some(f=>['UK_MHRA','UK_ABPI'].includes(f)) || get(['UK'],'pharma',{},'we sell prescription medicine').some(f=>['UK_MHRA','UK_ABPI'].includes(f)));
+inv('healthcare firm INCLUDES UK_CQC', get(['UK'],'healthcare',{},'').includes('UK_CQC'));
 console.log('\n===== 50-SCENARIO CONNECTION TEST =====');
 console.log('PASS '+PASS+'  FAIL '+FAIL+'  (scenarios '+S.length+')');
 if(fails.length){console.log('\nFAILURES:');fails.slice(0,40).forEach(f=>console.log('  x '+f));}

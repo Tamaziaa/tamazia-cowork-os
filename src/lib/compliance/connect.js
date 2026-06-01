@@ -9,6 +9,32 @@ const ROOT = path.resolve(__dirname, '..', '..', '..');
 const EU_ISO = new Set(['AT','BE','BG','CY','CZ','DE','DK','EE','ES','FI','FR','GR','HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE','SI','SK']);
 function normJuris(j) { j = String(j || '').toUpperCase().trim(); if (j === 'GB' || j === 'GBR') return 'UK'; if (j === 'USA') return 'US'; if (j === 'UAE') return 'AE'; return j; }
 
+// Frameworks that apply to EVERY sector (privacy, cookies, consumer protection, equality, advertising, Google).
+const UNIVERSAL_FW = new Set([
+  'GOOGLE_EEAT',
+  'UK_GDPR_A13','UK_PECR','UK_ICO_COOKIES','UK_DPA_2018','UK_DMCC_2024','UK_COMPANIES_ACT','UK_EQUALITY_2010','UK_CRA_2015','UK_CMA','UK_TRADING_STANDARDS','UK_ASA_CAP','UK_MODERN_SLAVERY',
+  'EU_GDPR','EU_EPRIVACY','EU_AI_ACT','EU_EAA_2025','EU_DSA',
+  'US_FTC','US_CPRA','US_CCPA','US_FTC_ENDORSE','US_ADA','US_TCPA','US_VCDPA','US_TDPSA',
+  'UAE_PDPL','DE_BDSG','FR_CNIL_2025',
+]);
+let _fwToSectors = null;
+function fwToSectors() {
+  if (_fwToSectors) return _fwToSectors;
+  _fwToSectors = {};
+  try { const { SECTOR_MAP } = require('./jurisdiction-router.js'); for (const [sec, fws] of Object.entries(SECTOR_MAP)) for (const fw of fws) (_fwToSectors[fw] = _fwToSectors[fw] || new Set()).add(sec); } catch (_e) {}
+  return _fwToSectors;
+}
+// GATE B0 (framework sector): a framework applies to a sector if it is universal, OR the curated sector map
+// lists it for that sector, OR it has a rule whose sector_relevance explicitly names the sector.
+function fwSectorOK(fw, sector, rulesForFw) {
+  if (!sector) return true;                         // unknown sector: do not over-filter
+  if (UNIVERSAL_FW.has(fw)) return true;
+  const m = fwToSectors()[fw];
+  if (m && m.has(sector)) return true;
+  if ((rulesForFw || []).some(r => Array.isArray(r.sector_relevance) && r.sector_relevance.includes(sector))) return true;
+  return false;                                     // sector-specific framework for a different sector -> excluded
+}
+
 // Expand a set of detected jurisdiction codes into the full set the firm is bound by.
 function expandJurisdictions(list) {
   const J = new Set((list || []).map(normJuris).filter(Boolean));
@@ -43,6 +69,8 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     // GATE A · JURISDICTION: framework must belong to a jurisdiction the firm operates in. GLOBAL always applies.
     const jurOK = juris === 'GLOBAL' || J.has(juris);
     if (!jurOK) { gates.jurisdiction_filtered.push(fw); continue; }
+    // GATE B0 · framework-sector applicability (stops pharma/accounting/energy frameworks leaking into, say, a law firm)
+    if (!fwSectorOK(fw, sec, byFw[fw])) { gates.sector_filtered.push(fw); continue; }
     let anyRule = false, triggerHeld = false, sectorHeld = false;
     for (const r of byFw[fw]) {
       const sectors = Array.isArray(r.sector_relevance) ? r.sector_relevance : [];

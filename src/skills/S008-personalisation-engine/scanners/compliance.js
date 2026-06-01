@@ -167,7 +167,7 @@ function ruleCheck(rule, corpus, sector) {
   };
 }
 
-async function scan({ domain, sector, country, cache_max_age = 86400 }) {
+async function scan({ domain, sector, country, cache_max_age = 86400, signals = {} }) {
   domain = String(domain || '').toLowerCase();
   if (!domain) return { ok: false, error: 'domain_required' };
   const cacheKey = `${domain}|${sector}|${country}`;
@@ -178,12 +178,16 @@ async function scan({ domain, sector, country, cache_max_age = 86400 }) {
   // then expand framework routing to include every detected jurisdiction.
   const corpus = await gatherCorpus({ domain });
   const detectedJurisdictions = detectOperatingJurisdictions(corpus);
-  const allJurisdictions = new Set([country].concat(detectedJurisdictions).filter(Boolean));
-  const frameworkSet = new Set();
-  for (const j of allJurisdictions) {
-    for (const f of routeJurisdictions({ country: j, sector })) frameworkSet.add(f);
+  const allJurisdictions = Array.from(new Set([country].concat(detectedJurisdictions).filter(Boolean)));
+  const corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+  // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
+  let frameworks;
+  try {
+    const { connect, loadCatalogue } = require('../../../lib/compliance/connect.js');
+    frameworks = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector, signals, text: corpusText }).frameworks;
+  } catch (_e) {
+    const fs2 = new Set(); for (const j of allJurisdictions) for (const f of routeJurisdictions({ country: j, sector })) fs2.add(f); frameworks = Array.from(fs2);
   }
-  const frameworks = Array.from(frameworkSet);
   const rules = loadRules({ frameworks });
   if (!rules.length) {
     const payload = { domain, sector, country, frameworks, detected_jurisdictions: detectedJurisdictions, ok: true, rules_evaluated: 0, findings: [], note: 'no_active_rules_for_routing' };
