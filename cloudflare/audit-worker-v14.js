@@ -529,6 +529,30 @@ function renderAIPlatform(audit) {
     </section>`;
 }
 
+function urlPath(u) {
+  try { const x = new URL(u); const pth = x.pathname.replace(/\/$/, '') || '/'; return pth === '/' ? 'home page' : pth; } catch (_e) { return String(u || '').slice(0, 40); }
+}
+// Word-level evidence: quote the client's exact offending sentence when we have it; otherwise, for an
+// absence finding, state honestly which pages were scanned and that the required disclosure was not present.
+function evidenceLine(p) {
+  if (p.evidence_quote) {
+    const where = p.evidence ? urlPath(p.evidence) : '';
+    return `<blockquote style="margin:4px 0 5px;padding:6px 11px;border-left:3px solid #B91C1C;background:#fff;border-radius:0 3px 3px 0">
+      <span style="font-size:0.7rem;color:#B91C1C;font-weight:700;text-transform:uppercase;letter-spacing:0.04em">Your own words</span>
+      <span style="display:block;font-size:0.8rem;color:#3D0E0E;font-style:italic;line-height:1.4;margin-top:2px">\u201C${esc(p.evidence_quote)}\u201D</span>
+      ${where ? `<span style="font-size:0.66rem;color:#6b6b6b">on your ${esc(where)}</span>` : ''}
+    </blockquote>`;
+  }
+  if (Array.isArray(p.checked_urls) && p.checked_urls.length) {
+    const paths = p.checked_urls.slice(0, 3).map(urlPath).filter(Boolean);
+    return `<p style="margin:0 0 3px;font-size:0.7rem;color:#6b6b6b">Scanned ${p.checked_urls.length} of your page${p.checked_urls.length === 1 ? '' : 's'}${paths.length ? ` (incl. ${esc(paths.join(', '))})` : ''}; this disclosure was not present.</p>`;
+  }
+  if (p.evidence && !/^multi-page/.test(p.evidence)) {
+    return `<p style="margin:0 0 3px;font-size:0.7rem;color:#6b6b6b">On your site: ${esc(urlPath(p.evidence))}</p>`;
+  }
+  return '';
+}
+
 function renderFrameworkBlock(code, list) {
   const m = FRAMEWORK_META[code] || { name: code, regulator: 'See guidance', root: '#' };
   const crit = list.filter(p => p.severity === 'P0').length;
@@ -578,7 +602,7 @@ function renderFrameworkBlock(code, list) {
                 ${fine ? `<span style="margin-left:auto;font-size:0.66rem;color:#B91C1C;font-weight:600">${esc(fine)}</span>` : ''}
               </div>
               <p style="margin:0 0 3px;font-size:0.84rem;color:#1F2937;line-height:1.4;font-weight:600">${esc(p.desc || p.fact || '')}</p>
-              ${p.evidence ? `<p style="margin:0 0 3px;font-size:0.7rem;color:#6b6b6b">On your site: ${esc(p.evidence)}</p>` : ''}
+              ${evidenceLine(p)}
               <p style="margin:0;font-size:0.78rem;color:#14532d;line-height:1.4"><strong>Tamazia fix:</strong> ${esc(p.tamazia_fix_short || p.recommendation || '')}</p>
             </li>`;
         }).join('')}
@@ -833,6 +857,9 @@ function adapt(row) {
       fine_high_gbp: x.fine_high_gbp || null,
       citation_url: x.citation_url || '',
       evidence: x.evidence || x.evidence_url || '',
+      evidence_quote: x.evidence_quote || null,
+      checked_urls: Array.isArray(x.checked_urls) ? x.checked_urls : null,
+      rule_type: x.rule_type || null,
     };
   });
   return {

@@ -81,7 +81,7 @@ function groupFindings(pointers) {
     const key = p.framework_short || p.citation || p.bucket || 'Other';
     if (!g[key]) g[key] = { key, label: p.framework_short ? _humanizeFw(p.framework_short) : (p.citation || String(key)), bucket: p.bucket || 'compliance', framework_short: p.framework_short || null, severity: p.severity || 'P3', fine_low_gbp: null, fine_high_gbp: null, citation_url: p.citation_url || '', items: [] };
     const grp = g[key];
-    grp.items.push({ severity: p.severity || 'P3', fact: p.fact || p.description || '', why: p.layman_explanation || '', fix: p.tamazia_fix_short || p.recommendation || '', evidence: p.evidence || p.evidence_url || '', citation_url: p.citation_url || '', fine_low_gbp: p.fine_low_gbp || null, fine_high_gbp: p.fine_high_gbp || null });
+    grp.items.push({ severity: p.severity || 'P3', fact: p.fact || p.description || '', why: p.layman_explanation || '', fix: p.tamazia_fix_short || p.recommendation || '', evidence: p.evidence || p.evidence_url || '', evidence_quote: p.evidence_quote || null, checked_urls: p.checked_urls || null, citation_url: p.citation_url || '', fine_low_gbp: p.fine_low_gbp || null, fine_high_gbp: p.fine_high_gbp || null });
     if ((_SEV[p.severity] ?? 3) < (_SEV[grp.severity] ?? 3)) grp.severity = p.severity;
     if (p.fine_high_gbp && (!grp.fine_high_gbp || p.fine_high_gbp > grp.fine_high_gbp)) { grp.fine_high_gbp = p.fine_high_gbp; grp.fine_low_gbp = p.fine_low_gbp || grp.fine_low_gbp; }
     if (!grp.citation_url && p.citation_url) grp.citation_url = p.citation_url;
@@ -117,6 +117,9 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     recommendation: f.tamazia_fix_short || '',
     citation: f.framework, framework_short: f.framework, citation_url: f.citation_url || '',
     evidence: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || 'multi-page corpus scan',
+    evidence_quote: f.evidence_quote || null,
+    checked_urls: Array.isArray(f.checked_urls) ? f.checked_urls.slice(0, 6) : null,
+    rule_type: f.rule_type || null,
     fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
   }));
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';

@@ -200,6 +200,52 @@ function detectOperatingJurisdictions(corpus) {
   return Array.from(out);
 }
 
+// Word-level evidence: given a page body + a regex, return the matched term AND the enclosing sentence
+// from the client's own copy, cleaned of markup. This is what lets a finding quote their exact offending words.
+function _stripText(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&[a-z]+;/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+const _PROSE_WORDS = /\b(the|a|an|of|to|your|our|we|you|is|are|was|were|will|may|can|must|with|for|that|this|and|or|but|if|when|how|all|any|please|do|not|no|on|in|at|by|as|it|they|their|these|those|because|so|than|then|from|have|has|had)\b/gi;
+// Decide whether a candidate string is a genuine prose sentence vs nav/footer/boilerplate (Title-Case link runs).
+function _isProse(str) {
+  const words = str.split(/\s+/).filter(Boolean);
+  if (words.length < 6 || words.length > 60) return false;
+  if (/\b(menu|toggle|skip to|breadcrumb|navigation)\b/i.test(str)) return false;   // explicit nav markers
+  const fn = (str.match(_PROSE_WORDS) || []).length;
+  if (fn < 3) return false;                                   // real sentences carry several function words
+  const lower = words.filter(w => /^[a-z]/.test(w)).length;
+  if (lower / words.length < 0.5) return false;               // mostly Title-Case tokens = menu/labels
+  if (fn / words.length < 0.15) return false;                 // too sparse to be a sentence
+  // Reject link/label lists: a run of 3+ consecutive Title-Case words (e.g. "Our Expertise Industries Consumer Markets").
+  let run = 0; for (const w of words) { if (/^[A-Z][a-zA-Z]{1,}$/.test(w)) { run++; if (run >= 3) return false; } else run = 0; }
+  return true;
+}
+function _extractQuote(html, re) {
+  const text = _stripText(html);
+  let rx; try { rx = new RegExp(re.source, 'i'); } catch (_e) { return null; }
+  const m = text.match(rx);
+  if (!m || m.index === undefined) return null;
+  const matched = m[0].slice(0, 80);
+  const idx = m.index;
+  // Bound to the sentence containing the match (stop at . ! ? bullets / newlines).
+  let start = idx; while (start > 0 && !/[.!?\u2022\n]/.test(text[start - 1]) && (idx - start) < 200) start--;
+  let end = idx + m[0].length; while (end < text.length && !/[.!?\u2022\n]/.test(text[end]) && (end - idx) < 240) end++;
+  let sentence = text.slice(start, Math.min(end + 1, text.length)).trim().replace(/^[\s\u2022\-|]+/, '');
+  // Strip a leading nav/link run that bled in (no terminal punctuation separates menus from prose),
+  // keeping the sentence-initial capital so the real sentence is quoted cleanly.
+  let toks = sentence.split(/\s+/);
+  let lead = 0; while (lead < toks.length && /^[A-Z][a-zA-Z]+$/.test(toks[lead])) lead++;
+  if (lead >= 3) { sentence = toks.slice(lead - 1).join(' ').replace(/^[\s,;:\u2013\-]+/, ''); }
+  if (sentence.length > 240) sentence = sentence.slice(0, 237).trim() + '\u2026';
+  // Only return a quote when it is genuinely a sentence from their copy; never quote nav/footer boilerplate.
+  if (!_isProse(sentence)) return { matched, quote: null };
+  return { matched, quote: sentence };
+}
+
 function ruleCheck(rule, corpus, sector) {
   // Sector relevance gate: if the rule has a sector list and our sector isn't in it, skip.
   if (rule.sectors && rule.sectors.length > 0 && sector && !rule.sectors.includes(sector)) {
@@ -222,19 +268,19 @@ function ruleCheck(rule, corpus, sector) {
     let triggerEvidence = null;
     for (const c of corpus) {
       const m = c.body.match(triggerRe);
-      if (m) { triggered = true; triggerEvidence = { url: c.url, snippet: m[0].slice(0, 120) }; break; }
+      if (m) { triggered = true; const q = _extractQuote(c.body, triggerRe); triggerEvidence = { url: c.url, snippet: (q && q.matched) || m[0].slice(0, 80), quote: q && q.quote }; break; }
     }
     if (!triggered) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'trigger_absent' };
     // Trigger present — now check whether the disclosure is also present.
     for (const c of corpus) { if (c.body.match(re)) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'hit_after_trigger', trigger_evidence: triggerEvidence }; }
     // Trigger present but disclosure missing → real breach.
-    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, evidence_url: triggerEvidence?.url, trigger_evidence: triggerEvidence };
+    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, evidence_url: triggerEvidence?.url, evidence_quote: triggerEvidence?.quote, trigger_evidence: triggerEvidence };
   }
   // prohibit: breach if pattern IS present (e.g. "no GLP-1 on consumer pages")
   if (rule.rule_type === 'prohibit') {
     for (const c of corpus) {
       const m = c.body.match(re);
-      if (m) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, evidence_url: c.url, evidence_snippet: m[0].slice(0, 120) };
+      if (m) { const q = _extractQuote(c.body, re); return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, evidence_url: c.url, evidence_snippet: (q && q.matched) || m[0].slice(0, 80), evidence_quote: q && q.quote }; }
     }
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'no_prohibited_pattern' };
   }
@@ -251,7 +297,7 @@ function ruleCheck(rule, corpus, sector) {
   // Miss: rule was expected but no match found in any candidate page
   return {
     rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity,
-    status: 'miss', description: rule.description, citation_url: rule.citation_url,
+    status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url,
     fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp,
     layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short,
     service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier,
