@@ -40,6 +40,20 @@ const checks = {
   } }),
   verifiedContact: { name: 'verified_contact', fn: (p) => ({ ok: !!(p && p.email && p.email_verified), reason: 'no verified email' }) },
   notSuppressed: { name: 'not_suppressed', fn: (p) => ({ ok: !(p && p.suppressed), reason: 'suppressed/opted-out' }) },
+  emailLength: (maxWords = 120, maxSubject = 65) => ({ name: 'email_length', fn: (p) => {
+    const words = String(p.body || '').trim().split(/\s+/).filter(Boolean).length;
+    const subj = String(p.subject || '').length;
+    if (words > maxWords) return { ok: false, reason: 'body ' + words + 'w > ' + maxWords };
+    if (subj > maxSubject) return { ok: false, reason: 'subject ' + subj + 'ch > ' + maxSubject };
+    if (words < 25) return { ok: false, reason: 'body too short ' + words + 'w' };
+    return { ok: true };
+  } }),
 };
+// Convenience: validate an email's subject+body length. Returns { ok, body_words, subject_chars }.
+function checkEmailLength(subject, body, maxWords = 120, maxSubject = 65) {
+  const body_words = String(body || '').trim().split(/\s+/).filter(Boolean).length;
+  const subject_chars = String(subject || '').length;
+  return { ok: body_words >= 25 && body_words <= maxWords && subject_chars <= maxSubject, body_words, subject_chars };
+}
 
-module.exports = { runGate, checks };
+module.exports = { runGate, checks, checkEmailLength };

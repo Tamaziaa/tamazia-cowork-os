@@ -75,14 +75,15 @@ async function buildRankInsight({ domain, company, sector, city, serviceNoun, ht
   const weak = results.filter(r => r.my_position === null)[0] || [...results].sort((a, b) => (b.my_position || 999) - (a.my_position || 999))[0];
   const noun = serviceNoun || SECTOR_NOUN[sector] || String(sector || 'business').replace(/-/g, ' ');
   const leader = (weak.top3[0] || {}).domain || 'a competitor';
-  const youAre = weak.my_position ? `you sit at #${weak.my_position}` : `you are nowhere on page one`;
+  const youAre = weak.my_position ? `you sit at #${weak.my_position}` : `you are absent`;
+  const sentence = `For "${weak.keyword}", ${leader} owns #1 while ${youAre} — that ${city} demand is going to them, not you.`;
   const headline = `For "${weak.keyword}", ${leader} owns #1 and ${youAre}.`;
   const urgency = `Every one of those searches in ${city} is a high-intent client picking ${leader} over you, today.`;
-  const blog_offer = `We are publishing "Best ${noun}s in ${city} 2026". A feature in it puts you in front of that exact search, and we will build the on-page work to hold the spot.`;
+  const blog_offer = `Best ${noun}s in ${city} 2026`;
   return {
     ok: true, domain, city, sector,
     keywords: results.map(r => ({ keyword: r.keyword, my_position: r.my_position, leader: (r.top3[0] || {}).domain || null, top3: r.top3.map(t => t.domain) })),
-    headline, urgency, blog_offer,
+    sentence, headline, urgency, blog_offer,
     evidence: results.map(r => ({ keyword: r.keyword, ranked: r.evidence })), // for the fact-check gate
     already_strong: strong, // keywords they already rank top-5 for (not pitched, kept for context)
     service_noun: serviceNoun,
@@ -124,7 +125,6 @@ async function composeRankBlock(lead = {}, opts = {}) {
   if (!insight.ok) return { ok: false, reason: insight.reason };
   const gate = await factCheck(insight, opts);
   if (!gate.pass) return { ok: false, reason: 'fact_check_failed', failed: gate.reasons };
-  const sentence = `${insight.headline} ${insight.urgency}`;
-  return { ok: true, sentence, blog_offer: insight.blog_offer, keywords: insight.keywords, insight };
+  return { ok: true, sentence: insight.sentence, blog_offer: insight.blog_offer, keywords: insight.keywords, insight };
 }
 module.exports.composeRankBlock = composeRankBlock;

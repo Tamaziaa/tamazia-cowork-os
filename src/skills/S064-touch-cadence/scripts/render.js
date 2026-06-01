@@ -66,34 +66,22 @@ function pickRecipientName(lead, apolloOrg) {
 }
 
 function buildTouch0({ lead, apolloOrg, findings }) {
-  const sectorTitle = SECTOR_TITLE[lead.sector] || `Best UK ${lead.sector} 2026`;
-  const fwList = SECTOR_FRAMEWORKS[lead.sector] || 'sector regulator framework';
   const recipient = pickRecipientName(lead, apolloOrg);
-  const headlineItems = findings.slice(0, 4).join('; ');
-  const orgBlurb = apolloOrg ? ` (${apolloOrg.estimated_num_employees || '?'} employees · ${apolloOrg.annual_revenue_printed ? apolloOrg.annual_revenue_printed + ' revenue' : 'private'})` : '';
-  const subject = `${lead.company} for the 2026 piece on tamazia`;
-  const body = `${recipient},
-
-We are publishing "${sectorTitle}" on Tamazia (https://tamazia.co.uk) this May 2026. ${lead.company}${orgBlurb} is on the shortlist. The pieces in this series typically rank top three on Google and get cited by Claude, ChatGPT, Gemini and Perplexity within 90 days.
-
-The pre-publish review on ${lead.company} produced a complimentary Compliance and SEO audit (£1,500 list price). The audit:
-
-1. Covers 200+ frameworks vetting your online presence through ${fwList}
-2. Maps AI search citation gaps across Claude, ChatGPT, Gemini, Perplexity
-3. Ten audit dimensions: compliance with regulators, technical SEO, AI SEO, content, security, accessibility, TLS/DNS, solutions, and comparison with competitors' live standing
-4. Names the specific regulator for every finding with breach under which sections
-5. A quick 12-week implementation plan to clear all errors and shortcomings
-
-Headline items: ${headlineItems}.
-
-Two questions:
-(1) Happy to be featured?
-(2) Is ${recipient} the right person to coordinate the audit?
-
-The DA 87 backlink stands either way. Point it at the page you most want Google or AI to weigh.
-
-Best,
-Aman`;
+  const ri = lead.rank_insight || {};
+  const blogTitle = ri.blog_offer || SECTOR_TITLE[lead.sector] || `Best UK ${lead.sector} 2026`;
+  // SOUL: the gated, fact-checked one-line keyword-gap. Fallback to the top audit finding.
+  const gapLine = (lead.rank_insight_sentence && lead.rank_insight_sentence.length > 30)
+    ? lead.rank_insight_sentence
+    : (findings && findings[0]) ? `One thing stood out reviewing you: ${findings[0]}.` : '';
+  const auditTail = (lead.audit_url && /^https?:\/\//.test(lead.audit_url)) ? `, free to you: ${lead.audit_url}` : '.';
+  const subject = (ri.keywords && ri.keywords[0] && ri.keywords[0].keyword)
+    ? `${lead.company} + "${ri.keywords[0].keyword}"`
+    : `${lead.company} for the 2026 ${lead.sector || ''} guide`.replace(/\s+/g, ' ').trim();
+  const lines = [`${recipient},`, '', `We're publishing "${blogTitle}" and ${lead.company} is shortlisted.`];
+  if (gapLine) lines.push('', gapLine);
+  lines.push('', `The pre-publish review produced a £1,500 compliance + SEO audit naming the fix${auditTail}`);
+  lines.push('', `Worth 15 minutes? cal.com/tamazia/strategy-call`, '', 'Aman');
+  const body = lines.join('\n');
   return { subject, body, touch: 0 };
 }
 
