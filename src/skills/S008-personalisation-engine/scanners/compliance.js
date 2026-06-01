@@ -260,7 +260,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const codes = new Set(); if (country) codes.add(String(country).toUpperCase());
   const R = mk.regions || [];
   if (R.includes('UK')) codes.add('UK'); if (R.includes('US')) codes.add('US'); if (R.includes('Middle East')) codes.add('AE'); if (mk.serves_eu) codes.add('EU');
-  for (const n of (mk.operating_countries || [])) { if (n === 'United Kingdom') codes.add('UK'); else if (n === 'United States') codes.add('US'); else if (['United Arab Emirates','Saudi Arabia','Qatar'].includes(n)) codes.add('AE'); else if (n === 'France') codes.add('FR'); else if (n === 'Germany') codes.add('DE'); }
+  for (const n of (mk.operating_countries || [])) { if (n === 'United Kingdom') codes.add('UK'); else if (n === 'United States') codes.add('US'); else if (n === 'United Arab Emirates') codes.add('AE'); else if (n === 'Saudi Arabia') codes.add('SA'); else if (n === 'Qatar') codes.add('QA'); else if (['Kuwait','Bahrain','Oman'].includes(n)) codes.add('AE'); else if (n === 'France') codes.add('FR'); else if (n === 'Germany') codes.add('DE'); }
   const detectedJurisdictions = mk.operating_countries || [];
   const allJurisdictions = Array.from(codes);
   // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
