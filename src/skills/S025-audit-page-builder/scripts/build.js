@@ -64,6 +64,31 @@ function verifySignedUrl(url) {
 
 // Build the payload that the Astro page will hydrate. Pulls applicable frameworks + rules
 // via the existing jurisdiction-router. Keeps the payload portable (JSON) so versioning is easy.
+// Framework-grouping: ONE framework = ONE finding = ONE collapsible box, merging all its sub-issues.
+// The count the prospect sees is the number of applicable frameworks; each box expands to its specific breaches.
+const _SEV = { P0: 0, P1: 1, P2: 2, P3: 3 };
+const _FW_LABEL = {
+  UK_GDPR_A13: 'UK GDPR \u2014 Right to be Informed (Art. 13)', UK_DPA_2018: 'UK Data Protection Act 2018', UK_PECR: 'UK PECR \u2014 Cookies & e-Privacy', UK_ICO_COOKIES: 'ICO Cookies Guidance',
+  EU_GDPR: 'EU GDPR', EU_EPRIVACY: 'EU ePrivacy', EU_EAA_2025: 'EU Accessibility Act 2025 (WCAG 2.1 AA)', EU_AI_ACT: 'EU AI Act', EU_DSA: 'EU Digital Services Act',
+  UK_CMA: 'UK CMA \u2014 Consumer Protection', UK_DMCC_2024: 'UK DMCC Act 2024 (Reviews & Pricing)', UK_CRA_2015: 'UK Consumer Rights Act 2015', UK_TRADING_STANDARDS: 'UK Trading Standards', UK_COMPANIES_ACT: 'UK Companies Act \u2014 Trading Disclosures', UK_EQUALITY_2010: 'UK Equality Act 2010', UK_ASA_CAP: 'UK ASA / CAP Code',
+  US_FTC: 'US FTC Act', US_FTC_ENDORSE: 'US FTC Endorsement & Reviews Rule', US_CPRA: 'US CPRA / CCPA', US_CCPA: 'US CCPA', US_VCDPA: 'US Virginia VCDPA', US_TDPSA: 'US Texas TDPSA', US_TCPA: 'US TCPA', US_ADA: 'US ADA Title III',
+  GOOGLE_EEAT: 'Google E-E-A-T (Trust & Authority)', UAE_PDPL: 'UAE PDPL', DE_BDSG: 'Germany BDSG', FR_CNIL_2025: 'France CNIL',
+};
+function _humanizeFw(fw) { return _FW_LABEL[fw] || String(fw || '').replace(/^(UK|EU|US|AE|DE|FR)_/, '$1 ').replace(/_/g, ' '); }
+function groupFindings(pointers) {
+  const g = {};
+  for (const p of (pointers || [])) {
+    const key = p.framework_short || p.citation || p.bucket || 'Other';
+    if (!g[key]) g[key] = { key, label: p.framework_short ? _humanizeFw(p.framework_short) : (p.citation || String(key)), bucket: p.bucket || 'compliance', framework_short: p.framework_short || null, severity: p.severity || 'P3', fine_low_gbp: null, fine_high_gbp: null, citation_url: p.citation_url || '', items: [] };
+    const grp = g[key];
+    grp.items.push({ severity: p.severity || 'P3', fact: p.fact || p.description || '', why: p.layman_explanation || '', fix: p.tamazia_fix_short || p.recommendation || '', evidence: p.evidence || p.evidence_url || '', citation_url: p.citation_url || '', fine_low_gbp: p.fine_low_gbp || null, fine_high_gbp: p.fine_high_gbp || null });
+    if ((_SEV[p.severity] ?? 3) < (_SEV[grp.severity] ?? 3)) grp.severity = p.severity;
+    if (p.fine_high_gbp && (!grp.fine_high_gbp || p.fine_high_gbp > grp.fine_high_gbp)) { grp.fine_high_gbp = p.fine_high_gbp; grp.fine_low_gbp = p.fine_low_gbp || grp.fine_low_gbp; }
+    if (!grp.citation_url && p.citation_url) grp.citation_url = p.citation_url;
+  }
+  return Object.values(g).map(x => ({ ...x, count: x.items.length })).sort((a, b) => (_SEV[a.severity] ?? 3) - (_SEV[b.severity] ?? 3) || (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0) || b.count - a.count);
+}
+
 async function buildPayload({ domain, sector, country, lead_id, env }) {
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
@@ -110,6 +135,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     rules,
     // Evidence-tied findings from the real site scan — surfaced at top level so any renderer can read them
     pointers: findings,
+    framework_groups: groupFindings(findings),
     scan: { scanned_at: scan.scanned_at, reachable: scan.reachable, final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
     sections: {
       cover:                 { firm: domain.replace(/^www\./, '').split('.')[0], generated_at: new Date().toISOString() },
