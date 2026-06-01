@@ -97,7 +97,35 @@ async function buildRankInsight({ domain, company, sector, city, serviceNoun, ht
     gated: true,
   };
 }
-module.exports = { buildRankInsight, keywordsFor, checkKeyword, deriveServiceNoun };
+
+// --- Audit keyword map: ungated full picture (where they rank now vs the top-3 target) + free autocomplete expansion ---
+async function autocomplete(seed) {
+  try {
+    const r = await fetch('https://google.com/complete/search?output=toolbar&gl=uk&hl=en&q=' + encodeURIComponent(seed), { signal: AbortSignal.timeout(6000), headers: { 'user-agent': 'Mozilla/5.0' } });
+    if (!r.ok) return [];
+    const t = await r.text();
+    return [...t.matchAll(/data="([^"]+)"/g)].map(m => m[1]).filter(Boolean).slice(0, 8);
+  } catch (_e) { return []; }
+}
+async function buildKeywordMap({ domain, company, sector, city, html, country = 'UK', env = process.env, max = 8 }) {
+  const dom = clean(domain); if (!dom || !city) return { ok: false, keywords: [] };
+  const noun = deriveServiceNoun(company, sector, html);
+  const brand = norm(company || dom.split('.')[0]);
+  let seeds = keywordsFor(sector, city, noun);
+  try { const ac = await autocomplete(noun + ' ' + city); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
+  seeds = seeds.filter(k => brand.length < 4 || !norm(k).includes(brand)).slice(0, max);
+  const out = [];
+  for (const kw of seeds) {
+    let r = null; try { r = await checkKeyword(kw, dom, country); } catch (_e) {}
+    if (!r) continue;
+    const leader = r.top3[0] || {};
+    out.push({ keyword: kw, my_position: r.my_position, leader: leader.domain || null, leader_pos: leader.pos || null, target: (r.my_position && r.my_position <= 3) ? r.my_position : 3 });
+  }
+  if (!out.length) return { ok: false, keywords: [] };
+  return { ok: true, service_noun: noun, city, keywords: out };
+}
+
+module.exports = { buildRankInsight, keywordsFor, checkKeyword, deriveServiceNoun, buildKeywordMap, autocomplete };
 
 // Fact-check gate — every claim (leader domain, my_position) must appear in the carried SERP evidence,
 // or the insight is rejected. This is the layer that guarantees the Touch-0 never asserts an invented rank.

@@ -695,6 +695,36 @@ function renderDisclaimer() {
     </section>`;
 }
 
+function renderKeywordMap(km) {
+  if (!km || !Array.isArray(km.keywords) || !km.keywords.length) return '';
+  const rows = km.keywords.slice(0, 12).map(k => {
+    const pos = k.my_position ? '#' + k.my_position : 'Not ranking';
+    const posCol = !k.my_position ? '#B91C1C' : k.my_position > 10 ? '#B91C1C' : k.my_position > 3 ? '#E67E22' : '#2E7D32';
+    const leader = k.leader ? esc(k.leader) + (k.leader_pos ? ' (#' + k.leader_pos + ')' : '') : '—';
+    return `<tr style="border-top:1px solid #eee">
+      <td style="padding:8px 10px;font-size:0.82rem;color:#1F2937">${esc(k.keyword)}</td>
+      <td style="padding:8px 10px;font-size:0.84rem;font-weight:700;color:${posCol};white-space:nowrap">${pos}</td>
+      <td style="padding:8px 10px;font-size:0.78rem;color:#6b6b6b">${leader}</td>
+      <td style="padding:8px 10px;font-size:0.82rem;font-weight:600;color:#2E7D32;white-space:nowrap">Top ${k.target || 3}</td>
+    </tr>`;
+  }).join('');
+  const missing = km.keywords.filter(k => !k.my_position || k.my_position > 10).length;
+  return `
+    <section style="padding:26px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Keyword map · where the demand is going</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">You are off page one for ${missing} of ${km.keywords.length} high-intent ${esc(km.service_noun || 'category')} searches in ${esc(km.city || 'your area')}.</h2>
+        <p style="font-size:0.78rem;color:#6b6b6b;margin:0 0 12px">Live Google positions. Every search below is buyer demand a competitor is capturing instead of you.</p>
+        <div style="overflow-x:auto;background:white;border-radius:6px;border:1px solid #e5e7eb">
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="background:#3D0E0E;color:#F8F5EF"><th style="text-align:left;padding:9px 10px;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.05em">Keyword</th><th style="text-align:left;padding:9px 10px;font-size:0.68rem;text-transform:uppercase">You</th><th style="text-align:left;padding:9px 10px;font-size:0.68rem;text-transform:uppercase">Who ranks instead</th><th style="text-align:left;padding:9px 10px;font-size:0.68rem;text-transform:uppercase">Target</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <p style="margin:10px 0 0;font-size:0.78rem;color:#14532d"><strong>How Tamazia fixes it:</strong> a keyword-led content + technical programme that moves these into the top 3, plus the GEO work so AI engines cite you for the same queries.</p>
+      </div>
+    </section>`;
+}
 function renderPage(audit) {
   const meta = audit.scan_meta || {};
   const rawPointers = audit.pointers || [];
@@ -737,6 +767,7 @@ ${renderSectionGauges(syncedBuckets, sevMap)}
 ${renderCritical(top3)}
 ${renderBeforeAfter(totalExposure, riskScore, projected, grade)}
 ${renderAIPlatform(adjAudit)}
+${renderKeywordMap(audit.keyword_map)}
 ${renderAllFindings(merged)}
 ${renderInvestment(adjMeta.pointer_count_p0)}
 ${renderFooterCTA()}
@@ -799,6 +830,7 @@ function adapt(row) {
       buckets: {},
     },
     pointers,
+    keyword_map: p.keyword_map || null,
   };
 }
 
