@@ -177,6 +177,12 @@ function pointersFromSignals(sig, psi, sector) {
 async function scanSite({ domain, sector, env }) {
   const clean = String(domain || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
   const page = await getHtml('https://' + clean);
+  // Credibility guard: never fabricate HTML-derived findings for a site we could not load.
+  if (!page.ok || !(page.body || '').length) {
+    let mail = []; try { mail = await require('./extra-scanners.js').emailAuth(clean); } catch (_) {}
+    const pts = [P('website', 'P1', 'Site reachability', 'The website could not be loaded for audit.', 'We could not reach the site to assess it, which may be a server, DNS, or blocking issue worth checking first. No on-page findings are asserted because the page did not load.', 'Tamazia confirms reachability then re-audits.', 'GET / · not reachable'), ...mail];
+    return { scanned_at: new Date().toISOString(), final_url: page.finalUrl, reachable: false, signals: {}, psi: null, pointers: pts, counts: { total: pts.length, p0: 0, p1: pts.filter(p => p.severity === 'P1').length, p2: pts.filter(p => p.severity !== 'P1').length } };
+  }
   const sig = extractSignals(page);
   const key = (env && (env.PAGESPEED_API_KEY || env.PSI_KEY)) || process.env.PAGESPEED_API_KEY || null;
   const psi = await pageSpeed(clean, key);
@@ -189,6 +195,20 @@ async function scanSite({ domain, sector, env }) {
   if (robots === false) pointers.push(P('technical_seo', 'P2', 'robots.txt', 'No robots.txt found.', 'Search and AI crawlers have no crawl directives, and you cannot point them at your sitemap, slowing how fast new pages get indexed.', 'Tamazia publishes a robots.txt that points crawlers at the sitemap.', 'GET /robots.txt · 404'));
   if (sitemap === false) pointers.push(P('technical_seo', 'P2', 'XML sitemap', 'No sitemap.xml found.', 'Without a sitemap, search engines discover pages slowly and may miss deep content entirely.', 'Tamazia generates and submits an XML sitemap.', 'GET /sitemap.xml · 404'));
   if (llms === false) pointers.push(P('ai_visibility', 'P2', 'llms.txt', 'No llms.txt file.', 'llms.txt is the emerging standard that tells AI assistants how to represent your firm. Publishing one puts you ahead of peers who have not.', 'Tamazia publishes a curated llms.txt.', 'GET /llms.txt · 404'));
+
+  // Phase B deep scanners (email-auth, tech-stack, cookies, regulated-claims, broken-links) — each fail-open.
+  try {
+    const extra = require('./extra-scanners.js');
+    const fetchFn = async (u) => { try { const r = await timed(sg => fetch(u, { method: 'HEAD', redirect: 'follow', headers: { 'user-agent': UA }, signal: sg }), 10000); return { status: r.status }; } catch (_) { return { status: 0 }; } };
+    const deep = await Promise.all([
+      extra.emailAuth(clean).catch(() => []),
+      Promise.resolve(extra.techStack(page.body, page.headers)),
+      Promise.resolve(extra.cookieCompliance(page.body)),
+      Promise.resolve(extra.regulatedClaims(page.body, sector || '')),
+      extra.brokenLinks(clean, page.body, fetchFn).catch(() => []),
+    ]);
+    for (const d of deep) pointers.push(...d);
+  } catch (_) { /* fail-open: audit still mints with the base scan */ }
 
   const p0 = pointers.filter(p => p.severity === 'P0').length;
   const p1 = pointers.filter(p => p.severity === 'P1').length;
