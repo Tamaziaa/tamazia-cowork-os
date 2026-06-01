@@ -1,0 +1,43 @@
+name: Enforcement-news refresh (weekly, free)
+# Pulls live regulator enforcement actions (GOV.UK API: CMA/MHRA; FTC RSS) into the Neon enforcement_news table
+# that every audit mint reads. Self-healing: each source is fail-soft; a single source failure never wedges the run.
+# Self-renewing: the cron re-arms automatically. Curated ICO/ASA/EU/UAE rows are the floor and are never blanked.
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: enforcement-news
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python deps (pg8000 for DB shim)
+        run: python -m pip install --quiet -r requirements.txt
+      - name: Materialise .env from secret
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Refresh enforcement news
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          node scripts/refresh-enforcement-news.js
+      - name: Alert on failure
+        if: failure()
+        run: |
+          MSG="🔴 enforcement-news refresh failed (run ${{ github.run_id }}). Check the Actions tab."
+          set +e
+          source .env 2>/dev/null
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+              -d chat_id="$TELEGRAM_CHAT_ID" -d text="$MSG" >/dev/null
+          fi
