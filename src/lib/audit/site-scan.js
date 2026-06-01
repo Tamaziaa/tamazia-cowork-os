@@ -307,7 +307,14 @@ async function wikidataEntity(domain) {
       const p856 = ents[qid] && ents[qid].claims && ents[qid].claims.P856;
       if (p856) for (const c of p856) { const url = String((((c.mainsnak || {}).datavalue || {}).value) || '').toLowerCase(); if (url.includes(dom)) return { checked: true, present: true, qid }; }
     }
-    return { checked: true, present: false };
+    // also check Wikipedia (complementary knowledge-graph signal)
+    let wiki = false;
+    try {
+      const wu = 'https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageprops&titles=' + encodeURIComponent(name.charAt(0).toUpperCase() + name.slice(1));
+      const wr = await timed((sig) => fetch(wu, { headers: { 'user-agent': UA, 'accept': 'application/json' }, signal: sig }), 7000);
+      if (wr && wr.ok) { const wd = await wr.json(); const pages = (wd.query && wd.query.pages) || {}; wiki = Object.values(pages).some(pg => pg && pg.pageprops && pg.pageprops.wikibase_item); }
+    } catch (_e) {}
+    return { checked: true, present: false, wikipedia: wiki };
   } catch (_e) { return { checked: false, present: false }; }
 }
 function geoPointers({ html, signals, sector, wikidata, domain }) {
@@ -322,7 +329,7 @@ function geoPointers({ html, signals, sector, wikidata, domain }) {
   if (!has('FAQPage') && !has('QAPage')) out.push(P('ai_visibility', 'P2', 'FAQ schema', 'No FAQPage schema or structured Q&A.', 'Answer engines preferentially quote structured Q&A. With no FAQPage you miss the single format LLMs cite most when answering buyer questions.', 'Tamazia builds an FAQ programme with FAQPage schema targeting real buyer questions.', 'homepage JSON-LD · no FAQPage'));
   if (!has('Review') && !has('AggregateRating')) out.push(P('ai_visibility', 'P2', 'Review schema', 'No Review or AggregateRating schema.', 'Star ratings shown in AI and search answers come from Review/AggregateRating schema. Without it your reputation is invisible to the engines buyers now ask first.', 'Tamazia adds compliant Review/AggregateRating schema (DMCC-safe, genuine reviews only).', 'homepage JSON-LD · no Review schema'));
   if (!has('BreadcrumbList')) out.push(P('ai_visibility', 'P2', 'Breadcrumb schema', 'No BreadcrumbList schema.', 'Breadcrumb schema helps search and AI understand your site structure and surface deep service pages, not just the homepage.', 'Tamazia adds BreadcrumbList schema sitewide.', 'homepage JSON-LD · no BreadcrumbList'));
-  if (wikidata && wikidata.checked && !wikidata.present) out.push(P('ai_visibility', 'P1', 'Knowledge Graph / Wikidata entity', 'Your firm has no Wikidata entity, so it is absent from the public knowledge graph.', 'ChatGPT, Google AI and others lean on Wikidata and the Knowledge Graph to decide who is a real, citable entity. With no entity you are structurally invisible to those answers, while competitors who have one get named.', 'Tamazia establishes your Wikidata and Knowledge-Graph entity with sourced, notable references.', 'Wikidata SPARQL · no item lists ' + (domain || 'your domain') + ' as its official website'));
+  if (wikidata && wikidata.checked && !wikidata.present && !wikidata.wikipedia) out.push(P('ai_visibility', 'P1', 'Knowledge Graph presence', 'Your firm has no Wikidata entity and no Wikipedia article, so it is absent from the public knowledge graph.', 'ChatGPT, Google AI, Gemini and Perplexity lean on Wikidata and Wikipedia to decide who is a real, citable entity. With neither, you are structurally invisible to those answers, while competitors who have an entity get named.', 'Tamazia establishes your Wikidata and Knowledge-Graph entity (and a notability-backed Wikipedia presence where eligible) with sourced references.', 'Wikidata + Wikipedia · no entity found for ' + (domain || 'your domain'));
   if (!s.author && !has('Person') && !/rel=["\x27]?author|byline|written by|author/i.test(b)) out.push(P('ai_visibility', 'P2', 'E-E-A-T author signals', 'No bylined author or Person schema establishing expertise.', 'Google E-E-A-T and LLM trust models reward demonstrable Experience, Expertise, Authority and Trust. Anonymous content is discounted and rarely cited in AI answers.', 'Tamazia ships a bylined expert-author programme with Person schema, credentials and sameAs.', 'homepage · no author / Person markup'));
   return out;
 }
@@ -383,6 +390,12 @@ async function scanSite({ domain, sector, env }) {
     ]);
     for (const d of deep) pointers.push(...d);
   } catch (_) { /* fail-open: audit still mints with the base scan */ }
+
+  // Spelling + grammar on the client's own live site (concrete, credibility-led)
+  try {
+    const typos = await spellCheck(page.body);
+    if (typos.length) pointers.push(P('content_depth', typos.length >= 4 ? 'P1' : 'P2', 'Spelling & grammar errors on your live site', typos.length + ' likely spelling or grammar error(s) are published on your homepage right now.', 'Visible errors on a professional firm\'s website quietly erode trust with high-value clients and signal low quality to Google\'s helpful-content systems. For a firm selling expertise, typos on the live site are an avoidable credibility leak.', 'Tamazia proofreads and corrects every page, then sets an editorial QA gate so it does not recur.', 'homepage - ' + typos.map(t => '"' + t.bad + '" to "' + t.suggestion + '"').slice(0, 8).join(', ')));
+  } catch (_e) {}
 
   const p0 = pointers.filter(p => p.severity === 'P0').length;
   const p1 = pointers.filter(p => p.severity === 'P1').length;
