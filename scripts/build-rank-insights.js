@@ -22,7 +22,8 @@ async function main() {
       const h = await html(lead.domain);
       const block = await composeRankBlock({ domain: lead.domain, company: lead.company, sector: lead.sector, country: lead.country, html: h }, { log: true });
       if (!block.ok) { gated_out++; continue; } // gate failed or no below-top-5 keyword → store nothing
-      pg(`UPDATE leads SET rank_insight_sentence=${esc(block.sentence)}, rank_insight=${esc(JSON.stringify({ keywords: block.keywords, blog_offer: block.blog_offer }))}::jsonb WHERE id=${lead.id}`);
+      const _city = (block.insight && block.insight.city) || '';
+      pg(`UPDATE leads SET rank_insight_sentence=${esc(block.sentence)}, rank_insight=${esc(JSON.stringify({ keywords: block.keywords, blog_offer: block.blog_offer, city: _city }))}::jsonb, operating_city=COALESCE(NULLIF(operating_city,''), ${esc(_city)}) WHERE id=${lead.id}`);
       built++;
     } catch (e) { console.error('[rank-insights] ' + lead.domain + ': ' + e.message); }
   }
