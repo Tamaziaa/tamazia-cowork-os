@@ -191,6 +191,7 @@ async function scanSite({ domain, sector, env }) {
   }
   const sig = extractSignals(page);
   try { sig.ad_tech = require('./ad-tech.js').detectAdTech(page.body); } catch (_) { sig.ad_tech = { runs_ads: false, platforms: [] }; }
+  try { sig.trackers = require('../compliance/tracker-detect.js').detectTrackers(page.body).trackers; } catch (_) { sig.trackers = []; }
   const key = (env && (env.PAGESPEED_API_KEY || env.PSI_KEY)) || process.env.PAGESPEED_API_KEY || null;
   const psi = await pageSpeed(clean, key);
   const [robots, sitemap, llms] = await Promise.all([

@@ -36,20 +36,45 @@ function techStack(html, headers) {
   return out;
 }
 
-// 3) COOKIE / TRACKER compliance (GDPR/PECR) — trackers firing without a consent mechanism.
+// 3) COOKIE / TRACKER compliance (GDPR/PECR) — named trackers firing without (or ahead of) a consent gate.
+// Backed by the Open Cookie Database (Apache-2.0): we name the specific cookies + data controller per tracker.
 function cookieCompliance(html, markets) {
-  const out = []; const b = (html || '').toLowerCase();
-  const trackers = [];
-  if (/gtag\(|google-analytics|googletagmanager|ga\.js/.test(b)) trackers.push('Google Analytics');
-  if (/fbq\(|connect\.facebook\.net/.test(b)) trackers.push('Meta Pixel');
-  if (/hotjar/.test(b)) trackers.push('Hotjar');
-  if (/clarity\.ms/.test(b)) trackers.push('Microsoft Clarity');
-  if (/doubleclick|googleadservices/.test(b)) trackers.push('Google Ads');
-  const hasConsent = /cookiebot|onetrust|cookieconsent|cookie-consent|usercentrics|termly|iubenda|we use cookies|cookie policy|cookie settings/.test(b);
-  // Which consent regime applies depends on the markets the firm SERVES, not where it is registered.
+  const out = [];
+  let det = { trackers: [], consentPlatform: null, hasConsentPlatform: false, hasConsentText: false };
+  try { det = require('../compliance/tracker-detect.js').detectTrackers(html || ''); } catch (_e) {}
+  const ne = det.trackers.filter(t => /Analytics|Marketing|Advertising/i.test(t.category || ''));
+  if (!ne.length) return out;
+
   const m = markets || { regions: ['UK'], serves_eu: false };
-  const regs = []; if (m.regions && m.regions.includes('UK')) regs.push('UK PECR'); if (m.serves_eu) regs.push('EU GDPR/ePrivacy'); if (m.regions && m.regions.includes('US')) regs.push('US state privacy law'); if (!regs.length) regs.push('UK PECR');
-  if (trackers.length && !hasConsent) out.push(P('compliance', 'P1', regs.join(' + ') + ' cookie consent', `${trackers.length} tracker(s) load with no detectable consent banner (${trackers.join(', ')}).`, `Non-essential trackers fire before consent, which breaches ${regs.join(' and ')}. Because you serve clients in ${(m.regions||['the UK']).join(', ')}, each of those regimes applies regardless of where the firm is registered. Regulators have fined exactly this, and for a regulated firm it is avoidable exposure.`, 'Tamazia implements a consent gate sized to every market you serve.', 'HTML · trackers present, no consent mechanism · markets: ' + (m.regions||[]).join('+')));
+  const regs = [];
+  if (m.regions && m.regions.includes('UK')) regs.push('UK PECR + UK GDPR');
+  if (m.serves_eu) regs.push('EU GDPR + ePrivacy');
+  if (m.regions && m.regions.includes('US')) regs.push('US state privacy law (CCPA/CPRA)');
+  if (!regs.length) regs.push('UK PECR + UK GDPR');
+
+  // Name the trackers + the actual cookies they set + the data controller.
+  const named = ne.slice(0, 6).map(t => {
+    const ck = (t.cookies || []).slice(0, 3).filter(Boolean);
+    return t.platform + (ck.length ? ' (sets ' + ck.join(', ') + ' — ' + t.category + ', controller ' + t.controller + ')' : ' (' + t.category + ', controller ' + t.controller + ')');
+  });
+  const list = named.join('; ');
+  const controllers = Array.from(new Set(ne.map(t => t.controller))).slice(0, 5).join(', ');
+
+  if (!det.hasConsentPlatform && !det.hasConsentText) {
+    // No consent mechanism at all → clear breach.
+    out.push(P('compliance', 'P1', regs.join(' + ') + ' · cookie consent',
+      ne.length + ' non-essential tracker(s) load with no detectable consent mechanism: ' + list + '.',
+      'These trackers set cookies and share data with ' + controllers + ' the moment the page loads, before the visitor consents. That breaches ' + regs.join(' and ') + '. You serve clients in ' + ((m.regions || ['the UK']).join(', ')) + ', so each of those regimes applies regardless of where the firm is registered. The ICO is actively reviewing the UK\'s top 1,000 sites and the maximum PECR fine is now £17.5M or 4% of global turnover.',
+      'Tamazia installs a consent platform that blocks every non-essential tracker until opt-in, with a Reject-All button as prominent as Accept-All.',
+      'homepage HTML · ' + ne.length + ' non-essential trackers, no consent gate · controllers: ' + controllers));
+  } else {
+    // A consent tool/text is present, but we cannot confirm it blocks pre-consent or offers Reject-All parity.
+    out.push(P('compliance', 'P2', regs.join(' + ') + ' · consent functionality',
+      'Consent signal detected (' + (det.consentPlatform || 'cookie notice') + '), but ' + ne.length + ' non-essential tracker(s) are present and may fire before opt-in: ' + list + '.',
+      'A banner alone is not compliance. Under the ICO\'s 2025 standard a Reject-All option must be as prominent and functional as Accept-All, and non-essential tags (' + controllers + ') must not load until consent. The SHEIN and American Express cases both involved cookies set despite a Reject-All click. Verify these tags are genuinely blocked pre-consent.',
+      'Tamazia configures the consent platform to block these tags until opt-in and adds an equally prominent, functional Reject-All.',
+      'homepage HTML · consent present + ' + ne.length + ' non-essential trackers · verify pre-consent blocking'));
+  }
   return out;
 }
 

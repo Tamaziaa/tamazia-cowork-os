@@ -1,0 +1,2287 @@
+{
+ "1rx.io": {
+  "category": "Marketing",
+  "controller": "1rx.io",
+  "cookies": [
+   "_rxuuid"
+  ]
+ },
+ "33Across": {
+  "category": "Marketing",
+  "controller": "33Across",
+  "cookies": [
+   "33x_ps"
+  ]
+ },
+ "ABTasty": {
+  "category": "Analytics",
+  "controller": "ABTasty",
+  "cookies": [
+   "ABTasty",
+   "ABTastySession"
+  ]
+ },
+ "ABlyft": {
+  "category": "Analytics",
+  "controller": "ABlyft",
+  "cookies": [
+   "ablyft_exps",
+   "ablyft_queue",
+   "ablyft_uvs",
+   "ablyft_tracking_consent"
+  ]
+ },
+ "AT Internet": {
+  "category": "Analytics",
+  "controller": "AT Internet",
+  "cookies": [
+   "atidvisitor",
+   "atuserid"
+  ]
+ },
+ "Abovo Media": {
+  "category": "Analytics",
+  "controller": "Abovo Media",
+  "cookies": [
+   "tv_spot_tracker"
+  ]
+ },
+ "Active Campaign": {
+  "category": "Marketing",
+  "controller": "Active Campaign",
+  "cookies": [
+   "ac_enable_tracking",
+   "prism_"
+  ]
+ },
+ "Acuity": {
+  "category": "Marketing",
+  "controller": "Acuity",
+  "cookies": [
+   "auid",
+   "aum"
+  ]
+ },
+ "Adalyser.com": {
+  "category": "Marketing",
+  "controller": "Adalyser.com",
+  "cookies": [
+   "__adal_ca",
+   "__adal_cw",
+   "__adal_id",
+   "__adal_ses"
+  ]
+ },
+ "Adcalls": {
+  "category": "Marketing",
+  "controller": "Adcalls",
+  "cookies": [
+   "acalltracker",
+   "acalltrackerreferrer",
+   "acalltrackernumber"
+  ]
+ },
+ "Adform": {
+  "category": "Marketing",
+  "controller": "Adform",
+  "cookies": [
+   "TPC",
+   "C",
+   "uid",
+   "cid",
+   "GCM",
+   "CM",
+   "CM14",
+   "token"
+  ]
+ },
+ "Adhese": {
+  "category": "Marketing",
+  "controller": "Adhese",
+  "cookies": [
+   "adhese2",
+   "cap",
+   "pubmatic_uid",
+   "improvedigital_uid",
+   "rubicon_uid",
+   "adform_uid",
+   "appnexus_uid",
+   "triplelift_uid"
+  ]
+ },
+ "Adition": {
+  "category": "Marketing",
+  "controller": "Adition",
+  "cookies": [
+   "UserID1"
+  ]
+ },
+ "Adkernel": {
+  "category": "Marketing",
+  "controller": "AdKernel",
+  "cookies": [
+   "SSPR_*",
+   "SSPZ",
+   "DSP2F_*",
+   "ADKUID"
+  ]
+ },
+ "Admatic": {
+  "category": "Marketing",
+  "controller": "Admatic",
+  "cookies": [
+   "__adm_ui",
+   "__adm_uiex",
+   "__adm_usyncc",
+   "uids"
+  ]
+ },
+ "Admixer": {
+  "category": "Marketing",
+  "controller": "Admixer",
+  "cookies": [
+   "am-uid"
+  ]
+ },
+ "Adobe Advertising": {
+  "category": "Marketing",
+  "controller": "Adobe",
+  "cookies": [
+   "everest_g_v2",
+   "everest_session_v2",
+   "ev_tm",
+   "_tmae",
+   "_lcc",
+   "ev_sync_ax",
+   "ev_sync_bk",
+   "ev_sync_dd"
+  ]
+ },
+ "Adobe Analytics": {
+  "category": "Marketing",
+  "controller": "Adobe",
+  "cookies": [
+   "s_cc",
+   "s_sq",
+   "s_vi",
+   "s_fid",
+   "fid",
+   "s_ecid",
+   "s_ppv",
+   "s_tp"
+  ]
+ },
+ "Adobe Audience Manager": {
+  "category": "Marketing",
+  "controller": "Adobe",
+  "cookies": [
+   "demdex",
+   "dextp",
+   "dst",
+   "_dp",
+   "aam_uuid",
+   "AMCV_",
+   "AMCVS_",
+   "mbox"
+  ]
+ },
+ "Adxcore": {
+  "category": "Marketing",
+  "controller": "Adxcore",
+  "cookies": [
+   "advst_uid_11",
+   "DISPATCHER"
+  ]
+ },
+ "Ahoy": {
+  "category": "Analytics",
+  "controller": "Ahoy",
+  "cookies": [
+   "ahoy_visit",
+   "ahoy_visitor"
+  ]
+ },
+ "Algolia": {
+  "category": "Analytics",
+  "controller": "Algolia",
+  "cookies": [
+   "_ALGOLIA"
+  ]
+ },
+ "Amazon": {
+  "category": "Marketing",
+  "controller": "Amazon",
+  "cookies": [
+   "ad-id",
+   "ad-privacy",
+   "__trf.src"
+  ]
+ },
+ "Amazon Web Services": {
+  "category": "Analytics",
+  "controller": "Amazon Web Services",
+  "cookies": [
+   "aws-target-visitor-id"
+  ]
+ },
+ "Amplitude": {
+  "category": "Analytics",
+  "controller": "Amplitude",
+  "cookies": [
+   "AMP_",
+   "AMP_MKTG_",
+   "AMP_TEST",
+   "AMP_TLDTEST",
+   "amplitude_cookie_test",
+   "amplitude_id_",
+   "amplitude_test"
+  ]
+ },
+ "Aniview": {
+  "category": "Marketing",
+  "controller": "Aniview",
+  "cookies": [
+   "aniC",
+   "version"
+  ]
+ },
+ "Atlas": {
+  "category": "Marketing",
+  "controller": "Atlas",
+  "cookies": [
+   "AA003",
+   "ATN"
+  ]
+ },
+ "Audrte": {
+  "category": "Marketing",
+  "controller": "Audrte",
+  "cookies": [
+   "arcki2",
+   "arcki2_adform",
+   "arcki2_ddp"
+  ]
+ },
+ "Awin": {
+  "category": "Marketing",
+  "controller": "29 days",
+  "cookies": [
+   "lantern",
+   "AwinChannelCookie"
+  ]
+ },
+ "Baidu": {
+  "category": "Analytics",
+  "controller": "Baidu",
+  "cookies": [
+   "Hm_lpvt_",
+   "Hm_lvt_",
+   "HMACCOUNT"
+  ]
+ },
+ "Bazaar Voice": {
+  "category": "Marketing",
+  "controller": "Bazaar Voice",
+  "cookies": [
+   "BVBRANDID",
+   "BVBRANDSID",
+   "BVID",
+   "BVSID"
+  ]
+ },
+ "Beamer": {
+  "category": "Marketing",
+  "controller": "Hotjar",
+  "cookies": [
+   "_BEAMER_FIRST_VISIT_",
+   "_BEAMER_USER_ID_",
+   "_BEAMER_DATE_",
+   "_BEAMER_LAST_POST_SHOWN_",
+   "_BEAMER_FILTER_BY_URL_"
+  ]
+ },
+ "Beeswax": {
+  "category": "Marketing",
+  "controller": "Beeswax",
+  "cookies": [
+   "bitoIsSecure",
+   "bito"
+  ]
+ },
+ "Beslist.nl": {
+  "category": "Analytics",
+  "controller": "Beslist.nl",
+  "cookies": [
+   "client_bslstaid",
+   "client_bslstmatch",
+   "client_bslstsid",
+   "client_bslstuid"
+  ]
+ },
+ "BetweenDigital": {
+  "category": "Marketing",
+  "controller": "BetweenDigital",
+  "cookies": [
+   "dc"
+  ]
+ },
+ "Bidence": {
+  "category": "Marketing",
+  "controller": "Bidence",
+  "cookies": [
+   "duid_update_time",
+   "_ssp_update_time",
+   "_dsp_uid"
+  ]
+ },
+ "Bing / Microsoft": {
+  "category": "Marketing",
+  "controller": "Microsoft",
+  "cookies": [
+   "MR",
+   "MUID",
+   "MUIDB",
+   "MC1",
+   "MSFPC",
+   "_uetsid",
+   "_uetvid",
+   "ANON"
+  ]
+ },
+ "Bit.ly": {
+  "category": "Analytics",
+  "controller": "Bit.ly",
+  "cookies": [
+   "_bit"
+  ]
+ },
+ "Blue": {
+  "category": "Marketing",
+  "controller": "Blue",
+  "cookies": [
+   "ckid",
+   "hash",
+   "BLUEID"
+  ]
+ },
+ "BlueKai": {
+  "category": "Marketing",
+  "controller": "Oracle",
+  "cookies": [
+   "bkdc",
+   "bku",
+   "bkpa"
+  ]
+ },
+ "Blueconic.com": {
+  "category": "Marketing",
+  "controller": "Blueconic.com",
+  "cookies": [
+   "BCSessionID",
+   "BCTempID",
+   "BCReferrerOverrule",
+   "BCRefusedObjectives",
+   "BCRevision",
+   "BCTracking",
+   "bc_tstgrp"
+  ]
+ },
+ "Bombora": {
+  "category": "Marketing",
+  "controller": "Bombora",
+  "cookies": [
+   "tp"
+  ]
+ },
+ "Bouncex": {
+  "category": "Marketing",
+  "controller": "Wunderkind",
+  "cookies": [
+   "dgzsdl08v4",
+   "bounceClientVisit"
+  ]
+ },
+ "Braze": {
+  "category": "Analytics",
+  "controller": "Braze",
+  "cookies": [
+   "ab.storage.sessionId.",
+   "ab.storage.deviceId."
+  ]
+ },
+ "Casale Media": {
+  "category": "Marketing",
+  "controller": "Casale Media",
+  "cookies": [
+   "CMID",
+   "CMPRO",
+   "CMPS",
+   "CMRUM3",
+   "CMST"
+  ]
+ },
+ "Chartbeat": {
+  "category": "Analytics",
+  "controller": "Chartbeat",
+  "cookies": [
+   "_chartbeat",
+   "_SUPERFLY_nosample"
+  ]
+ },
+ "Claritas": {
+  "category": "Marketing",
+  "controller": "Claritas",
+  "cookies": [
+   "barometric[cuid]",
+   "barometric[idfa]"
+  ]
+ },
+ "CognitoForms": {
+  "category": "Analytics",
+  "controller": "CognitoForms",
+  "cookies": [
+   "c-referrer",
+   "c-signup",
+   "c-plan",
+   "cognito.services.a",
+   "cognito.organization"
+  ]
+ },
+ "ComScore": {
+  "category": "Marketing",
+  "controller": "ComScore",
+  "cookies": [
+   "UIDR",
+   "UID",
+   "PID",
+   "XID"
+  ]
+ },
+ "Command Act": {
+  "category": "Marketing",
+  "controller": "Command Act",
+  "cookies": [
+   "tc_cj_v2",
+   "tc_cj_v2_cmp.",
+   "tc_cj_v2_med",
+   "CAID",
+   "TCID",
+   "WID",
+   "TMS",
+   "TCSESSION"
+  ]
+ },
+ "ContentSquare": {
+  "category": "Analytics",
+  "controller": "ContentSquare",
+  "cookies": [
+   "_cs_c",
+   "_cs_cvars",
+   "_cs_id",
+   "_cs_s",
+   "__CT_Data",
+   "_CT_RS_",
+   "WRUID",
+   "_cs_ex"
+  ]
+ },
+ "CookieConsent.io": {
+  "category": "Marketing",
+  "controller": "CookieConsent.io",
+  "cookies": [
+   "ccec_user"
+  ]
+ },
+ "Crazy Egg": {
+  "category": "Marketing",
+  "controller": "Crazy Egg",
+  "cookies": [
+   "_ceir",
+   "_CEFT",
+   "_cer.v",
+   "_ce.s",
+   "_ce.cch",
+   "_ce.gtld",
+   "ce_need_secure_cookie",
+   "ce_successful_csp_check"
+  ]
+ },
+ "CreativeCDN": {
+  "category": "Marketing",
+  "controller": "RTB House",
+  "cookies": [
+   "c",
+   "g",
+   "u"
+  ]
+ },
+ "Customer.io": {
+  "category": "Marketing",
+  "controller": "Customer.io",
+  "cookies": [
+   "_cio",
+   "_cioid",
+   "_cioanonid",
+   "cioFT",
+   "cioLT"
+  ]
+ },
+ "Datatrics": {
+  "category": "Marketing",
+  "controller": "Datatrics",
+  "cookies": [
+   "datatrics_optin",
+   "datatricsDebugger",
+   "datatrics_customData"
+  ]
+ },
+ "Digital Audience": {
+  "category": "Marketing",
+  "controller": "Digital Audience",
+  "cookies": [
+   "digitalAudience"
+  ]
+ },
+ "Disqus": {
+  "category": "Marketing",
+  "controller": "Disqus",
+  "cookies": [
+   "vglnk.Agent.p",
+   "vglnk.PartnerRfsh.p"
+  ]
+ },
+ "Dotmetrics": {
+  "category": "Analytics",
+  "controller": "Dot Metrics",
+  "cookies": [
+   "DotMetrics.SessionCookieTemp",
+   "DotMetrics.UniqueUserIdentityCookie",
+   "DotMetrics.DeviceKey",
+   "DotMetrics.SessionCookieTempTimed"
+  ]
+ },
+ "Dotomi": {
+  "category": "Marketing",
+  "controller": "Epsilon",
+  "cookies": [
+   "DotomiUser",
+   "cjae",
+   "DotomiStatus",
+   "DotomiSession_",
+   "DotomiSync",
+   "dtm_token",
+   "dtm_token_exp",
+   "dtm_tcdata"
+  ]
+ },
+ "DoubleClick/Google Marketing": {
+  "category": "Marketing",
+  "controller": "Google",
+  "cookies": [
+   "IDE",
+   "DSID",
+   "ID",
+   "RUL",
+   "FLC",
+   "__gads",
+   "GoogleAdServingTest",
+   "ar_debug"
+  ]
+ },
+ "Duda": {
+  "category": "Analytics",
+  "controller": "Duda",
+  "cookies": [
+   "dm_timezone_offset",
+   "dm_last_visit",
+   "dm_total_visits",
+   "dm_last_page_view",
+   "dm_this_page_view"
+  ]
+ },
+ "Dynamic Yield": {
+  "category": "Marketing",
+  "controller": "Dynamic Yield",
+  "cookies": [
+   "_dy_csc_ses",
+   "_dycmc",
+   "_dy_df_geo",
+   "_dy_geo",
+   "_dycst",
+   "_dy_cs_storage_items",
+   "_dy_cs_cookie_items"
+  ]
+ },
+ "Dynatrace": {
+  "category": "Analytics",
+  "controller": "Dynatrace",
+  "cookies": [
+   "dtCookie",
+   "dtLatC",
+   "dtPC",
+   "dtSa",
+   "dtValidationCookie",
+   "dtDisabled",
+   "rxVisitor",
+   "rxvt"
+  ]
+ },
+ "E-volution.ai": {
+  "category": "Marketing",
+  "controller": "E-volution.ai",
+  "cookies": [
+   "v_usr"
+  ]
+ },
+ "Emetric": {
+  "category": "Marketing",
+  "controller": "Emetric",
+  "cookies": [
+   "pid_short",
+   "pid_signature",
+   "pid",
+   "ep"
+  ]
+ },
+ "Exponea": {
+  "category": "Marketing",
+  "controller": "Exponea",
+  "cookies": [
+   "__exponea_etc__",
+   "__exponea_time2__"
+  ]
+ },
+ "Ezoic": {
+  "category": "Marketing",
+  "controller": "Ezoic",
+  "cookies": [
+   "ezoadgid_",
+   "ezopvc_",
+   "ezoref_",
+   "ezosuigeneris",
+   "ezosuibasgeneris-1",
+   "ezouid_",
+   "ezovid_",
+   "ezovuuid_"
+  ]
+ },
+ "Facebook": {
+  "category": "Marketing",
+  "controller": "Facebook",
+  "cookies": [
+   "lu",
+   "xs",
+   "c_user",
+   "m_user",
+   "pl",
+   "dbln",
+   "aks",
+   "aksb"
+  ]
+ },
+ "Fastclick": {
+  "category": "Marketing",
+  "controller": "Epsilon",
+  "cookies": [
+   "pluto2",
+   "pluto"
+  ]
+ },
+ "Fathom Analytics": {
+  "category": "Analytics",
+  "controller": "Conva Ventures Inc",
+  "cookies": [
+   "_fathom"
+  ]
+ },
+ "Federated Media Publishing": {
+  "category": "Marketing",
+  "controller": "Federated Media Publishing",
+  "cookies": [
+   "ljt_reader"
+  ]
+ },
+ "Fidelity-media.com": {
+  "category": "Marketing",
+  "controller": "Fidelity-media.com",
+  "cookies": [
+   "DSP_UID"
+  ]
+ },
+ "FreeWheel": {
+  "category": "Marketing",
+  "controller": "FreeWheel",
+  "cookies": [
+   "uid-bp-",
+   "MRM_UID"
+  ]
+ },
+ "Funda": {
+  "category": "Marketing",
+  "controller": "Funda",
+  "cookies": [
+   "DG_HID",
+   "DG_IID",
+   "DG_SID",
+   "DG_UID",
+   "DG_ZID",
+   "DG_ZUID"
+  ]
+ },
+ "Gemius": {
+  "category": "Analytics",
+  "controller": "Gemius",
+  "cookies": [
+   "__gfp_64b",
+   "__gfp_s_64b",
+   "Gdyn"
+  ]
+ },
+ "GitHub": {
+  "category": "Analytics",
+  "controller": "GitHub",
+  "cookies": [
+   "_octo"
+  ]
+ },
+ "Google": {
+  "category": "Marketing",
+  "controller": "Google",
+  "cookies": [
+   "AdID",
+   "DSID",
+   "gcl",
+   "gac",
+   "1P_JAR",
+   "AID",
+   "SID",
+   "HSID"
+  ]
+ },
+ "Google AdSense": {
+  "category": "Marketing",
+  "controller": "Google",
+  "cookies": [
+   "__gsas",
+   "__gpi",
+   "__gpi_optout",
+   "GED_PLAYLIST_ACTIVITY",
+   "ACLK_DATA"
+  ]
+ },
+ "Google Ads": {
+  "category": "Marketing",
+  "controller": "Google",
+  "cookies": [
+   "Conversion",
+   "_gcl_aw",
+   "_gcl_gs",
+   "_gcl_gb",
+   "_gac_gb_",
+   "FPGCLGB",
+   "FPGCLAW",
+   "ADS_VISITOR_ID"
+  ]
+ },
+ "Google Analytics": {
+  "category": "Marketing",
+  "controller": "Google",
+  "cookies": [
+   "_ga",
+   "_gali",
+   "_ga_",
+   "_gid",
+   "_gat",
+   "_dc_gtm_",
+   "AMP_TOKEN",
+   "_gat_gtag_"
+  ]
+ },
+ "Google Flights": {
+  "category": "Marketing",
+  "controller": "Google",
+  "cookies": [
+   "_gcl_gf"
+  ]
+ },
+ "Google Hotel Ads": {
+  "category": "Marketing",
+  "controller": "Google",
+  "cookies": [
+   "_gcl_ha"
+  ]
+ },
+ "Google Maps": {
+  "category": "Marketing",
+  "controller": "Google",
+  "cookies": [
+   "OGPC",
+   "OGP"
+  ]
+ },
+ "Google Optimize": {
+  "category": "Analytics",
+  "controller": "Google",
+  "cookies": [
+   "_opt_awkid",
+   "_opt_awgid",
+   "_opt_awmid",
+   "_gaexp_rc",
+   "_opt_awcid",
+   "_opt_expid"
+  ]
+ },
+ "Google Surveys": {
+  "category": "Marketing",
+  "controller": "Google",
+  "cookies": [
+   "PAIDCONTENT"
+  ]
+ },
+ "Google Tag Manager": {
+  "category": "Analytics",
+  "controller": "Google",
+  "cookies": [
+   "td"
+  ]
+ },
+ "Groovinads": {
+  "category": "Marketing",
+  "controller": "Groovinads",
+  "cookies": [
+   "GRV_BHV_UID",
+   "GRV_BHV_IDCC",
+   "GRV_BHV_SKU",
+   "GRV_BHV_IDCAT",
+   "GRV_BHV_DATE",
+   "GRV_IDU",
+   "NPA",
+   "GRV_BHV_BRND_"
+  ]
+ },
+ "GumGum": {
+  "category": "Marketing",
+  "controller": "GumGum",
+  "cookies": [
+   "cs",
+   "vst"
+  ]
+ },
+ "Heap Analytics": {
+  "category": "Analytics",
+  "controller": "Heap Analytics",
+  "cookies": [
+   "_hp2_id",
+   "_hp2_ses_props"
+  ]
+ },
+ "Hotjar": {
+  "category": "Analytics",
+  "controller": "Hotjar",
+  "cookies": [
+   "_hjHasCachedUserAttributes",
+   "_hjid",
+   "hj_visitor",
+   "_hjIncludedInSample",
+   "_hjClosedSurveyInvites",
+   "_hjDonePolls",
+   "_hjMinimizedPolls",
+   "_hjDoneTestersWidgets"
+  ]
+ },
+ "Hubspot": {
+  "category": "Marketing",
+  "controller": "HubSpot",
+  "cookies": [
+   "__hstc",
+   "hubspotutk",
+   "__hssc",
+   "__hssrc",
+   "messagesUtk",
+   "hubspotapi"
+  ]
+ },
+ "ID5": {
+  "category": "Marketing",
+  "controller": "ID5",
+  "cookies": [
+   "id5",
+   "cip",
+   "car",
+   "callback",
+   "cnac",
+   "cf",
+   "3pi"
+  ]
+ },
+ "Improve Digital": {
+  "category": "Marketing",
+  "controller": "ad.360yield.com",
+  "cookies": [
+   "um",
+   "umeh"
+  ]
+ },
+ "Indeed": {
+  "category": "Analytics",
+  "controller": "Indeed",
+  "cookies": [
+   "CTK",
+   "ctkgen",
+   "jasx_pool_id",
+   "pagead/conv/%INTEGER%"
+  ]
+ },
+ "Inspectlet": {
+  "category": "Analytics",
+  "controller": "Inspectlet",
+  "cookies": [
+   "__insp_pad",
+   "__insp_sid",
+   "__insp_ref",
+   "__insp_scpt",
+   "__insp_nv",
+   "__insp_wid",
+   "__insp_uid",
+   "__insp_dct"
+  ]
+ },
+ "Instagram": {
+  "category": "Marketing",
+  "controller": "Meta",
+  "cookies": [
+   "ig_did",
+   "ig_cb",
+   "ds_user_id",
+   "fbm_",
+   "shbid",
+   "shbts",
+   "sessionid"
+  ]
+ },
+ "Intercom": {
+  "category": "Analytics",
+  "controller": "Intercom",
+  "cookies": [
+   "intercom-id-",
+   "intercom-session-",
+   "intercom-device-id-"
+  ]
+ },
+ "Issuu": {
+  "category": "Marketing",
+  "controller": "Issuu",
+  "cookies": [
+   "iutk"
+  ]
+ },
+ "Kelkoo": {
+  "category": "Marketing",
+  "controller": "Kelkoo",
+  "cookies": [
+   "KelkooID"
+  ]
+ },
+ "Kentico": {
+  "category": "Analytics",
+  "controller": "Kentico",
+  "cookies": [
+   "CMSLandingPageLoaded",
+   "CMSUserPage",
+   "CurrentContact",
+   "VisitorStatus"
+  ]
+ },
+ "Klaviyo": {
+  "category": "Marketing",
+  "controller": "Klaviyo",
+  "cookies": [
+   "__kla_id"
+  ]
+ },
+ "Leadfeeder": {
+  "category": "Marketing",
+  "controller": "Leadfeeder",
+  "cookies": [
+   "_lfa"
+  ]
+ },
+ "Leadinfo": {
+  "category": "Marketing",
+  "controller": "Leadinfo",
+  "cookies": [
+   "_li_id",
+   "_li_ses"
+  ]
+ },
+ "LinkedIn": {
+  "category": "Marketing",
+  "controller": "LinkedIn",
+  "cookies": [
+   "lidc",
+   "bcookie",
+   "bscookie",
+   "trkCode",
+   "trkInfo",
+   "li_oatml",
+   "liap",
+   "lissc"
+  ]
+ },
+ "LiveIntent": {
+  "category": "Marketing",
+  "controller": "LiveIntent",
+  "cookies": [
+   "lidid",
+   "_li_ss"
+  ]
+ },
+ "LiveRamp": {
+  "category": "Marketing",
+  "controller": "LiveRamp",
+  "cookies": [
+   "euconsent"
+  ]
+ },
+ "Lotame": {
+  "category": "Marketing",
+  "controller": "Lotame",
+  "cookies": [
+   "_cc_aud",
+   "_cc_cc",
+   "_cc_id",
+   "panoramaId",
+   "panoramaId_expiry",
+   "panoramaId_expiry_exp",
+   "_cc_domain",
+   "_cc_dc"
+  ]
+ },
+ "Lucky Orange": {
+  "category": "Analytics",
+  "controller": "Lucky Orange",
+  "cookies": [
+   "_lo_uid",
+   "_lo_rid",
+   "_lo_v",
+   "__lotl",
+   "__lotr"
+  ]
+ },
+ "Magnite": {
+  "category": "Marketing",
+  "controller": "Magnite",
+  "cookies": [
+   "khaos",
+   "audit",
+   "put_",
+   "rpb",
+   "rpx",
+   "c",
+   "khaos_p",
+   "audit_p"
+  ]
+ },
+ "MailMunch": {
+  "category": "Marketing",
+  "controller": "MailMunch",
+  "cookies": [
+   "mailmunch_second_pageview",
+   "_mailmunch_visitor_id"
+  ]
+ },
+ "Mailchimp": {
+  "category": "Analytics",
+  "controller": "Mailchimp",
+  "cookies": [
+   "mc_cid",
+   "mc_eid",
+   "mc_landing_site"
+  ]
+ },
+ "Marfeel": {
+  "category": "Analytics",
+  "controller": "Marfeel",
+  "cookies": [
+   "_ut",
+   "_s",
+   "_lv",
+   "_nrbi",
+   "compass_sid",
+   "compass_uid",
+   "___m_rec"
+  ]
+ },
+ "Marketo": {
+  "category": "Analytics",
+  "controller": "Adobe",
+  "cookies": [
+   "_biz_uid",
+   "_biz_nA",
+   "_biz_flagsA",
+   "_biz_pendingA",
+   "_biz_ABTestA",
+   "_biz_su",
+   "_biz_EventA"
+  ]
+ },
+ "Matomo": {
+  "category": "Analytics",
+  "controller": "Matomo",
+  "cookies": [
+   "_pk_id",
+   "_pk_ref",
+   "_pk_ses",
+   "_pk_cvar",
+   "_pk_hsr",
+   "_pk_testcookie",
+   "mtm_consent",
+   "mtm_consent_removed"
+  ]
+ },
+ "Media.net": {
+  "category": "Marketing",
+  "controller": "Media.net",
+  "cookies": [
+   "data-",
+   "visitor-id",
+   "gdpr_status",
+   "mnet_session_depth"
+  ]
+ },
+ "MediaMath": {
+  "category": "Marketing",
+  "controller": "MediaMath",
+  "cookies": [
+   "mt_misc",
+   "mt_mop",
+   "uuidc"
+  ]
+ },
+ "MediaVine": {
+  "category": "Marketing",
+  "controller": "MediaVine",
+  "cookies": [
+   "mv_tokens",
+   "mv_tokens_invalidate-verizon-pushes",
+   "am_tokens",
+   "am_tokens_invalidate-verizon-pushes"
+  ]
+ },
+ "Mediamath": {
+  "category": "Marketing",
+  "controller": "MediaMath",
+  "cookies": [
+   "uuid"
+  ]
+ },
+ "Mediaplex": {
+  "category": "Marketing",
+  "controller": "Epsilon",
+  "cookies": [
+   "svid",
+   "rts"
+  ]
+ },
+ "Mediarithmics": {
+  "category": "Marketing",
+  "controller": "Mediarithmics",
+  "cookies": [
+   "mics_vid",
+   "mics_uaid",
+   "mics_lts",
+   "chk"
+  ]
+ },
+ "MercadoLibre": {
+  "category": "Marketing",
+  "controller": "MercadoLibre",
+  "cookies": [
+   "_d2id",
+   "edsid",
+   "ftid"
+  ]
+ },
+ "Microsoft": {
+  "category": "Analytics",
+  "controller": "Microsoft",
+  "cookies": [
+   "_clck",
+   "_clsk",
+   "SM",
+   "CLID",
+   "MicrosoftApplicationsTelemetryDeviceId",
+   "X-FD-FEATURES",
+   "X-FD-Time"
+  ]
+ },
+ "Mixpanel": {
+  "category": "Analytics",
+  "controller": "Mixpanel",
+  "cookies": [
+   "mp_"
+  ]
+ },
+ "Mopinion.com": {
+  "category": "Analytics",
+  "controller": "Mopinion.com",
+  "cookies": [
+   "Pastease.passive.activated",
+   "Pastease.passive.chance"
+  ]
+ },
+ "Nativo": {
+  "category": "Marketing",
+  "controller": "Nativo",
+  "cookies": [
+   "opt_out",
+   "visitor"
+  ]
+ },
+ "Neustar": {
+  "category": "Marketing",
+  "controller": "Neustar",
+  "cookies": [
+   "ab"
+  ]
+ },
+ "Nexx360": {
+  "category": "Marketing",
+  "controller": "Nexx360",
+  "cookies": [
+   "n360_thirtythreeacross",
+   "n360-thirtythreeacross",
+   "n360_appnexus",
+   "n360-appnexus",
+   "n360_bliink",
+   "n360-bliink",
+   "n360_amx",
+   "n360-amx"
+  ]
+ },
+ "Nielsen": {
+  "category": "Marketing",
+  "controller": "Nielsen",
+  "cookies": [
+   "IMRID",
+   "ud",
+   "udo",
+   "EE"
+  ]
+ },
+ "OnAudience": {
+  "category": "Marketing",
+  "controller": "OnAudience",
+  "cookies": [
+   "done_redirects"
+  ]
+ },
+ "OneTrust": {
+  "category": "Marketing",
+  "controller": "OneTrust",
+  "cookies": [
+   "_mkto_trk"
+  ]
+ },
+ "Optimizely": {
+  "category": "Marketing",
+  "controller": "Optimizely",
+  "cookies": [
+   "optimizelyEndUserId",
+   "optimizelyRedirectData",
+   "optimizelyDomainTestCookie",
+   "optimizelyOptOut"
+  ]
+ },
+ "Optinmonster": {
+  "category": "Marketing",
+  "controller": "Optinmonster",
+  "cookies": [
+   "_omappvs",
+   "_omappvp"
+  ]
+ },
+ "Oracle": {
+  "category": "Analytics",
+  "controller": "Oracle",
+  "cookies": [
+   "ELOQUA",
+   "ELQSTATUS"
+  ]
+ },
+ "Oribi": {
+  "category": "Analytics",
+  "controller": "Oribi",
+  "cookies": [
+   "oribi_user_guid",
+   "oribi_cookie_test"
+  ]
+ },
+ "Ortec": {
+  "category": "Marketing",
+  "controller": "Ortec",
+  "cookies": [
+   "app_ts",
+   "viewer",
+   "spx_ts",
+   "adx_ts",
+   "id_ts"
+  ]
+ },
+ "Outbrain": {
+  "category": "Marketing",
+  "controller": "Outbrain",
+  "cookies": [
+   "cookieJartestCookie",
+   "obuid",
+   "apnxs",
+   "criteo",
+   "mdfrc",
+   "adrl",
+   "ttd",
+   "recs"
+  ]
+ },
+ "Pangle": {
+  "category": "Marketing",
+  "controller": "Pangle",
+  "cookies": [
+   "_pangle"
+  ]
+ },
+ "Partnerize": {
+  "category": "Marketing",
+  "controller": "Partnerize",
+  "cookies": [
+   "tPHG-PS"
+  ]
+ },
+ "Perfect Audience": {
+  "category": "Marketing",
+  "controller": "Perfect Audience",
+  "cookies": [
+   "pa_rubicon_ts",
+   "pa_google_ts",
+   "pa_twitter_ts",
+   "pa_yahoo_ts",
+   "pa_openx_ts",
+   "pa_uid"
+  ]
+ },
+ "Piano": {
+  "category": "Marketing",
+  "controller": "Piano",
+  "cookies": [
+   "pa_user",
+   "_pcus",
+   "cX_P",
+   "cX_G",
+   "gckp",
+   "pnespsdk_visitor",
+   "pnespsdk_push_subscription_added",
+   "pnespsdk_pnespid"
+  ]
+ },
+ "Picreel": {
+  "category": "Analytics",
+  "controller": "Picreel",
+  "cookies": [
+   "picreel_tracker__visited",
+   "picreel_tracker__first_visit",
+   "picreel_tracker__page_views",
+   "picreel_new_price"
+  ]
+ },
+ "Pinterest": {
+  "category": "Marketing",
+  "controller": "Pinterest",
+  "cookies": [
+   "_pin_unauth",
+   "_pinterest_ct_ua",
+   "sessionFunnelEventLogged",
+   "_routing_id",
+   "_derived_epik",
+   "_pinterest_ct",
+   "_pinterest_ct_rt",
+   "_epik"
+  ]
+ },
+ "Piwik": {
+  "category": "Analytics",
+  "controller": "Piwik",
+  "cookies": [
+   "stg_traffic_source_priority",
+   "stg_last_interaction",
+   "stg_returning_visitor",
+   "stg_externalReferrer",
+   "_pk_id.",
+   "_pk_ses.",
+   "ppms_privacy_",
+   "ppms_privacy_bar_"
+  ]
+ },
+ "Platform161": {
+  "category": "Marketing",
+  "controller": "Platform161",
+  "cookies": [
+   "fl_inst",
+   "pvc2",
+   "pcc2",
+   "trc",
+   "tuuid",
+   "ad2"
+  ]
+ },
+ "Plausible Analytics": {
+  "category": "Analytics",
+  "controller": "Plausible Insights OÜ",
+  "cookies": [
+   "plausible_"
+  ]
+ },
+ "Postviewscounter": {
+  "category": "Analytics",
+  "controller": "Postviewscounter",
+  "cookies": [
+   "pvc_visits[0]"
+  ]
+ },
+ "PowerLinks": {
+  "category": "Marketing",
+  "controller": "PowerLinks",
+  "cookies": [
+   "pl_user_id"
+  ]
+ },
+ "PowerLinks Media Limited": {
+  "category": "Marketing",
+  "controller": "PowerLinks Media Limited",
+  "cookies": [
+   "dsps:"
+  ]
+ },
+ "PubMatic": {
+  "category": "Marketing",
+  "controller": "PubMatic",
+  "cookies": [
+   "PUBMDCID",
+   "pp",
+   "SPugT",
+   "KADUSERCOOKIE",
+   "PUBRETARGET",
+   "KCCH",
+   "SyncRTB",
+   "DPSync"
+  ]
+ },
+ "Pulsepoint": {
+  "category": "Marketing",
+  "controller": "Pulsepoint",
+  "cookies": [
+   "_dbefe"
+  ]
+ },
+ "Qualaroo": {
+  "category": "Marketing",
+  "controller": "Qualaroo",
+  "cookies": [
+   "ki_s",
+   "ki_u"
+  ]
+ },
+ "Qualtrics": {
+  "category": "Analytics",
+  "controller": "Qualtrics",
+  "cookies": [
+   "QSI_HistorySession",
+   "QSI_OptInIDsAndWindowNames",
+   "QSI_OptInIDsAndTargetOrigins",
+   "SiteReferrer",
+   "PageReferrer",
+   "SearchTerm",
+   "FocusTime",
+   "BlurTime"
+  ]
+ },
+ "Quantcast": {
+  "category": "Marketing",
+  "controller": "Quantcast",
+  "cookies": [
+   "cref",
+   "mc",
+   "d",
+   "__qca"
+  ]
+ },
+ "RD Station": {
+  "category": "Marketing",
+  "controller": "RD Station",
+  "cookies": [
+   "rdtrk",
+   "_rdtrk",
+   "_rd_experiment_version",
+   "_rdlps_pp",
+   "_rd_wa_first_session",
+   "_sp_wa_first_session",
+   "_rd_wa_id",
+   "_sp_wa_id"
+  ]
+ },
+ "Rapleaf": {
+  "category": "Marketing",
+  "controller": "Tower Data",
+  "cookies": [
+   "pxrc",
+   "rlas3"
+  ]
+ },
+ "Reddit": {
+  "category": "Marketing",
+  "controller": "Reddit",
+  "cookies": [
+   "edgebucket",
+   "initref",
+   "_rdt_uuid"
+  ]
+ },
+ "Roku": {
+  "category": "Marketing",
+  "controller": "Roku",
+  "cookies": [
+   "matchadform",
+   "wfivefivec"
+  ]
+ },
+ "Rudderstack": {
+  "category": "Analytics",
+  "controller": "Rudderstack",
+  "cookies": [
+   "rl_user_id",
+   "rl_trait",
+   "rl_anonymous_id",
+   "rl_group_id",
+   "rl_group_trait",
+   "rl_page_init_referrer",
+   "rl_page_init_referring_domain",
+   "test_rudder_cookie"
+  ]
+ },
+ "SAP": {
+  "category": "Marketing",
+  "controller": "SAP",
+  "cookies": [
+   "apiDomain_",
+   "gig_bootstrap_",
+   "_gig_email",
+   "gig_hasGmid",
+   "_gig_llu",
+   "_gig_llp",
+   "_gig_shareUI_lastUID",
+   "_gigRefUid_"
+  ]
+ },
+ "SOVRN": {
+  "category": "Marketing",
+  "controller": "SOVRN",
+  "cookies": [
+   "_ljtrtb_",
+   "ljtrtb"
+  ]
+ },
+ "Sailthru": {
+  "category": "Marketing",
+  "controller": "Sailthru",
+  "cookies": [
+   "sailthru_content",
+   "sailthru_pageviews",
+   "sailthru_visitor"
+  ]
+ },
+ "Salesforce": {
+  "category": "Marketing",
+  "controller": "Salesforce",
+  "cookies": [
+   "apex__EmailAddress",
+   "auraBrokenDefGraph",
+   "calViewState",
+   "pctrk",
+   "oinfo",
+   "expid_",
+   "_kuid_",
+   "visitor_id"
+  ]
+ },
+ "Seedtag": {
+  "category": "Marketing",
+  "controller": "seedtag.com",
+  "cookies": [
+   "st_csd",
+   "st_cs",
+   "st_uid",
+   "st_cnt",
+   "st_chc",
+   "st_ssp"
+  ]
+ },
+ "ShareThis": {
+  "category": "Marketing",
+  "controller": "ShareThis",
+  "cookies": [
+   "__stid",
+   "__stidv",
+   "pxcelBcnLcy",
+   "pxcelPage"
+  ]
+ },
+ "Sharethrough": {
+  "category": "Marketing",
+  "controller": "Sharethrough",
+  "cookies": [
+   "stx_user_id"
+  ]
+ },
+ "Sharpspring": {
+  "category": "Marketing",
+  "controller": "Constant Contact",
+  "cookies": [
+   "koitk",
+   "__ss_referrer",
+   "__ss_tk",
+   "__ss"
+  ]
+ },
+ "Shopify": {
+  "category": "Marketing",
+  "controller": "Shopify.com",
+  "cookies": [
+   "_tracking_consent",
+   "_landing_page",
+   "_orig_referrer",
+   "_s",
+   "_shopify_fs",
+   "_shopify_s",
+   "_shopify_sa_t",
+   "_shopify_uniq"
+  ]
+ },
+ "Siteimprove": {
+  "category": "Analytics",
+  "controller": "Siteimprove",
+  "cookies": [
+   "nmstat"
+  ]
+ },
+ "Sleeknote": {
+  "category": "Marketing",
+  "controller": "Sleeknote",
+  "cookies": [
+   "_sn_a",
+   "_sn_m"
+  ]
+ },
+ "Smaato": {
+  "category": "Marketing",
+  "controller": "Smaato",
+  "cookies": [
+   "SCM",
+   "SCMaps",
+   "SCMsovrn",
+   "SCMinf",
+   "SCMo",
+   "SCMg",
+   "SCM*"
+  ]
+ },
+ "Smartadserver": {
+  "category": "Marketing",
+  "controller": "Equativ.com",
+  "cookies": [
+   "cnfq",
+   "lcsrc",
+   "gid",
+   "csfq",
+   "partner-",
+   "vs",
+   "Comp",
+   "Pwb"
+  ]
+ },
+ "SnapEngage": {
+  "category": "Marketing",
+  "controller": "SnapEngage",
+  "cookies": [
+   "SnapABugHistory",
+   "SnapABugRef"
+  ]
+ },
+ "Snapchat": {
+  "category": "Marketing",
+  "controller": "Snapchat",
+  "cookies": [
+   "sc_at",
+   "sc-a-nonce",
+   "_scid",
+   "_schn",
+   "_scid_r"
+  ]
+ },
+ "Snowplow": {
+  "category": "Analytics",
+  "controller": "Snowplow",
+  "cookies": [
+   "sp",
+   "_sp_id.",
+   "_sp_ses."
+  ]
+ },
+ "Sonobi": {
+  "category": "Marketing",
+  "controller": "Sonobi",
+  "cookies": [
+   "__uin_bw",
+   "__uir_bw",
+   "__uis",
+   "HAPLB5S",
+   "__uin_mm",
+   "__uir_mm",
+   "HAPLB8",
+   "__uin_rh"
+  ]
+ },
+ "SpotX": {
+  "category": "Marketing",
+  "controller": "SpotX",
+  "cookies": [
+   "audience"
+  ]
+ },
+ "Springserve": {
+  "category": "Marketing",
+  "controller": "Magnite",
+  "cookies": [
+   "ssid",
+   "sst"
+  ]
+ },
+ "Squeezely": {
+  "category": "Marketing",
+  "controller": "Squeezely",
+  "cookies": [
+   "sqzl_abs",
+   "sqzl_session_id",
+   "sqzl_vw",
+   "sqzllocal"
+  ]
+ },
+ "Stape": {
+  "category": "Marketing",
+  "controller": "Stape",
+  "cookies": [
+   "_gtmeec"
+  ]
+ },
+ "StreamTheWorld": {
+  "category": "Marketing",
+  "controller": "StreamTheWorld",
+  "cookies": [
+   "idsync-bsw-uid-s"
+  ]
+ },
+ "Taboola": {
+  "category": "Marketing",
+  "controller": "taboola.com",
+  "cookies": [
+   "t_gid",
+   "taboola_session_id",
+   "_tb_t_ppg",
+   "abLdr",
+   "abMbl",
+   "tb_click_param"
+  ]
+ },
+ "Tailtarget": {
+  "category": "Marketing",
+  "controller": "Totvs",
+  "cookies": [
+   "ttbprf",
+   "ttc",
+   "ttnprf",
+   "n",
+   "u",
+   "trk",
+   "ttca",
+   "tp"
+  ]
+ },
+ "Tapad": {
+  "category": "Marketing",
+  "controller": "Tapad",
+  "cookies": [
+   "TapAd_DID",
+   "TapAd_TS",
+   "TapAd_3WAY_SYNCS"
+  ]
+ },
+ "Tappx": {
+  "category": "Marketing",
+  "controller": "Tappx",
+  "cookies": [
+   "TXCSDMN_",
+   "TXCD"
+  ]
+ },
+ "Tawk.to Chat": {
+  "category": "Analytics",
+  "controller": "Tawk.to Chat",
+  "cookies": [
+   "tawkUUID"
+  ]
+ },
+ "Teads": {
+  "category": "Marketing",
+  "controller": "Teads.com",
+  "cookies": [
+   "tt_viewer",
+   "tt_bluekai",
+   "tt_exelate",
+   "tt_liveramp",
+   "tt_neustar",
+   "tt_salesforce"
+  ]
+ },
+ "The Ozone Project": {
+  "category": "Marketing",
+  "controller": "The Ozone Project",
+  "cookies": [
+   "ozone_uid"
+  ]
+ },
+ "The Tradedesk": {
+  "category": "Marketing",
+  "controller": "The Tradedesk",
+  "cookies": [
+   "TDCPM",
+   "TDID"
+  ]
+ },
+ "TikTok": {
+  "category": "Marketing",
+  "controller": "TikTok",
+  "cookies": [
+   "_tt_enable_cookie",
+   "_ttp",
+   "MONITOR_WEB_ID",
+   "msToken",
+   "ttwid",
+   "ttcsid"
+  ]
+ },
+ "Totvs": {
+  "category": "Marketing",
+  "controller": "Totvs",
+  "cookies": [
+   "u",
+   "_ssc"
+  ]
+ },
+ "Tripadvisor": {
+  "category": "Marketing",
+  "controller": "Tripadvisor",
+  "cookies": [
+   "TADCID",
+   "ServerPool",
+   "TATravelInfo",
+   "TAUnique",
+   "TAReturnTo"
+  ]
+ },
+ "TripleLift": {
+  "category": "Marketing",
+  "controller": "TripleLift",
+  "cookies": [
+   "tluid",
+   "tluidp",
+   "optout",
+   "sync"
+  ]
+ },
+ "Trustpilot": {
+  "category": "Marketing",
+  "controller": "Trustpilot",
+  "cookies": [
+   "__auc",
+   "ajs_user_id",
+   "ajs_anonymous_id",
+   "ajs_group_id",
+   "__asc",
+   "amplitude_id"
+  ]
+ },
+ "Twiago": {
+  "category": "Marketing",
+  "controller": "Twiago",
+  "cookies": [
+   "deuxesse_uxid"
+  ]
+ },
+ "Typeform": {
+  "category": "Marketing",
+  "controller": "Typeform",
+  "cookies": [
+   "attribution_user_id"
+  ]
+ },
+ "Umami": {
+  "category": "Analytics",
+  "controller": "Website operator",
+  "cookies": [
+   "umami."
+  ]
+ },
+ "Underdog Media": {
+  "category": "Marketing",
+  "controller": "Underdog Media",
+  "cookies": [
+   "dt",
+   "rtbh",
+   "udmts"
+  ]
+ },
+ "Undertone": {
+  "category": "Marketing",
+  "controller": "Undertone",
+  "cookies": [
+   "UID_EXT_*",
+   "UTID",
+   "UTID_ENC"
+  ]
+ },
+ "Unrulymedia.com": {
+  "category": "Marketing",
+  "controller": "Unrulymedia.com",
+  "cookies": [
+   "unruly_m"
+  ]
+ },
+ "Usabilla": {
+  "category": "Marketing",
+  "controller": "SurveyMonkey",
+  "cookies": [
+   "usbls"
+  ]
+ },
+ "Verve": {
+  "category": "Marketing",
+  "controller": "Verve",
+  "cookies": [
+   "lkqdid",
+   "lkqdidts"
+  ]
+ },
+ "Viafoura": {
+  "category": "Analytics",
+  "controller": "Viafoura",
+  "cookies": [
+   "_vfa",
+   "_vfb",
+   "_vfz"
+  ]
+ },
+ "Vidoomy": {
+  "category": "Marketing",
+  "controller": "Vidoomy",
+  "cookies": [
+   "vidoomy-uids"
+  ]
+ },
+ "Vimeo": {
+  "category": "Analytics",
+  "controller": "Vimeo",
+  "cookies": [
+   "vuid",
+   "sd_identity",
+   "sd_client_id"
+  ]
+ },
+ "Visual Website Optimizer": {
+  "category": "Analytics",
+  "controller": "Visual Website Optimizer",
+  "cookies": [
+   "_vwo_sn",
+   "_vwo_ds",
+   "_vwo_referrer"
+  ]
+ },
+ "Visx.net": {
+  "category": "Marketing",
+  "controller": "visx.net",
+  "cookies": [
+   "um2"
+  ]
+ },
+ "Vuble": {
+  "category": "Marketing",
+  "controller": "Vuble",
+  "cookies": [
+   "_mb"
+  ]
+ },
+ "WePublish": {
+  "category": "Analytics",
+  "controller": "WePublish",
+  "cookies": [
+   "_wepublishGa",
+   "_wepublishGa_gid"
+  ]
+ },
+ "Weborama": {
+  "category": "Analytics",
+  "controller": "Weborama",
+  "cookies": [
+   "AFFICHE_W"
+  ]
+ },
+ "Wikimedia": {
+  "category": "Analytics",
+  "controller": "Wikipedia",
+  "cookies": [
+   "WMF-Last-Access",
+   "centralnotice_bucket",
+   "GeoIP",
+   "NetWorkProbeLimit"
+  ]
+ },
+ "Wix.com": {
+  "category": "Marketing",
+  "controller": "Wix.com",
+  "cookies": [
+   "svSession"
+  ]
+ },
+ "WooCommerce": {
+  "category": "Analytics",
+  "controller": "WooCommerce",
+  "cookies": [
+   "sbjs_session",
+   "sbjs_udata",
+   "sbjs_first",
+   "sbjs_current",
+   "sbjs_first_add",
+   "sbjs_current_add",
+   "sbjs_migrations"
+  ]
+ },
+ "WordPress": {
+  "category": "Marketing",
+  "controller": "WordPress",
+  "cookies": [
+   "tk_qs",
+   "tk_lr",
+   "tk_or",
+   "tk_r3d",
+   "tk_tc",
+   "camptix_client_stats"
+  ]
+ },
+ "X": {
+  "category": "Marketing",
+  "controller": "X",
+  "cookies": [
+   "guest_id",
+   "personalization_id",
+   "ct0",
+   "gt",
+   "guest_id_marketing",
+   "guest_id_ads",
+   "muc_ads",
+   "_twitter_sess"
+  ]
+ },
+ "Xandr": {
+  "category": "Marketing",
+  "controller": "Xandr",
+  "cookies": [
+   "anj",
+   "uuid2",
+   "usersync",
+   "icu",
+   "pses",
+   "uids",
+   "XANDR_PANID"
+  ]
+ },
+ "Yahoo": {
+  "category": "Marketing",
+  "controller": "Yahoo",
+  "cookies": [
+   "A3",
+   "APID",
+   "APIDTS",
+   "IDSYNC",
+   "A1",
+   "A1S",
+   "adaptv_unique_user_cookie",
+   "cmp"
+  ]
+ },
+ "Yandex.Metrica": {
+  "category": "Analytics",
+  "controller": "Yandex",
+  "cookies": [
+   "_ym_metrika_enabled",
+   "_ym_isad",
+   "_ym_uid",
+   "_ym_d",
+   "yabs-sid",
+   "_ym_visorc_",
+   "yandexuid",
+   "yuidss"
+  ]
+ },
+ "Yieldmo": {
+  "category": "Marketing",
+  "controller": "Yieldmo",
+  "cookies": [
+   "ptrcriteo",
+   "ptrrhs",
+   "yieldmo_id",
+   "ptrrc",
+   "ptran",
+   "ptrt",
+   "ptrpp",
+   "ptrpub"
+  ]
+ },
+ "Youtube": {
+  "category": "Marketing",
+  "controller": "Google",
+  "cookies": [
+   "GPS",
+   "VISITOR_INFO1_LIVE",
+   "VISITOR_PRIVACY_METADATA",
+   "__Secure-ROLLOUT_TOKEN"
+  ]
+ },
+ "ZOHO": {
+  "category": "Marketing",
+  "controller": "ZOHO",
+  "cookies": [
+   "zc_show",
+   "zc_loc"
+  ]
+ },
+ "Zendesk": {
+  "category": "Analytics",
+  "controller": "Zendesk",
+  "cookies": [
+   "_zdshared_user_session_analytics",
+   "ZD-suid",
+   "ZD-buid"
+  ]
+ },
+ "Zeotap": {
+  "category": "Marketing",
+  "controller": "Zeotap",
+  "cookies": [
+   "zc",
+   "zsc",
+   "zi",
+   "idp",
+   "zuc"
+  ]
+ },
+ "adscale.de": {
+  "category": "Marketing",
+  "controller": "adscale.de",
+  "cookies": [
+   "uu",
+   "cct",
+   "tu"
+  ]
+ },
+ "betweendigital.com": {
+  "category": "Marketing",
+  "controller": "betweendigital.com",
+  "cookies": [
+   "betweendigital.com"
+  ]
+ },
+ "bidswitch.net": {
+  "category": "Marketing",
+  "controller": "bidswitch.net",
+  "cookies": [
+   "tuuid_lu"
+  ]
+ },
+ "comScore": {
+  "category": "Analytics",
+  "controller": "comScore",
+  "cookies": [
+   "S1",
+   "C1"
+  ]
+ },
+ "csync.loopme.me": {
+  "category": "Marketing",
+  "controller": "csync.loopme.me",
+  "cookies": [
+   "viewer_token"
+  ]
+ },
+ "infOnline": {
+  "category": "Marketing",
+  "controller": "infOnline",
+  "cookies": [
+   "i00"
+  ]
+ },
+ "justpremium.com": {
+  "category": "Marketing",
+  "controller": "JustPremium",
+  "cookies": [
+   "jpxumaster",
+   "jpxumatched"
+  ]
+ },
+ "openx.net": {
+  "category": "Marketing",
+  "controller": "OpenX",
+  "cookies": [
+   "i",
+   "univ_id",
+   "pd",
+   "OAID",
+   "OAGEO"
+  ]
+ },
+ "rekmob.com": {
+  "category": "Marketing",
+  "controller": "rekmob.com",
+  "cookies": [
+   "rek_content"
+  ]
+ },
+ "richAudience": {
+  "category": "Marketing",
+  "controller": "richAudience",
+  "cookies": [
+   "rai-pltn-pl-",
+   "avcid-",
+   "pdid"
+  ]
+ },
+ "semasio.net": {
+  "category": "Marketing",
+  "controller": "semasio.net",
+  "cookies": [
+   "SEUNCY"
+  ]
+ },
+ "vmg.host": {
+  "category": "Marketing",
+  "controller": "vmg.host",
+  "cookies": [
+   "BSWtracker"
+  ]
+ }
+}
