@@ -9,6 +9,8 @@ const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const { send: routerSend } = require('../../../lib/notify/relay-router.js');
 const { pickSendAlias, markUsed, remainingCapacityToday } = require('../../../lib/alias-rotator.js');
 const { lint } = require('../../../lib/notify/content-linter.js');
+const { verifyAuditUrl } = require('../../../lib/audit/verify-audit-url.js');
+let _tg = null; try { _tg = require('../../../lib/notify/telegram.js'); } catch (_) {}
 
 function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return null; try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; } }
 function pgEsc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
@@ -52,18 +54,17 @@ async function processLead(lead) {
     return { lead_id: lead.id, skipped: 'quality_below_threshold', quality_score: Number(qs) };
   }
 
-  // Touch-1 audit guarantee: Touch 1 references the lead's audit URL. NEVER send a broken link.
-  // Verify the URL is present AND resolves (HTTP 200). If not, block + flag for audit minting.
-  if (touch === 1) {
+  // AUDIT-LINK GUARANTEE (any touch that references an audit): NEVER send unless the URL is a real,
+  // minted, signed audit that resolves HTTP 200. Fail-closed + flag the founder. No frivolous emails.
+  const bodyHasAudit = /\/audit\//i.test(draft.body);
+  if (bodyHasAudit) {
     const auditUrl = pg(`SELECT COALESCE(audit_url,'') FROM leads WHERE id=${lead.id}`);
-    const bodyHasAudit = /audit\.tamazia\.co\.uk|tamazia\.co\.uk\/audit|\/audit\//i.test(draft.body);
-    let resolves = false;
-    if (auditUrl) {
-      try { const u = require('child_process').execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-m', '8', '-L', auditUrl], { encoding: 'utf8' }).trim(); resolves = (u === '200'); } catch (_e) { resolves = false; }
-    }
-    if (bodyHasAudit && (!auditUrl || !resolves)) {
-      pg(`UPDATE outreach_drafts SET send_status='blocked_audit_missing', draft_metadata = draft_metadata || ${pgEsc(JSON.stringify({ audit_url: auditUrl || null, audit_resolves: resolves, blocked_at: new Date().toISOString() }))}::jsonb WHERE id=${draft.id}`);
-      return { lead_id: lead.id, skipped: 'touch1_audit_unavailable', audit_url: auditUrl, resolves };
+    const v = await verifyAuditUrl(auditUrl);
+    if (!v.ok) {
+      pg(`UPDATE outreach_drafts SET send_status='blocked_audit_missing', draft_metadata = draft_metadata || ${pgEsc(JSON.stringify({ audit_url: auditUrl || null, audit_check: v, blocked_at: new Date().toISOString() }))}::jsonb WHERE id=${draft.id}`);
+      pg(`UPDATE leads SET status='audit_unverified' WHERE id=${lead.id}`);
+      try { if (_tg) await _tg.send(`ABORTED Touch-${touch} for ${lead.company || lead.domain || ('lead ' + lead.id)}: audit link not verified (${v.reason}). No email sent. Mint or fix the audit and it will resend. [lead ${lead.id}]`, { parse_mode: '' }); } catch (_) {}
+      return { lead_id: lead.id, skipped: 'audit_unverified', audit_url: auditUrl, check: v };
     }
   }
 

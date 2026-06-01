@@ -23,6 +23,7 @@ run() { echo "[$(TS)] >> $1"; eval "$1" 2>&1 | tail -3; echo "[$(TS)] done: $1";
   run "node scripts/buying-signals.js 10"                                # Phase D: watch prospect sites for hiring/pricing/redesign -> auto hot re-score
   run "node scripts/build-rank-insights.js 15"                            # Touch-0 SOUL: gated below-top-5 keyword-gap insight per lead
   run "node scripts/render-touches.js 15"                                # S064: render the gated 4-touch cadence (Touch-0 rankings) for FIT leads BEFORE export
+  run "node scripts/verify-audits.js 6"                                   # AUDIT GUARANTEE: verify/mint each FIT lead audit live (HTTP 200) before export; hold+flag if not
   run "node scripts/mystrika-export.js 1000"                            # B02 export FIT leads -> Mystrika CSV + social CSV
   run "node scripts/render-social-drafts.js 20"                         # G02/G03 LinkedIn + Instagram drafts for FIT leads
   run "node scripts/health-check.js"                                    # self-diagnostic: 30 adverse-scenario probes → system_health

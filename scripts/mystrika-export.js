@@ -68,6 +68,7 @@ const HEADERS = ['email','first_name','last_name','company','website','sector','
     WHERE l.quality_fit = TRUE
       AND COALESCE(l.lifecycle_stage,'') = 'qualified'
       AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal')
+      AND COALESCE(l.audit_verified, FALSE) = TRUE  -- AUDIT GUARANTEE: only export leads whose audit link is verified live (verify-audits.js)
     ORDER BY COALESCE(l.quality_score,0) DESC NULLS LAST, l.id DESC LIMIT ${limit}`);
   const rows = raw.split('\n').filter(Boolean).map(r => r.split('\t'));
   if (!rows.length) { console.log('mystrika-export · 0 FIT leads ready (need quality_fit=TRUE, lifecycle=qualified).'); return; }
