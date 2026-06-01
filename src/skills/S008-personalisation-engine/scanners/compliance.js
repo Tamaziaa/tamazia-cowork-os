@@ -177,9 +177,16 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
   const corpus = await gatherCorpus({ domain });
-  const detectedJurisdictions = detectOperatingJurisdictions(corpus);
-  const allJurisdictions = Array.from(new Set([country].concat(detectedJurisdictions).filter(Boolean)));
   const corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+  // ROBUST jurisdiction detection over the FULL multi-page corpus (confidence-scored, 10+ parameters):
+  // offices, addresses, postcodes, phone codes, currencies, hreflang, regulators, served-market language, cities, TLD.
+  let mk = {}; try { mk = require('../../../lib/sourcing/markets.js').detectMarkets({ html: corpusText, domain }); } catch (_e) {}
+  const codes = new Set(); if (country) codes.add(String(country).toUpperCase());
+  const R = mk.regions || [];
+  if (R.includes('UK')) codes.add('UK'); if (R.includes('US')) codes.add('US'); if (R.includes('Middle East')) codes.add('AE'); if (mk.serves_eu) codes.add('EU');
+  for (const n of (mk.operating_countries || [])) { if (n === 'United Kingdom') codes.add('UK'); else if (n === 'United States') codes.add('US'); else if (['United Arab Emirates','Saudi Arabia','Qatar'].includes(n)) codes.add('AE'); else if (n === 'France') codes.add('FR'); else if (n === 'Germany') codes.add('DE'); }
+  const detectedJurisdictions = mk.operating_countries || [];
+  const allJurisdictions = Array.from(codes);
   // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
   let frameworks;
   try {
