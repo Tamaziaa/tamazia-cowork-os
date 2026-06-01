@@ -196,14 +196,20 @@ async function scanSite({ domain, sector, env }) {
   if (sitemap === false) pointers.push(P('technical_seo', 'P2', 'XML sitemap', 'No sitemap.xml found.', 'Without a sitemap, search engines discover pages slowly and may miss deep content entirely.', 'Tamazia generates and submits an XML sitemap.', 'GET /sitemap.xml · 404'));
   if (llms === false) pointers.push(P('ai_visibility', 'P2', 'llms.txt', 'No llms.txt file.', 'llms.txt is the emerging standard that tells AI assistants how to represent your firm. Publishing one puts you ahead of peers who have not.', 'Tamazia publishes a curated llms.txt.', 'GET /llms.txt · 404'));
 
-  // Phase B deep scanners (email-auth, tech-stack, cookies, regulated-claims, broken-links) — each fail-open.
+  // Operating-markets: the countries this firm actually serves drive which compliance regimes apply
+  // (a UK-registered firm serving the EU must meet EU GDPR). Computed once from the site, fail-open.
+  let markets = { operating_countries: [], regions: [], serves_eu: false, eu_countries: [] };
+  try { markets = require('../sourcing/markets.js').detectMarkets({ html: page.body, domain: clean }); } catch (_) {}
+
+  // Phase B/C deep scanners (email-auth, tech, market-aware cookies, multi-jurisdiction, claims, links) — fail-open.
   try {
     const extra = require('./extra-scanners.js');
     const fetchFn = async (u) => { try { const r = await timed(sg => fetch(u, { method: 'HEAD', redirect: 'follow', headers: { 'user-agent': UA }, signal: sg }), 10000); return { status: r.status }; } catch (_) { return { status: 0 }; } };
     const deep = await Promise.all([
       extra.emailAuth(clean).catch(() => []),
       Promise.resolve(extra.techStack(page.body, page.headers)),
-      Promise.resolve(extra.cookieCompliance(page.body)),
+      Promise.resolve(extra.cookieCompliance(page.body, markets)),
+      Promise.resolve(extra.marketsCompliance(markets, page.body)),
       Promise.resolve(extra.regulatedClaims(page.body, sector || '')),
       extra.brokenLinks(clean, page.body, fetchFn).catch(() => []),
     ]);
@@ -218,6 +224,7 @@ async function scanSite({ domain, sector, env }) {
     reachable: page.ok,
     signals: sig,
     psi: psi || null,
+    markets,
     pointers,
     counts: { total: pointers.length, p0, p1, p2: pointers.length - p0 - p1 },
   };

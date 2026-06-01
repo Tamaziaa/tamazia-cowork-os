@@ -22,7 +22,7 @@ const EXCLUDE = /(facebook|instagram|twitter|x\.com|linkedin|youtube|tiktok|pint
 // Served geographies (TLD + country names). UK, UAE, USA, EU, wider Middle East.
 const GEO = {
   tld: /\.(uk|co\.uk|ae|us|com|ie|fr|de|es|it|nl|be|pt|se|dk|fi|at|lu|sa|qa|kw|bh|om)$/i,
-  names: /(united kingdom|uk|england|scotland|wales|london|manchester|birmingham|edinburgh|uae|united arab emirates|dubai|abu dhabi|sharjah|usa|united states|new york|los angeles|miami|france|paris|spain|madrid|germany|berlin|ireland|netherlands|belgium|saudi|qatar|kuwait|bahrain|oman)/i,
+  names: /(united kingdom|\buk\b|england|scotland|wales|london|manchester|birmingham|edinburgh|glasgow|leeds|bristol|uae|united arab emirates|dubai|abu dhabi|sharjah|usa|united states|new york|los angeles|miami|chicago|france|paris|lyon|spain|madrid|barcelona|germany|berlin|munich|frankfurt|ireland|dublin|netherlands|amsterdam|belgium|brussels|portugal|lisbon|italy|rome|milan|sweden|stockholm|denmark|copenhagen|finland|helsinki|austria|vienna|luxembourg|poland|warsaw|greece|athens|czechia|czech republic|prague|hungary|budapest|romania|bucharest|bulgaria|croatia|zagreb|slovenia|slovakia|estonia|tallinn|latvia|riga|lithuania|vilnius|cyprus|malta|norway|oslo|iceland|saudi|riyadh|jeddah|qatar|doha|kuwait|bahrain|oman|european union|\beu\b|europe)/i,
 };
 
 function classifySector(text) {

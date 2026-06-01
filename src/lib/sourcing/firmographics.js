@@ -60,6 +60,8 @@ async function extractFirmographics({ domain, company, html, env = process.env }
   if (!body) { body = await getText('https://' + domain, 12000); if (!body) body = await getText('https://' + domain + '/contact', 10000); if (!body) body = await getText('https://' + domain + '/legal', 10000); }
   const reg = extractRegNumber(body);
   const vat = extractVAT(body);
+  let markets = { operating_countries: [], regions: [], serves_eu: false };
+  try { markets = require('./markets.js').detectMarkets({ html: body, domain }); } catch (_) {}
   const jc = jurisdictionFromReg(reg, body, domain);
   let officers = null, registry = null;
   if (reg && jc.jurisdiction === 'gb') officers = await companiesHouseLookup(reg, env.COMPANIES_HOUSE_KEY);
@@ -71,7 +73,8 @@ async function extractFirmographics({ domain, company, html, env = process.env }
     status: (registry && registry.status) || '',
     incorporation_date: (registry && registry.incorporation_date) || '',
     officers: officers || [],
-    confident_country: !!reg, // a found reg number = authoritative jurisdiction
+    operating_countries: markets.operating_countries || [], regions: markets.regions || [], serves_eu: !!markets.serves_eu,
+    confident_country: !!reg, // a found reg number = authoritative REGISTRATION jurisdiction (not where it operates)
     sources: { site_reg: !!reg, companies_house: !!(officers && officers.length), opencorporates: !!registry },
   };
 }

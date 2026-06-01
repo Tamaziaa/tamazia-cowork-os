@@ -37,7 +37,7 @@ function techStack(html, headers) {
 }
 
 // 3) COOKIE / TRACKER compliance (GDPR/PECR) — trackers firing without a consent mechanism.
-function cookieCompliance(html) {
+function cookieCompliance(html, markets) {
   const out = []; const b = (html || '').toLowerCase();
   const trackers = [];
   if (/gtag\(|google-analytics|googletagmanager|ga\.js/.test(b)) trackers.push('Google Analytics');
@@ -46,7 +46,22 @@ function cookieCompliance(html) {
   if (/clarity\.ms/.test(b)) trackers.push('Microsoft Clarity');
   if (/doubleclick|googleadservices/.test(b)) trackers.push('Google Ads');
   const hasConsent = /cookiebot|onetrust|cookieconsent|cookie-consent|usercentrics|termly|iubenda|we use cookies|cookie policy|cookie settings/.test(b);
-  if (trackers.length && !hasConsent) out.push(P('compliance', 'P1', 'PECR/GDPR cookie consent', `${trackers.length} tracker(s) load with no detectable consent banner (${trackers.join(', ')}).`, 'Non-essential trackers are firing before the visitor consents, which breaches UK PECR and EU GDPR/ePrivacy. The ICO has issued guidance and fines on exactly this, and for a regulated firm it is an avoidable enforcement and reputational risk.', 'Tamazia implements a compliant consent gate that blocks trackers until opt-in.', 'HTML · trackers present, no consent mechanism found'));
+  // Which consent regime applies depends on the markets the firm SERVES, not where it is registered.
+  const m = markets || { regions: ['UK'], serves_eu: false };
+  const regs = []; if (m.regions && m.regions.includes('UK')) regs.push('UK PECR'); if (m.serves_eu) regs.push('EU GDPR/ePrivacy'); if (m.regions && m.regions.includes('US')) regs.push('US state privacy law'); if (!regs.length) regs.push('UK PECR');
+  if (trackers.length && !hasConsent) out.push(P('compliance', 'P1', regs.join(' + ') + ' cookie consent', `${trackers.length} tracker(s) load with no detectable consent banner (${trackers.join(', ')}).`, `Non-essential trackers fire before consent, which breaches ${regs.join(' and ')}. Because you serve clients in ${(m.regions||['the UK']).join(', ')}, each of those regimes applies regardless of where the firm is registered. Regulators have fined exactly this, and for a regulated firm it is avoidable exposure.`, 'Tamazia implements a consent gate sized to every market you serve.', 'HTML · trackers present, no consent mechanism · markets: ' + (m.regions||[]).join('+')));
+  return out;
+}
+
+// Multi-jurisdiction compliance — a UK-registered firm serving EU/US/Gulf must meet each market's regime.
+function marketsCompliance(markets, html) {
+  const out = []; const b = (html || '').toLowerCase();
+  const m = markets || { regions: [], serves_eu: false, eu_countries: [] };
+  const hasPrivacy = /privacy policy|privacy notice|data protection|gdpr/.test(b);
+  const hasConsent = /cookiebot|onetrust|cookieconsent|usercentrics|we use cookies|cookie policy/.test(b);
+  if (m.serves_eu && !hasConsent) out.push(P('compliance', 'P1', 'EU GDPR + ePrivacy (cross-border)', 'Serves EU clients but has no detectable EU-grade consent mechanism.', `You serve clients in the EU (${(m.eu_countries||[]).slice(0,4).join(', ') || 'European markets'}), so EU GDPR and the ePrivacy Directive apply to those visitors even though the firm is UK-registered. The current site does not meet that bar for your European clients.`, 'Tamazia implements an EU-grade consent gate and data-protection notice.', 'markets · serves EU, no EU-grade consent'));
+  if ((m.regions || []).includes('US') && !hasPrivacy) out.push(P('compliance', 'P2', 'US CCPA/CPRA', 'Serves US clients with no clear privacy/opt-out notice.', 'California CCPA/CPRA grant US consumers data and opt-out rights; serving them without a compliant notice is an avoidable exposure.', 'Tamazia adds a CCPA-compliant notice and opt-out.', 'markets · serves US, no privacy notice'));
+  if ((m.regions || []).length >= 3) out.push(P('compliance', 'P2', 'Multi-jurisdiction posture', `Operates across ${m.regions.length} regions (${m.regions.join(', ')}) on one-size-fits-all compliance.`, `Operating across ${m.regions.join(', ')} means several data-protection and advertising regimes apply at once. A single generic policy rarely satisfies all of them, which is the most common compliance gap for international firms and a direct credibility risk in regulated sectors.`, 'Tamazia maps each market to its regime and closes the gaps.', 'markets · ' + m.regions.join('+')));
   return out;
 }
 
@@ -82,4 +97,4 @@ async function brokenLinks(domain, html, fetchFn) {
   return out;
 }
 
-module.exports = { emailAuth, techStack, cookieCompliance, regulatedClaims, brokenLinks };
+module.exports = { emailAuth, techStack, cookieCompliance, marketsCompliance, regulatedClaims, brokenLinks };

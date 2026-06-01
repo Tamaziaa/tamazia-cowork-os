@@ -150,7 +150,7 @@ async function enrichCompany({ domain, company, env = process.env, verify = true
   const rec = {
     domain, company: company || '', pattern,
     website: base.website || ('https://' + domain), instagram: (_social.socials.instagram && _social.socials.instagram.url) || base.instagram || '',
-    socials: _social.socials || {}, firmographics: { reg_number: _firmo.reg_number || null, country: _firmo.country || '', jurisdiction: _firmo.jurisdiction || '', vat_number: _firmo.vat_number || null, status: _firmo.status || '', officers: _firmo.officers || [], confident_country: !!_firmo.confident_country },
+    socials: _social.socials || {}, firmographics: { reg_number: _firmo.reg_number || null, registration_country: _firmo.country || '', jurisdiction: _firmo.jurisdiction || '', vat_number: _firmo.vat_number || null, status: _firmo.status || '', officers: _firmo.officers || [], operating_countries: _firmo.operating_countries || [], regions: _firmo.regions || [], serves_eu: !!_firmo.serves_eu, confident_country: !!_firmo.confident_country },
     emails, decisionMakers: dms, linkedin_people: site.people.map(p => p.linkedin),
     counts: { emails: emails.length, verified: verifiedEmails.length, decision_makers: dms.length, guessed: emails.filter(e => e.guessed).length },
     sources: { hunter: hunter.length, serper: dmSerper.length, site_emails: site.emails.length, site_linkedin: site.people.length },
