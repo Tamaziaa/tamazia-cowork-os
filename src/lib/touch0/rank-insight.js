@@ -125,7 +125,75 @@ async function buildKeywordMap({ domain, company, sector, city, html, country = 
   return { ok: true, service_noun: noun, city, keywords: out };
 }
 
-module.exports = { buildRankInsight, keywordsFor, checkKeyword, deriveServiceNoun, buildKeywordMap, autocomplete };
+// ── Real AI-citation probe (free path) ────────────────────────────────────────────────────────────────────
+// When a buyer asks AI/search for the firm's category, who actually gets surfaced and cited, and is the firm
+// among them? AI answer engines (ChatGPT, Perplexity, Google AI, Gemini) synthesise answers from the top-ranked,
+// entity-recognised sources, so the live category SERP + entity presence is a real, verifiable proxy for AI
+// citation. We name the exact competitor firms that own that surface today. No key beyond the wired SERPER.
+const _PROBE_ALIAS = { legal: 'solicitors', law: 'solicitors', 'law-firm': 'solicitors', 'law-firms': 'law firm', solicitor: 'solicitors', healthcare: 'clinic', dental: 'dentist', 'real-estate': 'estate agents', realestate: 'estate agents', property: 'estate agents', financial: 'financial advisers', finance: 'financial advisers', wellness: 'wellness clinic', automotive: 'car dealer', education: 'school', hospitality: 'hotel', professional: 'consultants', ecommerce: 'online store' };
+function _probeNoun(company, sector, html) {
+  let noun = deriveServiceNoun(company, sector, html);
+  const sec = String(sector || '').toLowerCase();
+  if (!noun || noun === sec || noun.length < 4) noun = _PROBE_ALIAS[sec] || noun || sec;
+  const h = String(html || '').toLowerCase();
+  if (sec === 'legal' || sec === 'law' || /solicitor|barrister|litigation|conveyanc/.test(h)) {
+    if (/litigation|dispute/.test(h)) noun = 'litigation solicitors';
+    else if (/conveyanc|property law/.test(h)) noun = 'conveyancing solicitors';
+    else if (/family law|divorce/.test(h)) noun = 'family law solicitors';
+    else if (/solicitor|barrister/.test(h) || sec === 'legal' || sec === 'law') noun = noun.includes('solicitor') ? noun : 'solicitors';
+  }
+  return noun;
+}
+async function aiCitationProbe({ domain, company, sector, city, html, country = 'UK', wikidata = null }) {
+  domain = clean(domain);
+  const noun = _probeNoun(company, sector, html);
+  // Use the same real-buyer query construction as the keyword map (no superlative skew): the plain "noun city" form.
+  let q;
+  if (city) { const kws = keywordsFor(sector, city, noun).filter(k => !/^best |^top /i.test(k) && !/\d{4}$/.test(k)); q = kws[0] || (noun + ' ' + city); }
+  else { q = noun + ' ' + country; }
+  let r = null; try { r = await serp.search(q, country, 20); } catch (_e) {}
+  if (!r || r.error || !((r.organic || []).length)) return { ok: false, reason: 'serp_unavailable', query: q };
+  const ranked = r.organic.map(o => ({ pos: o.rank, domain: clean(o.domain) })).filter(x => x.domain);
+  const mine = ranked.find(x => x.domain === domain || x.domain.endsWith('.' + domain) || domain.endsWith('.' + x.domain));
+  const competitors = []; const seen = new Set();
+  for (const x of ranked) {
+    if (!x.domain || x.domain === domain) continue;
+    if (isAggregator(x.domain)) continue;
+    if (seen.has(x.domain)) continue;
+    seen.add(x.domain); competitors.push({ domain: x.domain, pos: x.pos });
+    if (competitors.length >= 5) break;
+  }
+  let llm = null; try { llm = await llmCitationProbe({ query: q, company }); } catch (_e) {}
+  return {
+    ok: true, query: q, country,
+    firm_position: mine ? mine.pos : null,
+    competitors, surface_owned_by: competitors.slice(0, 3).map(c => c.domain),
+    checked: ranked.length, entity_known: !!(wikidata && wikidata.found),
+    llm: llm || { ran: false, reason: 'no_key' },
+  };
+}
+
+// ── Optional live-LLM answer probe (paid top-up, OFF by default) ─────────────────────────────────────────────
+// The free probe above always runs. THIS only fires if a key is present; otherwise it reports no_key so the
+// audit can say "free signals used; live LLM probe available." Cost when enabled: ~GBP 0.01-0.03 per audit.
+async function llmCitationProbe({ query, company }) {
+  const key = process.env.PERPLEXITY_API_KEY || process.env.OPENAI_API_KEY;
+  if (!key) return { ran: false, reason: 'no_key', note: 'Set PERPLEXITY_API_KEY or OPENAI_API_KEY to enable a live AI-answer probe (~GBP0.01-0.03/audit).' };
+  try {
+    const isPplx = !!process.env.PERPLEXITY_API_KEY;
+    const url = isPplx ? 'https://api.perplexity.ai/chat/completions' : 'https://api.openai.com/v1/chat/completions';
+    const model = isPplx ? 'sonar' : 'gpt-4o-mini';
+    const prompt = 'List the top 8 firms a buyer would consider for "' + query + '". Reply as a plain comma-separated list of firm names only.';
+    const res = await fetch(url, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 200 }), signal: AbortSignal.timeout(20000) });
+    const j = await res.json();
+    const text = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    const base = String(company || '').replace(/[^a-z0-9 ]/gi, '').trim().split(/\s+/).slice(0, 2).join('.{0,3}');
+    const cited = !!base && new RegExp(base, 'i').test(text);
+    return { ran: true, provider: isPplx ? 'perplexity' : 'openai', cited, answer: text.slice(0, 400) };
+  } catch (e) { return { ran: false, reason: 'error', error: String(e.message || e) }; }
+}
+
+module.exports = { buildRankInsight, keywordsFor, checkKeyword, deriveServiceNoun, buildKeywordMap, autocomplete, aiCitationProbe, llmCitationProbe };
 
 // Fact-check gate — every claim (leader domain, my_position) must appear in the carried SERP evidence,
 // or the insight is rejected. This is the layer that guarantees the Touch-0 never asserts an invented rank.

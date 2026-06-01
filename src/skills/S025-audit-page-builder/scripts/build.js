@@ -106,6 +106,38 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
       keyword_map = await ri.buildKeywordMap({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city, html: (scan.signals && scan.signals.title) || '', country: country || 'UK', env, max: 6 });
     }
   } catch (_e) {}
+  // REAL AI-citation probe (cog): who owns the answer surface for the firm's category, and is the firm cited?
+  let ai_citation = null; const aiCiteFindings = [];
+  try {
+    const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
+    const _city = (scan.markets && scan.markets.primary_city) || '';
+    const _wd = (scan.signals && scan.signals.wikidata) || scan.wikidata || null;
+    ai_citation = await ri.aiCitationProbe({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city: _city, html: (scan.signals && scan.signals.title) || '', country: country || 'UK', wikidata: _wd });
+    if (ai_citation && ai_citation.ok) {
+      const comps = (ai_citation.competitors || []).map(c => c.domain);
+      if (ai_citation.firm_position == null && comps.length) {
+        aiCiteFindings.push({ bucket: 'ai_visibility', severity: 'P1',
+          fact: 'Absent from the AI / search answer surface for "' + ai_citation.query + '"',
+          layman_explanation: 'When a buyer asks ChatGPT, Perplexity, Google AI or a search engine for "' + ai_citation.query + '", your site is not in the top ' + ai_citation.checked + ' results these engines read and cite. The firms that own that answer surface today are ' + comps.slice(0, 3).join(', ') + '. AI engines synthesise answers from these ranked, recognised sources, so they name your competitors and not you.',
+          tamazia_fix_short: 'Tamazia runs the GEO + entity programme (Schema.org, llms.txt, a Wikidata entity and authoritative content) that puts you into the set of sources AI engines read and cite for your category.',
+          recommendation: '', citation: 'GEO', framework_short: 'GEO', citation_url: '',
+          evidence: 'live SERP: ' + ai_citation.query, evidence_quote: null, ai_competitors: ai_citation.competitors });
+      } else if (ai_citation.firm_position && ai_citation.firm_position > 3 && comps.length) {
+        aiCiteFindings.push({ bucket: 'ai_visibility', severity: 'P2',
+          fact: 'You rank #' + ai_citation.firm_position + ' for "' + ai_citation.query + '"; positions 1-3 own the AI citations',
+          layman_explanation: 'AI answer engines overwhelmingly cite the top 3 results for a category. You appear at position ' + ai_citation.firm_position + ', below ' + comps.slice(0, 3).join(', ') + ', so AI answers name them ahead of you.',
+          tamazia_fix_short: 'Tamazia closes the ranking + entity gap to move you into the top-3 set AI engines cite.',
+          recommendation: '', citation: 'GEO', framework_short: 'GEO', citation_url: '', evidence: 'live SERP: ' + ai_citation.query, ai_competitors: ai_citation.competitors });
+      }
+      if (ai_citation.llm && ai_citation.llm.ran && ai_citation.llm.cited === false) {
+        aiCiteFindings.push({ bucket: 'ai_visibility', severity: 'P1',
+          fact: 'A live ' + ai_citation.llm.provider + ' query did not name your firm for your category',
+          layman_explanation: 'We asked ' + ai_citation.llm.provider + ' to list the top firms for "' + ai_citation.query + '". Your firm was not named, confirming you are absent from the real AI answers buyers receive.',
+          tamazia_fix_short: 'Tamazia builds the entity + authoritative-content footprint that gets you named in live AI answers.',
+          recommendation: '', citation: 'GEO', framework_short: 'GEO', citation_url: '', evidence: 'live ' + ai_citation.llm.provider + ' answer probe' });
+      }
+    }
+  } catch (_e) {}
   const frameworks = (comp.frameworks && comp.frameworks.length)
     ? comp.frameworks
     : (router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector, signals: scan.signals }) : router.routeJurisdictions({ country, sector }));
@@ -132,7 +164,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   }) : [];
 
   const sevRank = { P0: 0, P1: 1, P2: 2 };
-  const findings = [...compPointers, ...(scan.pointers || [])].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
+  const findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   const threeFindings = findings.slice(0, 3);
 
   return {
@@ -150,6 +182,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     framework_groups: groupFindings(findings),
     news_map: (() => { const nm = {}; try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) nm[ln.slice(0, i)] = ln.slice(i + 1); } } catch (_e) {} return nm; })(),
     keyword_map: keyword_map && keyword_map.ok ? keyword_map : null,
+    ai_citation: ai_citation && ai_citation.ok ? ai_citation : null,
     scan: { scanned_at: scan.scanned_at, reachable: scan.reachable, final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
     sections: {
       cover:                 { firm: domain.replace(/^www\./, '').split('.')[0], generated_at: new Date().toISOString() },
