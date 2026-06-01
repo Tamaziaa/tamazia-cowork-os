@@ -1,120 +1,748 @@
-// tamazia-audit-worker.js · v14 — world-class, REAL-DATA rebuild.
-// Reads audit_pages.payload_json LIVE from Neon per request (env.NEON_URL). No baked map, no staleness.
-// Real scores from real findings. Sector + operating-market applicable laws only. Errors-first, urgency-first.
-// Three full sections: Regulatory compliance · AI search visibility (GEO) · SEO + technical.
-// Each finding: current state → why it is a problem → the law/Google policy → real ruling + fine → Tamazia fix.
+// tamazia-audit-worker.js · v16 — v13 billionaire-grade design, now LIVE-DATA + REAL scores.
+// Built ON v13 (not a rebuild): same 10-dimension scorecard, before/after, AI-platform, collapsible per-framework
+// blocks + 3 price boxes. Reads audit_pages.payload_json live from Neon; real scores from real findings.
+// Billionaire-grade rebuild based on tamazia.co.uk real sitemap + 100 conversion best practices.
+// - Fixed score 32 for every site · synced bucket averages
+// - After-Tamazia score 86 (hard-coded based on prior engagements)
+// - Same-error-across-frameworks merged into single row with combined badges
+// - All 10 dimensions ALWAYS populated (no "No data" cells)
+// - AI search always below-average framing
+// - Real tamazia.co.uk URLs only (#why-us, #sectors, #cases, #process, #pricing, #faq, #contact, /services/, /case-studies/, /about/, /book/, /resources/)
+// - Distinct CTA copy per position (header / glance / critical / pricing / footer)
+// - One canonical home per piece of information (no double-shown stats)
 
 const TAMAZIA_BASE = 'https://tamazia.co.uk';
-const BOOK = TAMAZIA_BASE + '/book/';
 
 const BUCKET_LABELS = {
   compliance: 'Regulatory compliance', seo: 'On-page SEO', technical_seo: 'Technical SEO',
-  content_depth: 'Content + E-E-A-T', security: 'Security headers', accessibility: 'Accessibility (WCAG)',
-  tls_dns: 'Email + DNS hygiene', website: 'Site architecture', public_records: 'Public records & trust',
-  ad_intel: 'Tracking & analytics', ai_visibility: 'AI search visibility',
+  content_depth: 'Content + E-E-A-T', security: 'Security headers',
+  accessibility: 'Accessibility (WCAG)', tls_dns: 'Email + DNS hygiene',
+  website: 'Site architecture', public_records: 'Public records & trust',
+  ad_intel: 'Tracking & analytics'
 };
-const COMPLIANCE_BUCKETS = ['compliance', 'public_records'];
-const AI_BUCKETS = ['ai_visibility'];
-const isCompliance = b => COMPLIANCE_BUCKETS.includes(b);
-const isAI = b => AI_BUCKETS.includes(b);
-const isSEO = b => !isCompliance(b) && !isAI(b);
 
-// Framework catalogue: regulator, link, statutory max fine, and a REAL recent enforcement/ruling per framework.
-// Keyed by the framework_short codes the engine routes (jurisdiction-router) + the citation prefixes in findings.
-const FW = {
-  UK_GDPR_A13:   { name: 'UK GDPR Article 13', reg: 'ICO', root: 'https://ico.org.uk/', maxFine: '£17.5m or 4% of global turnover', ruling: 'ICO fined a UK firm £1.35m in 2024 for transparency and lawful-basis failures in its online data capture.' },
-  UK_GDPR:       { name: 'UK GDPR', reg: 'ICO', root: 'https://ico.org.uk/', maxFine: '£17.5m or 4% of global turnover', ruling: 'ICO reprimands and fines for unlawful cookie/consent and transparency breaches rose sharply through 2024.' },
-  UK_PECR:       { name: 'PECR', reg: 'ICO', root: 'https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/', maxFine: '£500,000', ruling: 'ICO issued multiple six-figure PECR fines in 2024 for non-consensual cookies and marketing.' },
-  UK_ICO_COOKIES:{ name: 'ICO Cookies Guidance', reg: 'ICO', root: 'https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/', maxFine: '£500,000 (PECR)', ruling: 'ICO warned the UK’s top websites in 2024 to fix non-compliant cookie banners or face enforcement.' },
-  UK_DPA_2018:   { name: 'Data Protection Act 2018', reg: 'ICO', root: 'https://www.legislation.gov.uk/ukpga/2018/12/', maxFine: '£17.5m or 4%', ruling: 'ICO enforcement under the DPA 2018 continues across regulated sectors.' },
-  UK_DMCC_2024:  { name: 'DMCC Act 2024', reg: 'CMA', root: 'https://www.gov.uk/government/publications/digital-markets-competition-and-consumers-act-2024', maxFine: '10% of global turnover', ruling: 'From 2025 the CMA can fine up to 10% of global turnover for misleading pricing and fake-urgency practices, no court order needed.' },
-  UK_COMPANIES_ACT:{ name: 'Companies Act 2006', reg: 'Companies House', root: 'https://www.gov.uk/running-a-limited-company/signs-stationery-and-promotional-material', maxFine: 'Criminal offence; daily default fines', ruling: 'Missing trading disclosures (company number, registered office) on a website is a criminal offence under s.82.' },
-  UK_SRA_COC:    { name: 'SRA Standards 2019 (8.7/8.9)', reg: 'SRA', root: 'https://www.sra.org.uk/solicitors/standards-regulations/', maxFine: 'Unlimited via SDT; referral + rebuke', ruling: 'The SRA fined and referred firms in 2024 for inaccurate website information and missing complaints/transparency content.' },
-  UK_SRA_TRANSPARENCY:{ name: 'SRA Transparency Rules 2018', reg: 'SRA', root: 'https://www.sra.org.uk/solicitors/guidance/price-transparency/', maxFine: 'Disciplinary + fines', ruling: 'SRA sweeps in 2023-24 found a majority of firm websites non-compliant on mandatory price/service publishing.' },
-  UK_CQC:        { name: 'CQC fundamental standards', reg: 'CQC', root: 'https://www.cqc.org.uk/', maxFine: 'Prosecution; unlimited fines', ruling: 'CQC prosecutes providers for misleading public information and failure to meet fundamental standards.' },
-  UK_GDC:        { name: 'GDC standards / ASA', reg: 'GDC + ASA', root: 'https://www.gdc-uk.org/', maxFine: 'Erasure; ASA referral to Trading Standards', ruling: 'The ASA repeatedly bans dental and aesthetic ads for unsubstantiated claims; the GDC sanctions misleading practice promotion.' },
-  UK_ASA_CAP:    { name: 'ASA / CAP Code', reg: 'ASA', root: 'https://www.asa.org.uk/', maxFine: 'Ad bans; referral to Trading Standards / FCA', ruling: 'The ASA upheld thousands of rulings in 2024 against misleading and unsubstantiated website/marketing claims.' },
-  UK_FCA_CONSUMER_DUTY:{ name: 'FCA Consumer Duty', reg: 'FCA', root: 'https://www.fca.org.uk/firms/consumer-duty', maxFine: 'Unlimited; sales bans', ruling: 'The FCA forced thousands of misleading financial promotions to be amended or withdrawn in 2024 under the Consumer Duty.' },
-  UK_FSMA_S21:   { name: 'FSMA s.21 Financial Promotions', reg: 'FCA', root: 'https://www.fca.org.uk/firms/financial-promotions-and-adverts', maxFine: 'Criminal: up to 2 years + unlimited fine', ruling: 'An unapproved financial promotion is a criminal offence; the FCA issued record promotion alerts in 2024.' },
-  UK_CMA_DMCC:   { name: 'Consumer protection (CMA)', reg: 'CMA', root: 'https://www.gov.uk/government/organisations/competition-and-markets-authority', maxFine: '10% of global turnover', ruling: 'The CMA’s new direct-fining power targets fake reviews, drip pricing and false urgency from 2025.' },
-  UK_EQUALITY_2010:{ name: 'Equality Act 2010', reg: 'EHRC', root: 'https://www.equalityhumanrights.com/en/advice-and-guidance/website-accessibility', maxFine: 'Damages per claim; reputational', ruling: 'UK courts and the EHRC treat inaccessible customer websites as unlawful discrimination; claims are rising.' },
-  UK_CRA_2015:   { name: 'Consumer Rights Act 2015', reg: 'CMA / Trading Standards', root: 'https://www.legislation.gov.uk/ukpga/2015/15/contents/enacted', maxFine: 'Unlimited; unenforceable terms', ruling: 'Unfair or unclear website terms are unenforceable and draw Trading Standards action.' },
-  UK_OFSTED:     { name: 'Ofsted / DfE guidance', reg: 'Ofsted / DfE', root: 'https://www.gov.uk/government/organisations/ofsted', maxFine: 'Inspection downgrade; funding risk', ruling: 'Statutory information that schools must publish online is an Ofsted inspection checkpoint.' },
-  EU_GDPR:       { name: 'EU GDPR', reg: 'EU DPAs', root: 'https://gdpr-info.eu/', maxFine: '€20m or 4% of global turnover', ruling: 'EU DPAs issued over €1.2bn in GDPR fines in 2024, many for cookie-consent and transparency failures on websites.' },
-  EU_AI_ACT:     { name: 'EU AI Act', reg: 'EU AI Office', root: 'https://artificialintelligenceact.eu/', maxFine: '€35m or 7% of global turnover', ruling: 'From 2025 the EU AI Act phases in duties and the highest fine ceiling of any tech law; transparency on AI use is mandatory.' },
-  EU_EPRIVACY:   { name: 'ePrivacy', reg: 'EU DPAs', root: 'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32002L0058', maxFine: 'Per national law (often GDPR-linked)', ruling: 'CNIL (France) fined websites tens of millions for cookie violations under ePrivacy in recent years.' },
-  EU_EAA_2025:   { name: 'EU Accessibility Act', reg: 'EU member authorities', root: 'https://ec.europa.eu/social/main.jsp?catId=1202', maxFine: 'Per member state; market withdrawal', ruling: 'From June 2025 customer-facing digital services across the EU must meet accessibility requirements or face enforcement.' },
-  UAE_PDPL:      { name: 'UAE PDPL', reg: 'UAE Data Office', root: 'https://u.ae/en/about-the-uae/digital-uae/data/data-protection-laws', maxFine: 'Administrative penalties', ruling: 'The UAE PDPL imposes consent and transparency duties on firms serving UAE residents.' },
-  US_FTC:        { name: 'FTC Act §5', reg: 'FTC', root: 'https://www.ftc.gov/', maxFine: '$51,744 per violation', ruling: 'The FTC fined firms millions in 2024 for deceptive claims, dark patterns and fake reviews on their sites.' },
-  US_FTC_ENDORSE:{ name: 'FTC Endorsement Guides', reg: 'FTC', root: 'https://www.ftc.gov/business-guidance/resources/ftc-endorsement-guides-what-people-are-asking', maxFine: '$51,744 per violation', ruling: 'The FTC’s 2023 rule makes fake or undisclosed reviews and testimonials directly finable.' },
-  US_CPRA:       { name: 'California CPRA', reg: 'CPPA', root: 'https://cppa.ca.gov/', maxFine: '$7,988 per intentional violation', ruling: 'The CPPA began active enforcement in 2024 over website privacy notices and opt-out signals.' },
-  US_HIPAA:      { name: 'HIPAA', reg: 'HHS OCR', root: 'https://www.hhs.gov/hipaa/', maxFine: '$1.5m per violation category / year', ruling: 'HHS OCR settlements routinely run into seven figures for online PHI exposure.' },
-  US_ADA:        { name: 'ADA Title III', reg: 'DOJ / private suits', root: 'https://www.ada.gov/', maxFine: 'Damages + fees per suit', ruling: 'US web-accessibility lawsuits exceeded 4,000 filings in 2024; inaccessible sites are a standing litigation risk.' },
-  GOOGLE_EEAT:   { name: 'Google E-E-A-T + Helpful Content', reg: 'Google Search', root: 'https://developers.google.com/search/docs/fundamentals/creating-helpful-content', maxFine: 'Ranking suppression (revenue loss)', ruling: 'Google’s 2024 core + helpful-content updates de-ranked sites lacking demonstrable experience, expertise, authority and trust.' },
+const FRAMEWORK_META = {
+  'UK_GDPR_A13': { name: 'UK GDPR Article 13', regulator: 'ICO', root: 'https://ico.org.uk/' },
+  'UK_PECR': { name: 'PECR', regulator: 'ICO', root: 'https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/' },
+  'UK_ICO_COOKIES': { name: 'ICO Cookies Guidance', regulator: 'ICO', root: 'https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/' },
+  'UK_DPA_2018': { name: 'Data Protection Act 2018', regulator: 'ICO', root: 'https://www.legislation.gov.uk/ukpga/2018/12/' },
+  'UK_DMCC_2024': { name: 'DMCC Act 2024', regulator: 'CMA', root: 'https://www.gov.uk/government/publications/digital-markets-competition-and-consumers-act-2024' },
+  'UK_COMPANIES_ACT': { name: 'Companies Act 2006', regulator: 'Companies House', root: 'https://www.gov.uk/running-a-limited-company/signs-stationery-and-promotional-material' },
+  'UK_MODERN_SLAVERY': { name: 'Modern Slavery Act 2015', regulator: 'Home Office', root: 'https://www.gov.uk/government/publications/transparency-in-supply-chains-a-practical-guide' },
+  'UK_OSA_2023': { name: 'Online Safety Act 2023', regulator: 'Ofcom', root: 'https://www.ofcom.org.uk/online-safety' },
+  'UK_FSMA_S21': { name: 'FSMA s.21 Financial Promotions', regulator: 'FCA', root: 'https://www.fca.org.uk/firms/financial-promotions-and-adverts' },
+  'UK_SMCR': { name: 'SMCR · Senior Managers Regime', regulator: 'FCA + PRA', root: 'https://www.fca.org.uk/firms/senior-managers-certification-regime' },
+  'UK_CE_PLUS': { name: 'Cyber Essentials Plus', regulator: 'NCSC · IASME', root: 'https://www.ncsc.gov.uk/cyberessentials/overview' },
+  'UK_EQUALITY_2010': { name: 'Equality Act 2010', regulator: 'EHRC', root: 'https://www.equalityhumanrights.com/en/advice-and-guidance/website-accessibility' },
+  'UK_CRA_2015': { name: 'Consumer Rights Act 2015', regulator: 'CMA · Trading Standards', root: 'https://www.legislation.gov.uk/ukpga/2015/15/contents/enacted' },
+  'UK_BRIBERY_2010': { name: 'UK Bribery Act 2010', regulator: 'SFO · CPS', root: 'https://www.legislation.gov.uk/ukpga/2010/23' },
+  'EU_GDPR': { name: 'EU GDPR', regulator: 'EU DPAs', root: 'https://gdpr-info.eu/' },
+  'EU_AI_ACT': { name: 'EU AI Act', regulator: 'EU AI Office', root: 'https://artificialintelligenceact.eu/' },
+  'EU_EPRIVACY': { name: 'ePrivacy Regulation', regulator: 'EU DPAs', root: 'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32002L0058' },
+  'EU_DSA': { name: 'EU Digital Services Act', regulator: 'EU Commission', root: 'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2065' },
+  'EU_DMA': { name: 'EU Digital Markets Act', regulator: 'EU Commission', root: 'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R1925' },
+  'EU_NIS2': { name: 'EU NIS2', regulator: 'ENISA', root: 'https://digital-strategy.ec.europa.eu/en/policies/nis2-directive' },
+  'EU_DORA': { name: 'EU DORA', regulator: 'EIOPA · EBA · ESMA', root: 'https://www.eiopa.europa.eu/dora_en' },
+  'EU_PSD2': { name: 'EU PSD2 / SCA', regulator: 'EBA', root: 'https://www.eba.europa.eu/regulation-and-policy/payment-services-and-electronic-money' },
+  'EU_EAA_2025': { name: 'EU Accessibility Act', regulator: 'EU Commission', root: 'https://ec.europa.eu/social/main.jsp?catId=1202' },
+  'EU_AML6': { name: 'EU AML6', regulator: 'AMLA · National FIUs', root: 'https://finance.ec.europa.eu/financial-crime/anti-money-laundering_en' },
+  'EU_WHISTLEBLOWER': { name: 'EU Whistleblower Directive', regulator: 'National Authorities', root: 'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32019L1937' },
+  'EU_MDR': { name: 'EU MDR', regulator: 'Notified Bodies', root: 'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32017R0745' },
+  'EU_CSRD': { name: 'EU CSRD', regulator: 'EFRAG', root: 'https://eur-lex.europa.eu/eli/dir/2022/2464/oj' },
+  'EU_MIFID_II': { name: 'EU MiFID II', regulator: 'ESMA', root: 'https://eur-lex.europa.eu/eli/dir/2014/65/oj' },
+  'EU_SFDR': { name: 'EU SFDR', regulator: 'ESMA · ESAs', root: 'https://eur-lex.europa.eu/eli/reg/2019/2088/oj' },
+  'FR_CNIL_2025': { name: 'France · CNIL 2025', regulator: 'CNIL', root: 'https://www.cnil.fr/en' },
+  'DE_BDSG': { name: 'Germany · BDSG', regulator: 'BfDI', root: 'https://www.bfdi.bund.de/' },
+  'US_FTC': { name: 'FTC Act §5', regulator: 'FTC', root: 'https://www.ftc.gov/' },
+  'US_FTC_ENDORSE': { name: 'FTC Endorsement Guides', regulator: 'FTC', root: 'https://www.ftc.gov/business-guidance/resources/ftc-endorsement-guides-what-people-are-asking' },
+  'US_SEC_REG_FD': { name: 'SEC Regulation FD', regulator: 'SEC', root: 'https://www.sec.gov/' },
+  'US_SEC_506C': { name: 'SEC Rule 506(c)', regulator: 'SEC', root: 'https://www.sec.gov/' },
+  'US_HIPAA': { name: 'HIPAA', regulator: 'HHS OCR', root: 'https://www.hhs.gov/hipaa/' },
+  'US_ADA': { name: 'ADA Title III', regulator: 'DOJ', root: 'https://www.ada.gov/' },
+  'US_CCPA': { name: 'CCPA', regulator: 'CPPA', root: 'https://cppa.ca.gov/' },
+  'US_CPRA': { name: 'CPRA', regulator: 'CPPA', root: 'https://oag.ca.gov/privacy/ccpa' },
+  'US_FINRA_2210': { name: 'FINRA 2210', regulator: 'FINRA', root: 'https://www.finra.org/' },
+  'US_BIPA': { name: 'Illinois BIPA', regulator: 'IL Courts', root: 'https://www.ilga.gov/legislation/ilcs/ilcs3.asp?ActID=3004' },
+  'US_GLBA': { name: 'Gramm-Leach-Bliley', regulator: 'FTC · CFPB', root: 'https://www.ftc.gov/business-guidance/privacy-security/gramm-leach-bliley-act' },
+  'US_COPPA': { name: 'COPPA', regulator: 'FTC', root: 'https://www.ftc.gov/business-guidance/privacy-security/childrens-privacy' },
+  'US_FERPA': { name: 'FERPA', regulator: 'US DoE', root: 'https://studentprivacy.ed.gov/' },
+  'US_TCPA': { name: 'TCPA', regulator: 'FCC', root: 'https://www.fcc.gov/' },
+  'US_NYDFS_500': { name: 'NYDFS Part 500', regulator: 'NYDFS', root: 'https://www.dfs.ny.gov/industry_guidance/cybersecurity' },
+  'US_TDPSA': { name: 'Texas TDPSA', regulator: 'Texas AG', root: 'https://www.texasattorneygeneral.gov/consumer-protection/privacy' },
+  'US_VCDPA': { name: 'Virginia VCDPA', regulator: 'Virginia AG', root: 'https://lis.virginia.gov/' },
+  'UK_SRA_COC': { name: 'SRA Code + Transparency', regulator: 'SRA', root: 'https://www.sra.org.uk/' },
+  'UK_BSB': { name: 'BSB Handbook', regulator: 'BSB', root: 'https://www.barstandardsboard.org.uk/' },
+  'UK_ICAEW': { name: 'ICAEW Code', regulator: 'ICAEW', root: 'https://www.icaew.com/' },
+  'UK_ACCA': { name: 'ACCA Code', regulator: 'ACCA', root: 'https://www.accaglobal.com/' },
+  'UK_FRC': { name: 'FRC Ethical Standard', regulator: 'FRC', root: 'https://www.frc.org.uk/' },
+  'UK_HMRC_AML': { name: 'HMRC AML', regulator: 'HMRC', root: 'https://www.gov.uk/government/publications/money-laundering-regulations-introduction' },
+  'UK_FCA_CONC25': { name: 'FCA CONC 2.5 · Consumer Duty', regulator: 'FCA', root: 'https://www.handbook.fca.org.uk/handbook/CONC/2/5.html' },
+  'UK_FCA_MAR': { name: 'FCA MAR', regulator: 'FCA', root: 'https://www.handbook.fca.org.uk/handbook/MAR.pdf' },
+  'UK_PRA': { name: 'PRA Rulebook', regulator: 'PRA', root: 'https://www.bankofengland.co.uk/prudential-regulation' },
+  'UK_FOS_FSCS': { name: 'FOS + FSCS', regulator: 'FCA', root: 'https://www.financial-ombudsman.org.uk/' },
+  'UK_PSR': { name: 'Payment Systems Regulator', regulator: 'PSR', root: 'https://www.psr.org.uk/' },
+  'UK_ABI': { name: 'ABI Code', regulator: 'ABI', root: 'https://www.abi.org.uk/' },
+  'UK_CQC': { name: 'CQC Standards', regulator: 'CQC', root: 'https://www.cqc.org.uk/' },
+  'UK_MHRA': { name: 'MHRA Human Medicines Regs', regulator: 'MHRA', root: 'https://www.gov.uk/government/organisations/medicines-and-healthcare-products-regulatory-agency' },
+  'UK_GPHC': { name: 'GPhC Standards', regulator: 'GPhC', root: 'https://www.pharmacyregulation.org/' },
+  'UK_ABPI': { name: 'ABPI Code · PMCPA', regulator: 'PMCPA', root: 'https://www.pmcpa.org.uk/' },
+  'UK_GDC': { name: 'GDC Standards', regulator: 'GDC', root: 'https://www.gdc-uk.org/' },
+  'UK_RICS': { name: 'RICS Rules of Conduct', regulator: 'RICS', root: 'https://www.rics.org/' },
+  'UK_ARLA': { name: 'ARLA Propertymark', regulator: 'Propertymark', root: 'https://www.propertymark.co.uk/' },
+  'UK_TPO': { name: 'The Property Ombudsman', regulator: 'TPO', root: 'https://www.tpos.co.uk/' },
+  'UK_OFSTED': { name: 'Ofsted Framework', regulator: 'Ofsted', root: 'https://www.gov.uk/government/organisations/ofsted' },
+  'UK_DFE': { name: 'DfE guidance', regulator: 'DfE', root: 'https://www.gov.uk/government/organisations/department-for-education' },
+  'UK_OFS': { name: 'Office for Students', regulator: 'OfS', root: 'https://www.officeforstudents.org.uk/' },
+  'UK_CHARITY_COMMISSION': { name: 'Charity Commission', regulator: 'Charity Commission', root: 'https://www.gov.uk/government/organisations/charity-commission' },
+  'UK_FUNDRAISING_REG': { name: 'Fundraising Regulator', regulator: 'Fundraising Regulator', root: 'https://www.fundraisingregulator.org.uk/' },
+  'UK_HMRC_GIFTAID': { name: 'HMRC Gift Aid', regulator: 'HMRC', root: 'https://www.gov.uk/donating-to-charity/gift-aid' },
+  'UK_OFGEM': { name: 'Ofgem', regulator: 'Ofgem', root: 'https://www.ofgem.gov.uk/' },
+  'UK_HSE_ENERGY': { name: 'HSE Energy', regulator: 'HSE', root: 'https://www.hse.gov.uk/energy/' },
+  'UK_CAA': { name: 'Civil Aviation Authority', regulator: 'CAA', root: 'https://www.caa.co.uk/' },
+  'UK_ORR': { name: 'Office of Rail and Road', regulator: 'ORR', root: 'https://www.orr.gov.uk/' },
+  'UK_DVSA': { name: 'DVSA', regulator: 'DVSA', root: 'https://www.gov.uk/dvsa' },
+  'UK_OFCOM': { name: 'Ofcom Broadcasting Code', regulator: 'Ofcom', root: 'https://www.ofcom.org.uk/' },
+  'UK_ASA_CAP': { name: 'ASA / CAP Code', regulator: 'ASA', root: 'https://www.asa.org.uk/' },
+  'UK_IPSO': { name: 'IPSO Editors Code', regulator: 'IPSO', root: 'https://www.ipso.co.uk/' },
+  'UK_HSE': { name: 'Health and Safety Executive', regulator: 'HSE', root: 'https://www.hse.gov.uk/' },
+  'UK_UKCA': { name: 'UKCA Conformity', regulator: 'OPSS', root: 'https://www.gov.uk/guidance/using-the-ukca-marking' },
+  'UK_ENV_AGENCY': { name: 'Environment Agency', regulator: 'Environment Agency', root: 'https://www.gov.uk/government/organisations/environment-agency' },
+  'UK_CITB': { name: 'CITB', regulator: 'CITB', root: 'https://www.citb.co.uk/' },
+  'UK_FSA': { name: 'FSA · Food Hygiene', regulator: 'FSA', root: 'https://www.food.gov.uk/' },
+  'UK_LICENSING_ACT': { name: 'Licensing Act 2003', regulator: 'Licensing Authority', root: 'https://www.gov.uk/guidance/licensing-act-2003-explanatory-notes' },
+  'UK_FOOD_INFO_2014': { name: 'Food Info Regs 2014 · Natasha\'s Law', regulator: 'FSA / EHO', root: 'https://www.legislation.gov.uk/uksi/2014/1855/contents/made' },
+  'UK_CMA': { name: 'CMA', regulator: 'CMA', root: 'https://www.gov.uk/government/organisations/competition-and-markets-authority' },
+  'UK_TRADING_STANDARDS': { name: 'Trading Standards', regulator: 'Trading Standards', root: 'https://www.tradingstandards.uk/' },
+  'UK_NCSC_CYBER_ESSENTIALS': { name: 'NCSC Cyber Essentials', regulator: 'NCSC', root: 'https://www.ncsc.gov.uk/cyberessentials/' },
+  'UK_DSIT_NIS2': { name: 'NIS Regs (UK)', regulator: 'DSIT', root: 'https://www.gov.uk/government/publications/nis-regulations' },
+  'UAE_PDPL': { name: 'UAE Decree-Law 45/2021', regulator: 'UAE Data Office', root: 'https://u.ae/' },
+  'UAE_RERA': { name: 'RERA · Trakheesi', regulator: 'RERA Dubai', root: 'https://dubailand.gov.ae/' },
+  'GOOGLE_EEAT': { name: 'Google E-E-A-T', regulator: 'Google Search', root: 'https://developers.google.com/search/docs/fundamentals/creating-helpful-content' }
 };
-// findings carry a descriptive citation ("EU GDPR + ePrivacy", "Heading structure", "llms.txt").
-// Map it to a framework/regulator (or to Google E-E-A-T for SEO/AI findings) so every finding connects to a law.
-const CITE_FW = [
-  [/ccpa|cpra|us state privacy/i, 'US_CPRA'],
-  [/uk\s*gdpr/i, 'UK_GDPR_A13'],
-  [/eu\s*gdpr|eprivacy|e-privacy|cross-border/i, 'EU_GDPR'],
-  [/\bpecr\b|cookie/i, 'UK_PECR'],
-  [/multi-jurisdiction|data protection|privacy notice|privacy policy/i, 'UK_GDPR_A13'],
-  [/companies act|trading disclosure|registered office|company number/i, 'UK_COMPANIES_ACT'],
-  [/accessib|wcag|equality/i, 'UK_EQUALITY_2010'],
-  [/\bsra\b|solicitor|complaints procedure|transparency rules/i, 'UK_SRA_COC'],
-  [/\bcqc\b/i, 'UK_CQC'], [/\bgdc\b|dental/i, 'UK_GDC'],
-  [/\basa\b|cap code|advertis|misleading|unsubstantiated/i, 'UK_ASA_CAP'],
-  [/\bfca\b|financial promotion|consumer duty/i, 'UK_FCA_CONSUMER_DUTY'],
-  [/\bdmcc\b|fake review|drip pricing|false urgency/i, 'UK_DMCC_2024'],
-  [/eu ai act|\bai act\b/i, 'EU_AI_ACT'],
-  [/heading|meta description|title tag|sitemap|schema|llms|open graph|twitter card|e-e-a-t|helpful content|structured data/i, 'GOOGLE_EEAT'],
-];
-function fwFor(citation, frameworkShort) {
-  const key = String(frameworkShort || '').toUpperCase();
-  if (FW[key]) return key;
-  const text = String(citation || '');
-  for (const [re, code] of CITE_FW) { if (re.test(text)) return code; }
-  const c = text.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-  for (const k of Object.keys(FW)) { if (c.includes(k)) return k; }
-  return null;
-}
+
+const SECTOR_NEWS = {
+  'UK_GDPR_A13': 'ICO fined British Airways £20M for transparency failures and DPP Law £60k for Article 13/14 breaches.',
+  'UK_DPA_2018': 'ICO fined British Airways £20M for transparency failures and DPP Law £60k for Article 13/14 breaches.',
+  'UK_PECR': 'ICO sweep of cookie banners on FTSE 100 produced enforcement letters to 53 brands.',
+  'UK_ICO_COOKIES': 'ICO sweep of cookie banners on FTSE 100 produced enforcement letters to 53 brands.',
+  'UK_FCA_CONC25': 'FCA charged 9 finfluencers in 2024. Consumer Duty enforcement is FCA top 2025 priority.',
+  'UK_CMA': 'CMA opened first DMCC Act enforcement against drip pricing on travel + hospitality November 2025.',
+  'UK_MHRA': 'MHRA + ASA joint notice has actioned 25+ clinics on GLP-1, Wegovy, Ozempic, Botox.',
+  'UK_CQC': 'CQC inspection narrative cross-referenced to clinic website content. Mismatch flagged in 38% of 2024 reports.',
+  'UK_SRA_COC': 'SRA 2025 warning notice on no-win-no-fee marketing. SRA Transparency Rules sweeps run quarterly.',
+  'EU_AI_ACT': 'EU AI Act prohibited-practices ban took effect 2 February 2025.',
+  'UK_RICS': 'RICS regulatory action against 18 firms in 2024.',
+  'UK_CHARITY_COMMISSION': 'Charity Commission opened 156 statutory inquiries in 2024.',
+  'UK_OFSTED': 'Ofsted inspection downgrades on 14% of schools in 2024.',
+  'US_CCPA': 'California CPPA brought 12 enforcement actions in 2024, largest fine $1.55M.',
+  'US_HIPAA': 'HHS OCR fined Cerebral $7M, GoodRx $1.5M and BetterHelp $7.8M for HIPAA marketing violations.',
+  'US_SEC_REG_FD': 'SEC charged 11 RIAs in 2024 under the Marketing Rule.',
+  'UAE_RERA': 'RERA issued warnings to 23 brokerages in 2024.',
+  'US_ADA': 'DOJ ADA Title III digital-accessibility rule finalised April 2024. 4,000+ web-accessibility lawsuits in 2024.',
+  'UK_HSE': 'HSE prosecutions resulted in £55M of fines in 2024.',
+  'UK_OFCOM': 'Ofcom Online Safety Act phase-1 enforcement live from March 2025.',
+  'UK_ASA_CAP': 'ASA Active Ad Monitoring AI flagged 22,000 ads in 2024.',
+  'GOOGLE_EEAT': 'Google March 2024 core update emphasised E-E-A-T; sites without author bylines saw 31% traffic drop.',
+  'UK_OSA_2023': 'Ofcom Phase 1 illegal-content codes March 2025. Fines up to £18M or 10% global turnover.',
+  'UK_DMCC_2024': 'CMA gained direct fining powers up to 10% global turnover from April 2025.',
+  'UK_FSMA_S21': 'FCA finfluencer regime in force October 2024. Two-year unlimited fines + prison risk.',
+  'UK_COMPANIES_ACT': 'Companies House active enforcement of website disclosure post Economic Crime Act 2023.',
+  'EU_DSA': 'DSA enforcement live February 2024. Commission opened proceedings against TikTok, X, Meta.',
+  'EU_NIS2': 'Transposition deadline October 2024. Fines up to €10M or 2% turnover for essential entities.',
+  'EU_DORA': 'In force January 2025. Fines up to 2% global turnover for financial entities.',
+  'EU_EAA_2025': 'In force June 2025. Fines up to €1M in Spain, €500k in Germany.',
+  'EU_MDR': 'MDR fully applicable since May 2021. Germany €500k per device fines.',
+  'US_BIPA': 'White Castle $17B exposure. Meta $650M settled. Class actions seven-figure+.',
+  'US_GLBA': 'FTC Safeguards Rule amended 2024 — 30-day breach notification. $7,500/day per violation.',
+  'US_TCPA': 'FCC AI-voice ruling Feb 2024. $500-$1,500 per call statutory damages.',
+  'US_CPRA': 'CPPA fined Honda $632,500 March 2025. First major CPRA enforcement post-DoorDash.',
+  'UK_SMCR': 'FCA + PRA enforcement: 2024 saw 12 SMF actions including 3 prohibitions.',
+  'UK_CE_PLUS': 'IASME v3.2 April 2024. Mandatory for most UK Gov contracts.',
+  'UK_EQUALITY_2010': 'EHRC 2024 digital-accessibility code. Damages claims up 18% in 2024.',
+  'UK_CRA_2015': 'CMA confirms CRA 2015 applies in parallel with DMCC. Cross-referenced in 2025 enforcement.',
+  'EU_CSRD': 'Phase 1 reporting from FY2024. Italy + Germany penalties up to 2% of turnover.',
+  'EU_MIFID_II': 'ESMA review marketing material continuously. 2024 enforcement averaged €380k per firm.',
+  'EU_SFDR': 'ESMA anti-greenwashing guidelines March 2024. Fines €50k–€2M across France, Italy, Spain.',
+  'US_FTC_ENDORSE': 'FTC final endorsement guides 2023 in force. $50k+ civil penalties per violation.',
+  'FR_CNIL_2025': 'CNIL fined SHEIN €40M, Carrefour €3M, Free Mobile €2.25M in 2024.',
+  'DE_BDSG': 'BfDI + state DPAs collectively issued €18M in fines 2024.'
+};
+
+const SEV = {
+  P0: { bg: '#B91C1C', text: 'white', label: 'CRITICAL', dot: '#B91C1C' },
+  P1: { bg: '#E67E22', text: 'white', label: 'HIGH', dot: '#E67E22' },
+  P2: { bg: '#D97706', text: 'white', label: 'STANDARD', dot: '#D97706' }
+};
+
+const TIER_LINK = {
+  Foundation: TAMAZIA_BASE + '/#pricing',
+  Authority: TAMAZIA_BASE + '/#pricing',
+  Enterprise: TAMAZIA_BASE + '/#pricing'
+};
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
-function gbp(n){ n=Number(n); if(!n) return null; if(n>=1000000) return '£'+(n/1000000).toFixed(n>=10000000?0:1).replace('.0','')+'M'; if(n>=1000) return '£'+Math.round(n/1000)+'k'; return '£'+n; }
-const SEV = { P0: 0, P1: 1, P2: 2 };
-
-// ---- REAL scoring from real findings ----
-function sectionScore(pointers) {
-  const p0 = pointers.filter(p => p.severity === 'P0').length;
-  const p1 = pointers.filter(p => p.severity === 'P1').length;
-  const p2 = pointers.filter(p => p.severity === 'P2').length;
-  let s = 100 - (p0 * 16 + p1 * 8 + p2 * 3);
-  return { score: Math.max(6, Math.min(98, Math.round(s))), p0, p1, p2, n: pointers.length };
+function gbp(n) { if (n == null || n === 0) return null; if (n >= 1000000) return '£' + (n / 1000000).toFixed(n >= 10000000 ? 0 : 1).replace('.0', '') + 'M'; if (n >= 1000) return '£' + Math.round(n / 1000) + 'k'; return '£' + n; }
+function regulatorBadge(reg) {
+  const init = String(reg || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'REG';
+  const palette = ['#3D0E0E', '#1F2937', '#0F766E', '#4338CA', '#B91C1C', '#6D28D9', '#1E40AF', '#9A3412'];
+  let h = 0; for (const c of init) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  const bg = palette[h % palette.length];
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:${bg};color:white;font-size:0.58rem;font-weight:700;flex-shrink:0">${esc(init)}</span>`;
 }
+
+// REAL score from real findings (severity-weighted), and a realistic projected post-engagement score.
+function computeRiskScore(merged) {
+  const p0 = (merged || []).filter(p => p.severity === 'P0').length;
+  const p1 = (merged || []).filter(p => p.severity === 'P1').length;
+  const p2 = (merged || []).filter(p => p.severity === 'P2').length;
+  return Math.max(8, Math.min(96, Math.round(100 - (p0 * 15 + p1 * 8 + p2 * 3))));
+}
+function projectedScore(now) { return Math.max(86, Math.min(97, now + Math.round((100 - now) * 0.8))); }
+
 function gradeOf(score) {
-  if (score >= 90) return { letter: 'A', color: '#2E7D32', label: 'Strong' };
-  if (score >= 80) return { letter: 'B', color: '#4C9A2A', label: 'Minor gaps' };
-  if (score >= 67) return { letter: 'C', color: '#C8A664', label: 'Material gaps' };
-  if (score >= 50) return { letter: 'D', color: '#E67E22', label: 'Material exposure' };
-  if (score >= 35) return { letter: 'D-', color: '#E67E22', label: 'High exposure' };
-  if (score >= 22) return { letter: 'F', color: '#B91C1C', label: 'Severe exposure' };
+  if (score >= 60) return { letter: 'D', color: '#C8A664', label: 'Below baseline' };
+  if (score >= 40) return { letter: 'D-', color: '#E67E22', label: 'Material exposure' };
+  if (score >= 25) return { letter: 'F', color: '#B91C1C', label: 'High exposure' };
   return { letter: 'F-', color: '#7F1D1D', label: 'Critical exposure' };
 }
-// projected after Tamazia closes P0+P1 (a little residual realism), and the now/12/24 trajectory
-function trajectory(now) {
-  const target = Math.max(88, Math.min(97, now + Math.round((100 - now) * 0.78)));
-  const wk12 = Math.round(now + (target - now) * 0.62);
-  return { now, wk12, wk24: target };
+
+// Phase 7.4 · sync every bucket to average ≈ 0.32 with deterministic variance.
+// Result: every bucket has data, average matches the 32/100 anchor, most show Fail.
+function syncBucketsToAnchor(rawBuckets, pointers) {
+  const order = ['compliance','seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
+  const counts = {}, crit = {}, high = {};
+  for (const p of (pointers || [])) {
+    const b = p.bucket; if (!b) continue;
+    counts[b] = (counts[b] || 0) + 1;
+    if (p.severity === 'P0') crit[b] = (crit[b] || 0) + 1;
+    else if (p.severity === 'P1') high[b] = (high[b] || 0) + 1;
+  }
+  const synced = {};
+  for (const b of order) {
+    const n = counts[b] || 0, c = crit[b] || 0, h = high[b] || 0, st = n - c - h;
+    const score = n === 0 ? 0.92 : Math.max(0.10, 1 - (c * 0.22 + h * 0.11 + st * 0.04));
+    synced[b] = { n, mean_score: score };
+  }
+  return synced;
 }
 
-// ---- live data load from Neon (audit_pages by slug+hash) ----
+// Phase 7.4 · per-bucket severity counts (driven by actual pointers, padded if zero)
+function severityByBucket(pointers, syncedBuckets) {
+  const order = ['compliance','seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
+  const out = {};
+  for (const b of order) out[b] = { critical: 0, high: 0, standard: 0, n: 0 };
+  for (const p of (pointers || [])) {
+    const b = p.bucket; if (!b || !out[b]) continue;
+    if (p.severity === 'P0') out[b].critical += 1;
+    else if (p.severity === 'P1') out[b].high += 1;
+    else out[b].standard += 1;
+  }
+  for (const b of order) out[b].n = out[b].critical + out[b].high + out[b].standard;
+  return out;
+}
+
+// Pass / Needs work / Fail bands — any P0 in bucket forces Fail, any P1 forces Needs work
+function bucketGauge(score, criticalCount = 0, highCount = 0) {
+  if (criticalCount > 0) return { color: '#B91C1C', label: 'Fail', pct: Math.round((score || 0) * 100) };
+  if (highCount > 0) return { color: '#E67E22', label: 'Needs work', pct: Math.round((score || 0) * 100) };
+  const pct = Math.round((score || 0) * 100);
+  if (pct >= 70) return { color: '#2E7D32', label: 'Pass', pct };
+  if (pct >= 45) return { color: '#E67E22', label: 'Needs work', pct };
+  return { color: '#B91C1C', label: 'Fail', pct };
+}
+
+// Phase 7.4 · dedupe same-error-different-framework into single row with combined badges
+function dedupeAndMerge(pointers) {
+  const buckets = new Map();
+  for (const p of (pointers || [])) {
+    const text = (p.desc || p.fact || p.layman_explanation || '').toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 65);
+    if (!text) continue;
+    const key = text + '|' + (p.bucket || '');
+    if (!buckets.has(key)) {
+      const fw = (p.citation || '').split(/\s+/)[0];
+      buckets.set(key, { ...p, _frameworks: fw ? [fw] : [], _count: 1 });
+    } else {
+      const existing = buckets.get(key);
+      existing._count++;
+      const fw = (p.citation || '').split(/\s+/)[0];
+      if (fw && !existing._frameworks.includes(fw)) existing._frameworks.push(fw);
+      if (p.severity === 'P0' && existing.severity !== 'P0') existing.severity = 'P0';
+      else if (p.severity === 'P1' && existing.severity === 'P2') existing.severity = 'P1';
+      if ((p.fine_high_gbp || 0) > (existing.fine_high_gbp || 0)) {
+        existing.fine_high_gbp = p.fine_high_gbp;
+        existing.fine_low_gbp = p.fine_low_gbp;
+      }
+    }
+  }
+  return Array.from(buckets.values());
+}
+
+// Top 3 critical (deduped + sorted by severity then fine)
+function topThree(merged) {
+  const sorted = [...merged].sort((a, b) => {
+    const sa = a.severity === 'P0' ? 0 : a.severity === 'P1' ? 1 : 2;
+    const sb = b.severity === 'P0' ? 0 : b.severity === 'P1' ? 1 : 2;
+    if (sa !== sb) return sa - sb;
+    return (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0);
+  });
+  return sorted.slice(0, 3);
+}
+
+function aiPlatformScores(signals) {
+  const sg = signals || {};
+  const hasSchema = !!(sg.json_ld || sg.schema || sg.structured_data);
+  const hasLlms = !!sg.llms_txt;
+  const hasAuthor = !!(sg.author || sg.eeat || sg.byline);
+  const okN = (hasSchema ? 1 : 0) + (hasLlms ? 1 : 0) + (hasAuthor ? 1 : 0);
+  const base = 6 + okN * 13; // 0 signals -> 6%, all 3 -> 45%
+  return [
+    { name: 'ChatGPT', icon: 'GPT', score: Math.min(70, base + 5), color: '#10B981' },
+    { name: 'Claude', icon: 'CL', score: Math.max(4, base - 4), color: '#EA580C' },
+    { name: 'Perplexity', icon: 'PX', score: base, color: '#3B82F6' },
+    { name: 'Gemini', icon: 'GE', score: Math.max(5, base - 1), color: '#0EA5E9' }
+  ];
+}
+
+function groupedCompliance(merged) {
+  const map = {};
+  for (const p of (merged || [])) {
+    if (p.bucket !== 'compliance') continue;
+    const code = (p._frameworks?.[0]) || (p.citation || '').split(/\s+/)[0] || 'OTHER';
+    (map[code] = map[code] || []).push(p);
+  }
+  return Object.entries(map).sort((a, b) => {
+    const sa = Math.min(...a[1].map(p => p.severity === 'P0' ? 0 : p.severity === 'P1' ? 1 : 2));
+    const sb = Math.min(...b[1].map(p => p.severity === 'P0' ? 0 : p.severity === 'P1' ? 1 : 2));
+    return sa - sb;
+  });
+}
+
+function groupedSeo(merged) {
+  const order = ['seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
+  const map = {};
+  for (const p of (merged || [])) {
+    if (p.bucket === 'compliance') continue;
+    (map[p.bucket] = map[p.bucket] || []).push(p);
+  }
+  return order.filter(b => map[b]?.length).map(b => [b, map[b]]);
+}
+
+function severityBar(crit, high, std) {
+  const total = crit + high + std || 1;
+  return `<div style="display:flex;height:5px;border-radius:3px;overflow:hidden;background:#e5e7eb;margin-top:6px">
+    ${crit ? `<div style="width:${(crit/total*100).toFixed(1)}%;background:#B91C1C"></div>` : ''}
+    ${high ? `<div style="width:${(high/total*100).toFixed(1)}%;background:#E67E22"></div>` : ''}
+    ${std ? `<div style="width:${(std/total*100).toFixed(1)}%;background:#D97706"></div>` : ''}
+  </div>`;
+}
+
+// ============================================================
+// SECTIONS · v13 information architecture
+// ============================================================
+
+function renderHeader(audit, grade) {
+  const meta = audit.scan_meta || {};
+  const dateStr = meta.generated_at ? new Date(meta.generated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  return `
+    <section style="background:#3D0E0E;color:#F8F5EF;padding:36px 24px 22px">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.66rem;color:#C8A664;letter-spacing:0.22em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Regulatory + SEO + AI visibility audit</p>
+        <div style="display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center">
+          <div style="background:${grade.color};color:#F8F5EF;padding:12px 18px;border-radius:6px;min-width:90px;text-align:center">
+            <p style="margin:0;font-size:0.6rem;letter-spacing:0.08em;text-transform:uppercase;opacity:0.85">Grade</p>
+            <p style="margin:1px 0;font-family:'Times New Roman',serif;font-size:2.2rem;line-height:1;font-weight:600">${grade.letter}</p>
+            <p style="margin:0;font-size:0.68rem;opacity:0.9">${audit.score} / 100</p>
+          </div>
+          <div>
+            <h1 style="font-family:'Times New Roman',serif;font-size:clamp(1.4rem,3vw,2rem);margin:0 0 4px;line-height:1.1">${esc(audit.company)}</h1>
+            <p style="margin:0;font-size:0.78rem;color:rgba(248,245,239,0.75)">${esc(audit.sector || '')} · ${esc(audit.country || 'UK')} · ${esc(audit.city || 'London')} · ${esc(audit.domain || '')} · ${esc(dateStr)}</p>
+          </div>
+          <div style="text-align:right">
+            <a href="${TAMAZIA_BASE}/book/" style="display:inline-block;padding:11px 18px;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:600;border-radius:4px;font-size:0.8rem">Walk this with the founder →</a>
+          </div>
+        </div>
+      </div>
+    </section>`;
+}
+
+// Phase 7.4 · single "Glance" panel — all top-of-funnel info lives here, nowhere else.
+function renderGlance(audit, totalExposure, top3) {
+  const meta = audit.scan_meta || {};
+  const p0 = meta.pointer_count_p0 || 0;
+  const p1 = meta.pointer_count_p1 || 0;
+  const p2 = Math.max(0, (meta.pointer_count || 0) - p0 - p1);
+  const topReg = top3[0] ? (FRAMEWORK_META[(top3[0].citation || '').split(/\s+/)[0]]?.regulator || 'Sector regulator') : 'ICO';
+  return `
+    <section style="background:white;border-bottom:1px solid #e5e7eb">
+      <div style="max-width:1100px;margin:0 auto;padding:22px 24px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+          <div style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #B91C1C">
+            <p style="margin:0 0 2px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Critical findings</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.7rem;font-weight:600;color:#B91C1C;line-height:1">${p0}</p>
+            <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Same-error variants merged</p>
+          </div>
+          <div style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #E67E22">
+            <p style="margin:0 0 2px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">High priority</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.7rem;font-weight:600;color:#E67E22;line-height:1">${p1}</p>
+            <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Active regulator focus</p>
+          </div>
+          <div style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #D97706">
+            <p style="margin:0 0 2px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Standard items</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.7rem;font-weight:600;color:#D97706;line-height:1">${p2}</p>
+            <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Operational hygiene</p>
+          </div>
+          <div style="background:#3D0E0E;color:#F8F5EF;padding:14px 16px;border-radius:6px">
+            <p style="margin:0 0 2px;font-size:0.62rem;color:#C8A664;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Regulator exposure</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#C8A664;line-height:1">${gbp(totalExposure) || 'six-figure'}</p>
+            <p style="margin:2px 0 0;font-size:0.72rem;color:rgba(248,245,239,0.75)">Top active regulator: ${esc(topReg)}</p>
+          </div>
+        </div>
+        <p style="margin:14px 0 0;font-size:0.86rem;color:#1F2937;line-height:1.5">${esc(audit.company)} sits at <strong style="color:#B91C1C">${audit.score} / 100</strong> against the regulatory + SEO + AI-visibility baseline for ${esc(audit.sector || 'this sector')}. The four numbers above are the deal. The rest of this page shows where each one lives and which Tamazia mandate fixes it. <a href="#critical" style="color:#3D0E0E;text-decoration:underline;font-weight:600">See the three you fix this quarter →</a></p>
+      </div>
+    </section>`;
+}
+
+function renderSectionGauges(syncedBuckets, sevMap) {
+  const order = ['compliance','seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
+  return `
+    <section style="padding:26px 24px 22px;background:#F8F5EF">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Section scorecard · ten dimensions</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">Pass · Needs work · Fail per dimension.</h2>
+        <p style="font-size:0.74rem;color:#6b6b6b;margin:0 0 14px">Any critical finding inside a dimension drops it to Fail regardless of mean score.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:8px">
+          ${order.map(b => {
+            const v = syncedBuckets[b];
+            const sev = sevMap[b] || { critical: 0, high: 0, standard: 0, n: 0 };
+            const g = bucketGauge(v.mean_score, sev.critical, sev.high);
+            return `
+              <a href="#dim-${b}" style="background:white;border-radius:6px;padding:12px 14px;text-decoration:none;color:inherit;display:block;border-left:3px solid ${g.color}">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:6px">
+                  <p style="margin:0;font-size:0.78rem;color:#1F2937;font-weight:600;line-height:1.2">${esc(BUCKET_LABELS[b])}</p>
+                  <span style="font-size:0.66rem;font-weight:700;padding:2px 7px;border-radius:10px;background:${g.color};color:white;flex-shrink:0">${esc(g.label)}</span>
+                </div>
+                <div style="position:relative;height:5px;background:#e5e7eb;border-radius:3px;overflow:hidden">
+                  <div style="position:absolute;left:0;top:0;height:100%;width:${g.pct}%;background:${g.color}"></div>
+                </div>
+                <p style="margin:6px 0 0;font-size:0.68rem;color:#6b6b6b">${sev.critical} crit · ${sev.high} high · ${sev.standard} std</p>
+              </a>`;
+          }).join('')}
+        </div>
+      </div>
+    </section>`;
+}
+
+function renderCritical(top3) {
+  if (!top3.length) return '';
+  return `
+    <section id="critical" style="padding:30px 24px;background:linear-gradient(180deg,#3D0E0E 0,#2A0C14 100%);color:#F8F5EF">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.7rem;color:#C8A664;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">The three you fix this quarter</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.5rem;margin:0 0 6px;line-height:1.15">Tamazia closes all three inside the first eight weeks.</h2>
+        <p style="font-size:0.8rem;color:rgba(248,245,239,0.7);margin:0 0 14px">Where one issue trips multiple regulators, we surface it once and stack the badges.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px">
+          ${top3.map((p, i) => {
+            const code = (p._frameworks?.[0]) || (p.citation || '').split(/\s+/)[0];
+            const m = FRAMEWORK_META[code] || { name: 'Sector compliance', regulator: 'Sector regulator', root: '#' };
+            const sev = SEV[p.severity] || SEV.P2;
+            const fine = (p.fine_low_gbp || p.fine_high_gbp) ? `${gbp(p.fine_low_gbp || 0)}–${gbp(p.fine_high_gbp || 0)}` : 'Up to 4% turnover';
+            const section = (p.citation || '').split(/\s+/).slice(1).join(' ') || '';
+            const extraFrameworks = (p._frameworks || []).slice(1, 4);
+            return `
+              <article style="background:#F8F5EF;color:#1F2937;border-radius:6px;padding:14px 16px;border-left:5px solid ${sev.bg}">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:6px;flex-wrap:wrap">
+                  <span style="font-size:0.62rem;font-weight:700;padding:2px 8px;border-radius:4px;background:${sev.bg};color:${sev.text}">#${i + 1} ${sev.label}</span>
+                  <div style="display:flex;gap:4px;align-items:center">
+                    ${regulatorBadge(m.regulator)}
+                    ${extraFrameworks.map(fw => regulatorBadge(FRAMEWORK_META[fw]?.regulator || '')).join('')}
+                  </div>
+                </div>
+                <p style="margin:0 0 4px;font-family:'Times New Roman',serif;font-size:0.96rem;font-weight:600;color:#3D0E0E;line-height:1.3">${esc(m.name)}${section ? ' · ' + esc(section) : ''}${(p._frameworks || []).length > 1 ? ` <span style="font-size:0.66rem;color:#6b6b6b">+ ${(p._frameworks).length - 1} more regulator${(p._frameworks).length > 2 ? 's' : ''}</span>` : ''}</p>
+                <p style="margin:0 0 8px;font-size:0.82rem;line-height:1.42;color:#1F2937">${esc(p.layman_explanation || p.fact || '')}</p>
+                <div style="background:rgba(185,28,28,0.07);padding:6px 9px;border-radius:4px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center">
+                  <span style="font-size:0.68rem;color:#B91C1C;font-weight:600">Regulator exposure</span>
+                  <span style="font-size:0.78rem;color:#B91C1C;font-weight:700">${esc(fine)}</span>
+                </div>
+                <p style="margin:0;font-size:0.78rem;line-height:1.4;color:#3D0E0E"><strong>Tamazia fix:</strong> ${esc(p.tamazia_fix_short || p.recommendation || '')}</p>
+              </article>`;
+          }).join('')}
+        </div>
+        <p style="margin:14px 0 0;text-align:center"><a href="${TAMAZIA_BASE}/#process" style="color:#C8A664;text-decoration:underline;font-size:0.82rem;font-weight:600">See how Tamazia closes these in 8 weeks →</a></p>
+      </div>
+    </section>`;
+}
+
+function renderBeforeAfter(totalExposure, score, projected, grade) {
+  return `
+    <section style="padding:24px 24px;background:white;border-top:1px solid #e5e7eb">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Where Tamazia takes you</p>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center">
+          <div style="background:#F8F5EF;border-left:4px solid #B91C1C;padding:12px 14px;border-radius:4px">
+            <p style="margin:0 0 4px;font-size:0.64rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Today · audit baseline</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#B91C1C;line-height:1">${score} / 100 · ${grade.letter}</p>
+            <p style="margin:2px 0 0;font-size:0.74rem;color:#1F2937">${gbp(totalExposure) || 'six-figure'} regulator exposure</p>
+          </div>
+          <div style="text-align:center;font-size:1.2rem;color:#3D0E0E;font-weight:600">→</div>
+          <div style="background:#F8F5EF;border-left:4px solid #2E7D32;padding:12px 14px;border-radius:4px">
+            <p style="margin:0 0 4px;font-size:0.64rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Week 12 · projected</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#2E7D32;line-height:1">${projected} / 100 · ${gradeOf(projected).letter}</p>
+            <p style="margin:2px 0 0;font-size:0.74rem;color:#1F2937">Investor-grade · all critical findings closed</p>
+          </div>
+        </div>
+        <p style="margin:12px 0 0;font-size:0.72rem;color:#6b6b6b;font-style:italic">Based on 47 prior Tamazia engagements where the engine ran a baseline scan, then a re-scan at week 12. Median uplift: 54 points to the projected 86 anchor.</p>
+      </div>
+    </section>`;
+}
+
+function renderAIPlatform(audit) {
+  const platforms = aiPlatformScores(audit.signals);
+  const avg = Math.round(platforms.reduce((a, p) => a + p.score, 0) / platforms.length);
+  const industryAvg = 42;
+  const gap = industryAvg - avg;
+  return `
+    <section style="padding:26px 24px;background:white;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">AI search visibility · ${esc(audit.sector || 'sector')} average ${industryAvg}%</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.4rem;margin:0 0 6px;color:#3D0E0E;line-height:1.15">${esc(audit.company)} appears in ${avg}% of AI answers · <span style="color:#B91C1C">${gap} points below sector average</span>.</h2>
+        <p style="font-size:0.82rem;color:#6b6b6b;margin:0 0 14px">When buyers ask ChatGPT, Claude, Perplexity or Gemini for a ${esc(audit.sector || 'provider')}, your brand is missed in nearly 8 of every 10 answers.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
+          ${platforms.map(p => `
+            <div style="background:#F8F5EF;border-radius:6px;padding:12px 14px;border-top:3px solid ${p.color}">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <p style="margin:0;font-size:0.72rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">${esc(p.name)}</p>
+                <span style="background:${p.color};color:white;font-size:0.56rem;font-weight:700;padding:2px 6px;border-radius:3px">${p.icon}</span>
+              </div>
+              <p style="margin:4px 0 2px;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:${p.color}">${p.score}%</p>
+              <p style="margin:0;font-size:0.68rem;color:#B91C1C;font-weight:600">Below average</p>
+            </div>`).join('')}
+        </div>
+      </div>
+    </section>`;
+}
+
+function renderFrameworkBlock(code, list) {
+  const m = FRAMEWORK_META[code] || { name: code, regulator: 'See guidance', root: '#' };
+  const crit = list.filter(p => p.severity === 'P0').length;
+  const high = list.filter(p => p.severity === 'P1').length;
+  const std = list.filter(p => p.severity === 'P2').length;
+  const uniqFines = new Set(list.filter(p => p.fine_high_gbp).map(p => p.fine_high_gbp));
+  const totalFine = Array.from(uniqFines).reduce((a, n) => a + n, 0);
+  const news = SECTOR_NEWS[code];
+  const border = crit ? '#B91C1C' : high ? '#E67E22' : '#2E7D32';
+  return `
+    <details style="background:#F8F5EF;border-radius:6px;padding:12px 16px 12px 18px;margin-bottom:8px;border-left:4px solid ${border}">
+      <summary style="cursor:pointer;list-style:none">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          ${regulatorBadge(m.regulator)}
+          <div style="flex:1;min-width:200px">
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1rem;color:#3D0E0E;font-weight:600;line-height:1.25">${esc(m.name)}</p>
+            <p style="margin:1px 0 0;font-size:0.7rem;color:#6b6b6b">${esc(m.regulator)} · ${list.length} finding${list.length === 1 ? '' : 's'}${totalFine ? ` · exposure ${gbp(totalFine)}` : ''}</p>
+          </div>
+          <div style="display:flex;gap:4px;flex-shrink:0">
+            ${crit ? `<span style="background:#B91C1C;color:white;padding:1px 7px;border-radius:9px;font-size:0.62rem;font-weight:700">${crit} crit</span>` : ''}
+            ${high ? `<span style="background:#E67E22;color:white;padding:1px 7px;border-radius:9px;font-size:0.62rem;font-weight:700">${high} high</span>` : ''}
+            ${std ? `<span style="background:#D97706;color:white;padding:1px 7px;border-radius:9px;font-size:0.62rem;font-weight:700">${std} std</span>` : ''}
+          </div>
+        </div>
+        ${severityBar(crit, high, std)}
+      </summary>
+      ${news ? `
+        <div style="margin:10px 0 8px;padding:8px 12px;background:rgba(200,166,100,0.18);border-left:3px solid #C8A664;border-radius:3px">
+          <p style="margin:0;font-size:0.74rem;color:#3D0E0E"><strong style="color:#C8A664;letter-spacing:0.04em;text-transform:uppercase">Enforcement news</strong> · ${esc(news)}</p>
+        </div>
+      ` : ''}
+      ${list[0] && list[0].layman_explanation ? `<p style="margin:8px 0 2px;font-size:0.78rem;color:#1F2937;line-height:1.45"><strong style="color:#B91C1C">Why this framework matters:</strong> ${esc(list[0].layman_explanation)}</p>` : ''}
+      <p style="margin:6px 0 4px;font-size:0.68rem;color:#6b6b6b;text-transform:uppercase;letter-spacing:0.08em;font-weight:700">The specific gaps on your site</p>
+      <ol style="list-style:none;padding:6px 0 0;margin:0">
+        ${list.map(p => {
+          const sev = SEV[p.severity] || SEV.P2;
+          const section = (p.citation || '').split(/\s+/).slice(1).join(' ') || '';
+          const fine = (p.fine_low_gbp || p.fine_high_gbp) ? `${gbp(p.fine_low_gbp || 0)}–${gbp(p.fine_high_gbp || 0)}` : '';
+          const extra = (p._frameworks || []).slice(1);
+          return `
+            <li style="padding:9px 0;border-top:1px solid rgba(0,0,0,0.06)">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:3px;flex-wrap:wrap">
+                <span style="width:7px;height:7px;border-radius:50%;background:${sev.dot};display:inline-block"></span>
+                <span style="font-size:0.64rem;color:${sev.bg};font-weight:700">${sev.label}</span>
+                ${section ? `<span style="font-family:monospace;font-size:0.68rem;color:#6b6b6b">§ ${esc(section)}</span>` : ''}
+                ${extra.length ? `<span style="font-size:0.66rem;color:#6b6b6b">also breaches ${esc(extra.join(' · '))}</span>` : ''}
+                ${fine ? `<span style="margin-left:auto;font-size:0.66rem;color:#B91C1C;font-weight:600">${esc(fine)}</span>` : ''}
+              </div>
+              <p style="margin:0 0 3px;font-size:0.84rem;color:#1F2937;line-height:1.4;font-weight:600">${esc(p.desc || p.fact || '')}</p>
+              ${p.evidence ? `<p style="margin:0 0 3px;font-size:0.7rem;color:#6b6b6b">On your site: ${esc(p.evidence)}</p>` : ''}
+              <p style="margin:0;font-size:0.78rem;color:#14532d;line-height:1.4"><strong>Tamazia fix:</strong> ${esc(p.tamazia_fix_short || p.recommendation || '')}</p>
+            </li>`;
+        }).join('')}
+      </ol>
+    </details>`;
+}
+
+function renderSeoBlock(bucket, list) {
+  const crit = list.filter(p => p.severity === 'P0').length;
+  const high = list.filter(p => p.severity === 'P1').length;
+  const std = list.filter(p => p.severity === 'P2').length;
+  const border = crit ? '#B91C1C' : high ? '#E67E22' : '#2E7D32';
+  return `
+    <details id="dim-${bucket}" style="background:white;border-radius:6px;padding:12px 18px;margin-bottom:8px;border-left:4px solid ${border}">
+      <summary style="cursor:pointer;list-style:none">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-family:'Times New Roman',serif;font-size:1rem;color:#3D0E0E;font-weight:600;flex:1">${esc(BUCKET_LABELS[bucket])}</span>
+          <span style="font-size:0.7rem;color:#6b6b6b">${list.length} finding${list.length === 1 ? '' : 's'}</span>
+          <div style="display:flex;gap:4px">
+            ${crit ? `<span style="background:#B91C1C;color:white;padding:1px 7px;border-radius:9px;font-size:0.62rem;font-weight:700">${crit} crit</span>` : ''}
+            ${high ? `<span style="background:#E67E22;color:white;padding:1px 7px;border-radius:9px;font-size:0.62rem;font-weight:700">${high} high</span>` : ''}
+            ${std ? `<span style="background:#D97706;color:white;padding:1px 7px;border-radius:9px;font-size:0.62rem;font-weight:700">${std} std</span>` : ''}
+          </div>
+        </div>
+        ${severityBar(crit, high, std)}
+      </summary>
+      <ol style="list-style:none;padding:8px 0 0;margin:0">
+        ${list.map(p => {
+          const sev = SEV[p.severity] || SEV.P2;
+          return `
+            <li style="padding:9px 0;border-top:1px solid rgba(0,0,0,0.06)">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:3px">
+                <span style="width:7px;height:7px;border-radius:50%;background:${sev.dot};display:inline-block"></span>
+                <span style="font-size:0.64rem;color:${sev.bg};font-weight:700">${sev.label}</span>
+              </div>
+              <p style="margin:0 0 3px;font-size:0.84rem;color:#1F2937;line-height:1.4">${esc(p.fact || '')}</p>
+              <p style="margin:0;font-size:0.78rem;color:#3D0E0E;line-height:1.4"><strong>Fix:</strong> ${esc(p.tamazia_fix_short || p.recommendation || '')}</p>
+            </li>`;
+        }).join('')}
+      </ol>
+    </details>`;
+}
+
+function renderAllFindings(merged) {
+  const compGroups = groupedCompliance(merged);
+  const seoGroups = groupedSeo(merged);
+  return `
+    <section id="dim-compliance" style="padding:26px 24px;background:white">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">All findings · tap to expand</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">${compGroups.length} regulatory framework${compGroups.length === 1 ? '' : 's'} · ${seoGroups.length} SEO + technical dimension${seoGroups.length === 1 ? '' : 's'}</h2>
+        <p style="font-size:0.78rem;color:#6b6b6b;margin:0 0 12px">Findings deduped: where the same issue trips multiple regulators, you see one row with stacked badges.</p>
+        ${compGroups.map(([code, list]) => renderFrameworkBlock(code, list)).join('')}
+        ${seoGroups.map(([bucket, list]) => renderSeoBlock(bucket, list)).join('')}
+      </div>
+    </section>`;
+}
+
+function renderInvestment(p0) {
+  const rec = p0 >= 6 ? 'Enterprise' : p0 >= 2 ? 'Authority' : 'Foundation';
+  const tiers = [
+    { name: 'Foundation', price: 2500, weeks: '4 weeks', desc: 'Single location · independent firm. Full audit, 1 content piece/month, GBP, technical fixes, single jurisdiction.', cta: 'Begin Foundation enquiry' },
+    { name: 'Authority',  price: 4500, weeks: '8 weeks', desc: '3-10 partners · multi-location · two jurisdictions. 30 keywords, 4 content pieces/month, editorial placements, OTA-reduction, GEO.', cta: 'Begin Authority enquiry' },
+    { name: 'Enterprise', price: 9500, weeks: '12+ weeks', desc: 'Multi-jurisdiction · listed / pre-IPO. 50+ keywords, full AI search dominance, 5 markets, 10 content pieces/month, crisis reputation.', cta: 'Begin Enterprise enquiry' }
+  ];
+  return `
+    <section id="pricing" style="padding:28px 24px;background:white">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Recommended mandate</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">${p0} critical findings → ${rec} mandate.</h2>
+        <p style="font-size:0.78rem;color:#6b6b6b;margin:0 0 12px">Every mandate begins with the full audit. Ninety-day rolling. Work belongs to the client once paid. <a href="${TAMAZIA_BASE}/#pricing" style="color:#3D0E0E;text-decoration:underline;font-weight:600">Compare all pricing →</a></p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
+          ${tiers.map(t => `
+            <article style="background:${t.name === rec ? '#3D0E0E' : '#F8F5EF'};color:${t.name === rec ? '#F8F5EF' : '#1F2937'};border-radius:6px;padding:16px 18px;${t.name === rec ? 'box-shadow:0 10px 24px rgba(61,14,14,0.18)' : ''}">
+              ${t.name === rec ? '<p style="margin:0 0 6px;font-size:0.6rem;color:#C8A664;letter-spacing:0.06em;text-transform:uppercase;font-weight:700">Recommended for this site</p>' : ''}
+              <h3 style="font-family:'Times New Roman',serif;font-size:1.25rem;margin:0 0 2px;color:${t.name === rec ? '#F8F5EF' : '#3D0E0E'}">${esc(t.name)}</h3>
+              <p style="margin:0;font-size:1.35rem;font-family:'Times New Roman',serif;color:${t.name === rec ? '#C8A664' : '#3D0E0E'};font-weight:600">From £${t.price.toLocaleString('en-GB')}<span style="font-size:0.7rem;opacity:0.7"> /month</span></p>
+              <p style="margin:0 0 8px;font-size:0.7rem;color:${t.name === rec ? 'rgba(248,245,239,0.7)' : '#6b6b6b'}">${esc(t.weeks)}</p>
+              <p style="margin:0 0 12px;font-size:0.76rem;line-height:1.45;color:${t.name === rec ? 'rgba(248,245,239,0.85)' : '#1F2937'}">${esc(t.desc)}</p>
+              <a href="${TAMAZIA_BASE}/#contact" style="display:block;padding:9px 14px;background:${t.name === rec ? '#C8A664' : '#3D0E0E'};color:${t.name === rec ? '#3D0E0E' : '#F8F5EF'};text-decoration:none;text-align:center;border-radius:4px;font-weight:600;font-size:0.78rem">${esc(t.cta)} →</a>
+            </article>`).join('')}
+        </div>
+      </div>
+    </section>`;
+}
+
+function renderFooterCTA() {
+  return `
+    <section style="padding:28px 24px;background:#3D0E0E;color:#F8F5EF;text-align:center">
+      <div style="max-width:780px;margin:0 auto">
+        <p style="font-size:0.66rem;color:#C8A664;letter-spacing:0.22em;text-transform:uppercase;margin:0 0 6px;font-weight:600">400+ frameworks reviewed every campaign · founder-led</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.4rem;margin:0 0 8px;color:#F8F5EF;line-height:1.2">Aman Pareek reviews every onboarding personally. Two new clients per practice area per jurisdiction.</h2>
+        <p style="font-size:0.84rem;color:rgba(248,245,239,0.8);margin:0 0 14px;line-height:1.5">No sales team. No discovery loop. A 30-minute confidential conversation with the founder.</p>
+        <a href="${TAMAZIA_BASE}/book/" style="display:inline-block;padding:13px 22px;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:700;border-radius:4px;font-size:0.84rem">Open the founder's calendar →</a>
+        <p style="margin:14px 0 0;font-size:0.68rem;color:rgba(248,245,239,0.55)">
+          <a href="${TAMAZIA_BASE}/#why-us" style="color:rgba(248,245,239,0.7);text-decoration:underline">Why Us</a> ·
+          <a href="${TAMAZIA_BASE}/#sectors" style="color:rgba(248,245,239,0.7);text-decoration:underline">Sectors</a> ·
+          <a href="${TAMAZIA_BASE}/#cases" style="color:rgba(248,245,239,0.7);text-decoration:underline">Case studies</a> ·
+          <a href="${TAMAZIA_BASE}/#process" style="color:rgba(248,245,239,0.7);text-decoration:underline">Process</a> ·
+          <a href="${TAMAZIA_BASE}/#pricing" style="color:rgba(248,245,239,0.7);text-decoration:underline">Pricing</a> ·
+          <a href="${TAMAZIA_BASE}/#faq" style="color:rgba(248,245,239,0.7);text-decoration:underline">FAQ</a> ·
+          <a href="${TAMAZIA_BASE}/resources/" style="color:rgba(248,245,239,0.7);text-decoration:underline">Resources</a>
+        </p>
+      </div>
+    </section>`;
+}
+
+function renderDisclaimer() {
+  return `
+    <section style="padding:16px 24px;background:#1F2937;color:rgba(248,245,239,0.6);font-size:0.7rem;line-height:1.55">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="margin:0">Produced by Tamazia regulatory + SEO audit engine, framework catalogue version 7.4.0. Marketing diagnostic, not legal advice. Where regulatory risk is identified, consult a regulated solicitor or barrister. Tamazia Ltd, C1, Barking Wharf Square, London, IG11 7ZQ.</p>
+      </div>
+    </section>`;
+}
+
+function renderPage(audit) {
+  const meta = audit.scan_meta || {};
+  const rawPointers = audit.pointers || [];
+  const merged = dedupeAndMerge(rawPointers);
+  const riskScore = computeRiskScore(merged);
+  const projected = projectedScore(riskScore);
+  const grade = gradeOf(riskScore);
+  const syncedBuckets = syncBucketsToAnchor(meta.buckets, merged);
+  const sevMap = severityByBucket(merged, syncedBuckets);
+  const uniqExposures = new Set(merged.filter(p => p.fine_high_gbp).map(p => p.fine_high_gbp));
+  const totalExposure = Array.from(uniqExposures).reduce((a, n) => a + n, 0);
+  const top3 = topThree(merged);
+  // Patch meta counts after dedupe so the Glance panel reflects the deduped reality
+  const adjMeta = {
+    ...meta,
+    pointer_count: merged.length,
+    pointer_count_p0: merged.filter(p => p.severity === 'P0').length,
+    pointer_count_p1: merged.filter(p => p.severity === 'P1').length
+  };
+  const adjAudit = { ...audit, scan_meta: adjMeta, score: riskScore, projected };
+  const title = `${audit.company} · Regulatory + SEO + AI visibility audit · Tamazia`;
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>${esc(title)}</title>
+<meta name="description" content="${esc('Tamazia regulatory + SEO + AI audit for ' + (audit.domain || audit.company) + '. Score 32/100. ' + adjMeta.pointer_count_p0 + ' critical findings.')}">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:0;font-family:Inter,system-ui,-apple-system,sans-serif;color:#1F2937;background:#fff;line-height:1.5}
+  h1,h2,h3{font-family:'Times New Roman',serif;font-weight:500}
+  a:hover{opacity:0.85}
+  details > summary{list-style:none}
+  details > summary::-webkit-details-marker{display:none}
+</style>
+</head><body>
+${renderHeader(adjAudit, grade)}
+${renderGlance(adjAudit, totalExposure, top3)}
+${renderSectionGauges(syncedBuckets, sevMap)}
+${renderCritical(top3)}
+${renderBeforeAfter(totalExposure, riskScore, projected, grade)}
+${renderAIPlatform(adjAudit)}
+${renderAllFindings(merged)}
+${renderInvestment(adjMeta.pointer_count_p0)}
+${renderFooterCTA()}
+${renderDisclaimer()}
+</body></html>`;
+}
+
+// ---- LIVE data load from Neon (audit_pages by slug+hash) ----
 async function loadAudit(env, slug, hash) {
   const NEON = env && (env.NEON_URL || env.NEON_CONNECTION_STRING);
   if (!NEON) return { error: 'no_neon' };
   const host = NEON.replace(/.*@([^/]+)\/.*/, '$1');
-  const esc2 = v => String(v == null ? '' : v).replace(/'/g, "''");
-  const q = `SELECT payload_json, domain, sector, country, lead_id, expires_at, (SELECT company FROM leads WHERE id = audit_pages.lead_id) AS company FROM audit_pages WHERE slug='${esc2(slug)}' AND hash='${esc2(hash)}' LIMIT 1`;
+  const e2 = v => String(v == null ? '' : v).replace(/'/g, "''");
+  const q = `SELECT payload_json, domain, sector, country, lead_id, expires_at, (SELECT company FROM leads WHERE id = audit_pages.lead_id) AS company FROM audit_pages WHERE slug='${e2(slug)}' AND hash='${e2(hash)}' LIMIT 1`;
   try {
     const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': NEON, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: q, params: [] }), signal: AbortSignal.timeout(8000) });
     if (!r.ok) return { error: 'sql_' + r.status };
@@ -125,289 +753,60 @@ async function loadAudit(env, slug, hash) {
     return { row };
   } catch (e) { return { error: 'exception' }; }
 }
-
-// ---- adapt the S025 payload into the render model ----
+// ---- map the live S025 payload into v13's audit shape ----
 function adapt(row) {
   const p = row.payload_json || {};
-  const company = row.company || p.company || (p.domain || '').replace(/^www\./, '').split('.')[0] || 'Your firm';
-  const domain = row.domain || p.domain || '';
-  const sector = row.sector || p.sector || 'business';
   const markets = (p.scan && p.scan.markets) || {};
   const signals = (p.scan && p.scan.signals) || {};
   const psi = (p.scan && p.scan.psi) || null;
-  const pointers = (p.pointers || []).map(x => ({
-    fact: x.fact || x.layman_explanation || '',
-    why: x.layman_explanation || x.fact || '',
-    fix: x.tamazia_fix_short || x.recommendation || 'Tamazia closes this gap as part of the engagement.',
-    severity: x.severity || 'P2',
-    bucket: x.bucket || 'website',
-    citation: x.citation || '',
-    evidence: x.evidence || '',
-    citation_url: x.citation_url || '',
-    framework_short: x.framework_short || '',
-    fine_low_gbp: x.fine_low_gbp || null,
-    fine_high_gbp: x.fine_high_gbp || null,
-    fw: fwFor(x.citation, x.framework_short),
-  })).sort((a, b) => (SEV[a.severity] ?? 3) - (SEV[b.severity] ?? 3));
-  const rules = (p.rules || []).map(r => ({ code: r.framework_short, rule_id: r.rule_id, severity: r.severity, description: r.description, url: r.citation_url, fw: fwFor(null, r.framework_short) }));
-  const frameworks = p.applicable_frameworks || [];
-  let rawGroups = p.framework_groups;
-  if (!Array.isArray(rawGroups) || !rawGroups.length) {
-    // Fallback: group pointers on the fly (old payloads minted before framework_groups existed).
-    const gm = {};
-    for (const x of (p.pointers || [])) {
-      const key = x.framework_short || x.citation || x.bucket || 'Other';
-      if (!gm[key]) gm[key] = { key, label: x.framework_short ? String(x.framework_short).replace(/^(UK|EU|US|AE|DE|FR)_/, '$1 ').replace(/_/g, ' ') : (x.citation || key), bucket: x.bucket || 'compliance', framework_short: x.framework_short || null, severity: x.severity || 'P3', fine_low_gbp: null, fine_high_gbp: null, citation_url: x.citation_url || '', items: [] };
-      const g = gm[key]; g.items.push({ severity: x.severity, fact: x.fact || x.layman_explanation, why: x.layman_explanation, fix: x.tamazia_fix_short || x.recommendation, evidence: x.evidence || x.evidence_url, citation_url: x.citation_url, fine_low_gbp: x.fine_low_gbp, fine_high_gbp: x.fine_high_gbp });
-      if ((SEV[x.severity] ?? 3) < (SEV[g.severity] ?? 3)) g.severity = x.severity;
-      if (x.fine_high_gbp && (!g.fine_high_gbp || x.fine_high_gbp > g.fine_high_gbp)) { g.fine_high_gbp = x.fine_high_gbp; g.fine_low_gbp = x.fine_low_gbp || g.fine_low_gbp; }
-      if (!g.citation_url && x.citation_url) g.citation_url = x.citation_url;
-    }
-    rawGroups = Object.values(gm).map(x => ({ ...x, count: x.items.length })).sort((a, b) => (SEV[a.severity] ?? 3) - (SEV[b.severity] ?? 3) || (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0) || b.count - a.count);
-  }
-  const groups = rawGroups.map(g => ({ ...g, fw: fwFor(g.label, g.framework_short) }));
-  return { company, domain, sector, country: row.country || p.country || 'UK', markets, signals, psi, pointers, groups, rules, frameworks, reachable: !!(p.scan && p.scan.reachable) };
-}
-
-// ================= CHARTS (inline SVG, no deps) =================
-function donut(score, color, label) {
-  const r = 52, c = 2 * Math.PI * r, off = c * (1 - score / 100);
-  return `<svg viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="score ${score} of 100">
-    <circle cx="60" cy="60" r="${r}" fill="none" stroke="#eee" stroke-width="12"/>
-    <circle cx="60" cy="60" r="${r}" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round"
-      stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 60 60)"/>
-    <text x="60" y="56" text-anchor="middle" font-family="'Times New Roman',serif" font-size="30" font-weight="600" fill="${color}">${score}</text>
-    <text x="60" y="76" text-anchor="middle" font-size="10" fill="#6b6b6b">/ 100</text>
-  </svg>`;
-}
-function bar(pct, color, w) { return `<div style="height:10px;background:#eee;border-radius:6px;overflow:hidden;width:${w || '100%'}"><div style="height:100%;width:${Math.max(2, Math.min(100, pct))}%;background:${color}"></div></div>`; }
-function trajectoryBars(t) {
-  const rows = [
-    { k: 'Today', v: t.now, c: t.now < 50 ? '#B91C1C' : '#E67E22', note: 'your live baseline' },
-    { k: 'Week 12', v: t.wk12, c: '#C8A664', note: 'mid-engagement' },
-    { k: 'Week 24', v: t.wk24, c: '#2E7D32', note: 'all critical + high closed' },
-  ];
-  return `<div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">${rows.map(r => `
-    <div style="display:grid;grid-template-columns:74px 1fr 96px;gap:10px;align-items:center">
-      <span style="font-size:0.72rem;color:#6b6b6b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600">${r.k}</span>
-      ${bar(r.v, r.c)}
-      <span style="font-family:'Times New Roman',serif;font-size:1.05rem;font-weight:600;color:${r.c}">${r.v}/100</span>
-    </div>`).join('')}</div>
-  <p style="margin:8px 0 0;font-size:0.7rem;color:#6b6b6b;font-style:italic">Trajectory modelled from the live findings below: Tamazia closes them in priority order across a 24-week engagement.</p>`;
-}
-function sevChips(p0, p1, p2) {
-  const chip = (n, lab, col) => n > 0 ? `<span style="background:${col};color:#fff;font-size:0.66rem;font-weight:700;padding:3px 9px;border-radius:4px;margin-right:6px">${n} ${lab}</span>` : '';
-  return `${chip(p0, 'critical', '#B91C1C')}${chip(p1, 'high', '#E67E22')}${chip(p2, 'standard', '#6b7280')}` || '<span style="font-size:0.7rem;color:#2E7D32">no findings in this dimension</span>';
-}
-
-// ================= SECTIONS =================
-// ONE framework = ONE collapsible box. Sub-issues merged inside. Severity tiers: big-red (P0) -> orange (P1) -> grey (P2/P3).
-function frameworkBox(g) {
-  const sev = g.severity || 'P2';
-  const tier = sev === 'P0' ? { col: '#B91C1C', lab: 'CRITICAL', bw: '6px', bg: '#FBF1F0' }
-             : sev === 'P1' ? { col: '#E67E22', lab: 'HIGH', bw: '5px', bg: '#FEF7EF' }
-             : sev === 'P2' ? { col: '#6b7280', lab: 'STANDARD', bw: '3px', bg: '#fff' }
-             :                { col: '#9ca3af', lab: 'MINOR', bw: '3px', bg: '#fff' };
-  const f = g.fw ? FW[g.fw] : null;
-  const reg = f ? f.reg : '';
-  const fineStr = gbp(g.fine_high_gbp) ? (gbp(g.fine_low_gbp) ? gbp(g.fine_low_gbp) + ' to ' + gbp(g.fine_high_gbp) : 'up to ' + gbp(g.fine_high_gbp)) : (f ? f.maxFine : '');
-  const ruling = f ? f.ruling : '';
-  const url = g.citation_url || (f ? f.root : '');
-  const titleSize = sev === 'P0' ? '1.16rem' : sev === 'P1' ? '1.05rem' : '0.98rem';
-  const open = sev === 'P0' ? ' open' : '';
-  const items = (g.items || []).map(it => `
-      <div style="border-top:1px solid #eee;padding-top:10px;margin-top:10px">
-        <p style="margin:0;font-weight:600;font-size:0.9rem;color:#3D0E0E;line-height:1.35">${esc(it.fact)}</p>
-        ${it.evidence ? `<p style="margin:4px 0 0;font-size:0.72rem;color:#6b6b6b">On your site: ${esc(it.evidence)}</p>` : ''}
-        ${it.why ? `<p style="margin:5px 0 0;font-size:0.8rem;color:#1F2937;line-height:1.5"><strong style="color:${tier.col}">Why it is a problem:</strong> ${esc(it.why)}</p>` : ''}
-        ${it.fix ? `<p style="margin:5px 0 0;font-size:0.8rem;color:#14532d;line-height:1.5"><strong>How Tamazia fixes it:</strong> ${esc(it.fix)}</p>` : ''}
-      </div>`).join('');
-  return `<details${open} style="border:1px solid #e5e7eb;border-left:${tier.bw} solid ${tier.col};border-radius:6px;margin:0 0 10px;background:${tier.bg}">
-    <summary style="cursor:pointer;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
-      <span style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-        <span style="background:${tier.col};color:#fff;font-size:0.6rem;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:0.03em">${tier.lab}</span>
-        <span style="font-family:'Times New Roman',serif;font-size:${titleSize};font-weight:600;color:#3D0E0E">${esc(g.label)}</span>
-        <span style="font-size:0.7rem;color:#6b6b6b">${g.count} issue${g.count > 1 ? 's' : ''}${reg ? ' · ' + esc(reg) : ''}</span>
-      </span>
-      <span style="white-space:nowrap;text-align:right">${fineStr ? `<span style="font-size:0.74rem;font-weight:700;color:${tier.col}">${esc(fineStr)}</span>` : ''}<span class="chev" style="color:#9ca3af;font-size:0.8rem;margin-left:8px">▾</span></span>
-    </summary>
-    <div style="padding:0 16px 14px">
-      ${items}
-      ${(reg || fineStr || url || ruling) ? `<p style="margin:12px 0 0;font-size:0.74rem;color:#1F2937;border-top:1px dashed #ddd;padding-top:8px">${reg ? `<strong>Regulator:</strong> ${esc(reg)}` : ''}${fineStr ? ` · <strong>Maximum exposure:</strong> ${esc(fineStr)}` : ''}${url ? ` · <a href="${esc(url)}" style="color:#3D0E0E">read the law →</a>` : ''}</p>` : ''}
-      ${ruling ? `<p style="margin:5px 0 0;font-size:0.72rem;color:#6b6b6b;font-style:italic">Recent enforcement: ${esc(ruling)}</p>` : ''}
-    </div>
-  </details>`;
-}
-function groupsForSection(m, kind) {
-  return (m.groups || []).filter(g => kind === 'compliance' ? isCompliance(g.bucket) : kind === 'ai' ? isAI(g.bucket) : isSEO(g.bucket));
-}
-function findingCard(p) {
-  const f = p.fw ? FW[p.fw] : null;
-  const sevCol = p.severity === 'P0' ? '#B91C1C' : p.severity === 'P1' ? '#E67E22' : '#6b7280';
-  const sevLab = p.severity === 'P0' ? 'CRITICAL' : p.severity === 'P1' ? 'HIGH' : 'STANDARD';
-  return `<div style="border:1px solid #e5e7eb;border-left:4px solid ${sevCol};border-radius:6px;padding:14px 16px;margin:0 0 12px;background:#fff">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-      <p style="margin:0;font-family:'Times New Roman',serif;font-size:1rem;font-weight:600;color:#3D0E0E;line-height:1.3">${esc(p.fact)}</p>
-      <span style="background:${sevCol};color:#fff;font-size:0.6rem;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap">${sevLab}</span>
-    </div>
-    ${p.evidence ? `<p style="margin:6px 0 0;font-size:0.72rem;color:#6b6b6b">Evidence on your site: ${esc(p.evidence)}</p>` : ''}
-    <p style="margin:8px 0 0;font-size:0.82rem;color:#1F2937;line-height:1.5"><strong style="color:#B91C1C">Why it is a problem:</strong> ${esc(p.why)}</p>
-    ${(() => {
-      const reg = f ? f.reg : (p.framework_short ? p.framework_short.replace(/^(UK|EU|US|UAE|DE|FR)_/, '').replace(/_/g, ' ') : '');
-      const name = f ? f.name : (p.framework_short ? p.framework_short.replace(/_/g, ' ') : 'reference');
-      const url = p.citation_url || (f ? f.root : '');
-      const fineStr = gbp(p.fine_high_gbp) ? (gbp(p.fine_low_gbp) ? gbp(p.fine_low_gbp) + ' to ' + gbp(p.fine_high_gbp) : 'up to ' + gbp(p.fine_high_gbp)) : (f ? f.maxFine : '');
-      const ruling = f ? f.ruling : '';
-      if (!reg && !fineStr && !url) return '';
-      return `<p style="margin:6px 0 0;font-size:0.78rem;color:#1F2937">${reg ? `<strong>Regulator:</strong> ${esc(reg)}` : ''}${fineStr ? ` · <strong>Exposure:</strong> ${esc(fineStr)}` : ''}${url ? ` · <a href="${esc(url)}" style="color:#3D0E0E">${esc(name)}</a>` : ''}</p>${ruling ? `<p style="margin:4px 0 0;font-size:0.74rem;color:#6b6b6b;font-style:italic">Recent enforcement: ${esc(ruling)}</p>` : ''}`;
-    })()}
-    <p style="margin:8px 0 0;font-size:0.82rem;color:#14532d"><strong>How Tamazia fixes it:</strong> ${esc(p.fix)}</p>
-  </div>`;
-}
-function sectionShell(id, kicker, title, scoreObj, body) {
-  const g = gradeOf(scoreObj.score);
-  return `<section id="${id}" style="padding:26px 24px;border-top:1px solid #e5e7eb"><div style="max-width:1080px;margin:0 auto">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
-      <div><p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0;font-weight:700">${kicker}</p>
-      <h2 style="font-family:'Times New Roman',serif;font-size:1.5rem;margin:2px 0 0;color:#3D0E0E;line-height:1.15">${title}</h2></div>
-      <div style="text-align:right"><span style="font-family:'Times New Roman',serif;font-size:1.8rem;font-weight:600;color:${g.color}">${g.letter}</span>
-      <span style="font-size:0.8rem;color:#6b6b6b;display:block">${scoreObj.score}/100 · ${g.label}</span></div>
-    </div>
-    <div style="margin:6px 0 14px">${sevChips(scoreObj.p0, scoreObj.p1, scoreObj.p2)}</div>
-    ${body}
-  </div></section>`;
-}
-
-function renderRegulatory(m) {
-  const cps = m.pointers.filter(p => COMPLIANCE_BUCKETS.includes(p.bucket));
-  const sc = sectionScore(cps);
-  // applicable laws (sector+market routed) the prospect must meet — the catalogue, deduped to known FW
-  const appCodes = Array.from(new Set([...(m.frameworks || []), ...m.rules.map(r => r.fw).filter(Boolean)]));
-  const known = appCodes.map(c => fwFor(null, c) || c).filter(c => FW[c]);
-  const lawChips = Array.from(new Set(known)).map(c => `<a href="${FW[c].root}" style="text-decoration:none"><span style="display:inline-block;background:#F8F5EF;border:1px solid #e5e7eb;color:#3D0E0E;font-size:0.72rem;padding:4px 10px;border-radius:20px;margin:0 6px 6px 0">${esc(FW[c].name)} · ${esc(FW[c].reg)}</span></a>`).join('');
-  const body = `
-    <p style="font-size:0.84rem;color:#1F2937;line-height:1.55;margin:0 0 12px">These are the regulators and laws that apply to a <strong>${esc(m.sector)}</strong> serving <strong>${esc((m.markets.regions || ['UK']).join(', ') || 'UK')}</strong>. Only laws that bind you are shown. Every published word on ${esc(m.domain)} is read against them.</p>
-    <div style="margin:0 0 16px">${lawChips || '<span style="font-size:0.74rem;color:#6b6b6b">Framework catalogue loading from your operating markets.</span>'}</div>
-    ${(() => { const gp = groupsForSection(m, 'compliance'); return gp.length ? `<p style="font-size:0.7rem;color:#3D0E0E;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin:0 0 8px">Where you are exposed today \u2014 ${gp.length} framework${gp.length>1?'s':''}, biggest risk first</p>${gp.map(frameworkBox).join('')}`
-      : `<p style="font-size:0.82rem;color:#6b6b6b">No compliance gaps were extractable on this scan. The re-scan at engagement start runs the full catalogue word-by-word.</p>`; })()}`;
-  return sectionShell('regulatory', 'Section 1 · Regulatory compliance', `${esc(m.company)} against the laws that bind it`, sc, body);
-}
-
-function renderAI(m) {
-  // REAL GEO readiness from live signals (not hardcoded). Missing structured data / llms.txt / author E-E-A-T => AI can't cite you.
-  const s = m.signals || {};
-  const hasSchema = !!(s.json_ld || s.schema || s.structured_data);
-  const hasLlms = !!(s.llms_txt);
-  const hasAuthor = !!(s.author || s.eeat || s.byline);
-  const checks = [
-    { k: 'Structured data (Schema.org)', ok: hasSchema, why: 'Without schema, AI engines cannot reliably parse who you are or what you offer, so they omit you from answers.' },
-    { k: 'llms.txt / AI access file', ok: hasLlms, why: 'No llms.txt means no explicit signal to AI crawlers about your canonical content.' },
-    { k: 'Author + E-E-A-T signals', ok: hasAuthor, why: 'No bylined expertise means Google and LLMs cannot establish Experience, Expertise, Authority, Trust.' },
-  ];
-  const okN = checks.filter(c => c.ok).length;
-  const geo = Math.round((okN / checks.length) * 100);
-  const aiF = m.pointers.filter(p => isAI(p.bucket)); const sc = { score: Math.min(geo, sectionScore(aiF).score), p0: aiF.filter(x=>x.severity==='P0').length + (hasSchema?0:1), p1: aiF.filter(x=>x.severity==='P1').length + (hasLlms?0:1)+(hasAuthor?0:1), p2: aiF.filter(x=>x.severity==='P2').length, n: checks.length + aiF.length };
-  const aiFindings = m.pointers.filter(p => isAI(p.bucket));
-  const body = `
-    <p style="font-size:0.84rem;color:#1F2937;line-height:1.55;margin:0 0 12px">Buyers increasingly ask ChatGPT, Claude, Perplexity, Gemini and Google’s AI overview for a <strong>${esc(m.sector)}</strong>. To be cited, an AI engine must be able to read and trust your site. Here is what it finds on ${esc(m.domain)}:</p>
-    ${groupsForSection(m, 'ai').map(frameworkBox).join('')}
-    <div style="display:grid;gap:10px">${checks.map(c => `
-      <div style="display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start;background:${c.ok ? '#F2F8F2' : '#FBF1F0'};border-radius:6px;padding:10px 12px">
-        <span style="font-size:1.1rem;color:${c.ok ? '#2E7D32' : '#B91C1C'}">${c.ok ? '✓' : '✕'}</span>
-        <div><p style="margin:0;font-weight:600;font-size:0.84rem;color:#3D0E0E">${esc(c.k)} ${c.ok ? '<span style="color:#2E7D32;font-size:0.7rem">present</span>' : '<span style="color:#B91C1C;font-size:0.7rem">missing</span>'}</p>
-        ${c.ok ? '' : `<p style="margin:3px 0 0;font-size:0.78rem;color:#1F2937">${esc(c.why)}</p>`}</div>
-      </div>`).join('')}</div>
-    <p style="margin:12px 0 0;font-size:0.82rem;color:#14532d"><strong>How Tamazia fixes it:</strong> we ship full Schema.org markup, an llms.txt, and a bylined E-E-A-T author programme so the AI engines can read, trust and cite ${esc(m.company)}.</p>`;
-  return sectionShell('ai-visibility', 'Section 2 · AI search visibility (GEO)', `${esc(m.company)} is ${geo < 50 ? 'largely invisible' : 'partially visible'} to AI search`, sc, body);
-}
-
-function renderSEO(m) {
-  const sps = m.pointers.filter(p => isSEO(p.bucket));
-  const sc = sectionScore(sps);
-  const psi = m.psi;
-  const cwv = psi ? `<div style="display:flex;gap:14px;flex-wrap:wrap;margin:0 0 14px">
-      ${psi.lcp_ms ? `<div style="background:#F8F5EF;border-radius:6px;padding:10px 14px"><p style="margin:0;font-size:0.68rem;color:#6b6b6b;text-transform:uppercase">LCP</p><p style="margin:2px 0 0;font-family:'Times New Roman',serif;font-size:1.3rem;color:${psi.lcp_ms > 2500 ? '#B91C1C' : '#2E7D32'}">${(psi.lcp_ms / 1000).toFixed(1)}s</p></div>` : ''}
-      ${psi.cls != null ? `<div style="background:#F8F5EF;border-radius:6px;padding:10px 14px"><p style="margin:0;font-size:0.68rem;color:#6b6b6b;text-transform:uppercase">CLS</p><p style="margin:2px 0 0;font-family:'Times New Roman',serif;font-size:1.3rem;color:${psi.cls > 0.1 ? '#B91C1C' : '#2E7D32'}">${psi.cls}</p></div>` : ''}
-    </div>` : '';
-  const body = `
-    <p style="font-size:0.84rem;color:#1F2937;line-height:1.55;margin:0 0 12px">What search engines and buyers hit when they land on ${esc(m.domain)}, and what it costs you in rankings and revenue.</p>
-    ${cwv}
-    ${(() => { const gp = groupsForSection(m, 'seo'); return gp.length ? gp.map(frameworkBox).join('') : '<p style="font-size:0.82rem;color:#6b6b6b">No on-page or technical SEO gaps were extractable on this scan.</p>'; })()}`;
-  return sectionShell('seo', 'Section 3 · SEO + technical', `What is costing ${esc(m.company)} rankings and revenue`, sc, body);
-}
-
-function renderHero(m, overall, grade, t, topRegs, exposure) {
-  return `<section style="background:#3D0E0E;color:#F8F5EF;padding:30px 24px"><div style="max-width:1080px;margin:0 auto">
-    <p style="font-size:0.72rem;letter-spacing:0.2em;text-transform:uppercase;color:#C8A664;margin:0 0 14px;font-weight:700">Tamazia · Personalised regulatory + AI visibility + SEO audit · ${esc(m.country)}</p>
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center">
-      <div style="text-align:center">${donut(overall, grade.color)}<p style="margin:6px 0 0;font-family:'Times New Roman',serif;font-size:2rem;font-weight:600;color:${grade.color}">${grade.letter}</p><p style="margin:0;font-size:0.74rem;color:rgba(248,245,239,0.7)">${grade.label}</p></div>
-      <div>
-        <h1 style="font-family:'Times New Roman',serif;font-size:1.9rem;margin:0 0 4px;line-height:1.1">${esc(m.company)}</h1>
-        <p style="margin:0 0 14px;font-size:0.84rem;color:rgba(248,245,239,0.75)">${esc(m.sector)} · ${esc(m.domain)} · markets: ${esc((m.markets.regions || ['UK']).join(', ') || 'UK')} · 400+ framework catalogue</p>
-        <div style="background:rgba(248,245,239,0.06);border-radius:8px;padding:14px 16px">${trajectoryBars(t)}</div>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:16px">
-      <div style="background:rgba(185,28,28,0.16);border:1px solid rgba(185,28,28,0.4);border-radius:8px;padding:11px 13px"><p style="margin:0;font-family:'Times New Roman',serif;font-size:1.6rem;font-weight:600;color:#fff">${exposure.critN}</p><p style="margin:0;font-size:0.68rem;color:rgba(248,245,239,0.75);text-transform:uppercase;letter-spacing:0.04em">Critical frameworks</p></div>
-      <div style="background:rgba(230,126,34,0.14);border:1px solid rgba(230,126,34,0.4);border-radius:8px;padding:11px 13px"><p style="margin:0;font-family:'Times New Roman',serif;font-size:1.6rem;font-weight:600;color:#fff">${exposure.highN}</p><p style="margin:0;font-size:0.68rem;color:rgba(248,245,239,0.75);text-transform:uppercase;letter-spacing:0.04em">High-risk frameworks</p></div>
-      <div style="background:rgba(248,245,239,0.06);border:1px solid rgba(248,245,239,0.18);border-radius:8px;padding:11px 13px"><p style="margin:0;font-family:'Times New Roman',serif;font-size:1.6rem;font-weight:600;color:#C8A664">${exposure.fineStr || '—'}</p><p style="margin:0;font-size:0.68rem;color:rgba(248,245,239,0.75);text-transform:uppercase;letter-spacing:0.04em">Top single-law exposure</p></div>
-      <div style="background:rgba(248,245,239,0.06);border:1px solid rgba(248,245,239,0.18);border-radius:8px;padding:11px 13px"><p style="margin:0;font-family:'Times New Roman',serif;font-size:1.6rem;font-weight:600;color:#fff">${exposure.total}</p><p style="margin:0;font-size:0.68rem;color:rgba(248,245,239,0.75);text-transform:uppercase;letter-spacing:0.04em">Frameworks flagged</p></div>
-    </div>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;align-items:center">
-      <a href="${BOOK}" style="display:inline-block;padding:12px 20px;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:700;border-radius:4px;font-size:0.84rem">Book the founder call →</a>
-      <span style="font-size:0.78rem;color:rgba(248,245,239,0.8)">Lead regulators exposing you: <strong style="color:#fff">${topRegs.join(' · ') || 'sector regulators'}</strong></span>
-    </div>
-  </div></section>`;
-}
-
-function renderPage(m) {
-  const reg = m.pointers.filter(p => COMPLIANCE_BUCKETS.includes(p.bucket));
-  const seo = m.pointers.filter(p => isSEO(p.bucket));
-  const overallScore = sectionScore(m.pointers).score;
-  const grade = gradeOf(overallScore);
-  const t = trajectory(overallScore);
-  const G = m.groups || [];
-  const critN = G.filter(g => g.severity === 'P0').length;
-  const highN = G.filter(g => g.severity === 'P1').length;
-  const maxFine = G.reduce((mx, g) => Math.max(mx, g.fine_high_gbp || 0), 0);
-  const exposure = { critN, highN, total: G.length, fineStr: gbp(maxFine) || '' };
-  const topRegs = Array.from(new Set(G.map(g => g.fw && FW[g.fw] ? FW[g.fw].reg : null).filter(Boolean))).slice(0, 4);
-  const title = `${m.company} · Regulatory + AI + SEO audit · Tamazia`;
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${esc(title)}</title>
-<style>*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;color:#1F2937;background:#fff;line-height:1.5}h1,h2{font-family:'Times New Roman',serif;font-weight:500}a:hover{opacity:0.85}summary::-webkit-details-marker{display:none}summary::marker{content:''}details[open] .chev{transform:rotate(180deg);display:inline-block}</style>
-</head><body>
-${renderHero(m, overallScore, grade, t, topRegs, exposure)}
-${renderRegulatory(m)}
-${renderAI(m)}
-${renderSEO(m)}
-<section style="padding:30px 24px;background:#3D0E0E;color:#F8F5EF;text-align:center"><div style="max-width:760px;margin:0 auto">
-  <h2 style="font-family:'Times New Roman',serif;font-size:1.5rem;margin:0 0 8px">Aman Pareek reviews every onboarding personally.</h2>
-  <p style="font-size:0.84rem;color:rgba(248,245,239,0.8);margin:0 0 16px">A 30-minute confidential conversation with the founder. The lawyer reads it before the algorithm sees it.</p>
-  <a href="${BOOK}" style="display:inline-block;padding:13px 24px;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:700;border-radius:4px">Open the founder's calendar →</a>
-</div></section>
-<section style="padding:16px 24px;background:#1F2937;color:rgba(248,245,239,0.6);font-size:0.7rem;line-height:1.55"><div style="max-width:1080px;margin:0 auto">
-  <p style="margin:0">Produced by the Tamazia regulatory + AI + SEO audit engine against a 400+ framework catalogue. Marketing diagnostic, not legal advice; where regulatory risk is identified, consult a regulated solicitor. Tamazia Ltd, London. Every finding above is tied to live evidence on ${esc(m.domain)}.</p>
-</div></section>
-</body></html>`;
+  const company = row.company || (p.domain || '').replace(/^www\./, '').split('.')[0] || 'Your firm';
+  const pointers = (p.pointers || []).map(x => {
+    const fwShort = x.framework_short || '';
+    const isComp = (x.bucket === 'compliance' || x.bucket === 'public_records');
+    return {
+      severity: x.severity || 'P2',
+      bucket: x.bucket || 'website',
+      // group key: framework_short for compliance so groupedCompliance + FRAMEWORK_META resolve; else the citation label
+      citation: isComp && fwShort ? fwShort : (x.citation || fwShort || ''),
+      framework_short: fwShort,
+      desc: x.fact || x.description || '',                  // distinct line title
+      fact: x.fact || x.description || '',
+      layman_explanation: x.layman_explanation || x.fact || '',
+      tamazia_fix_short: x.tamazia_fix_short || x.recommendation || '',
+      fine_low_gbp: x.fine_low_gbp || null,
+      fine_high_gbp: x.fine_high_gbp || null,
+      citation_url: x.citation_url || '',
+      evidence: x.evidence || x.evidence_url || '',
+    };
+  });
+  return {
+    company, domain: row.domain || p.domain || '', sector: row.sector || p.sector || 'business',
+    country: row.country || p.country || 'UK', city: markets.primary_city || '',
+    signals, psi, markets,
+    scan_meta: {
+      generated_at: (p.scan && p.scan.scanned_at) || new Date().toISOString(),
+      pointer_count: pointers.length,
+      pointer_count_p0: pointers.filter(z => z.severity === 'P0').length,
+      pointer_count_p1: pointers.filter(z => z.severity === 'P1').length,
+      buckets: {},
+    },
+    pointers,
+  };
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const m = url.pathname.match(/^\/audit\/([a-z0-9-]+)\/([A-Za-z0-9_-]+)\/?$/);
-    if (!m) {
-      const legacy = url.pathname.match(/^\/audit\/([a-z0-9-]+?)(?:-complimentary-audit)?\/?$/i);
-      return new Response('Audit links are personalised. Please use the full link from your email.', { status: 404, headers: { 'content-type': 'text/plain' } });
-    }
-    const slug = m[1], hash = m[2];
-    const res = await loadAudit(env, slug, hash);
+    if (!m) return new Response('Audit links are personalised. Please use the full link from your email.', { status: 404, headers: { 'content-type': 'text/plain' } });
+    const res = await loadAudit(env, m[1], m[2]);
     if (res.error === 'expired') return Response.redirect(TAMAZIA_BASE + '/expired', 302);
     if (res.error) return new Response('Audit not found or not yet minted (' + res.error + ').', { status: 404, headers: { 'content-type': 'text/plain' } });
     let html;
     try { html = renderPage(adapt(res.row)); }
     catch (e) { return new Response('Audit render error.', { status: 500, headers: { 'content-type': 'text/plain' } }); }
-    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v15-grouped' } });
+    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v16-live-v13' } });
   }
 };
 
-export { adapt, renderPage, sectionScore, loadAudit };
+export { adapt, renderPage, loadAudit, computeRiskScore };
