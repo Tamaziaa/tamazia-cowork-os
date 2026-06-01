@@ -184,6 +184,7 @@ async function scanSite({ domain, sector, env }) {
     return { scanned_at: new Date().toISOString(), final_url: page.finalUrl, reachable: false, signals: {}, psi: null, pointers: pts, counts: { total: pts.length, p0: 0, p1: pts.filter(p => p.severity === 'P1').length, p2: pts.filter(p => p.severity !== 'P1').length } };
   }
   const sig = extractSignals(page);
+  try { sig.ad_tech = require('./ad-tech.js').detectAdTech(page.body); } catch (_) { sig.ad_tech = { runs_ads: false, platforms: [] }; }
   const key = (env && (env.PAGESPEED_API_KEY || env.PSI_KEY)) || process.env.PAGESPEED_API_KEY || null;
   const psi = await pageSpeed(clean, key);
   const [robots, sitemap, llms] = await Promise.all([
