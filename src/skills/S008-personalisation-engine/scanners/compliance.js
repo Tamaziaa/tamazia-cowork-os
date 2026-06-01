@@ -236,6 +236,13 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // then expand framework routing to include every detected jurisdiction.
   const corpus = await gatherCorpus({ domain });
   const corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+  // CREDIBILITY GUARD: an empty/unreadable corpus (site blocked our crawler, JS-only, or down) cannot support
+  // any 'missing disclosure' finding. Asserting 50+ must_appear misses against no text is a false-positive. Bail.
+  if (!corpus.length || corpusText.replace(/\s+/g, '').length < 500) {
+    const payload = { domain, sector, country, ok: true, reachable: false, rules_evaluated: 0, findings: [], note: 'corpus_unreadable_site_blocked_or_down' };
+    writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 3600 });
+    return payload;
+  }
   // Credibility guard: a privacy/cookie policy that only renders via JavaScript/iframe is invisible to static
   // scanning (and to AI crawlers). We must NOT assert granular "missing disclosure" breaches we cannot verify.
   const PRIVACY_FW = new Set(['UK_GDPR_A13', 'EU_GDPR', 'EU_GDPR_A13', 'UK_DPA_2018']);
