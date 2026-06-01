@@ -42,6 +42,35 @@ async function exists(url) {
   } catch (_e) { return null; } // null = could not determine
 }
 
+async function getText(url) {
+  try { const r = await timed((signal) => fetch(url, { redirect: 'follow', headers: { 'user-agent': UA }, signal }), 10000); if (!r.ok) return ''; return await r.text(); } catch (_e) { return ''; }
+}
+// --- AI crawler access (GEO): is the site blocking the bots that feed ChatGPT/Claude/Perplexity/Google AI? ---
+function aiCrawlerPointers(robotsBody) {
+  const out = []; const b = String(robotsBody || '');
+  const bots = ['GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'anthropic-ai', 'Claude-Web', 'PerplexityBot', 'Google-Extended', 'CCBot', 'Applebot-Extended', 'Bytespider'];
+  const blocked = bots.filter(bot => new RegExp('user-agent:\\s*' + bot + '[\\s\\S]{0,300}?disallow:\\s*/', 'i').test(b));
+  if (blocked.length) out.push(P('ai_visibility', 'P1', 'AI crawler access', 'Your robots.txt blocks AI crawlers: ' + blocked.slice(0, 6).join(', ') + '.', 'These are the exact bots that let ChatGPT, Claude, Perplexity and Google AI read and cite your site. Blocking them guarantees you are absent from AI answers in your category while competitors who allow them get named.', 'Tamazia opens the right AI crawlers (and blocks only what should stay private) so AI engines can read and cite you.', 'robots.txt · Disallow for ' + blocked.join(', ')));
+  return out;
+}
+// --- CrUX real-user field data (free, same Google key) ---
+async function cruxField(domain, key) {
+  if (!key) return null;
+  try {
+    const r = await timed((signal) => fetch('https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=' + key, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ origin: 'https://' + domain }), signal }), 12000);
+    if (!r || !r.ok) return null;
+    const d = await r.json(); const m = (d.record && d.record.metrics) || {};
+    const p75 = (k) => (m[k] && m[k].percentiles) ? m[k].percentiles.p75 : null;
+    return { lcp: p75('largest_contentful_paint'), inp: p75('interaction_to_next_paint'), cls: p75('cumulative_layout_shift') };
+  } catch (_e) { return null; }
+}
+function cruxPointers(crux) {
+  const out = []; if (!crux) return out;
+  if (crux.lcp && crux.lcp > 2500) out.push(P('technical_seo', crux.lcp > 4000 ? 'P1' : 'P2', 'Core Web Vitals · real-user LCP', 'Real Chrome users experience an LCP of ' + (crux.lcp / 1000).toFixed(1) + 's (Google target under 2.5s).', 'This is field data from real visitors in Google\'s Chrome UX Report, the exact data Google uses for ranking. Slow real-world load is the single most common reason buyers bounce before reading anything.', 'Tamazia brings real-user LCP under 2.5s.', 'CrUX field data · p75 LCP ' + Math.round(crux.lcp) + 'ms'));
+  if (crux.inp && crux.inp > 200) out.push(P('technical_seo', crux.inp > 500 ? 'P1' : 'P2', 'Core Web Vitals · real-user INP', 'Real users experience an INP of ' + Math.round(crux.inp) + 'ms (Google target under 200ms).', 'Interaction to Next Paint is a Core Web Vital and a ranking factor. High INP means the site feels sluggish when users click or type.', 'Tamazia reduces INP below 200ms.', 'CrUX field data · p75 INP ' + Math.round(crux.inp) + 'ms'));
+  if (crux.cls != null && crux.cls > 0.1) out.push(P('technical_seo', 'P2', 'Core Web Vitals · real-user CLS', 'Real users experience a CLS of ' + Number(crux.cls).toFixed(2) + ' (target under 0.1).', 'Layout shift frustrates real visitors and is a Google ranking factor.', 'Tamazia eliminates layout shift.', 'CrUX field data · p75 CLS ' + Number(crux.cls).toFixed(3)));
+  return out;
+}
 // --- HTML signal extraction (real, from the fetched page) ---
 function extractSignals({ body, headers }) {
   const b = (body || '');
@@ -65,6 +94,9 @@ function extractSignals({ body, headers }) {
     hsts: !!headers['strict-transport-security'],
     csp: !!headers['content-security-policy'],
     xcto: !!headers['x-content-type-options'],
+    xfo: !!headers['x-frame-options'],
+    refpol: !!headers['referrer-policy'],
+    permpol: !!headers['permissions-policy'],
     html_bytes: b.length,
     // CONNECTION-LAYER trigger signals (wappalyzer-style fingerprints) — drive which laws actually attach
     uses_ai: /intercom|drift\.com|tidio|tawk\.to|crisp\.chat|livechatinc|live ?chat|botpress|voiceflow|dialogflow|api\.openai|openai|chatgpt|gpt-?4|anthropic|claude\.ai|perplexity|ai[- ]?(assistant|chatbot|powered|widget)|chatbot|kommunicate|manychat/i.test(b),
@@ -155,6 +187,15 @@ function pointersFromSignals(sig, psi, sector) {
       'A missing CSP leaves the site more exposed to script-injection and is another item flagged in client security reviews.',
       'Tamazia ships a tuned CSP.',
       'response headers · content-security-policy absent'));
+  }
+  if (!sig.xfo && !sig.csp) {
+    out.push(P('security', 'P2', 'Clickjacking protection', 'No X-Frame-Options or CSP frame-ancestors directive.', 'The site can be embedded in a hostile iframe (clickjacking), and corporate-client security questionnaires check for this. An avoidable trust gap.', 'Tamazia sets X-Frame-Options and CSP frame-ancestors.', 'response headers · x-frame-options absent'));
+  }
+  if (!sig.refpol) {
+    out.push(P('security', 'P3', 'Referrer-Policy', 'No Referrer-Policy header.', 'Full URLs (which can carry sensitive query parameters) leak to third parties on outbound navigation without a Referrer-Policy.', 'Tamazia sets a strict Referrer-Policy.', 'response headers · referrer-policy absent'));
+  }
+  if (!sig.permpol) {
+    out.push(P('security', 'P3', 'Permissions-Policy', 'No Permissions-Policy header.', 'Powerful browser features (camera, microphone, geolocation) are not restricted, widening the attack surface a security review will flag.', 'Tamazia sets a least-privilege Permissions-Policy.', 'response headers · permissions-policy absent'));
   }
   // PageSpeed-derived (only when a key is configured)
   if (psi) {
@@ -314,6 +355,10 @@ async function scanSite({ domain, sector, env }) {
   ]);
   const pointers = pointersFromSignals(sig, psi, sector || '');
   for (const pp of psiPointers(psi)) pointers.push(pp);
+  // AI crawler access (GEO) from robots.txt body
+  try { const robotsBody = await getText('https://' + clean + '/robots.txt'); for (const pp of aiCrawlerPointers(robotsBody)) pointers.push(pp); } catch (_e) {}
+  // CrUX real-user field data (free, same key)
+  try { const crux = await cruxField(clean, key); for (const pp of cruxPointers(crux)) pointers.push(pp); } catch (_e) {}
   let wikidata = { checked: false, present: false };
   try { wikidata = await wikidataEntity(clean); } catch (_e) {}
   for (const gp of geoPointers({ html: page.body, signals: sig, sector: sector || '', wikidata, domain: clean })) pointers.push(gp);
