@@ -158,8 +158,13 @@ async function run() {
   const MAX_PER_RUN = Math.max(1, Number(process.env.SEND_MAX_PER_RUN || 6));
   const GAP_MIN_S = Math.max(0, Number(process.env.SEND_GAP_MIN_S || 35));
   const GAP_MAX_S = Math.max(GAP_MIN_S, Number(process.env.SEND_GAP_MAX_S || 95));
-  const batch = due.slice(0, MAX_PER_RUN);
-  console.log(`Touch scheduler · ${due.length} due · sending up to ${batch.length} this run (cap ${MAX_PER_RUN}, gap ${GAP_MIN_S}-${GAP_MAX_S}s) · ${new Date().toISOString()}`);
+  // PHASE D · daily warmup-aware budget on TOP of the per-run cap. Only enforced when we can read real
+  // inbox/warmup capacity (cap>0); otherwise we fall back to the per-run cap so we never wrongly halt sends.
+  let dayRemaining = Infinity;
+  try { const { sendBudget } = require('../../../lib/send-pacing.js'); const b = await sendBudget(); if (b && b.cap > 0) { dayRemaining = b.remaining; console.log(`  daily budget: ${b.remaining}/${b.cap} remaining (inboxes ${b.inboxes}, warmup day ${b.warmup_day})`); } } catch (_e) {}
+  const effectiveCap = Math.max(0, Math.min(MAX_PER_RUN, dayRemaining));
+  const batch = due.slice(0, effectiveCap);
+  console.log(`Touch scheduler · ${due.length} due · sending up to ${batch.length} this run (per-run ${MAX_PER_RUN}, daily ${dayRemaining === Infinity ? 'n/a' : dayRemaining}, gap ${GAP_MIN_S}-${GAP_MAX_S}s) · ${new Date().toISOString()}`);
   const results = [];
   let sentThisRun = 0;
   for (let i = 0; i < batch.length; i++) {
