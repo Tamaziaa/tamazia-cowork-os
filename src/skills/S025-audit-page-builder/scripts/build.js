@@ -69,7 +69,22 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
   let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
   try { scan = await scanSite({ domain, sector, env }); } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
-  const frameworks = router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector, signals: scan.signals }) : router.routeJurisdictions({ country, sector });
+  // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
+  let comp = { frameworks: [], findings: [] };
+  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: country || 'UK', signals: scan.signals }); } catch (_e) {}
+  const frameworks = (comp.frameworks && comp.frameworks.length)
+    ? comp.frameworks
+    : (router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector, signals: scan.signals }) : router.routeJurisdictions({ country, sector }));
+  const compPointers = (comp.findings || []).filter(f => f.status === 'miss').map(f => ({
+    bucket: 'compliance', severity: f.severity || 'P2',
+    fact: f.description || ((f.framework || '') + ' ' + (f.code || '')),
+    layman_explanation: f.layman_explanation || f.description || '',
+    tamazia_fix_short: f.tamazia_fix_short || 'Tamazia closes this gap as part of the engagement.',
+    recommendation: f.tamazia_fix_short || '',
+    citation: f.framework, framework_short: f.framework, citation_url: f.citation_url || '',
+    evidence: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || 'multi-page corpus scan',
+    fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
+  }));
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';
   const lr = pg(`SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'`) || new Date().toISOString().slice(0, 10);
   const rulesList = frameworks.map(f => `'${f}'`).join(',');
@@ -80,7 +95,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   }) : [];
 
   const sevRank = { P0: 0, P1: 1, P2: 2 };
-  const findings = [...(scan.pointers || [])].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
+  const findings = [...compPointers, ...(scan.pointers || [])].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   const threeFindings = findings.slice(0, 3);
 
   return {

@@ -81,6 +81,7 @@ function fwFor(citation, frameworkShort) {
 }
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+function gbp(n){ n=Number(n); if(!n) return null; if(n>=1000000) return '£'+(n/1000000).toFixed(n>=10000000?0:1).replace('.0','')+'M'; if(n>=1000) return '£'+Math.round(n/1000)+'k'; return '£'+n; }
 const SEV = { P0: 0, P1: 1, P2: 2 };
 
 // ---- REAL scoring from real findings ----
@@ -142,6 +143,10 @@ function adapt(row) {
     bucket: x.bucket || 'website',
     citation: x.citation || '',
     evidence: x.evidence || '',
+    citation_url: x.citation_url || '',
+    framework_short: x.framework_short || '',
+    fine_low_gbp: x.fine_low_gbp || null,
+    fine_high_gbp: x.fine_high_gbp || null,
     fw: fwFor(x.citation, x.framework_short),
   })).sort((a, b) => (SEV[a.severity] ?? 3) - (SEV[b.severity] ?? 3));
   const rules = (p.rules || []).map(r => ({ code: r.framework_short, rule_id: r.rule_id, severity: r.severity, description: r.description, url: r.citation_url, fw: fwFor(null, r.framework_short) }));
@@ -192,8 +197,15 @@ function findingCard(p) {
     </div>
     ${p.evidence ? `<p style="margin:6px 0 0;font-size:0.72rem;color:#6b6b6b">Evidence on your site: ${esc(p.evidence)}</p>` : ''}
     <p style="margin:8px 0 0;font-size:0.82rem;color:#1F2937;line-height:1.5"><strong style="color:#B91C1C">Why it is a problem:</strong> ${esc(p.why)}</p>
-    ${f ? `<p style="margin:6px 0 0;font-size:0.78rem;color:#1F2937"><strong>Regulator:</strong> ${esc(f.reg)} · <strong>Exposure:</strong> ${esc(f.maxFine)} · <a href="${f.root}" style="color:#3D0E0E">${esc(f.name)}</a></p>
-    <p style="margin:4px 0 0;font-size:0.74rem;color:#6b6b6b;font-style:italic">Recent enforcement: ${esc(f.ruling)}</p>` : ''}
+    ${(() => {
+      const reg = f ? f.reg : (p.framework_short ? p.framework_short.replace(/^(UK|EU|US|UAE|DE|FR)_/, '').replace(/_/g, ' ') : '');
+      const name = f ? f.name : (p.framework_short ? p.framework_short.replace(/_/g, ' ') : 'reference');
+      const url = p.citation_url || (f ? f.root : '');
+      const fineStr = gbp(p.fine_high_gbp) ? (gbp(p.fine_low_gbp) ? gbp(p.fine_low_gbp) + ' to ' + gbp(p.fine_high_gbp) : 'up to ' + gbp(p.fine_high_gbp)) : (f ? f.maxFine : '');
+      const ruling = f ? f.ruling : '';
+      if (!reg && !fineStr && !url) return '';
+      return `<p style="margin:6px 0 0;font-size:0.78rem;color:#1F2937">${reg ? `<strong>Regulator:</strong> ${esc(reg)}` : ''}${fineStr ? ` · <strong>Exposure:</strong> ${esc(fineStr)}` : ''}${url ? ` · <a href="${esc(url)}" style="color:#3D0E0E">${esc(name)}</a>` : ''}</p>${ruling ? `<p style="margin:4px 0 0;font-size:0.74rem;color:#6b6b6b;font-style:italic">Recent enforcement: ${esc(ruling)}</p>` : ''}`;
+    })()}
     <p style="margin:8px 0 0;font-size:0.82rem;color:#14532d"><strong>How Tamazia fixes it:</strong> ${esc(p.fix)}</p>
   </div>`;
 }
