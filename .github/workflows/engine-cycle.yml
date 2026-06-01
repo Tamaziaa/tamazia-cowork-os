@@ -28,7 +28,11 @@ jobs:
       - name: Install Python deps (pg8000 for DB shim)
         run: python -m pip install --quiet -r requirements.txt
       - name: Materialise .env from secret
-        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+        run: |
+          echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+          if ! grep -q '^PAGESPEED_API_KEY=' .env && [ -n "${{ secrets.PAGESPEED_API_KEY }}" ]; then
+            echo "PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}" >> .env
+          fi
       - name: Run engine cycle
         run: |
           bash scripts/run-engine-cycle.sh
