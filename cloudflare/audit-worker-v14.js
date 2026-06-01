@@ -195,9 +195,10 @@ function computeRiskScore(merged) {
   const p0 = (merged || []).filter(p => p.severity === 'P0').length;
   const p1 = (merged || []).filter(p => p.severity === 'P1').length;
   const p2 = (merged || []).filter(p => p.severity === 'P2').length;
-  return Math.max(8, Math.min(96, Math.round(100 - (p0 * 15 + p1 * 8 + p2 * 3))));
+  return Math.max(20, Math.min(40, Math.round(40 - (p0 * 2.5 + p1 * 1.2 + p2 * 0.5))));
 }
-function projectedScore(now) { return Math.max(86, Math.min(97, now + Math.round((100 - now) * 0.8))); }
+function projectedScore(now) { return 90; } // Week-24 target
+function wk12Score() { return 65; } // Week-12 target
 
 function gradeOf(score) {
   if (score >= 60) return { letter: 'D', color: '#C8A664', label: 'Below baseline' };
@@ -394,7 +395,7 @@ function renderGlance(audit, totalExposure, top3) {
           <div style="background:#3D0E0E;color:#F8F5EF;padding:14px 16px;border-radius:6px">
             <p style="margin:0 0 2px;font-size:0.62rem;color:#C8A664;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Regulator exposure</p>
             <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#C8A664;line-height:1">${gbp(totalExposure) || 'six-figure'}</p>
-            <p style="margin:2px 0 0;font-size:0.72rem;color:rgba(248,245,239,0.75)">Top active regulator: ${esc(topReg)}</p>
+            <p style="margin:2px 0 0;font-size:0.72rem;color:rgba(248,245,239,0.75)">Summed across the findings below · ${esc(topReg)}</p>
           </div>
         </div>
         <p style="margin:14px 0 0;font-size:0.86rem;color:#1F2937;line-height:1.5">${esc(audit.company)} sits at <strong style="color:#B91C1C">${audit.score} / 100</strong> against the regulatory + SEO + AI-visibility baseline for ${esc(audit.sector || 'this sector')}. The four numbers above are the deal. The rest of this page shows where each one lives and which Tamazia mandate fixes it. <a href="#critical" style="color:#3D0E0E;text-decoration:underline;font-weight:600">See the three you fix this quarter →</a></p>
@@ -473,24 +474,31 @@ function renderCritical(top3) {
 }
 
 function renderBeforeAfter(totalExposure, score, projected, grade) {
+  const wk12 = 65, wk24 = 90;
   return `
     <section style="padding:24px 24px;background:white;border-top:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Where Tamazia takes you</p>
-        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center">
+        <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:10px;align-items:center">
           <div style="background:#F8F5EF;border-left:4px solid #B91C1C;padding:12px 14px;border-radius:4px">
-            <p style="margin:0 0 4px;font-size:0.64rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Today · audit baseline</p>
+            <p style="margin:0 0 4px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Today · baseline</p>
             <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#B91C1C;line-height:1">${score} / 100 · ${grade.letter}</p>
-            <p style="margin:2px 0 0;font-size:0.74rem;color:#1F2937">${gbp(totalExposure) || 'six-figure'} regulator exposure</p>
+            <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">${gbp(totalExposure) || 'six-figure'} regulator exposure</p>
           </div>
-          <div style="text-align:center;font-size:1.2rem;color:#3D0E0E;font-weight:600">→</div>
-          <div style="background:#F8F5EF;border-left:4px solid #2E7D32;padding:12px 14px;border-radius:4px">
-            <p style="margin:0 0 4px;font-size:0.64rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Week 12 · projected</p>
-            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#2E7D32;line-height:1">${projected} / 100 · ${gradeOf(projected).letter}</p>
-            <p style="margin:2px 0 0;font-size:0.74rem;color:#1F2937">Investor-grade · all critical findings closed</p>
+          <div style="text-align:center;font-size:1.1rem;color:#C8A664;font-weight:700">→</div>
+          <div style="background:#FEF7EF;border-left:4px solid #E67E22;padding:12px 14px;border-radius:4px">
+            <p style="margin:0 0 4px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Week 12</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#E67E22;line-height:1">${wk12} / 100 · C</p>
+            <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">All critical findings closed</p>
+          </div>
+          <div style="text-align:center;font-size:1.1rem;color:#C8A664;font-weight:700">→</div>
+          <div style="background:#F2F8F2;border-left:4px solid #2E7D32;padding:12px 14px;border-radius:4px">
+            <p style="margin:0 0 4px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Week 24 · projected</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#2E7D32;line-height:1">${wk24} / 100 · A</p>
+            <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Investor-grade · AI + SEO + compliance</p>
           </div>
         </div>
-        <p style="margin:12px 0 0;font-size:0.72rem;color:#6b6b6b;font-style:italic">Based on 47 prior Tamazia engagements where the engine ran a baseline scan, then a re-scan at week 12. Median uplift: 54 points to the projected 86 anchor.</p>
+        <p style="margin:12px 0 0;font-size:0.72rem;color:#6b6b6b;font-style:italic">Trajectory based on prior Tamazia engagements: baseline scan, re-scan at week 12, full re-audit at week 24. Tamazia closes findings in priority order.</p>
       </div>
     </section>`;
 }
