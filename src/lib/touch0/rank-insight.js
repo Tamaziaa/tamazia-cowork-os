@@ -40,7 +40,7 @@ function keywordsFor(sector, city, serviceNoun) {
 }
 
 async function checkKeyword(keyword, domain, country) {
-  const r = await serp.search(keyword, country, 20);
+  const r = await serp.search(keyword, country, 100); // full depth → real live position
   if (!r || r.error || !((r.organic || []).length)) return null; // GATE: unverified → drop
   const ranked = r.organic.map(o => ({ pos: o.rank, domain: o.domain })).filter(x => x.domain);
   const mine = ranked.find(x => x.domain === domain);

@@ -108,8 +108,14 @@ async function processLead(lead) {
   if (!alias) return { lead_id: lead.id, skipped: 'no_eligible_alias_quota_exhausted' };
 
   const fromName = alias.persona_name || alias.first_name || 'Aman Pareek';
+  // Signature MUST match the sending alias. Fill the __SIGNATURE__ token with the alias's first name,
+  // and scrub any stray dash one last time before the wire.
+  let _nd = (x) => x; try { _nd = require('../../../lib/gates.js').noDashes; } catch (_) {}
+  const sigName = alias.first_name || (alias.persona_name || '').split(' ')[0] || 'Aman';
+  const sendBody = _nd(String(draft.body).replace(/__SIGNATURE__/g, sigName));
+  const sendSubject = _nd(String(draft.subject));
   // Send via the multi-relay router (routes by alias.relay, fails over, enforces daily caps)
-  const result = await routerSend({ to: lead.email, from: alias.email, from_name: fromName, subject: draft.subject, text: draft.body, relay: alias.relay });
+  const result = await routerSend({ to: lead.email, from: alias.email, from_name: fromName, subject: sendSubject, text: sendBody, relay: alias.relay });
   if (!result.ok) return { lead_id: lead.id, error: 'send_failed', detail: result.attempts };
   const email_id = result.id;
   markUsed(alias.id);

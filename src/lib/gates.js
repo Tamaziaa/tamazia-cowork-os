@@ -52,6 +52,15 @@ const checks = {
 // Foolproof placeholder check — no email leaves with an unfilled variable. Catches {x} templates,
 // undefined/null/NaN, [square] placeholders, empty quotes, and the tell-tale gaps an empty variable
 // leaves behind ("and  is", "Best UK  2026", "#undefined").
+// Strict no-dash rule. Replaces em/en dashes and ' - ' used as a pause with clean punctuation,
+// and leaves hyphenated words (e.g. 'co-founder', 'top-3') intact.
+function noDashes(text) {
+  return String(text || '')
+    .replace(/\s*[\u2014\u2013]\s*/g, ', ')   // em/en dash → comma
+    .replace(/(\S)\s+-\s+(\S)/g, '$1, $2')      // ' - ' pause → comma (keeps in-word hyphens)
+    .replace(/, ,/g, ',').replace(/\s+,/g, ',');
+}
+function hasDashPause(text) { return /[\u2014\u2013]/.test(String(text || '')) || /\S\s+-\s+\S/.test(String(text || '')); }
 function validatePlaceholders(subject, body) {
   const t = String(subject || '') + '\n' + String(body || '');
   const issues = [];
@@ -72,9 +81,10 @@ function validateEmail(subject, body, opts = {}) {
   const linkOk = !needsLink || /https?:\/\/[^ ]+\/audit\//.test(String(body || '')) || /https?:\/\//.test(String(opts.audit_url || ''));
   // curated = the body carries real, lead-specific substance (a keyword-ranking line or a named finding),
   // not just the generic fallback. Prevents sending a hollow email to a lead we have no real signal for.
-  const curatedOk = !opts.requireCurated || /"[^"]+"\s*\u2014\s*(#\d+|not on page one)/.test(String(body || '')) || /flag(s|ged)?\s+[a-z]/.test(String(body || ''));
-  const ok = len.ok && ph.ok && linkOk && curatedOk;
-  return { ok, length: len, placeholders: ph, link_ok: linkOk, curated_ok: curatedOk, reasons: [...(len.ok ? [] : ['length:' + JSON.stringify(len)]), ...(ph.ok ? [] : ['placeholders:' + ph.issues.join(',')]), ...(linkOk ? [] : ['missing_audit_link']), ...(curatedOk ? [] : ['not_curated'])] };
+  const curatedOk = !opts.requireCurated || /"[^"]+"\s*[:\u2014-]\s*(#\d+|outside the top 100|not on page one)/.test(String(body || '')) || /flag(s|ged)?\s+[a-z]/.test(String(body || ''));
+  const dashOk = !hasDashPause(String(subject || '') + '\n' + String(body || ''));
+  const ok = len.ok && ph.ok && linkOk && curatedOk && dashOk;
+  return { ok, length: len, placeholders: ph, link_ok: linkOk, curated_ok: curatedOk, reasons: [...(len.ok ? [] : ['length:' + JSON.stringify(len)]), ...(ph.ok ? [] : ['placeholders:' + ph.issues.join(',')]), ...(linkOk ? [] : ['missing_audit_link']), ...(curatedOk ? [] : ['not_curated']), ...(dashOk ? [] : ['contains_dash'])] };
 }
 // Convenience: validate an email's subject+body length. Returns { ok, body_words, subject_chars }.
 function checkEmailLength(subject, body, maxWords = 120, maxSubject = 65) {
@@ -83,4 +93,4 @@ function checkEmailLength(subject, body, maxWords = 120, maxSubject = 65) {
   return { ok: body_words >= 25 && body_words <= maxWords && subject_chars <= maxSubject, body_words, subject_chars };
 }
 
-module.exports = { runGate, checks, checkEmailLength, validatePlaceholders, validateEmail };
+module.exports = { runGate, checks, checkEmailLength, validatePlaceholders, validateEmail, noDashes, hasDashPause };

@@ -16,7 +16,9 @@ const ROOT = path.resolve(__dirname, '..');
 (() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
 function pg(sql) { try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString(); } catch (e) { return ''; } }
 function csv(v) { const s = v == null ? '' : String(v); return '"' + s.replace(/"/g, '""') + '"'; }
-const HEADERS = ['email','first_name','last_name','company','website','sector','audit_url','finding','linkedin','instagram'];
+const HEADERS = ['email','first_name','last_name','company','website','sector','audit_url','finding','linkedin','instagram','rank_insight','keyword_1','position_1','competitor_1','keyword_2','position_2','keyword_3','position_3','blog_title','city'];
+let _nd = (x) => x; try { _nd = require(require('path').resolve(__dirname, '..', 'src', 'lib', 'gates.js')).noDashes; } catch (_) {}
+function _pos(k) { return k && k.my_position ? '#' + k.my_position : 'outside the top 100'; }
 
 (async () => {
   const limit = Number(process.argv[2] || 1000);
@@ -26,7 +28,9 @@ const HEADERS = ['email','first_name','last_name','company','website','sector','
            regexp_replace(COALESCE(l.company,''),'[\\t\\r\\n]',' ','g'),
            COALESCE(l.domain,''), COALESCE(l.sector,''), COALESCE(l.audit_url,''),
            regexp_replace(COALESCE(l.personalisation_pointers->>'top_finding',''),'[\\t\\r\\n]',' ','g'),
-           COALESCE(l.linkedin_url,''), COALESCE(l.instagram_handle,'')
+           COALESCE(l.linkedin_url,''), COALESCE(l.instagram_handle,''),
+           regexp_replace(COALESCE(l.rank_insight_sentence,''),'[\\t\\r\\n]',' ','g'),
+           COALESCE(l.rank_insight::text,'{}'), COALESCE(l.operating_city,'')
     FROM leads l
     WHERE l.quality_fit = TRUE
       AND COALESCE(l.lifecycle_stage,'') = 'qualified'
@@ -36,8 +40,18 @@ const HEADERS = ['email','first_name','last_name','company','website','sector','
   if (!rows.length) { console.log('mystrika-export · 0 FIT leads ready (need quality_fit=TRUE, lifecycle=qualified).'); return; }
   const emailRows = [], socialRows = [];
   for (const r of rows) {
-    const [email, first, last, company, domain, sector, audit, finding, li, ig] = r;
-    const line = [email, first, last, company, domain, sector, audit, finding, li, ig].map(csv).join(',');
+    const [email, first, last, company, domain, sector, audit, finding, li, ig, riSentence, riJson, city] = r;
+    let ri = {}; try { ri = JSON.parse(riJson || '{}'); } catch (_) {}
+    const kw = ri.keywords || [];
+    const cols = [
+      email, first, last, company, domain, sector, audit, _nd(finding), li, ig,
+      _nd(riSentence),
+      kw[0] ? kw[0].keyword : '', kw[0] ? _pos(kw[0]) : '', kw[0] ? (kw[0].leader || '') : '',
+      kw[1] ? kw[1].keyword : '', kw[1] ? _pos(kw[1]) : '',
+      kw[2] ? kw[2].keyword : '', kw[2] ? _pos(kw[2]) : '',
+      _nd(ri.blog_offer || ''), city,
+    ];
+    const line = cols.map(csv).join(',');
     if (email) emailRows.push(line); else if (li || ig) socialRows.push(line);
   }
   const dir = path.join(ROOT, 'exports'); fs.mkdirSync(dir, { recursive: true });

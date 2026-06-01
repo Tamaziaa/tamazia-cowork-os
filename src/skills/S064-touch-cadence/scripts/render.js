@@ -74,9 +74,9 @@ function buildTouch0({ lead, apolloOrg, findings }) {
   const blogTitle = ri.blog_offer || SECTOR_TITLE[lead.sector] || `Best UK ${lead.sector || 'business'} 2026`;
   const kws = (ri.keywords || []).filter(k => k && k.keyword).slice(0, 3);
   const kwLine = (k) => {
-    const pos = k.my_position ? `#${k.my_position}` : 'not on page one';
-    const note = k.leader ? (k.my_position ? ` (${k.leader} holds #1)` : ` (${k.leader} owns #1)`) : '';
-    return `"${k.keyword}" \u2014 ${pos}${note}`;
+    const pos = k.my_position ? `#${k.my_position}` : 'outside the top 100';
+    const note = k.leader ? (k.my_position ? ` (${k.leader} at #1)` : ` (${k.leader} at #1)`) : '';
+    return `"${k.keyword}": ${pos}${note}`;
   };
   const subject = (kws[0] && kws[0].keyword)
     ? `${company} + "${kws[0].keyword}"`
@@ -91,7 +91,7 @@ function buildTouch0({ lead, apolloOrg, findings }) {
   } else {
     lines.push('', `We ran you a complimentary compliance + SEO audit (\u00a31,500 list) of the site.`);
   }
-  lines.push('', `Happy to be featured? And who is the right person to send the audit to?`, '', 'Aman');
+  lines.push('', `Happy to be featured? And who is the right person to send the audit to?`, '', '__SIGNATURE__');
   return { subject, body: lines.join('\n'), touch: 0 };
 }
 
@@ -109,7 +109,7 @@ function buildTouch1({ lead, findings }) {
     auditUrl, '',
     `It names the regulator and the fix for every issue, and benchmarks you against the firms outranking you.${top}`, '',
     `30 minutes with the founder: https://tamazia.co.uk/book/`, '',
-    'Aman',
+    '__SIGNATURE__',
   ].join('\n');
   return { subject, body, touch: 1 };
 }
@@ -129,7 +129,7 @@ ${lead.audit_url || 'https://audit.tamazia.co.uk/audit/' + (lead.company || '').
 Stays live for 180 days. Worth comparing line by line against the last report your current agency delivered.
 
 Best,
-Aman`;
+__SIGNATURE__`;
   return { subject, body, touch: 2 };
 }
 
@@ -144,7 +144,7 @@ Closing the file. The audit at ${lead.audit_url || 'https://audit.tamazia.co.uk/
 If the ${primary} ever lands on the team's desk, the audit has the fix, or the founder's calendar is at https://tamazia.co.uk/book/.
 
 Best,
-Aman`;
+__SIGNATURE__`;
   return { subject, body, touch: 3 };
 }
 
@@ -165,10 +165,12 @@ async function renderAll(lead_id) {
   }
   const findings = topAuditFindings(lead.pointers || []);
   if (!findings.length) findings.push('Compliance posture awaiting full audit re-scan; engine flags pending review');
-  const t0 = _validate(buildTouch0({ lead, apolloOrg, findings }), { requireCurated: true });
-  const t1 = _validate(buildTouch1({ lead, findings }), { requireAuditUrl: true, audit_url: lead.audit_url });
-  const t2 = _validate(buildTouch2({ lead, findings }), {});
-  const t3 = _validate(buildTouch3({ lead, findings }), {});
+  const _nd = (_gate && _gate.noDashes) ? _gate.noDashes : (x => x);
+  const _scrub = (t) => ({ ...t, subject: _nd(t.subject), body: _nd(t.body) });
+  const t0 = _validate(_scrub(buildTouch0({ lead, apolloOrg, findings })), { requireCurated: true });
+  const t1 = _validate(_scrub(buildTouch1({ lead, findings })), { requireAuditUrl: true, audit_url: lead.audit_url });
+  const t2 = _validate(_scrub(buildTouch2({ lead, findings })), {});
+  const t3 = _validate(_scrub(buildTouch3({ lead, findings })), {});
   const ids = {
     touch_0: saveDraft(lead.id, t0),
     touch_1: saveDraft(lead.id, t1),
