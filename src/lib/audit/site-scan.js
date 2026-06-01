@@ -108,13 +108,6 @@ function P(bucket, severity, citation, fact, layman, fix, evidence) {
 function pointersFromSignals(sig, psi, sector) {
   const out = [];
   // AI visibility — the headline Tamazia USP. Structured data is what AI engines parse.
-  if (!sig.json_ld) {
-    out.push(P('ai_visibility', 'P1', 'Schema.org structured data',
-      'No JSON-LD structured data on the homepage.',
-      'AI search engines (ChatGPT, Perplexity, Google AI Overviews) read schema.org structured data to understand and cite a firm. Your homepage has none, so AI assistants cannot reliably surface or recommend you when a prospect asks for a firm in your field.',
-      'Tamazia implements Organization, ' + (/law/i.test(sector) ? 'LegalService' : 'Service') + ', and FAQ schema so AI engines parse and recommend you.',
-      'fetched homepage · no application/ld+json block present'));
-  }
   if (!sig.meta_description) {
     out.push(P('seo', 'P2', 'Meta description',
       'Homepage is missing a meta description.',
@@ -247,6 +240,59 @@ function psiPointers(psi) {
   }
   return out;
 }
+// ---- GEO / AI search visibility bracket ----
+function detectSchemaTypes(html) {
+  const types = new Set();
+  const re = /<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    try {
+      const walk = (o) => { if (!o) return; if (Array.isArray(o)) return o.forEach(walk); if (typeof o === 'object') { if (o['@type']) (Array.isArray(o['@type']) ? o['@type'] : [o['@type']]).forEach(t => types.add(String(t))); if (o['@graph']) walk(o['@graph']); } };
+      walk(JSON.parse(m[1].trim()));
+    } catch (_e) {}
+  }
+  return types;
+}
+async function wikidataEntity(domain) {
+  try {
+    const dom = String(domain || '').replace(/^www\./, '').toLowerCase();
+    const name = dom.split('.')[0];
+    if (!name) return { checked: false, present: false };
+    const su = 'https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=7&search=' + encodeURIComponent(name);
+    const sr = await timed((sig) => fetch(su, { headers: { 'user-agent': UA, 'accept': 'application/json' }, signal: sig }), 8000);
+    if (!sr || !sr.ok) return { checked: false, present: false };
+    const sd = await sr.json();
+    const ids = (sd.search || []).map(x => x.id).filter(Boolean).slice(0, 7);
+    if (!ids.length) return { checked: true, present: false };
+    const gu = 'https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=claims&ids=' + ids.join('|');
+    const gr = await timed((sig) => fetch(gu, { headers: { 'user-agent': UA, 'accept': 'application/json' }, signal: sig }), 8000);
+    if (!gr || !gr.ok) return { checked: false, present: false };
+    const gd = await gr.json();
+    const ents = gd.entities || {};
+    for (const qid of ids) {
+      const p856 = ents[qid] && ents[qid].claims && ents[qid].claims.P856;
+      if (p856) for (const c of p856) { const url = String((((c.mainsnak || {}).datavalue || {}).value) || '').toLowerCase(); if (url.includes(dom)) return { checked: true, present: true, qid }; }
+    }
+    return { checked: true, present: false };
+  } catch (_e) { return { checked: false, present: false }; }
+}
+function geoPointers({ html, signals, sector, wikidata, domain }) {
+  const out = []; const s = signals || {}; const b = html || '';
+  const types = detectSchemaTypes(b);
+  const has = (t) => types.has(t);
+  const orgish = has('Organization') || has('LocalBusiness') || has('LegalService') || has('Corporation') || has('ProfessionalService') || has('MedicalBusiness') || has('Dentist');
+  const local = /dental|clinic|salon|restaurant|cafe|law|solicit|estate|property|agency|shop|store|retail|garage|gym|spa|hotel|hospitality|medical|health|veterinar/i.test(sector || '') || has('LocalBusiness');
+  if (!orgish) out.push(P('ai_visibility', 'P1', 'Organization schema', 'No Organization or LocalBusiness schema in your structured data.', 'AI engines (ChatGPT, Claude, Perplexity, Google AI) read Schema.org to know who you are. With no Organization entity they cannot reliably identify, trust or cite your firm when a buyer asks for a provider in your field.', 'Tamazia ships full Organization/LocalBusiness schema with name, logo, sameAs and contact points.', 'homepage JSON-LD · no Organization type detected'));
+  if (local && !has('LocalBusiness') && !has('LegalService') && !has('Dentist') && !has('MedicalBusiness') && !has('ProfessionalService')) out.push(P('ai_visibility', 'P2', 'LocalBusiness schema', 'No LocalBusiness schema (address, opening hours, geo).', 'Local and map AI results depend on LocalBusiness schema with verified NAP and geo. Without it you are invisible to "near me" and local AI answers your competitors win.', 'Tamazia adds LocalBusiness schema with verified NAP, hours and geo-coordinates.', 'homepage JSON-LD · no LocalBusiness'));
+  if (!has('Service') && !has('Offer') && !has('Product') && !has('OfferCatalog')) out.push(P('ai_visibility', 'P2', 'Service schema', 'No Service or Offer schema describing what you sell.', 'AI engines extract Service/Offer schema to answer "who offers X". Without it your services are not machine-readable and you are left out of those answers.', 'Tamazia marks up each service with Service schema and clear offers.', 'homepage JSON-LD · no Service/Offer'));
+  if (!has('FAQPage') && !has('QAPage')) out.push(P('ai_visibility', 'P2', 'FAQ schema', 'No FAQPage schema or structured Q&A.', 'Answer engines preferentially quote structured Q&A. With no FAQPage you miss the single format LLMs cite most when answering buyer questions.', 'Tamazia builds an FAQ programme with FAQPage schema targeting real buyer questions.', 'homepage JSON-LD · no FAQPage'));
+  if (!has('Review') && !has('AggregateRating')) out.push(P('ai_visibility', 'P2', 'Review schema', 'No Review or AggregateRating schema.', 'Star ratings shown in AI and search answers come from Review/AggregateRating schema. Without it your reputation is invisible to the engines buyers now ask first.', 'Tamazia adds compliant Review/AggregateRating schema (DMCC-safe, genuine reviews only).', 'homepage JSON-LD · no Review schema'));
+  if (!has('BreadcrumbList')) out.push(P('ai_visibility', 'P2', 'Breadcrumb schema', 'No BreadcrumbList schema.', 'Breadcrumb schema helps search and AI understand your site structure and surface deep service pages, not just the homepage.', 'Tamazia adds BreadcrumbList schema sitewide.', 'homepage JSON-LD · no BreadcrumbList'));
+  if (wikidata && wikidata.checked && !wikidata.present) out.push(P('ai_visibility', 'P1', 'Knowledge Graph / Wikidata entity', 'Your firm has no Wikidata entity, so it is absent from the public knowledge graph.', 'ChatGPT, Google AI and others lean on Wikidata and the Knowledge Graph to decide who is a real, citable entity. With no entity you are structurally invisible to those answers, while competitors who have one get named.', 'Tamazia establishes your Wikidata and Knowledge-Graph entity with sourced, notable references.', 'Wikidata SPARQL · no item lists ' + (domain || 'your domain') + ' as its official website'));
+  if (!s.author && !has('Person') && !/rel=["\x27]?author|byline|written by|author/i.test(b)) out.push(P('ai_visibility', 'P2', 'E-E-A-T author signals', 'No bylined author or Person schema establishing expertise.', 'Google E-E-A-T and LLM trust models reward demonstrable Experience, Expertise, Authority and Trust. Anonymous content is discounted and rarely cited in AI answers.', 'Tamazia ships a bylined expert-author programme with Person schema, credentials and sameAs.', 'homepage · no author / Person markup'));
+  return out;
+}
+
 async function scanSite({ domain, sector, env }) {
   const clean = String(domain || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
   const page = await getHtml('https://' + clean);
@@ -268,6 +314,9 @@ async function scanSite({ domain, sector, env }) {
   ]);
   const pointers = pointersFromSignals(sig, psi, sector || '');
   for (const pp of psiPointers(psi)) pointers.push(pp);
+  let wikidata = { checked: false, present: false };
+  try { wikidata = await wikidataEntity(clean); } catch (_e) {}
+  for (const gp of geoPointers({ html: page.body, signals: sig, sector: sector || '', wikidata, domain: clean })) pointers.push(gp);
   if (robots === false) pointers.push(P('technical_seo', 'P2', 'robots.txt', 'No robots.txt found.', 'Search and AI crawlers have no crawl directives, and you cannot point them at your sitemap, slowing how fast new pages get indexed.', 'Tamazia publishes a robots.txt that points crawlers at the sitemap.', 'GET /robots.txt · 404'));
   if (sitemap === false) pointers.push(P('technical_seo', 'P2', 'XML sitemap', 'No sitemap.xml found.', 'Without a sitemap, search engines discover pages slowly and may miss deep content entirely.', 'Tamazia generates and submits an XML sitemap.', 'GET /sitemap.xml · 404'));
   if (llms === false) pointers.push(P('ai_visibility', 'P2', 'llms.txt', 'No llms.txt file.', 'llms.txt is the emerging standard that tells AI assistants how to represent your firm. Publishing one puts you ahead of peers who have not.', 'Tamazia publishes a curated llms.txt.', 'GET /llms.txt · 404'));
@@ -306,4 +355,4 @@ async function scanSite({ domain, sector, env }) {
   };
 }
 
-module.exports = { scanSite, extractSignals, pointersFromSignals, psiPointers, pageSpeed };
+module.exports = { scanSite, extractSignals, pointersFromSignals, psiPointers, pageSpeed, geoPointers, detectSchemaTypes, wikidataEntity };
