@@ -6,6 +6,7 @@
 
 const path = require('path');
 const { execFileSync } = require('child_process');
+const _crypto = require('crypto');
 const { fetchWithRetry, getCached, writeCache } = require('../lib/http.js');
 const { routeJurisdictions } = require('../../../lib/compliance/jurisdiction-router.js');
 const SCANNER = 'compliance';
@@ -67,15 +68,72 @@ const POLICY_PATHS = [
   '/why-us', '/work', '/insights', '/blog'
 ];
 
-async function gatherCorpus({ domain }) {
-  const corpus = [];
-  const seen = new Set();
-  const results = await Promise.all(POLICY_PATHS.map(p => fetchWithRetry(`https://${domain}${p}`, { timeout: 10000, retries: 1 })));
-  for (let i = 0; i < POLICY_PATHS.length; i++) {
-    const r = results[i];
-    const url = `https://${domain}${POLICY_PATHS[i]}`;
-    if (r.ok && r.body && r.body.length > 400 && !seen.has(r.body.slice(0, 200))) {
-      seen.add(r.body.slice(0, 200)); // dedupe identical-bodied 404s served as 200
+function _sameHost(u, domain) {
+  try { const h = new URL(u).hostname.replace(/^www\./, ''); return h === domain.replace(/^www\./, ''); } catch (_e) { return false; }
+}
+function _discoverLinks(html, domain) {
+  const out = []; const base = 'https://' + domain;
+  const re = /href\s*=\s*["']([^"'#?]+)/gi; let m;
+  while ((m = re.exec(html)) && out.length < 400) {
+    let href = m[1].trim(); if (!href || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) continue;
+    let abs; try { abs = new URL(href, base).toString(); } catch (_e) { continue; }
+    if (_sameHost(abs, domain)) out.push(abs.split('#')[0]);
+  }
+  return out;
+}
+async function _discoverSitemap(domain) {
+  const urls = [];
+  const roots = ['https://' + domain + '/sitemap.xml', 'https://' + domain + '/sitemap_index.xml', 'https://' + domain + '/sitemap-index.xml'];
+  for (const root of roots) {
+    let r; try { r = await fetchWithRetry(root, { timeout: 8000, retries: 0 }); } catch (_e) { continue; }
+    if (!r || !r.ok || !r.body) continue;
+    const locs = (r.body.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || []).map(x => x.replace(/<\/?loc>/gi, '').trim());
+    const childSitemaps = locs.filter(u => /sitemap.*\.xml/i.test(u)).slice(0, 4);
+    const pageUrls = locs.filter(u => !/\.xml/i.test(u));
+    for (const u of pageUrls) if (_sameHost(u, domain)) urls.push(u);
+    for (const cs of childSitemaps) {
+      try { const cr = await fetchWithRetry(cs, { timeout: 8000, retries: 0 }); if (cr && cr.ok && cr.body) {
+        (cr.body.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || []).map(x => x.replace(/<\/?loc>/gi, '').trim()).forEach(u => { if (_sameHost(u, domain)) urls.push(u); });
+      } } catch (_e) {}
+    }
+    if (urls.length) break;
+  }
+  return urls;
+}
+// Relevant-page matcher: policy/legal/contact/service pages where compliance + content signals live.
+const _RELEVANT = /privacy|cookie|terms|legal|gdpr|data[- ]protection|accessibility|complaint|modern[- ]slavery|disclaimer|imprint|impressum|about|contact|service|pricing|fees|returns|refund|shipping|delivery|disclosure|regulat|compliance|safeguard/i;
+async function gatherCorpus({ domain, maxPages = 22 }) {
+  const base = 'https://' + domain;
+  const corpus = []; const seenBody = new Set(); const used = new Set();
+  // 1) homepage first (and a source of internal links)
+  const home = await fetchWithRetry(base + '/', { timeout: 10000, retries: 1 });
+  const candidates = [base + '/'];
+  // 2) discovered real pages: homepage links (relevant first) + sitemap (relevant first)
+  const links = (home && home.ok && home.body) ? _discoverLinks(home.body, domain) : [];
+  let smap = []; try { smap = await _discoverSitemap(domain); } catch (_e) {}
+  const _TIER1 = /privacy|cookie|terms|legal|gdpr|data[- ]protection|accessibility|complaint|modern[- ]slavery|disclaimer|imprint|impressum|disclosure|safeguard|regulat|compliance/i;
+  const _TIER2 = /about|contact|service|pricing|fees|returns|refund|shipping|delivery|sector|team|locations|offices/i;
+  const t1Links = links.filter(u => _TIER1.test(u)); const t1Smap = smap.filter(u => _TIER1.test(u));
+  const t2Links = links.filter(u => _TIER2.test(u) && !_TIER1.test(u)); const t2Smap = smap.filter(u => _TIER2.test(u) && !_TIER1.test(u));
+  // 3) guessed policy paths as a backstop (privacy/cookie/terms first inside POLICY_PATHS)
+  const guessed = POLICY_PATHS.map(pp => base + pp);
+  // priority: homepage, legal pages (links+sitemap+guessed), commercial pages, then any remaining internal pages
+  for (const u of [...t1Links, ...t1Smap, ...guessed, ...t2Links, ...t2Smap, ...links, ...smap]) candidates.push(u);
+  // de-dup by normalised URL, cap
+  const fetchList = [];
+  for (const u of candidates) {
+    const norm = u.split('#')[0].replace(/\/$/, '').toLowerCase();
+    if (used.has(norm)) continue; if (!_sameHost(u, domain)) continue;
+    used.add(norm); fetchList.push(u); if (fetchList.length >= maxPages) break;
+  }
+  // fetch (homepage reuse)
+  const results = await Promise.all(fetchList.map((u, i) => (i === 0 && home) ? Promise.resolve(home) : fetchWithRetry(u, { timeout: 10000, retries: 1 })));
+  for (let i = 0; i < fetchList.length; i++) {
+    const r = results[i]; const url = fetchList[i];
+    if (r && r.ok && r.body && r.body.length > 400) {
+      const sig = _crypto.createHash('sha1').update(r.body).digest('hex'); // full-body hash: only truly identical pages (soft-404s) collapse
+      if (seenBody.has(sig)) continue;
+      seenBody.add(sig);
       corpus.push({ url, body: r.body, status: r.status, fetch_ms: r.fetch_ms, bytes: Buffer.byteLength(r.body) });
     }
   }
@@ -178,6 +236,17 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // then expand framework routing to include every detected jurisdiction.
   const corpus = await gatherCorpus({ domain });
   const corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+  // Credibility guard: a privacy/cookie policy that only renders via JavaScript/iframe is invisible to static
+  // scanning (and to AI crawlers). We must NOT assert granular "missing disclosure" breaches we cannot verify.
+  const PRIVACY_FW = new Set(['UK_GDPR_A13', 'EU_GDPR', 'EU_GDPR_A13', 'UK_DPA_2018']);
+  // Measure privacy-disclosure anchors on the POLICY PAGE(S) themselves (not the whole corpus, which can include
+  // blog posts about data protection). If a policy page exists but reads thin, its content is JS-rendered/embedded.
+  const _ANCHOR = /data controller|personal data|information commissioner|\bico\b|retention|lawful basis|legitimate interest|data subject|\bgdpr\b|data protection|right to (?:access|erasure|object|rectif|withdraw)/gi;
+  const _policyPages = corpus.filter(c => /(?:^|\/)(?:privacy|privacy-policy|privacy-notice|data-protection-policy|data-protection-notice)(?:\/|$|\.|\?)/i.test((c.url || '').replace(/^https?:\/\/[^/]+/, '')) && !/cookie/i.test(c.url || ''));
+  let _maxAnchors = -1;
+  for (const pp of _policyPages) { const t = (pp.body || '').replace(/<[^>]+>/g, ' '); const n = (t.match(_ANCHOR) || []).length; if (n > _maxAnchors) _maxAnchors = n; }
+  const _privacyAnchors = _maxAnchors < 0 ? 0 : _maxAnchors;
+  const privacyUnreadable = _policyPages.length > 0 && _maxAnchors < 4;
   // ROBUST jurisdiction detection over the FULL multi-page corpus (confidence-scored, 10+ parameters):
   // offices, addresses, postcodes, phone codes, currencies, hreflang, regulators, served-market language, cities, TLD.
   let mk = {}; try { mk = require('../../../lib/sourcing/markets.js').detectMarkets({ html: corpusText, domain }); } catch (_e) {}
@@ -202,14 +271,29 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     return payload;
   }
   const findings = [];
-  let hits = 0, misses = 0;
+  let hits = 0, misses = 0, suppressedPrivacy = 0;
   const normSector = String(sector || '').toLowerCase();
   for (const r of rules) {
     const out = ruleCheck(r, corpus, normSector);
     if (out.status === 'hit' || out.status === 'hit_after_trigger') { hits++; }
-    else if (out.status === 'miss') { misses++; findings.push(out); }
+    else if (out.status === 'miss') {
+      // Suppress unverifiable privacy-disclosure misses when the policy is JS-rendered/embedded (false-positive guard).
+      if (privacyUnreadable && PRIVACY_FW.has(r.framework_short) && (r.rule_type === 'must_appear' || !r.rule_type)) { suppressedPrivacy++; continue; }
+      misses++; findings.push(out);
+    }
     // Drop irrelevant rules — trigger_absent, not_applicable_to_sector, no_prohibited_pattern.
-    // Don't push them into findings: they shouldn't surface in the UI.
+  }
+  // One honest finding in place of the suppressed granular breaches: JS-only legal content is a real AI-visibility + verification gap.
+  if (suppressedPrivacy > 0) {
+    misses++;
+    findings.push({ status: 'miss', severity: 'P1', framework: 'UK_GDPR_A13', code: 'PRIVACY_NOT_MACHINE_READABLE',
+      description: 'Privacy/cookie policy does not render as static text (JavaScript or embed only)',
+      citation_url: 'https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/right-to-be-informed/',
+      fine_low_gbp: null, fine_high_gbp: null,
+      layman_explanation: 'Your privacy/cookie policy loads only when JavaScript runs, so search engines, AI assistants (ChatGPT, Claude, Perplexity, Google AI) and many privacy tools cannot read it as text. We therefore could not verify it carries the GDPR Article 13 essentials (controller identity, purposes, lawful basis, retention, data-subject rights, the right to complain to the ICO). JavaScript-only legal content is also invisible to AI search engines that increasingly answer "is this firm trustworthy" questions.',
+      tamazia_fix_short: 'Tamazia serves the privacy and cookie policy as crawlable server-rendered text and confirms every GDPR Article 13 disclosure is present.',
+      evidence_url: (corpus.find(c => /privacy|data-protection/i.test(c.url)) || {}).url || ('https://' + domain + '/privacy'),
+      evidence: 'policy page present, only ' + _privacyAnchors + ' privacy anchor terms in static text (JS-rendered/embedded)' });
   }
   // Most severe first
   findings.sort((a, b) => sevRank(a.severity) - sevRank(b.severity));
