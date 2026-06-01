@@ -66,6 +66,12 @@ function extractSignals({ body, headers }) {
     csp: !!headers['content-security-policy'],
     xcto: !!headers['x-content-type-options'],
     html_bytes: b.length,
+    // CONNECTION-LAYER trigger signals (wappalyzer-style fingerprints) — drive which laws actually attach
+    uses_ai: /intercom|drift\.com|tidio|tawk\.to|crisp\.chat|livechatinc|live ?chat|botpress|voiceflow|dialogflow|api\.openai|openai|chatgpt|gpt-?4|anthropic|claude\.ai|perplexity|ai[- ]?(assistant|chatbot|powered|widget)|chatbot|kommunicate|manychat/i.test(b),
+    payments: /js\.stripe\.com|checkout\.stripe|stripe\.com\/v3|paypal\.com\/sdk|paypalobjects|braintreegateway|worldpay|opayo|sagepay|gocardless|klarna|adyen|squareup|\/checkout\b|add[- ]to[- ](cart|basket)|data-add-to-cart/i.test(b),
+    biometrics: /face[- ]?(id|recognition|scan)|facial[- ]recognition|fingerprint(ing)?|biometric|retina scan|voiceprint/i.test(b),
+    ugc: /\/forum|community\.|leave a (review|comment)|post a (comment|review)|user[- ]reviews|discussion board|disqus|message board|comment-section|comments\b.{0,20}section/i.test(b),
+    has_forms: /<form[\s>]/i.test(b),
   };
 }
 

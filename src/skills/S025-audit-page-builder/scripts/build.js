@@ -69,7 +69,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
   let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
   try { scan = await scanSite({ domain, sector, env }); } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
-  const frameworks = router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector }) : router.routeJurisdictions({ country, sector });
+  const frameworks = router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector, signals: scan.signals }) : router.routeJurisdictions({ country, sector });
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';
   const lr = pg(`SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'`) || new Date().toISOString().slice(0, 10);
   const rulesList = frameworks.map(f => `'${f}'`).join(',');

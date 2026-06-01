@@ -100,7 +100,7 @@ function routeJurisdictions(opts = {}) {
   if (c === 'UK' || c === 'GB' || c === 'GBR' || !c) {
     out.push(
       'UK_GDPR_A13', 'UK_PECR', 'UK_ICO_COOKIES', 'UK_DPA_2018',
-      'EU_AI_ACT', 'GOOGLE_EEAT',
+      'GOOGLE_EEAT',
       'UK_DMCC_2024', 'UK_COMPANIES_ACT'
     );
   } else if (EU_MEMBER_STATES.has(c)) {
@@ -133,16 +133,57 @@ function listAllFrameworks() {
 // dedicated Gulf frameworks are seeded.
 const NAME_TO_CODE = { 'United Kingdom':'UK','United States':'US','United Arab Emirates':'AE','Ireland':'IE','France':'FR','Germany':'DE','Spain':'ES','Italy':'IT','Netherlands':'NL','Belgium':'BE','Portugal':'PT','Sweden':'SE','Denmark':'DK','Finland':'FI','Austria':'AT','Luxembourg':'LU','Poland':'PL','Greece':'GR','Czechia':'CZ','Hungary':'HU','Romania':'RO','Bulgaria':'BG','Croatia':'HR','Slovenia':'SI','Slovakia':'SK','Estonia':'EE','Latvia':'LV','Lithuania':'LT','Cyprus':'CY','Malta':'MT','Saudi Arabia':'AE','Qatar':'AE','Kuwait':'AE','Bahrain':'AE','Oman':'AE' };
 
-// Route frameworks across every market a firm actually SERVES (not just registration). A UK-registered
-// firm serving the EU and US gets UK + EU + US frameworks, unioned. Falls back to single-country routing.
-function routeForMarkets({ markets, country, sector }) {
+// CONNECTION LAYER · a law attaches only when (a) the firm operates in its jurisdiction AND (b) its real
+// trigger is present (uses AI, takes payments, hosts user content, processes biometrics, reaches US kids).
+// Same philosophy as Touch-0: detect where the firm actually functions, then connect only the laws that bind it.
+const CONDITIONAL = new Set(['EU_AI_ACT', 'US_BIPA', 'US_COPPA', 'EU_PSD2', 'UK_OSA_2023', 'EU_DSA', 'US_TCPA']);
+function conditionalOK(code, ctx) {
+  const sec = ctx.sector, sig = ctx.sig || {};
+  switch (code) {
+    case 'EU_AI_ACT':   return ctx.eu && (!!sig.uses_ai || ['saas', 'tech', 'fintech', 'marketing'].includes(sec));
+    case 'US_BIPA':     return ctx.us && !!sig.biometrics;
+    case 'US_COPPA':    return ctx.us && ['education', 'higher-education'].includes(sec);
+    case 'EU_PSD2':     return ctx.eu && (!!sig.payments || ['finance', 'fintech', 'insurance'].includes(sec));
+    case 'UK_OSA_2023': return ctx.uk && (!!sig.ugc || ['media', 'marketing', 'saas', 'tech', 'ecommerce'].includes(sec));
+    case 'EU_DSA':      return ctx.eu && (!!sig.ugc || ['media', 'marketing', 'ecommerce', 'saas', 'tech'].includes(sec));
+    case 'US_TCPA':     return ctx.us && (!!sig.payments || ['ecommerce', 'retail', 'finance'].includes(sec));
+    default: return true;
+  }
+}
+function routeForMarkets({ markets, country, sector, signals }) {
+  const m = markets || {}; const sig = signals || {};
+  const sec = normaliseSector(sector);
+  const regions = m.regions || []; const opCountries = m.operating_countries || [];
+  const ctx = {
+    sector: sec, sig,
+    uk: country === 'UK' || country === 'GB' || !country || regions.includes('UK') || opCountries.includes('United Kingdom'),
+    eu: !!m.serves_eu || regions.includes('EU') || opCountries.some(n => EU_MEMBER_STATES.has(NAME_TO_CODE[n] || '')),
+    us: regions.includes('US') || opCountries.includes('United States') || country === 'US' || country === 'USA',
+    me: regions.includes('Middle East') || opCountries.some(n => ['Saudi Arabia','Qatar','Kuwait','Bahrain','Oman','United Arab Emirates'].includes(n)),
+  };
   const out = new Set(routeJurisdictions({ country, sector }));
-  const m = markets || {};
-  for (const name of (m.operating_countries || [])) { const code = NAME_TO_CODE[name]; if (code) for (const f of routeJurisdictions({ country: code, sector })) out.add(f); }
-  if (m.serves_eu) { out.add('EU_GDPR'); out.add('EU_EPRIVACY'); }
-  if ((m.regions || []).includes('US')) { out.add('US_FTC'); out.add('US_CPRA'); }
-  if ((m.regions || []).includes('Middle East')) out.add('UAE_PDPL');
-  return Array.from(out);
+  for (const name of opCountries) { const code = NAME_TO_CODE[name]; if (code) for (const f of routeJurisdictions({ country: code, sector })) out.add(f); }
+  out.add('GOOGLE_EEAT'); // Google ranking standards apply to every site regardless of jurisdiction
+  if (ctx.eu) { out.add('EU_GDPR'); out.add('EU_EPRIVACY'); }
+  if (ctx.us) { out.add('US_FTC'); out.add('US_CPRA'); }
+  if (ctx.me) out.add('UAE_PDPL');
+  // trigger layer: inject conditional laws only when their trigger passes, and strip any that slipped in but do not.
+  for (const code of CONDITIONAL) { if (conditionalOK(code, ctx)) out.add(code); else out.delete(code); }
+  // JURISDICTION GATE: a law only applies if the firm actually operates in its jurisdiction.
+  // (Sector maps bundle UK+EU+US frameworks; this strips the ones for markets the firm does not serve.)
+  const inFrance = opCountries.includes('France');
+  const inGermany = opCountries.includes('Germany');
+  const jOK = (code) => {
+    if (code.startsWith('GOOGLE_')) return true;
+    if (code.startsWith('FR_')) return ctx.eu && inFrance;       // national law: only with that country
+    if (code.startsWith('DE_')) return ctx.eu && inGermany;
+    if (code.startsWith('UK_')) return ctx.uk;
+    if (code.startsWith('EU_')) return ctx.eu;
+    if (code.startsWith('US_')) return ctx.us;
+    if (code.startsWith('UAE_')) return ctx.me;
+    return true;
+  };
+  return Array.from(out).filter(jOK);
 }
 
 module.exports = { routeJurisdictions, routeForMarkets, normaliseSector, listAllSectors, listAllFrameworks, EU_MEMBER_STATES, SECTOR_MAP, SECTOR_ALIASES };
