@@ -7,6 +7,8 @@
 'use strict';
 
 const UA = 'Mozilla/5.0 (compatible; TamaziaAuditBot/1.0; +https://tamazia.co.uk)';
+let _http = null;
+try { _http = require(require('path').resolve(__dirname, '..', '..', 'skills', 'S008-personalisation-engine', 'lib', 'http.js')); } catch (_) {}
 
 async function timed(fetchPromise, ms) {
   const ctrl = new AbortController();
@@ -16,6 +18,14 @@ async function timed(fetchPromise, ms) {
 }
 
 async function getHtml(url) {
+  // Converged onto S008 fetchWithRetry (shared retry + UA + header-map); falls back to global fetch.
+  if (_http && _http.fetchWithRetry) {
+    try {
+      const r = await _http.fetchWithRetry(url, { headers: { 'user-agent': UA }, timeout: 20000, retries: 1 });
+      const headers = {}; for (const [k, v] of Object.entries(r.headers || {})) headers[k.toLowerCase()] = v;
+      return { ok: r.ok, status: r.status, headers, body: r.body || '', finalUrl: url };
+    } catch (_e) { /* fall through */ }
+  }
   try {
     const r = await timed((signal) => fetch(url, { redirect: 'follow', headers: { 'user-agent': UA }, signal }), 20000);
     const headers = {};

@@ -10,6 +10,8 @@ const NEON = () => process.env.NEON_URL || process.env.NEON_CONNECTION_STRING ||
 // Phase A convergence: the engine's canonical 10-layer verifier is the source of truth.
 let _canonicalVerify = null;
 try { _canonicalVerify = require(require('path').resolve(__dirname, '..', 'enrich', 'free-verify.js')).verifyEmail; } catch (_) {}
+let _canonicalEnrich = null;
+try { _canonicalEnrich = require(require('path').resolve(__dirname, '..', 'enrich', 'waterfall.js')).enrichLead; } catch (_) {}
 
 async function timed(fn, ms) { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); try { return await fn(c.signal); } finally { clearTimeout(t); } }
 async function getJSON(url, opts, ms) { try { const r = await timed(s => fetch(url, { ...opts, signal: s }), ms || 15000); if (!r.ok) return null; return await r.json(); } catch (_) { return null; } }
@@ -116,10 +118,14 @@ async function cachePut(domain, rec) { try { const p = `'${esc(JSON.stringify(re
 async function enrichCompany({ domain, company, env = process.env, verify = true, useCache = true }) {
   domain = String(domain || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
   if (useCache && NEON()) { const c = await cacheGet(domain); if (c) { c.cached = true; return c; } }
+  // CONVERGED: base discovery (website + emails + socials) comes from the canonical waterfall.enrichLead.
+  // My adds on top: Serper decision-makers, email-pattern inference, free verification, Neon cache.
+  let base = { website: '', emails: [], contacts: [], linkedin: '', instagram: '' };
+  if (_canonicalEnrich) { try { base = await _canonicalEnrich({ company: company || domain.split('.')[0], domain }); } catch (_) {} }
   const [hunter, dmSerper, site] = await Promise.all([
-    hunterDomainSearch(domain, env.HUNTER_KEY || env.HUNTER_API_KEY), // optional booster
+    Promise.resolve((base.contacts || []).map(c => ({ value: (c.email || '').toLowerCase(), first_name: c.first_name || '', last_name: c.last_name || '', name: [c.first_name, c.last_name].filter(Boolean).join(' '), position: c.position || '', type: c.type || '', confidence: c.confidence || 0, linkedin: '', source: 'waterfall' }))),
     serperDecisionMakers(company || domain.split('.')[0], env.SERPER_KEY),
-    scrapeSiteContacts(domain),
+    Promise.resolve({ emails: [], people: [ ...(base.linkedin ? [{ linkedin: base.linkedin }] : []) ] }),
   ]);
   // known emails (with names where available) → infer the firm pattern
   const known = [...hunter];
@@ -138,6 +144,7 @@ async function enrichCompany({ domain, company, env = process.env, verify = true
   const verifiedEmails = emails.filter(e => e.verified);
   const rec = {
     domain, company: company || '', pattern,
+    website: base.website || ('https://' + domain), instagram: base.instagram || '',
     emails, decisionMakers: dms, linkedin_people: site.people.map(p => p.linkedin),
     counts: { emails: emails.length, verified: verifiedEmails.length, decision_makers: dms.length, guessed: emails.filter(e => e.guessed).length },
     sources: { hunter: hunter.length, serper: dmSerper.length, site_emails: site.emails.length, site_linkedin: site.people.length },
