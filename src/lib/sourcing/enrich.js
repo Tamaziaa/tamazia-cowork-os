@@ -122,6 +122,9 @@ async function enrichCompany({ domain, company, env = process.env, verify = true
   // My adds on top: Serper decision-makers, email-pattern inference, free verification, Neon cache.
   let base = { website: '', emails: [], contacts: [], linkedin: '', instagram: '' };
   if (_canonicalEnrich) { try { base = await _canonicalEnrich({ company: company || domain.split('.')[0], domain }); } catch (_) {} }
+  let _firmo = {}, _social = { socials: {} };
+  try { _firmo = await require('./firmographics.js').extractFirmographics({ domain, company, env }); } catch (_) {}
+  try { _social = await require('./social-find.js').findSocials({ domain }); } catch (_) {}
   const [hunter, dmSerper, site] = await Promise.all([
     Promise.resolve((base.contacts || []).map(c => ({ value: (c.email || '').toLowerCase(), first_name: c.first_name || '', last_name: c.last_name || '', name: [c.first_name, c.last_name].filter(Boolean).join(' '), position: c.position || '', type: c.type || '', confidence: c.confidence || 0, linkedin: '', source: 'waterfall' }))),
     serperDecisionMakers(company || domain.split('.')[0], env.SERPER_KEY),
@@ -141,10 +144,13 @@ async function enrichCompany({ domain, company, env = process.env, verify = true
   // verify (free MX/disposable/role; NeverBounce booster) — cap to protect any keyed quota
   if (verify) { for (const e of emails.slice(0, 25)) { const v = await verifyFree(e.value, env); e.verified = v.verified; e.verify_status = v.status; e.verify_provider = v.provider; e.role = v.role; } }
   for (const d of dms) if (d.email) { const e = emails.find(x => x.value === d.email); if (e) d.verified = !!e.verified; }
+  // Phase C: registry officers are decision-makers too
+  for (const o of (_firmo.officers || [])) { const k = (o.name || '').toLowerCase(); if (o.name && !seen.has(k)) { seen.add(k); dms.push({ name: o.name, title: o.role || 'Officer', email: '', linkedin: '', source: 'companies_house' }); } }
   const verifiedEmails = emails.filter(e => e.verified);
   const rec = {
     domain, company: company || '', pattern,
-    website: base.website || ('https://' + domain), instagram: base.instagram || '',
+    website: base.website || ('https://' + domain), instagram: (_social.socials.instagram && _social.socials.instagram.url) || base.instagram || '',
+    socials: _social.socials || {}, firmographics: { reg_number: _firmo.reg_number || null, country: _firmo.country || '', jurisdiction: _firmo.jurisdiction || '', vat_number: _firmo.vat_number || null, status: _firmo.status || '', officers: _firmo.officers || [], confident_country: !!_firmo.confident_country },
     emails, decisionMakers: dms, linkedin_people: site.people.map(p => p.linkedin),
     counts: { emails: emails.length, verified: verifiedEmails.length, decision_makers: dms.length, guessed: emails.filter(e => e.guessed).length },
     sources: { hunter: hunter.length, serper: dmSerper.length, site_emails: site.emails.length, site_linkedin: site.people.length },
