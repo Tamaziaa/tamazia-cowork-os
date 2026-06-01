@@ -108,18 +108,77 @@ function regulatedClaims(html, sector) {
 // 5) BROKEN LINKS + reachable internal pages (sample, SEO).
 async function brokenLinks(domain, html, fetchFn) {
   const out = [];
-  const links = new Set();
-  for (const m of (html || '').matchAll(/href=["'](\/[^"'#?]+|https?:\/\/[^"'#?]+)["']/gi)) {
-    let href = m[1];
-    try { const u = new URL(href, 'https://' + domain); if (u.hostname.replace(/^www\./, '') === domain.replace(/^www\./, '')) links.add(u.href); } catch (_) {}
+  const internal = new Set(); const external = new Set();
+  const ASSET_RX = /\.(css|js|mjs|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot|map|pdf|zip|rar|mp4|webm|mp3|json|xml|rss|woff)(\?|$)/i;
+  for (const m of (html || '').matchAll(/href=["'](\/[^"'#?\s]+|https?:\/\/[^"'#?\s]+)["']/gi)) {
+    try { const u = new URL(m[1], 'https://' + domain);
+      if (!/^https?:$/.test(u.protocol)) continue;
+      if (ASSET_RX.test(u.pathname)) continue;   // skip asset refs (hashed cache files 404 transiently = false positives)
+      if (u.hostname.replace(/^www\./, '') === domain.replace(/^www\./, '')) internal.add(u.href.split('#')[0]);
+      else external.add(u.href.split('#')[0]);
+    } catch (_) {}
   }
-  const sample = Array.from(links).slice(0, 6);
-  let broken = 0;
-  for (const url of sample) {
-    try { const r = await fetchFn(url); if (r && (r.status === 404 || r.status === 410 || (r.status >= 500))) broken++; } catch (_) {}
+  // Bounded multi-page sweep: each internal link is a distinct page, so HEADing ~24 of them is a real crawl.
+  const intSample = Array.from(internal).slice(0, 24);
+  const extSample = Array.from(external).slice(0, 8);
+  const broken = []; let okInt = 0, okExt = 0;
+  const isBroken = (st) => st === 404 || st === 410 || st === 451 || (st >= 500 && st <= 599);
+  const isOk = (st) => st >= 200 && st < 400;
+  const check = async (url, kind) => { try { const r = await fetchFn(url); const st = r && r.status; if (isBroken(st)) broken.push({ url, status: st, kind }); else if (isOk(st)) { if (kind === 'internal') okInt++; else okExt++; } } catch (_) {} };
+  await Promise.all([...intSample.map(u => check(u, 'internal')), ...extSample.map(u => check(u, 'external'))]);
+  const brokenInt = broken.filter(b => b.kind === 'internal');
+  const brokenExt = broken.filter(b => b.kind === 'external');
+  const ex = (arr) => arr.slice(0, 3).map(b => { try { return new URL(b.url).pathname; } catch (_) { return b.url; } }).join(', ');
+  // FALSE-POSITIVE GUARD: report broken internal links only when we have proof the probe works (>=3 OK responses)
+  // AND broken are a clear minority (<=40%). All/most "failing" means the server is blocking our probe, not that
+  // every page is dead — never assert that.
+  const intDefinitive = okInt + brokenInt.length;
+  if (brokenInt.length && okInt >= 3 && (brokenInt.length / intDefinitive) <= 0.4) {
+    out.push(P('technical_seo', 'P2', 'Broken internal links', `${brokenInt.length} of ${intDefinitive} reachable internal links are broken (404/410/5xx).`, 'Broken links waste crawl budget, frustrate visitors and signal neglect to search engines, which depresses rankings across the whole site.', 'Tamazia runs a full site crawl and fixes or 301-redirects every broken link, then monitors for new ones.', 'crawled internal links · broken: ' + (ex(brokenInt) || brokenInt.length)));
   }
-  if (broken > 0) out.push(P('technical_seo', 'P2', 'Broken internal links', `${broken} of ${sample.length} sampled internal links are broken (404/5xx).`, 'Broken links waste crawl budget, frustrate visitors, and signal neglect to search engines. A full crawl typically finds more.', 'Tamazia runs a full crawl and fixes or redirects every broken link.', 'sampled internal links · ' + broken + ' failing'));
+  if (brokenExt.length && okExt >= 2 && (brokenExt.length / (okExt + brokenExt.length)) <= 0.5) {
+    out.push(P('technical_seo', 'P3', 'Broken outbound links', `${brokenExt.length} sampled outbound links are dead.`, 'Dead outbound links to closed pages erode user trust and the topical authority signals search engines read from your citations.', 'Tamazia audits outbound links and replaces or removes dead destinations.', 'outbound links · broken: ' + (ex(brokenExt) || brokenExt.length)));
+  }
   return out;
 }
 
-module.exports = { emailAuth, techStack, cookieCompliance, marketsCompliance, regulatedClaims, brokenLinks };
+// DNSSEC via DoH (Cloudflare). Honest: only flags when the lookup SUCCEEDS and the zone is genuinely unsigned;
+// a failed/uncertain lookup yields no finding (never fabricate a security gap).
+async function dnssec(domain) {
+  const out = [];
+  const d = String(domain || '').replace(/^www\./, '');
+  let signed = null;
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
+    const r = await fetch('https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(d) + '&type=DS&do=1', { headers: { accept: 'application/dns-json' }, signal: ctl.signal });
+    clearTimeout(t);
+    const j = await r.json();
+    signed = (Array.isArray(j.Answer) && j.Answer.some(a => a.type === 43)) || j.AD === true;
+  } catch (_) { return out; }
+  if (signed === false) out.push(P('tls_dns', 'P3', 'DNSSEC not enabled', 'Your domain is not signed with DNSSEC.', 'Without DNSSEC, attackers can forge DNS responses (cache poisoning) to silently redirect your visitors or intercept email. Enterprise, finance and government client security reviews increasingly require it.', 'Tamazia enables DNSSEC at your DNS provider so every lookup of your domain is cryptographically verified.', 'DNS · no DS record and AD flag false'));
+  return out;
+}
+
+// Sitemap freshness: parse <lastmod>; flag a missing-lastmod or stale (6m+) sitemap. Absence of the sitemap
+// itself is handled by the existing technical_seo check, so here we only act when a sitemap is present.
+async function sitemapFreshness(domain, getTextFn) {
+  const out = [];
+  let body = ''; try { body = await getTextFn('https://' + domain + '/sitemap.xml'); } catch (_) {}
+  if (!body || !/<(urlset|sitemapindex)/i.test(body)) return out;
+  // Follow a sitemap index one level to its first child for lastmod, if needed.
+  if (/<sitemapindex/i.test(body) && !/<url>/i.test(body)) {
+    const child = (body.match(/<loc>\s*([^<\s]+sitemap[^<\s]*)\s*<\/loc>/i) || [])[1];
+    if (child) { try { body = await getTextFn(child) || body; } catch (_) {} }
+  }
+  const lastmods = [...body.matchAll(/<lastmod>\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/gi)].map(m => m[1]).sort();
+  if (!lastmods.length) {
+    out.push(P('technical_seo', 'P3', 'Sitemap has no lastmod dates', 'Your sitemap.xml omits <lastmod> change dates.', 'Search engines use <lastmod> to prioritise re-crawling pages that changed. Without it, your new and updated content is discovered and re-ranked more slowly than competitors who provide it.', 'Tamazia generates a sitemap with accurate <lastmod> and pings search engines on every update.', 'sitemap.xml · no <lastmod>'));
+    return out;
+  }
+  const newest = lastmods[lastmods.length - 1];
+  const days = Math.floor((Date.now() - new Date(newest + 'T00:00:00Z').getTime()) / 86400000);
+  if (days > 180) out.push(P('content_depth', 'P2', 'Content has gone stale', 'Your most recently updated page (per sitemap) changed ' + days + ' days ago (' + newest + ').', 'Freshness is a ranking and AI-citation signal. A site with no updates in 6+ months reads as dormant to Google and to AI answer engines, and active competitors steadily take its positions.', 'Tamazia runs a content cadence (new and refreshed pages on a schedule) that keeps you fresh for search and AI engines.', 'sitemap.xml · newest <lastmod> ' + newest + ' (' + days + 'd ago)'));
+  return out;
+}
+
+module.exports = { emailAuth, techStack, cookieCompliance, marketsCompliance, regulatedClaims, brokenLinks, dnssec, sitemapFreshness };

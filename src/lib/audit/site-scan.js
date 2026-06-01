@@ -382,7 +382,7 @@ async function scanSite({ domain, sector, env }) {
   // Phase B/C deep scanners (email-auth, tech, market-aware cookies, multi-jurisdiction, claims, links) — fail-open.
   try {
     const extra = require('./extra-scanners.js');
-    const fetchFn = async (u) => { try { const r = await timed(sg => fetch(u, { method: 'HEAD', redirect: 'follow', headers: { 'user-agent': UA }, signal: sg }), 10000); return { status: r.status }; } catch (_) { return { status: 0 }; } };
+    const fetchFn = async (u) => { try { const r = await timed(sg => fetch(u, { method: 'GET', redirect: 'follow', headers: BH, signal: sg }), 9000); return { status: r.status }; } catch (_) { return { status: 0 }; } };
     const deep = await Promise.all([
       extra.emailAuth(clean).catch(() => []),
       Promise.resolve(extra.techStack(page.body, page.headers)),
@@ -390,6 +390,8 @@ async function scanSite({ domain, sector, env }) {
       Promise.resolve(extra.marketsCompliance(markets, page.body)),
       Promise.resolve(extra.regulatedClaims(page.body, sector || '')),
       extra.brokenLinks(clean, page.body, fetchFn).catch(() => []),
+      extra.dnssec(clean).catch(() => []),
+      extra.sitemapFreshness(clean, getText).catch(() => []),
     ]);
     for (const d of deep) pointers.push(...d);
   } catch (_) { /* fail-open: audit still mints with the base scan */ }
