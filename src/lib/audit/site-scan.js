@@ -108,13 +108,8 @@ function extractSignals({ body, headers }) {
 }
 
 // --- Optional PageSpeed (Core Web Vitals) — only if a free key is configured ---
-async function pageSpeed(domain, key) {
-  if (!key) return null;
+function _parsePsi(d) {
   try {
-    const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=mobile&category=performance&category=seo&key=${key}`;
-    const r = await timed((signal) => fetch(u, { signal }), 40000);
-    if (!r.ok) return null;
-    const d = await r.json();
     const lr = d.lighthouseResult || {};
     const cats = lr.categories || {};
     const a = lr.audits || {};
@@ -129,6 +124,20 @@ async function pageSpeed(domain, key) {
       audits: Object.values(a).filter(x => x && x.score !== null && x.score < 0.9 && ['binary','numeric','metricSavings'].includes(x.scoreDisplayMode))
         .map(x => ({ id: x.id, title: x.title || '', description: String(x.description || '').replace(/\s*\[[^\]]*\]\([^)]*\)/g, '').trim(), score: x.score, displayValue: x.displayValue || '', items: (x.details && x.details.items && x.details.items.length) || 0 })),
     };
+  } catch (_e) { return null; }
+}
+async function pageSpeed(domain, key) {
+  // Dev cache: if PSI_CACHE_DIR/<domain>.json exists, use it (lets full mints run under the shell time cap).
+  try {
+    const dir = process.env.PSI_CACHE_DIR;
+    if (dir) { const fs = require('fs'); const f = dir + '/' + domain + '.json'; if (fs.existsSync(f)) return _parsePsi(JSON.parse(fs.readFileSync(f, 'utf8'))); }
+  } catch (_e) {}
+  if (!key) return null;
+  try {
+    const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=mobile&category=performance&category=seo&category=accessibility&category=best-practices&key=${key}`;
+    const r = await timed((signal) => fetch(u, { signal }), 40000);
+    if (!r.ok) return null;
+    return _parsePsi(await r.json());
   } catch (_e) { return null; }
 }
 
@@ -197,23 +206,7 @@ function pointersFromSignals(sig, psi, sector) {
   if (!sig.permpol) {
     out.push(P('security', 'P3', 'Permissions-Policy', 'No Permissions-Policy header.', 'Powerful browser features (camera, microphone, geolocation) are not restricted, widening the attack surface a security review will flag.', 'Tamazia sets a least-privilege Permissions-Policy.', 'response headers · permissions-policy absent'));
   }
-  // PageSpeed-derived (only when a key is configured)
-  if (psi) {
-    if (psi.lcp_ms && psi.lcp_ms > 2500) {
-      out.push(P('seo', psi.lcp_ms > 4000 ? 'P1' : 'P2', 'Core Web Vitals · LCP',
-        'Largest Contentful Paint is ' + (psi.lcp_ms / 1000).toFixed(1) + 's (Google target: under 2.5s).',
-        'Your main content takes ' + (psi.lcp_ms / 1000).toFixed(1) + ' seconds to appear on mobile. Google uses Core Web Vitals as a direct ranking factor, and slow load is the single most common reason prospects bounce before reading anything.',
-        'Tamazia remediates LCP via image, font, and render-path optimisation.',
-        'PageSpeed Insights (mobile) · measured LCP ' + Math.round(psi.lcp_ms) + 'ms'));
-    }
-    if (psi.cls && psi.cls > 0.1) {
-      out.push(P('seo', 'P2', 'Core Web Vitals · CLS',
-        'Cumulative Layout Shift is ' + psi.cls.toFixed(2) + ' (target: under 0.1).',
-        'Page elements jump around as your site loads, which both annoys visitors and is penalised by Google ranking.',
-        'Tamazia fixes layout-shift by reserving space for media and ads.',
-        'PageSpeed Insights (mobile) · measured CLS ' + psi.cls.toFixed(3)));
-    }
-  }
+  // CWV findings now come from psiPointers() (lab) + cruxPointers() (real-user field data) — deduped, no double-count here.
   return out;
 }
 

@@ -622,19 +622,35 @@ function renderSeoBlock(bucket, list) {
     </details>`;
 }
 
+function _bySev(a, b) { const S = { P0: 0, P1: 1, P2: 2, P3: 3 }; return (S[a.severity] ?? 3) - (S[b.severity] ?? 3) || ((b.fine_high_gbp || 0) - (a.fine_high_gbp || 0)); }
+function renderFindingRow(p) {
+  const sev = SEV[p.severity] || SEV.P2;
+  return `<div style="background:white;border:1px solid #e5e7eb;border-left:4px solid ${sev.bg};border-radius:6px;padding:11px 14px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+      <p style="margin:0;font-weight:600;font-size:0.9rem;color:#3D0E0E;line-height:1.3">${esc(p.desc || p.fact || '')}</p>
+      <span style="background:${sev.bg};color:#fff;font-size:0.58rem;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap">${sev.label}</span>
+    </div>
+    ${p.layman_explanation ? `<p style="margin:5px 0 0;font-size:0.8rem;color:#1F2937;line-height:1.45">${esc(p.layman_explanation)}</p>` : ''}
+    ${p.evidence ? `<p style="margin:4px 0 0;font-size:0.7rem;color:#6b6b6b">Evidence: ${esc(p.evidence)}</p>` : ''}
+    <p style="margin:5px 0 0;font-size:0.8rem;color:#14532d"><strong>Tamazia fix:</strong> ${esc(p.tamazia_fix_short || p.recommendation || '')}</p>
+  </div>`;
+}
+function _bracket(id, kicker, title, sub, body) {
+  return `<section id="${id}" style="padding:26px 24px;background:white;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
+    <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">${kicker}</p>
+    <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">${title}</h2>
+    <p style="font-size:0.78rem;color:#6b6b6b;margin:0 0 12px">${sub}</p>
+    ${body}
+  </div></section>`;
+}
 function renderAllFindings(merged) {
-  const compGroups = groupedCompliance(merged);
-  const seoGroups = groupedSeo(merged);
-  return `
-    <section id="dim-compliance" style="padding:26px 24px;background:white">
-      <div style="max-width:1100px;margin:0 auto">
-        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">All findings · tap to expand</p>
-        <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">${compGroups.length} regulatory framework${compGroups.length === 1 ? '' : 's'} · ${seoGroups.length} SEO + technical dimension${seoGroups.length === 1 ? '' : 's'}</h2>
-        <p style="font-size:0.78rem;color:#6b6b6b;margin:0 0 12px">Findings deduped: where the same issue trips multiple regulators, you see one row with stacked badges.</p>
-        ${compGroups.map(([code, list]) => renderFrameworkBlock(code, list)).join('')}
-        ${seoGroups.map(([bucket, list]) => renderSeoBlock(bucket, list)).join('')}
-      </div>
-    </section>`;
+  const compGroups = groupedCompliance(merged).slice(0, 10);
+  const seoList = merged.filter(p => ['seo', 'technical_seo', 'accessibility', 'security', 'content_depth', 'tls_dns', 'website', 'public_records'].includes(p.bucket)).sort(_bySev).slice(0, 10);
+  const geoList = merged.filter(p => p.bucket === 'ai_visibility').sort(_bySev).slice(0, 10);
+  const b1 = compGroups.length ? _bracket('reg', 'Bracket 1 · Regulatory + compliance', 'Your top ' + compGroups.length + ' regulatory exposure' + (compGroups.length === 1 ? '' : 's'), 'One box per framework. Tap to expand the specific breaches on your site, the regulator, the fine, and that regulator\'s recent enforcement action.', compGroups.map(([code, list]) => renderFrameworkBlock(code, list)).join('')) : '';
+  const b2 = seoList.length ? _bracket('seo', 'Bracket 2 · SEO + technical', 'Your top ' + seoList.length + ' SEO + technical loophole' + (seoList.length === 1 ? '' : 's'), 'Measured live by Google PageSpeed and the Chrome UX Report. Each one costs you rankings and revenue right now.', seoList.map(renderFindingRow).join('')) : '';
+  const b3 = geoList.length ? _bracket('geo', 'Bracket 3 · AI search visibility (GEO)', 'Your top ' + geoList.length + ' AI-visibility loophole' + (geoList.length === 1 ? '' : 's'), 'Why ChatGPT, Claude, Perplexity and Google AI cannot find, trust or cite you when a buyer asks for a firm in your field.', geoList.map(renderFindingRow).join('')) : '';
+  return b1 + b2 + b3;
 }
 
 function renderInvestment(p0) {
