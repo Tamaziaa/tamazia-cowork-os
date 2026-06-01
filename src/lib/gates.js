@@ -49,6 +49,33 @@ const checks = {
     return { ok: true };
   } }),
 };
+// Foolproof placeholder check — no email leaves with an unfilled variable. Catches {x} templates,
+// undefined/null/NaN, [square] placeholders, empty quotes, and the tell-tale gaps an empty variable
+// leaves behind ("and  is", "Best UK  2026", "#undefined").
+function validatePlaceholders(subject, body) {
+  const t = String(subject || '') + '\n' + String(body || '');
+  const issues = [];
+  if (/\{[a-zA-Z0-9_]+\}/.test(t)) issues.push('unfilled_braces');
+  if (/(^|[^a-z])(undefined|null|NaN)([^a-z]|$)/i.test(t)) issues.push('undefined_null');
+  if (/\[[a-zA-Z][a-zA-Z _-]{1,30}\]/.test(t)) issues.push('square_placeholder');
+  if (/""|''/.test(t)) issues.push('empty_quotes');
+  if (/\b(and|publishing|on|for)\s{2,}\S/.test(t) || /\S {3,}\S/.test(t)) issues.push('empty_var_gap');
+  if (/Best UK\s{2,}|Best\s+in\s/i.test(t)) issues.push('empty_sector');
+  if (/#(undefined|null|NaN|0\b)/.test(t)) issues.push('bad_position');
+  return { ok: issues.length === 0, issues };
+}
+// Full pre-send email gate: length + placeholders + a real audit link when the touch needs one.
+function validateEmail(subject, body, opts = {}) {
+  const len = checkEmailLength(subject, body, opts.maxWords || 130, opts.maxSubject || 70);
+  const ph = validatePlaceholders(subject, body);
+  const needsLink = !!opts.requireAuditUrl;
+  const linkOk = !needsLink || /https?:\/\/[^ ]+\/audit\//.test(String(body || '')) || /https?:\/\//.test(String(opts.audit_url || ''));
+  // curated = the body carries real, lead-specific substance (a keyword-ranking line or a named finding),
+  // not just the generic fallback. Prevents sending a hollow email to a lead we have no real signal for.
+  const curatedOk = !opts.requireCurated || /"[^"]+"\s*\u2014\s*(#\d+|not on page one)/.test(String(body || '')) || /flag(s|ged)?\s+[a-z]/.test(String(body || ''));
+  const ok = len.ok && ph.ok && linkOk && curatedOk;
+  return { ok, length: len, placeholders: ph, link_ok: linkOk, curated_ok: curatedOk, reasons: [...(len.ok ? [] : ['length:' + JSON.stringify(len)]), ...(ph.ok ? [] : ['placeholders:' + ph.issues.join(',')]), ...(linkOk ? [] : ['missing_audit_link']), ...(curatedOk ? [] : ['not_curated'])] };
+}
 // Convenience: validate an email's subject+body length. Returns { ok, body_words, subject_chars }.
 function checkEmailLength(subject, body, maxWords = 120, maxSubject = 65) {
   const body_words = String(body || '').trim().split(/\s+/).filter(Boolean).length;
@@ -56,4 +83,4 @@ function checkEmailLength(subject, body, maxWords = 120, maxSubject = 65) {
   return { ok: body_words >= 25 && body_words <= maxWords && subject_chars <= maxSubject, body_words, subject_chars };
 }
 
-module.exports = { runGate, checks, checkEmailLength };
+module.exports = { runGate, checks, checkEmailLength, validatePlaceholders, validateEmail };

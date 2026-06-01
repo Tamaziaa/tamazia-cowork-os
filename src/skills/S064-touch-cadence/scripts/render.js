@@ -9,6 +9,8 @@ const fs = require('fs');
 const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const apollo = require('../../../lib/enrichment/apollo.js');
+let _gate = null; try { _gate = require('../../../lib/gates.js'); } catch (_) {}
+function _validate(t, opts) { if (!_gate || !_gate.validateEmail) return { ...t, valid: true, gate: { ok: true, reasons: [] } }; const v = _gate.validateEmail(t.subject, t.body, opts); return { ...t, valid: v.ok, gate: v }; }
 
 function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return null; try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; } }
 function pgEsc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
@@ -67,47 +69,48 @@ function pickRecipientName(lead, apolloOrg) {
 
 function buildTouch0({ lead, apolloOrg, findings }) {
   const recipient = pickRecipientName(lead, apolloOrg);
+  const company = lead.company || 'your firm';
   const ri = lead.rank_insight || {};
-  const blogTitle = ri.blog_offer || SECTOR_TITLE[lead.sector] || `Best UK ${lead.sector} 2026`;
-  // SOUL: the gated, fact-checked one-line keyword-gap. Fallback to the top audit finding.
-  const gapLine = (lead.rank_insight_sentence && lead.rank_insight_sentence.length > 30)
-    ? lead.rank_insight_sentence
-    : (findings && findings[0]) ? `One thing stood out reviewing you: ${findings[0]}.` : '';
-  const auditTail = (lead.audit_url && /^https?:\/\//.test(lead.audit_url)) ? `, free to you: ${lead.audit_url}` : '.';
-  const subject = (ri.keywords && ri.keywords[0] && ri.keywords[0].keyword)
-    ? `${lead.company} + "${ri.keywords[0].keyword}"`
-    : `${lead.company} for the 2026 ${lead.sector || ''} guide`.replace(/\s+/g, ' ').trim();
-  const lines = [`${recipient},`, '', `We're publishing "${blogTitle}" and ${lead.company} is shortlisted.`];
-  if (gapLine) lines.push('', gapLine);
-  lines.push('', `The pre-publish review produced a £1,500 compliance + SEO audit naming the fix${auditTail}`);
-  lines.push('', `Worth 15 minutes? cal.com/tamazia/strategy-call`, '', 'Aman');
-  const body = lines.join('\n');
-  return { subject, body, touch: 0 };
+  const blogTitle = ri.blog_offer || SECTOR_TITLE[lead.sector] || `Best UK ${lead.sector || 'business'} 2026`;
+  const kws = (ri.keywords || []).filter(k => k && k.keyword).slice(0, 3);
+  const kwLine = (k) => {
+    const pos = k.my_position ? `#${k.my_position}` : 'not on page one';
+    const note = k.leader ? (k.my_position ? ` (${k.leader} holds #1)` : ` (${k.leader} owns #1)`) : '';
+    return `"${k.keyword}" \u2014 ${pos}${note}`;
+  };
+  const subject = (kws[0] && kws[0].keyword)
+    ? `${company} + "${kws[0].keyword}"`
+    : `${company} for the 2026 ${(lead.sector || 'sector').replace(/-/g, ' ')} guide`;
+  const lines = [`${recipient},`, '', `We're publishing "${blogTitle}" and ${company} is shortlisted.`];
+  if (kws.length) {
+    lines.push('', 'Where you rank today for the searches that matter most:');
+    kws.forEach(k => lines.push(kwLine(k)));
+    lines.push('', `We ran you a complimentary compliance + SEO audit (\u00a31,500 list) that names the exact fix for each.`);
+  } else if (findings && findings[0]) {
+    lines.push('', `One thing the review flagged: ${findings[0]}.`, '', `We ran you a complimentary compliance + SEO audit (\u00a31,500 list) that names the fix.`);
+  } else {
+    lines.push('', `We ran you a complimentary compliance + SEO audit (\u00a31,500 list) of the site.`);
+  }
+  lines.push('', `Happy to be featured? And who is the right person to send the audit to?`, '', 'Aman');
+  return { subject, body: lines.join('\n'), touch: 0 };
 }
 
 function buildTouch1({ lead, findings }) {
   const recipient = pickRecipientName(lead);
-  const five = findings.slice(0, 5).map((f, i) => `${i + 1}. ${f}`).join('\n');
-  const subject = `re: ${lead.company} for the 2026 piece`;
-  const body = `${recipient},
-
-Following last week. Are you still up for the feature? The DA 87 backlink hyperlinked to your website could directly push your organic ranking by 2-3 places on Google and AI search; the piece publishes this May 2026.
-
-The complimentary £1,500 Compliance and SEO audit on ${lead.company} is live:
-
-${lead.audit_url || 'https://audit.tamazia.co.uk/audit/' + (lead.company || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-complimentary-audit'}
-
-Five takeaways:
-${five}
-
-We request to ask your current agency for its most recent report on ${lead.domain || lead.company}. Compare ours line by line. If theirs covers the same ground, we are not the right fit. If not, you have just identified the blind spot.
-
-Tamazia is a founder-led Compliance and SEO agency. £110M+ generated in client revenue across four continents.
-
-Thirty minutes with the founder to walk you through the report (Aman Pareek, LLM in International Business Law from King's College London): https://tamazia.co.uk/book/
-
-Best,
-Aman`;
+  const company = lead.company || 'your firm';
+  const blogTitle = (lead.rank_insight && lead.rank_insight.blog_offer) || SECTOR_TITLE[lead.sector] || `Best UK ${lead.sector || 'business'} 2026`;
+  const auditUrl = lead.audit_url || ('https://tamazia.co.uk/audit/' + String(company).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-complimentary-audit');
+  const top = (findings && findings[0]) ? ` It flags ${findings[0]} first.` : '';
+  const subject = `re: ${company} for the 2026 piece`;
+  const body = [
+    `${recipient},`, '',
+    `Following up \u2014 still open to being featured in "${blogTitle}"?`, '',
+    `Either way, here is the complimentary \u00a31,500 compliance + SEO audit we ran on ${company}:`,
+    auditUrl, '',
+    `It names the regulator and the fix for every issue, and benchmarks you against the firms outranking you.${top}`, '',
+    `30 minutes with the founder: https://tamazia.co.uk/book/`, '',
+    'Aman',
+  ].join('\n');
   return { subject, body, touch: 1 };
 }
 
@@ -162,10 +165,10 @@ async function renderAll(lead_id) {
   }
   const findings = topAuditFindings(lead.pointers || []);
   if (!findings.length) findings.push('Compliance posture awaiting full audit re-scan; engine flags pending review');
-  const t0 = buildTouch0({ lead, apolloOrg, findings });
-  const t1 = buildTouch1({ lead, findings });
-  const t2 = buildTouch2({ lead, findings });
-  const t3 = buildTouch3({ lead, findings });
+  const t0 = _validate(buildTouch0({ lead, apolloOrg, findings }), { requireCurated: true });
+  const t1 = _validate(buildTouch1({ lead, findings }), { requireAuditUrl: true, audit_url: lead.audit_url });
+  const t2 = _validate(buildTouch2({ lead, findings }), {});
+  const t3 = _validate(buildTouch3({ lead, findings }), {});
   const ids = {
     touch_0: saveDraft(lead.id, t0),
     touch_1: saveDraft(lead.id, t1),
@@ -180,8 +183,10 @@ async function renderAll(lead_id) {
   fs.writeFileSync(path.join(dir, 'touch_2.md'), `# Touch 2\nSubject: ${t2.subject}\n\n---\n\n${t2.body}\n`);
   fs.writeFileSync(path.join(dir, 'touch_3.md'), `# Touch 3\nSubject: ${t3.subject}\n\n---\n\n${t3.body}\n`);
   // Schedule next_touch_date for cron-driven send (Touch 0 immediate, Touch 1 +5d, Touch 2 +10d, Touch 3 +20d business days)
-  pg(`UPDATE leads SET status='touch_0_queued', next_touch_date=CURRENT_DATE, updated_at=NOW() WHERE id=${lead.id}`);
-  return { lead_id: lead.id, company: lead.company, apollo_enriched: !!apolloOrg, findings_count: findings.length, draft_ids: ids, files_written: dir };
+  if (t0.valid) pg(`UPDATE leads SET status='touch_0_queued', next_touch_date=CURRENT_DATE, updated_at=NOW() WHERE id=${lead.id}`);
+  else pg(`UPDATE leads SET status='touch_0_blocked', updated_at=NOW() WHERE id=${lead.id}`);
+  try { if (_gate && _gate.runGate) await _gate.runGate('touch_render', { entity: lead.domain || lead.company, t0valid: t0.valid }, [{ name: 'touch0_send_ready', fn: (p) => ({ ok: !!p.t0valid, reason: (t0.gate.reasons || []).join(',') }) }]); } catch (_) {}
+  return { lead_id: lead.id, company: lead.company, apollo_enriched: !!apolloOrg, findings_count: findings.length, draft_ids: ids, touch0_valid: t0.valid, gate_reasons: t0.gate.reasons, files_written: dir };
 }
 
 if (require.main === module) {
