@@ -128,7 +128,24 @@ function listAllFrameworks() {
   return Array.from(set).sort();
 }
 
-module.exports = { routeJurisdictions, normaliseSector, listAllSectors, listAllFrameworks, EU_MEMBER_STATES, SECTOR_MAP, SECTOR_ALIASES };
+
+// Country name → routing code (for operating-markets routing). Gulf states proxy to UAE_PDPL until
+// dedicated Gulf frameworks are seeded.
+const NAME_TO_CODE = { 'United Kingdom':'UK','United States':'US','United Arab Emirates':'AE','Ireland':'IE','France':'FR','Germany':'DE','Spain':'ES','Italy':'IT','Netherlands':'NL','Belgium':'BE','Portugal':'PT','Sweden':'SE','Denmark':'DK','Finland':'FI','Austria':'AT','Luxembourg':'LU','Poland':'PL','Greece':'GR','Czechia':'CZ','Hungary':'HU','Romania':'RO','Bulgaria':'BG','Croatia':'HR','Slovenia':'SI','Slovakia':'SK','Estonia':'EE','Latvia':'LV','Lithuania':'LT','Cyprus':'CY','Malta':'MT','Saudi Arabia':'AE','Qatar':'AE','Kuwait':'AE','Bahrain':'AE','Oman':'AE' };
+
+// Route frameworks across every market a firm actually SERVES (not just registration). A UK-registered
+// firm serving the EU and US gets UK + EU + US frameworks, unioned. Falls back to single-country routing.
+function routeForMarkets({ markets, country, sector }) {
+  const out = new Set(routeJurisdictions({ country, sector }));
+  const m = markets || {};
+  for (const name of (m.operating_countries || [])) { const code = NAME_TO_CODE[name]; if (code) for (const f of routeJurisdictions({ country: code, sector })) out.add(f); }
+  if (m.serves_eu) { out.add('EU_GDPR'); out.add('EU_EPRIVACY'); }
+  if ((m.regions || []).includes('US')) { out.add('US_FTC'); out.add('US_CPRA'); }
+  if ((m.regions || []).includes('Middle East')) out.add('UAE_PDPL');
+  return Array.from(out);
+}
+
+module.exports = { routeJurisdictions, routeForMarkets, normaliseSector, listAllSectors, listAllFrameworks, EU_MEMBER_STATES, SECTOR_MAP, SECTOR_ALIASES };
 
 if (require.main === module) {
   console.log(JSON.stringify({

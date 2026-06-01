@@ -66,7 +66,10 @@ function verifySignedUrl(url) {
 // via the existing jurisdiction-router. Keeps the payload portable (JSON) so versioning is easy.
 async function buildPayload({ domain, sector, country, lead_id, env }) {
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
-  const frameworks = router.routeJurisdictions({ country, sector });
+  // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
+  let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
+  try { scan = await scanSite({ domain, sector, env }); } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
+  const frameworks = router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector }) : router.routeJurisdictions({ country, sector });
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';
   const lr = pg(`SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'`) || new Date().toISOString().slice(0, 10);
   const rulesList = frameworks.map(f => `'${f}'`).join(',');
@@ -76,9 +79,6 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     return { framework_short, rule_id, severity, description, citation_url };
   }) : [];
 
-  // Real, evidence-tied site scan (self-healing — returns partial on any failure, never throws)
-  let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false };
-  try { scan = await scanSite({ domain, sector, env }); } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
   const sevRank = { P0: 0, P1: 1, P2: 2 };
   const findings = [...(scan.pointers || [])].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   const threeFindings = findings.slice(0, 3);
@@ -95,7 +95,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     rules,
     // Evidence-tied findings from the real site scan — surfaced at top level so any renderer can read them
     pointers: findings,
-    scan: { scanned_at: scan.scanned_at, reachable: scan.reachable, final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null },
+    scan: { scanned_at: scan.scanned_at, reachable: scan.reachable, final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
     sections: {
       cover:                 { firm: domain.replace(/^www\./, '').split('.')[0], generated_at: new Date().toISOString() },
       three_findings:        { items: threeFindings, count: findings.length },
