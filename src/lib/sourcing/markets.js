@@ -29,7 +29,10 @@ function detectMarkets({ html, domain }) {
   const b = (html || '');
   const text = b.replace(/<[^>]+>/g, ' ');
   const countries = new Set();
+  const citiesFound = [];
   const evidence = [];
+  const CITY_RX = [[/\blondon\b/i,'London'],[/\bmanchester\b/i,'Manchester'],[/\bbirmingham\b/i,'Birmingham'],[/\bedinburgh\b/i,'Edinburgh'],[/\bglasgow\b/i,'Glasgow'],[/\bleeds\b/i,'Leeds'],[/\bbristol\b/i,'Bristol'],[/\bdubai\b/i,'Dubai'],[/\babu dhabi\b/i,'Abu Dhabi'],[/\bnew york\b/i,'New York'],[/\bmiami\b/i,'Miami'],[/\bparis\b/i,'Paris'],[/\bmadrid\b/i,'Madrid'],[/\bberlin\b/i,'Berlin'],[/\bdublin\b/i,'Dublin']];
+  for (const [rx, c] of CITY_RX) { if (rx.test(text)) citiesFound.push(c); }
   // 1) place/country names in content
   for (const [rx, c] of PLACES) { if (rx.test(text)) { countries.add(c); } }
   // 2) phone country codes
@@ -70,6 +73,8 @@ function detectMarkets({ html, domain }) {
     regions: Array.from(new Set(regions)),
     currencies: Array.from(new Set(currencies)),
     international: intl,
+    cities: Array.from(new Set(citiesFound)),
+    primary_city: citiesFound[0] || '',
     evidence: list.length ? ['site signals: ' + list.slice(0, 6).join(', ')] : [],
   };
 }

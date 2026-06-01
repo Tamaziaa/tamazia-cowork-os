@@ -3742,6 +3742,24 @@
 "default": null,
 "notnull": false,
 "identity": false
+},
+"rank_insight_sentence": {
+"type": "text",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"rank_insight": {
+"type": "jsonb",
+"default": null,
+"notnull": false,
+"identity": false
+},
+"operating_city": {
+"type": "varchar(80)",
+"default": null,
+"notnull": false,
+"identity": false
 }
 },
 "pk": [

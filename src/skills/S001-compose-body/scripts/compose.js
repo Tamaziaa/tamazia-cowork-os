@@ -49,7 +49,9 @@ function bodyCore(lead) {
   const opener = sectorOpener(lead.sector, lead.firm, lead.first_name);
   // Phase 6.5 · prefer the personalisation-engine sentence when populated by pre-send-pipeline.
   // Falls back to a generic-but-on-brand observation if the engine has not yet run for this lead.
-  const observation = (lead.audit_first_touch_sentence && lead.audit_first_touch_sentence.length > 30)
+  const observation = (lead.rank_insight_sentence && lead.rank_insight_sentence.length > 30)
+    ? lead.rank_insight_sentence
+    : (lead.audit_first_touch_sentence && lead.audit_first_touch_sentence.length > 30)
     ? lead.audit_first_touch_sentence
     : 'When I reviewed the public-facing pages, the analytics tag fires before the cookie consent banner accepts. ' +
       'That is the kind of signal a regulator scans for, and it costs rankings before it costs compliance.';
@@ -75,6 +77,7 @@ function compose(input) {
     first_name: lead.first_name || lead.contact_first || '',
     // Phase 6.5 · forward the personalisation engine + audit URL into bodyCore
     audit_url: lead.audit_url || null,
+    rank_insight_sentence: lead.rank_insight_sentence || null,
     audit_first_touch_sentence: lead.audit_first_touch_sentence || null,
   });
 
