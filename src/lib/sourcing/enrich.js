@@ -7,6 +7,9 @@ const dns = require('dns').promises;
 const UA = 'Mozilla/5.0 (compatible; TamaziaBot/1.0; +https://tamazia.co.uk)';
 const DM = /(owner|founder|co-?founder|ceo|chief executive|managing director|\bmd\b|managing partner|senior partner|\bpartner\b|principal|\bdirector\b|head of|vice president|\bvp\b|chief|\bcmo\b|\bcto\b|\bcoo\b|\bcfo\b|business development|sales director|sales manager|marketing director|practice manager|clinic director|general manager)/i;
 const NEON = () => process.env.NEON_URL || process.env.NEON_CONNECTION_STRING || process.env.NEON_DATABASE_URL;
+// Phase A convergence: the engine's canonical 10-layer verifier is the source of truth.
+let _canonicalVerify = null;
+try { _canonicalVerify = require(require('path').resolve(__dirname, '..', 'enrich', 'free-verify.js')).verifyEmail; } catch (_) {}
 
 async function timed(fn, ms) { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); try { return await fn(c.signal); } finally { clearTimeout(t); } }
 async function getJSON(url, opts, ms) { try { const r = await timed(s => fetch(url, { ...opts, signal: s }), ms || 15000); if (!r.ok) return null; return await r.json(); } catch (_) { return null; } }
@@ -56,8 +59,18 @@ function applyPattern(pattern, first, last, domain) {
   const email = `${lp}@${domain}`; return SYNTAX.test(email) ? email : null;
 }
 
-// ---- free verify: syntax + MX + disposable + role (no SMTP). NeverBounce optional booster. ----
+// ---- free verify: canonical 10-layer (free-verify.js) with inline as backup ----
 async function verifyFree(email, env) {
+  if (_canonicalVerify) {
+    try {
+      const r = await _canonicalVerify(email, env || {});
+      const c = r.checks || {};
+      return { verified: r.status === 'valid', status: r.status, score: r.score, role: !!c.role, disposable: !!c.disposable, mx: !!c.mx, provider: r.source || 'free-verify' };
+    } catch (_) { /* fall through to inline backup */ }
+  }
+  return verifyFreeInline(email, env);
+}
+async function verifyFreeInline(email, env) {
   const lists = await loadLists();
   const [lp, dom] = email.toLowerCase().split('@');
   const syntax = SYNTAX.test(email);
