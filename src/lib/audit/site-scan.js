@@ -355,6 +355,11 @@ async function scanSite({ domain, sector, env }) {
   let wikidata = { checked: false, present: false };
   try { wikidata = await wikidataEntity(clean); } catch (_e) {}
   for (const gp of geoPointers({ html: page.body, signals: sig, sector: sector || '', wikidata, domain: clean })) pointers.push(gp);
+  // content depth (thin content = poor ranking + nothing for AI to cite)
+  try {
+    const vw = String(page.body || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length;
+    if (vw < 600) pointers.push(P('content_depth', vw < 300 ? 'P1' : 'P2', 'Thin page content', 'The homepage has only ' + vw + ' words of crawlable text; competitive ranking pages average 1,200+.', 'Thin content gives Google and AI engines little to rank or cite and signals low authority. Depth on the topic wins both the rankings and the AI citations.', 'Tamazia expands the homepage and key service pages with substantive, E-E-A-T-rich content targeting your buyer queries.', 'homepage - ' + vw + ' words of visible text'));
+  } catch (_e) {}
   if (robots === false) pointers.push(P('technical_seo', 'P2', 'robots.txt', 'No robots.txt found.', 'Search and AI crawlers have no crawl directives, and you cannot point them at your sitemap, slowing how fast new pages get indexed.', 'Tamazia publishes a robots.txt that points crawlers at the sitemap.', 'GET /robots.txt · 404'));
   if (sitemap === false) pointers.push(P('technical_seo', 'P2', 'XML sitemap', 'No sitemap.xml found.', 'Without a sitemap, search engines discover pages slowly and may miss deep content entirely.', 'Tamazia generates and submits an XML sitemap.', 'GET /sitemap.xml · 404'));
   if (llms === false) pointers.push(P('ai_visibility', 'P2', 'llms.txt', 'No llms.txt file.', 'llms.txt is the emerging standard that tells AI assistants how to represent your firm. Publishing one puts you ahead of peers who have not.', 'Tamazia publishes a curated llms.txt.', 'GET /llms.txt · 404'));

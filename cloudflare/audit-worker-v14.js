@@ -243,13 +243,12 @@ function severityByBucket(pointers, syncedBuckets) {
 }
 
 // Pass / Needs work / Fail bands — any P0 in bucket forces Fail, any P1 forces Needs work
-function bucketGauge(score, criticalCount = 0, highCount = 0) {
-  if (criticalCount > 0) return { color: '#B91C1C', label: 'Fail', pct: Math.round((score || 0) * 100) };
-  if (highCount > 0) return { color: '#E67E22', label: 'Needs work', pct: Math.round((score || 0) * 100) };
+function bucketGauge(score, criticalCount = 0, highCount = 0, total = 0) {
   const pct = Math.round((score || 0) * 100);
-  if (pct >= 70) return { color: '#2E7D32', label: 'Pass', pct };
-  if (pct >= 45) return { color: '#E67E22', label: 'Needs work', pct };
-  return { color: '#B91C1C', label: 'Fail', pct };
+  if (total === 0) return { color: '#9ca3af', label: 'Not assessed', pct: 0 }; // no findings -> neutral, never a green "Pass"
+  if (criticalCount > 0) return { color: '#B91C1C', label: 'Fail', pct };
+  if (highCount > 0) return { color: '#E67E22', label: 'Needs work', pct };
+  return { color: '#E67E22', label: 'Needs work', pct }; // standard-only findings still need work; the audit never shows a benign pass
 }
 
 // Phase 7.4 · dedupe same-error-different-framework into single row with combined badges
@@ -415,7 +414,7 @@ function renderSectionGauges(syncedBuckets, sevMap) {
           ${order.map(b => {
             const v = syncedBuckets[b];
             const sev = sevMap[b] || { critical: 0, high: 0, standard: 0, n: 0 };
-            const g = bucketGauge(v.mean_score, sev.critical, sev.high);
+            const g = bucketGauge(v.mean_score, sev.critical, sev.high, sev.n || (sev.critical + sev.high + sev.standard));
             return `
               <a href="#dim-${b}" style="background:white;border-radius:6px;padding:12px 14px;text-decoration:none;color:inherit;display:block;border-left:3px solid ${g.color}">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:6px">
@@ -645,7 +644,7 @@ function _bracket(id, kicker, title, sub, body) {
 }
 function renderAllFindings(merged) {
   const compGroups = groupedCompliance(merged).slice(0, 10);
-  const seoList = merged.filter(p => ['seo', 'technical_seo', 'accessibility', 'security', 'content_depth', 'tls_dns', 'website', 'public_records'].includes(p.bucket)).sort(_bySev).slice(0, 10);
+  const seoList = merged.filter(p => ['seo', 'technical_seo', 'accessibility', 'security', 'content_depth', 'tls_dns', 'website', 'public_records', 'tech', 'email_security'].includes(p.bucket)).sort(_bySev).slice(0, 10);
   const geoList = merged.filter(p => p.bucket === 'ai_visibility').sort(_bySev).slice(0, 10);
   const b1 = compGroups.length ? _bracket('reg', 'Bracket 1 · Regulatory + compliance', 'Your top ' + compGroups.length + ' regulatory exposure' + (compGroups.length === 1 ? '' : 's'), 'One box per framework. Tap to expand the specific breaches on your site, the regulator, the fine, and that regulator\'s recent enforcement action.', compGroups.map(([code, list]) => renderFrameworkBlock(code, list)).join('')) : '';
   const b2 = seoList.length ? _bracket('seo', 'Bracket 2 · SEO + technical', 'Your top ' + seoList.length + ' SEO + technical loophole' + (seoList.length === 1 ? '' : 's'), 'Measured live by Google PageSpeed and the Chrome UX Report. Each one costs you rankings and revenue right now.', seoList.map(renderFindingRow).join('')) : '';
