@@ -120,6 +120,7 @@ const FRAMEWORK_META = {
   'GOOGLE_EEAT': { name: 'Google E-E-A-T', regulator: 'Google Search', root: 'https://developers.google.com/search/docs/fundamentals/creating-helpful-content' }
 };
 
+let NEWS_LIVE = {};
 const SECTOR_NEWS = {
   'UK_GDPR_A13': 'ICO issued GBP 19.6M across 7 cases in 2025 (Capita GBP 14M, Advanced Computer Software GBP 3.07M, 23andMe GBP 2.31M, LastPass GBP 1.23M); two-thirds were UK GDPR breaches.',
   'UK_DPA_2018': 'ICO 2025 enforcement hit GBP 19.6M from 7 cases (vs GBP 2.7M in 2024); the DUAA came into force 5 Feb 2026 with new compulsion powers.',
@@ -535,7 +536,7 @@ function renderFrameworkBlock(code, list) {
   const std = list.filter(p => p.severity === 'P2').length;
   const uniqFines = new Set(list.filter(p => p.fine_high_gbp).map(p => p.fine_high_gbp));
   const totalFine = Array.from(uniqFines).reduce((a, n) => a + n, 0);
-  const news = SECTOR_NEWS[code];
+  const news = NEWS_LIVE[code] || SECTOR_NEWS[code];
   const border = crit ? '#B91C1C' : high ? '#E67E22' : '#2E7D32';
   return `
     <details style="background:#F8F5EF;border-radius:6px;padding:12px 16px 12px 18px;margin-bottom:8px;border-left:4px solid ${border}">
@@ -741,6 +742,7 @@ function renderKeywordMap(km) {
     </section>`;
 }
 function renderPage(audit) {
+  NEWS_LIVE = audit.news_map || {};
   const meta = audit.scan_meta || {};
   const rawPointers = audit.pointers || [];
   const merged = dedupeAndMerge(rawPointers);
@@ -846,6 +848,7 @@ function adapt(row) {
     },
     pointers,
     keyword_map: p.keyword_map || null,
+    news_map: p.news_map || {},
   };
 }
 

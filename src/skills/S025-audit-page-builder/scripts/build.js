@@ -145,6 +145,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     // Evidence-tied findings from the real site scan — surfaced at top level so any renderer can read them
     pointers: findings,
     framework_groups: groupFindings(findings),
+    news_map: (() => { const nm = {}; try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) nm[ln.slice(0, i)] = ln.slice(i + 1); } } catch (_e) {} return nm; })(),
     keyword_map: keyword_map && keyword_map.ok ? keyword_map : null,
     scan: { scanned_at: scan.scanned_at, reachable: scan.reachable, final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
     sections: {
