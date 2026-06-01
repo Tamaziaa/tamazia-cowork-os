@@ -104,7 +104,7 @@ async function smtpVerify(mxHost, email) {
 async function verifyViaHunter(email) {
   const key = process.env.HUNTER_KEY; if (!key) return null;
   try {
-    const r = await fetch(`https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${key}`);
+    const r = await fetch(`https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${key}`, { signal: AbortSignal.timeout(12000) });
     if (!r.ok) return null;
     const j = await r.json(); const d = j && j.data; if (!d) return null;
     return d; // status, score, smtp_check, accept_all, gibberish, disposable, webmail, block, mx_records

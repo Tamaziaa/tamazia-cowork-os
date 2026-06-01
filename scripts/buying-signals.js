@@ -31,7 +31,7 @@ function diffSignals(prev, cur) {
   return out;
 }
 
-(async () => {
+async function main() {
   const limit = Number(process.argv[2]) || 10;
   pg(`CREATE TABLE IF NOT EXISTS buying_signals (id BIGSERIAL PRIMARY KEY, lead_id BIGINT, signal_type TEXT, detail TEXT, detected_at TIMESTAMPTZ DEFAULT NOW())`);
   pg(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS site_fingerprint JSONB`);
@@ -63,4 +63,6 @@ function diffSignals(prev, cur) {
   }
   console.log(`[buying-signals] checked ${checked}/${rows.length}, ${fired} new signal(s) fired`);
   try { await require(path.join(ROOT, 'src/lib/cost-ledger.js')).logUsage('buying-signals', checked, { fired }); } catch (_) {}
-})().catch(e => { console.error('[buying-signals] fatal (fail-open):', e.message); process.exit(0); });
+}
+if (require.main === module) main().catch(e => { console.error('[buying-signals] fatal (fail-open):', e.message); process.exit(0); });
+module.exports = { fingerprint, diffSignals, djb2, main };

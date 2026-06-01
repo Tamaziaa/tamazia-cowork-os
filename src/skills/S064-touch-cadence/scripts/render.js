@@ -47,7 +47,7 @@ const SECTOR_FRAMEWORKS = {
 };
 
 function loadLead(lead_id) {
-  const sql = `SELECT id::text, company, COALESCE(domain,''), COALESCE(sector,''), COALESCE(jurisdiction,'UK'), COALESCE(first_name,''), COALESCE(last_name,''), COALESCE(title,''), COALESCE(email,''), audit_url::text, personalisation_pointers::text, COALESCE(rank_insight::text,'{}'), COALESCE(operating_city,''), COALESCE(rank_insight_sentence,'') FROM leads WHERE id=${lead_id}`;
+  const sql = `SELECT id::text, regexp_replace(COALESCE(company,''),'[\\t\\r\\n]',' ','g'), COALESCE(domain,''), COALESCE(sector,''), COALESCE(jurisdiction,'UK'), regexp_replace(COALESCE(first_name,''),'[\\t\\r\\n]',' ','g'), regexp_replace(COALESCE(last_name,''),'[\\t\\r\\n]',' ','g'), regexp_replace(COALESCE(title,''),'[\\t\\r\\n]',' ','g'), COALESCE(email,''), audit_url::text, personalisation_pointers::text, COALESCE(rank_insight::text,'{}'), COALESCE(operating_city,''), regexp_replace(COALESCE(rank_insight_sentence,''),'[\\t\\r\\n]',' ','g') FROM leads WHERE id=${lead_id}`;
   const raw = pg(sql); if (!raw) return null;
   const [id, company, domain, sector, jurisdiction, first_name, last_name, title, email, audit_url, pp, riJson, operating_city, riSentence] = raw.split('\t');
   let pointers = []; try { const _j = JSON.parse(pp || '[]'); pointers = Array.isArray(_j) ? _j : (_j && Array.isArray(_j.pointers) ? _j.pointers : []); } catch (_e) {}
@@ -68,6 +68,10 @@ function pickRecipientName(lead, apolloOrg) {
   if (apolloOrg?.primary_domain) return 'Team';
   return 'Team';
 }
+
+// Normalise any audit_url to an ABSOLUTE https link (stored values are sometimes relative '/audit/...').
+// A relative link in a cold email is dead, so this guarantees the recipient gets a clickable URL.
+function absAudit(u) { u = String(u == null ? '' : u).trim(); if (/^https?:\/\//i.test(u)) return u; if (u.startsWith('/')) return 'https://tamazia.co.uk' + u; return ''; }
 
 function buildTouch0({ lead, apolloOrg, findings }) {
   const recipient = pickRecipientName(lead, apolloOrg);
@@ -101,7 +105,7 @@ function buildTouch1({ lead, findings }) {
   const recipient = pickRecipientName(lead);
   const company = lead.company || 'your firm';
   const blogTitle = (lead.rank_insight && lead.rank_insight.blog_offer) || SECTOR_TITLE[lead.sector] || `Best UK ${lead.sector || 'business'} 2026`;
-  const auditUrl = lead.audit_url || ('https://tamazia.co.uk/audit/' + String(company).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-complimentary-audit');
+  const auditUrl = absAudit(lead.audit_url) || ('https://tamazia.co.uk/audit/' + String(company).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-complimentary-audit');
   const top = (findings && findings[0]) ? ` The first thing it flags: ${findings[0]}.` : '';
   const subject = `re: ${company} for the 2026 piece`;
   const body = [
@@ -126,7 +130,7 @@ One direct question on ${lead.company}. Has the ${primary} on the home page been
 
 If yes, apologies for the noise. If no, the audit has the fix:
 
-${lead.audit_url || 'https://audit.tamazia.co.uk/audit/' + (lead.company || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-complimentary-audit'}
+${absAudit(lead.audit_url) || 'https://tamazia.co.uk/audit/' + (lead.company || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-complimentary-audit'}
 
 Stays live for 180 days. Worth comparing line by line against the last report your current agency delivered.
 
@@ -141,7 +145,7 @@ function buildTouch3({ lead, findings }) {
   const subject = `closing the file on ${lead.company}`;
   const body = `${recipient},
 
-Closing the file. The audit at ${lead.audit_url || 'https://audit.tamazia.co.uk/audit/' + (lead.company || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-complimentary-audit'} stays live for 180 days.
+Closing the file. The audit at ${absAudit(lead.audit_url) || 'https://tamazia.co.uk/audit/' + (lead.company || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-complimentary-audit'} stays live for 180 days.
 
 If the ${primary} ever lands on the team's desk, the audit has the fix, or the founder's calendar is at https://tamazia.co.uk/book/.
 

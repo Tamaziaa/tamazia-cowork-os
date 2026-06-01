@@ -12,7 +12,7 @@ const ROOT = path.resolve(__dirname, '..');
 (() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
 function pg(sql) { try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return ''; } }
 
-(async () => {
+async function main() {
   // self-provision throttle columns (additive, fail-open)
   pg(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS score_decayed_at TIMESTAMPTZ`);
   pg(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS rank_refreshed_at TIMESTAMPTZ`);
@@ -51,4 +51,6 @@ function pg(sql) { try { return execFileSync(path.join(ROOT, 'scripts', 'psql'),
 
   console.log(`[refresh-pipeline] decayed ${decayed} stale scores, re-ranked ${reranked} stale insights, re-enrolled ${reenrolled} stale-enrichment leads`);
   try { await require(path.join(ROOT, 'src/lib/cost-ledger.js')).logUsage('refresh-pipeline', 0, { decayed: Number(decayed), reranked: Number(reranked), reenrolled: Number(reenrolled) }); } catch (_) {}
-})().catch(e => { console.error('[refresh-pipeline] fatal (fail-open):', e.message); process.exit(0); });
+}
+if (require.main === module) main().catch(e => { console.error('[refresh-pipeline] fatal (fail-open):', e.message); process.exit(0); });
+module.exports = { main };

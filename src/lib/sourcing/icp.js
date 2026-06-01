@@ -46,6 +46,7 @@ function inServedGeo({ country, domain }) {
 // Coarse pre-filter (pre-audit): is this worth auditing at all?
 // raw: { domain, country, sector?, title, snippet, adText, adRunner }
 function preFilter(raw) {
+  if (!raw || typeof raw !== 'object') raw = {};
   const reasons = [];
   const dom = (raw.domain || '').toLowerCase().replace(/^www\./, '');
   if (!dom || isExcluded(dom)) return { pass: false, reasons: ['excluded_or_no_domain'] };
@@ -61,6 +62,7 @@ function preFilter(raw) {
 // Full FIT score after the audit/site-scan supplies gap signals.
 // sig: { sector, country, adRunner, adPlatforms[], seoGapCount, complianceApplicable, aiVisibilityGap, decisionMakerFound }
 function scoreICP(sig) {
+  if (!sig || typeof sig !== 'object') sig = {};
   const def = SECTORS[sig.sector] || {};
   let score = 0; const reasons = [];
   if (sig.sector) { score += 18; reasons.push('served sector ' + sig.sector); }

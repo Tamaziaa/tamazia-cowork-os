@@ -9,7 +9,7 @@ function pg(sql) { try { return execFileSync(path.join(ROOT, 'scripts', 'psql'),
 const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
 const { composeRankBlock } = require(path.join(ROOT, 'src/lib/touch0/rank-insight.js'));
 const UA = 'Mozilla/5.0 (compatible; TamaziaBot/1.0; +https://tamazia.co.uk)';
-async function html(d) { try { const r = await fetch('https://' + d, { redirect: 'follow', headers: { 'user-agent': UA } }); return r.ok ? await r.text() : ''; } catch (_) { return ''; } }
+async function html(d) { try { const r = await fetch('https://' + d, { redirect: 'follow', headers: { 'user-agent': UA }, signal: AbortSignal.timeout(8000) }); return r.ok ? await r.text() : ''; } catch (_) { return ''; } }
 
 async function main() {
   const limit = Number(process.argv[2]) || 15;
@@ -29,4 +29,6 @@ async function main() {
   }
   console.log(`[rank-insights] built ${built}, gated-out ${gated_out} of ${leads.length}`);
 }
-main().catch(e => { console.error('[rank-insights] fatal (fail-open):', e.message); process.exit(0); });
+if (require.main === module) if (require.main === module) main().catch(e => { console.error('[rank-insights] fatal (fail-open):', e.message); process.exit(0); });
+module.exports = { main };
+module.exports = { main };

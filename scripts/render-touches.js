@@ -11,7 +11,7 @@ const ROOT = path.resolve(__dirname, '..');
 function pg(sql) { try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return ''; } }
 const { renderAll } = require(path.join(ROOT, 'src/skills/S064-touch-cadence/scripts/render.js'));
 
-(async () => {
+async function main() {
   const limit = Number(process.argv[2]) || 15;
   const raw = pg(`SELECT id::text FROM leads
     WHERE quality_fit = TRUE
@@ -29,4 +29,6 @@ const { renderAll } = require(path.join(ROOT, 'src/skills/S064-touch-cadence/scr
     catch (e) { err++; console.error('[render-touches] ' + id + ': ' + e.message); }
   }
   console.log(`[render-touches] rendered ${ok} valid, ${blocked} blocked, ${err} errored of ${ids.length}`);
-})().catch(e => { console.error('[render-touches] fatal (fail-open):', e.message); process.exit(0); });
+}
+if (require.main === module) main().catch(e => { console.error('[render-touches] fatal (fail-open):', e.message); process.exit(0); });
+module.exports = { main };

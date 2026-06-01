@@ -6,7 +6,7 @@ async function sql(query) {
   if (!NEON) return { ok: false };
   try {
     const host = NEON.replace(/.*@([^/]+)\/.*/, '$1');
-    const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': NEON, 'Content-Type': 'application/json' }, body: JSON.stringify({ query, params: [] }) });
+    const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': NEON, 'Content-Type': 'application/json' }, body: JSON.stringify({ query, params: [] }), signal: AbortSignal.timeout(8000) });
     if (!r.ok) return { ok: false };
     const d = await r.json(); return { ok: true, rows: d.rows || d.results || [] };
   } catch (_) { return { ok: false }; }
