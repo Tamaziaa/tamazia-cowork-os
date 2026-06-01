@@ -121,10 +121,10 @@ const FRAMEWORK_META = {
 };
 
 const SECTOR_NEWS = {
-  'UK_GDPR_A13': 'ICO fined British Airways £20M for transparency failures and DPP Law £60k for Article 13/14 breaches.',
-  'UK_DPA_2018': 'ICO fined British Airways £20M for transparency failures and DPP Law £60k for Article 13/14 breaches.',
-  'UK_PECR': 'ICO sweep of cookie banners on FTSE 100 produced enforcement letters to 53 brands.',
-  'UK_ICO_COOKIES': 'ICO sweep of cookie banners on FTSE 100 produced enforcement letters to 53 brands.',
+  'UK_GDPR_A13': 'ICO issued GBP 19.6M across 7 cases in 2025 (Capita GBP 14M, Advanced Computer Software GBP 3.07M, 23andMe GBP 2.31M, LastPass GBP 1.23M); two-thirds were UK GDPR breaches.',
+  'UK_DPA_2018': 'ICO 2025 enforcement hit GBP 19.6M from 7 cases (vs GBP 2.7M in 2024); the DUAA came into force 5 Feb 2026 with new compulsion powers.',
+  'UK_PECR': 'The DUAA came into force 5 Feb 2026, raising the maximum PECR fine to GBP 17.5M (from GBP 500k); the ICO is reviewing the UK top 1,000 websites cookie banners.',
+  'UK_ICO_COOKIES': 'DUAA (in force 5 Feb 2026) lifts PECR fines to GBP 17.5M; the ICO is actively reviewing the top 1,000 UK sites and warned non-compliant cookie banners.',
   'UK_FCA_CONC25': 'FCA charged 9 finfluencers in 2024. Consumer Duty enforcement is FCA top 2025 priority.',
   'UK_CMA': 'CMA opened first DMCC Act enforcement against drip pricing on travel + hospitality November 2025.',
   'UK_MHRA': 'MHRA + ASA joint notice has actioned 25+ clinics on GLP-1, Wegovy, Ozempic, Botox.',
@@ -141,7 +141,7 @@ const SECTOR_NEWS = {
   'US_ADA': 'DOJ ADA Title III digital-accessibility rule finalised April 2024. 4,000+ web-accessibility lawsuits in 2024.',
   'UK_HSE': 'HSE prosecutions resulted in £55M of fines in 2024.',
   'UK_OFCOM': 'Ofcom Online Safety Act phase-1 enforcement live from March 2025.',
-  'UK_ASA_CAP': 'ASA Active Ad Monitoring AI flagged 22,000 ads in 2024.',
+  'UK_ASA_CAP': 'The ASA AI monitoring banned ads in 2025 for greenwashing (Wizz Air), misleading product claims (Origin Mattress) and false-urgency countdown timers (Oct 2025).',
   'GOOGLE_EEAT': 'Google March 2024 core update emphasised E-E-A-T; sites without author bylines saw 31% traffic drop.',
   'UK_OSA_2023': 'Ofcom Phase 1 illegal-content codes March 2025. Fines up to £18M or 10% global turnover.',
   'UK_DMCC_2024': 'CMA gained direct fining powers up to 10% global turnover from April 2025.',
@@ -163,7 +163,7 @@ const SECTOR_NEWS = {
   'EU_CSRD': 'Phase 1 reporting from FY2024. Italy + Germany penalties up to 2% of turnover.',
   'EU_MIFID_II': 'ESMA review marketing material continuously. 2024 enforcement averaged €380k per firm.',
   'EU_SFDR': 'ESMA anti-greenwashing guidelines March 2024. Fines €50k–€2M across France, Italy, Spain.',
-  'US_FTC_ENDORSE': 'FTC final endorsement guides 2023 in force. $50k+ civil penalties per violation.',
+  'US_FTC_ENDORSE': 'FTC Consumer Reviews & Testimonials Rule in force Oct 2024 (USD 53,088 per violation); first warning letters issued to 10 firms in Dec 2025.',
   'FR_CNIL_2025': 'CNIL fined SHEIN €40M, Carrefour €3M, Free Mobile €2.25M in 2024.',
   'DE_BDSG': 'BfDI + state DPAs collectively issued €18M in fines 2024.'
 };
@@ -557,7 +557,7 @@ function renderFrameworkBlock(code, list) {
       </summary>
       ${news ? `
         <div style="margin:10px 0 8px;padding:8px 12px;background:rgba(200,166,100,0.18);border-left:3px solid #C8A664;border-radius:3px">
-          <p style="margin:0;font-size:0.74rem;color:#3D0E0E"><strong style="color:#C8A664;letter-spacing:0.04em;text-transform:uppercase">Enforcement news</strong> · ${esc(news)}</p>
+          <p style="margin:0;font-size:0.74rem;color:#3D0E0E"><strong style="color:#C8A664;letter-spacing:0.04em;text-transform:uppercase">${esc(m.regulator)} · recent action</strong> · ${esc(news)} <span style="color:#6b6b6b">This is the regulator behind the gaps above.</span></p>
         </div>
       ` : ''}
       ${list[0] && list[0].layman_explanation ? `<p style="margin:8px 0 2px;font-size:0.78rem;color:#1F2937;line-height:1.45"><strong style="color:#B91C1C">Why this framework matters:</strong> ${esc(list[0].layman_explanation)}</p>` : ''}
