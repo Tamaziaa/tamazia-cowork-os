@@ -102,6 +102,19 @@ async function _discoverSitemap(domain) {
 }
 // Relevant-page matcher: policy/legal/contact/service pages where compliance + content signals live.
 const _RELEVANT = /privacy|cookie|terms|legal|gdpr|data[- ]protection|accessibility|complaint|modern[- ]slavery|disclaimer|imprint|impressum|about|contact|service|pricing|fees|returns|refund|shipping|delivery|disclosure|regulat|compliance|safeguard/i;
+// JS-render fallback (free, no infra, no key): the public reader executes JavaScript and returns plain text.
+// Used ONLY for a 200 empty-shell SPA (never for challenge walls, never for normal server-rendered sites).
+async function _renderViaReader(url) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 22000);
+  try {
+    const r = await fetch('https://r.jina.ai/' + url, { headers: { 'x-respond-with': 'text', 'accept': 'text/plain' }, signal: ctl.signal });
+    clearTimeout(t);
+    if (!r.ok) return '';
+    const txt = await r.text();
+    return (txt && txt.length > 80) ? txt : '';
+  } catch (_e) { clearTimeout(t); return ''; }
+}
+
 async function gatherCorpus({ domain, maxPages = 22 }) {
   const base = 'https://' + domain;
   const corpus = []; const seenBody = new Set(); const used = new Set();
@@ -137,7 +150,29 @@ async function gatherCorpus({ domain, maxPages = 22 }) {
       corpus.push({ url, body: r.body, status: r.status, fetch_ms: r.fetch_ms, bytes: Buffer.byteLength(r.body) });
     }
   }
-  return corpus;
+  const _anyChallengePre = (home && home.challenge) || results.some(r => r && r.challenge);
+  // JS-render fallback: nothing readable, no challenge, homepage answered 200 -> likely a client-rendered SPA.
+  if (!corpus.length && !_anyChallengePre && home && (home.status === 200 || home.ok)) {
+    const renderTargets = [base + '/', ...guessed.filter(u => /privacy|terms|cookie/i.test(u)).slice(0, 2)];
+    for (const ru of renderTargets) {
+      const txt = await _renderViaReader(ru);
+      if (txt && txt.replace(/\s+/g, '').length > 500) {
+        const sig = _crypto.createHash('sha1').update(txt).digest('hex');
+        if (seenBody.has(sig)) continue; seenBody.add(sig);
+        corpus.push({ url: ru, body: txt, status: 200, fetch_ms: 0, bytes: Buffer.byteLength(txt), rendered: true });
+      }
+    }
+  }
+  // Honest block-reason (so a held site reports WHY, not a generic note).
+  const anyChallenge = (home && home.challenge) || results.some(r => r && r.challenge);
+  let reason = null;
+  if (!corpus.length) {
+    if (anyChallenge) reason = 'anti_bot_challenge';
+    else if (home && home.status >= 400) reason = 'http_' + home.status;
+    else if (home && home.ok && home.body && home.body.replace(/<[^>]+>/g,' ').replace(/\s+/g,'').length < 500) reason = 'js_rendered_empty_shell';
+    else reason = 'no_readable_pages';
+  }
+  return { corpus, blocked: corpus.length === 0, reason, challenge: !!anyChallenge, home_status: home ? home.status : 0, pages_tried: fetchList.length };
 }
 
 // Phase 7.4 · detect operating jurisdictions from the actual site corpus.
@@ -234,12 +269,16 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
-  const corpus = await gatherCorpus({ domain });
+  const _cg = await gatherCorpus({ domain });
+  const corpus = _cg.corpus || [];
   const corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
   // CREDIBILITY GUARD: an empty/unreadable corpus (site blocked our crawler, JS-only, or down) cannot support
   // any 'missing disclosure' finding. Asserting 50+ must_appear misses against no text is a false-positive. Bail.
   if (!corpus.length || corpusText.replace(/\s+/g, '').length < 500) {
-    const payload = { domain, sector, country, ok: true, reachable: false, rules_evaluated: 0, findings: [], note: 'corpus_unreadable_site_blocked_or_down' };
+    const _reason = _cg.reason || 'corpus_unreadable_site_blocked_or_down';
+    const payload = { domain, sector, country, ok: true, reachable: false, rules_evaluated: 0, findings: [],
+      note: _cg.challenge ? 'held_anti_bot_challenge_not_assessable_without_authorized_access' : ('corpus_unreadable_' + _reason),
+      block_reason: _reason, http_status: _cg.home_status || 0, challenge: !!_cg.challenge, pages_tried: _cg.pages_tried || 0 };
     writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 3600 });
     return payload;
   }

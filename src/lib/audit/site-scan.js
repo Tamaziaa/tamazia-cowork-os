@@ -6,9 +6,11 @@
 
 'use strict';
 
-const UA = 'Mozilla/5.0 (compatible; TamaziaAuditBot/1.0; +https://tamazia.co.uk)';
 let _http = null;
 try { _http = require(require('path').resolve(__dirname, '..', '..', 'skills', 'S008-personalisation-engine', 'lib', 'http.js')); } catch (_) {}
+const UA = (_http && _http.UA) || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const BH = (_http && _http.BROWSER_HEADERS) || { 'User-Agent': UA };
+const _detectChallenge = (_http && _http.detectChallenge) || (() => false);
 
 async function timed(fetchPromise, ms) {
   const ctrl = new AbortController();
@@ -21,29 +23,30 @@ async function getHtml(url) {
   // Converged onto S008 fetchWithRetry (shared retry + UA + header-map); falls back to global fetch.
   if (_http && _http.fetchWithRetry) {
     try {
-      const r = await _http.fetchWithRetry(url, { headers: { 'user-agent': UA }, timeout: 20000, retries: 1 });
+      const r = await _http.fetchWithRetry(url, { timeout: 20000, retries: 2 });
       const headers = {}; for (const [k, v] of Object.entries(r.headers || {})) headers[k.toLowerCase()] = v;
-      return { ok: r.ok, status: r.status, headers, body: r.body || '', finalUrl: url };
+      return { ok: r.ok, status: r.status, headers, body: r.body || '', finalUrl: url, challenge: !!r.challenge };
     } catch (_e) { /* fall through */ }
   }
   try {
-    const r = await timed((signal) => fetch(url, { redirect: 'follow', headers: { 'user-agent': UA }, signal }), 20000);
+    const r = await timed((signal) => fetch(url, { redirect: 'follow', headers: BH, signal }), 20000);
     const headers = {};
     r.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
     const body = await r.text();
-    return { ok: r.ok, status: r.status, headers, body, finalUrl: r.url || url };
+    const challenge = _detectChallenge(r.status, body);
+    return { ok: (r.ok && !challenge), status: r.status, headers, body, finalUrl: r.url || url, challenge };
   } catch (_e) { return { ok: false, status: 0, headers: {}, body: '', finalUrl: url }; }
 }
 
 async function exists(url) {
   try {
-    const r = await timed((signal) => fetch(url, { redirect: 'follow', headers: { 'user-agent': UA }, signal }), 12000);
+    const r = await timed((signal) => fetch(url, { redirect: 'follow', headers: BH, signal }), 12000);
     return r.ok;
   } catch (_e) { return null; } // null = could not determine
 }
 
 async function getText(url) {
-  try { const r = await timed((signal) => fetch(url, { redirect: 'follow', headers: { 'user-agent': UA }, signal }), 10000); if (!r.ok) return ''; return await r.text(); } catch (_e) { return ''; }
+  try { const r = await timed((signal) => fetch(url, { redirect: 'follow', headers: BH, signal }), 10000); if (!r.ok) return ''; return await r.text(); } catch (_e) { return ''; }
 }
 // --- AI crawler access (GEO): is the site blocking the bots that feed ChatGPT/Claude/Perplexity/Google AI? ---
 function aiCrawlerPointers(robotsBody) {
