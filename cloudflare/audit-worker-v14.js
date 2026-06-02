@@ -513,16 +513,29 @@ function renderBeforeAfter(totalExposure, score, projected, grade) {
 }
 
 function renderAIPlatform(audit) {
+  const aic = audit.ai_citation || null;
   const platforms = aiPlatformScores(audit.signals);
-  const avg = Math.round(platforms.reduce((a, p) => a + p.score, 0) / platforms.length);
-  const industryAvg = 42;
-  const gap = industryAvg - avg;
+  let realBand = '';
+  if (aic && (aic.firm_position != null || (aic.llm && aic.llm.ran))) {
+    const comp = (aic.competitors && aic.competitors[0]) ? esc(String((aic.competitors[0].name || aic.competitors[0].domain) || '').replace(/^www\./, '')) : '';
+    const q = esc(aic.query || (audit.sector || ''));
+    let line;
+    if (aic.llm && aic.llm.ran && aic.llm.cited === false) line = `We asked a live AI assistant to name the leading firms for “${q}”. It named ${comp ? comp + ' and others, but not you.' : 'your competitors, not you.'}`;
+    else if (aic.firm_position != null && aic.firm_position > 3) line = `For “${q}” you rank #${aic.firm_position}. AI answers overwhelmingly cite positions 1 to 3${comp ? ', led today by ' + comp + '.' : '.'}`;
+    else if (aic.llm && aic.llm.ran && aic.llm.cited === true) line = `A live AI assistant named your firm for “${q}”, a lead to defend and extend.`;
+    else line = `When buyers ask AI assistants for a ${esc(audit.sector || 'provider')}${comp ? ', they surface ' + comp + ' ahead of you.' : ', your firm is not reliably surfaced.'}`;
+    const srcLabel = aic.source === 'llm_only' ? 'live AI-assistant probe' : 'live search + AI probe';
+    realBand = `<div style="background:#3D0E0E;color:#F8F5EF;border-radius:8px;padding:14px 16px;margin:0 0 16px"><p style="margin:0 0 4px;font-size:0.58rem;letter-spacing:0.16em;text-transform:uppercase;color:#C8A664;font-weight:700">Measured · ${srcLabel}</p><p style="margin:0;font-size:1.04rem;font-family:'Times New Roman',serif;line-height:1.4">${line}</p></div>`;
+  }
+  const rlabel = (sc) => sc < 40 ? 'Low readiness' : sc < 70 ? 'Partial readiness' : 'Strong readiness';
+  const rcol = (sc) => sc < 40 ? '#B91C1C' : sc < 70 ? '#E67E22' : '#2E7D32';
   return `
     <section style="padding:26px 24px;background:white;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto">
-        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">AI search visibility · ${esc(audit.sector || 'sector')} average ${industryAvg}%</p>
-        <h2 style="font-family:'Times New Roman',serif;font-size:1.4rem;margin:0 0 6px;color:#3D0E0E;line-height:1.15">${esc(audit.company)} appears in ${avg}% of AI answers · <span style="color:#B91C1C">${gap} points below sector average</span>.</h2>
-        <p style="font-size:0.82rem;color:#6b6b6b;margin:0 0 14px">When buyers ask ChatGPT, Claude, Perplexity or Gemini for a ${esc(audit.sector || 'provider')}, your brand is missed in nearly 8 of every 10 answers.</p>
+        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">AI search visibility</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.4rem;margin:0 0 10px;color:#3D0E0E;line-height:1.15">Are AI assistants recommending ${esc(audit.company)}?</h2>
+        ${realBand}
+        <p style="font-size:0.82rem;color:#6b6b6b;margin:0 0 14px">The scores below are modelled from your on-page signals (Schema, llms.txt, entity and E-E-A-T), the inputs that decide whether ChatGPT, Claude, Perplexity and Gemini can cite you.${aic ? ' The band above is the measured live result.' : ''}</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
           ${platforms.map(p => `
             <div style="background:#F8F5EF;border-radius:6px;padding:12px 14px;border-top:3px solid ${p.color}">
@@ -530,10 +543,11 @@ function renderAIPlatform(audit) {
                 <p style="margin:0;font-size:0.72rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">${esc(p.name)}</p>
                 <span style="background:${p.color};color:white;font-size:0.56rem;font-weight:700;padding:2px 6px;border-radius:3px">${p.icon}</span>
               </div>
-              <p style="margin:4px 0 2px;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:${p.color}">${p.score}%</p>
-              <p style="margin:0;font-size:0.68rem;color:#B91C1C;font-weight:600">Below average</p>
+              <p style="margin:4px 0 2px;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:${rcol(p.score)}">${p.score}<span style="font-size:0.8rem;color:#9ca3af">/100</span></p>
+              <p style="margin:0;font-size:0.66rem;color:${rcol(p.score)};font-weight:600">${rlabel(p.score)}</p>
             </div>`).join('')}
         </div>
+        <p style="font-size:0.62rem;color:#9ca3af;margin:10px 0 0">Readiness is a modelled estimate, not a measured citation rate; full multi-engine measurement is delivered in the engagement.</p>
       </div>
     </section>`;
 }

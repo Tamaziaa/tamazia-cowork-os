@@ -162,7 +162,7 @@ function buildCompetitiveBenchmark(aic, km) {
   if (hasAic) {
     out.query = aic.query || null;
     out.you = { position: aic.firm_position != null ? aic.firm_position : null, cited: aic.firm_position != null && aic.firm_position <= 3 };
-    out.competitors = (aic.competitors || []).slice(0, 5).map(c => ({ name: String(c.domain || '').replace(/^www\./, ''), domain: c.domain || null, position: c.position != null ? c.position : null }));
+    out.competitors = (aic.competitors || []).slice(0, 5).map(c => ({ name: c.name || String(c.domain || '').replace(/^www\./, ''), domain: c.domain || null, position: (c.position != null ? c.position : (c.pos != null ? c.pos : null)) }));
   }
   if (hasKm) {
     out.keyword_leaders = km.keywords.slice(0, 6).map(k => ({ keyword: k.keyword, your_position: k.my_position != null ? k.my_position : null, leader: k.leader || null, leader_position: k.leader_pos != null ? k.leader_pos : null }));

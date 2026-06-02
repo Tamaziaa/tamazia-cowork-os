@@ -174,6 +174,14 @@ function _probeNoun(company, sector, html) {
   }
   return noun;
 }
+function parseLlmCompetitors(answer, company) {
+  const self = String(company || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim().split(/\s+/)[0];
+  return String(answer || '').split(/[,\n]/)
+    .map(x => x.replace(/^\s*\d+[\.\)]\s*/, '').replace(/[*"']/g, '').trim())
+    .filter(x => x && x.length > 1 && x.length < 60 && !/^(here|the|top|firms?|providers?|sure|certainly|some|popular)\b/i.test(x))
+    .filter(x => { const n = x.toLowerCase().replace(/[^a-z0-9 ]/g, ''); return self ? !n.includes(self) : true; })
+    .slice(0, 5);
+}
 async function aiCitationProbe({ domain, company, sector, city, html, country = 'UK', wikidata = null }) {
   domain = clean(domain);
   const noun = await deriveCategoryNoun({ company, sector, html, domain });
@@ -182,7 +190,16 @@ async function aiCitationProbe({ domain, company, sector, city, html, country = 
   if (city) { const kws = keywordsFor(sector, city, noun).filter(k => !/^best |^top /i.test(k) && !/\d{4}$/.test(k)); q = kws[0] || (noun + ' ' + city); }
   else { q = noun + ' ' + country; }
   let r = null; try { r = await serp.search(q, country, 20); } catch (_e) {}
-  if (!r || r.error || !((r.organic || []).length)) return { ok: false, reason: 'serp_unavailable', query: q };
+  if (!r || r.error || !((r.organic || []).length)) {
+    // SERP unavailable: fall back to the FREE NIM-only probe so the AI-visibility section still populates at GBP 0.
+    let llm = null; try { llm = await llmCitationProbe({ query: q, company }); } catch (_e) {}
+    if (llm && llm.ran) {
+      const names = parseLlmCompetitors(llm.answer, company);
+      const competitors = names.map(n => ({ name: n, domain: null, pos: null }));
+      return { ok: true, source: 'llm_only', query: q, country, firm_position: null, competitors, surface_owned_by: names.slice(0, 3), checked: 0, entity_known: !!(wikidata && wikidata.found), llm };
+    }
+    return { ok: false, reason: 'serp_unavailable', query: q };
+  }
   const ranked = r.organic.map(o => ({ pos: o.rank, domain: clean(o.domain) })).filter(x => x.domain);
   const mine = ranked.find(x => x.domain === domain || x.domain.endsWith('.' + domain) || domain.endsWith('.' + x.domain));
   const competitors = []; const seen = new Set();
@@ -195,7 +212,7 @@ async function aiCitationProbe({ domain, company, sector, city, html, country = 
   }
   let llm = null; try { llm = await llmCitationProbe({ query: q, company }); } catch (_e) {}
   return {
-    ok: true, query: q, country,
+    ok: true, source: 'serp', query: q, country,
     firm_position: mine ? mine.pos : null,
     competitors, surface_owned_by: competitors.slice(0, 3).map(c => c.domain),
     checked: ranked.length, entity_known: !!(wikidata && wikidata.found),
