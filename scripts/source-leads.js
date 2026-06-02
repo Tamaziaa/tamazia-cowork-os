@@ -15,6 +15,7 @@ const path = require('path');
 const { REGISTRY } = require(path.resolve(__dirname, '..', 'src/lib/sourcing/sources/adapters.js'));
 const { preFilter, scoreICP, SECTORS } = require(path.resolve(__dirname, '..', 'src/lib/sourcing/icp.js'));
 const { hotScore } = require(path.resolve(__dirname, '..', 'src/lib/sourcing/hot-score.js'));
+const { conversionScore } = require(path.resolve(__dirname, '..', 'src/lib/sourcing/conversion.js'));
 const { enrichCompany } = require(path.resolve(__dirname, '..', 'src/lib/sourcing/enrich.js'));
 const { scanSite } = require(path.resolve(__dirname, '..', 'src/lib/audit/site-scan.js'));
 const ab = require(path.resolve(__dirname, '..', 'src/skills/S025-audit-page-builder/scripts/build.js'));
@@ -111,12 +112,15 @@ async function run() {
       channel_instagram_ready: consumerSector,
       top_finding: (scan.pointers && scan.pointers[0] && scan.pointers[0].layman_explanation) || '',
     };
-    summary.leads.push({ domain: lead.domain, sector: lead.sector, fit: lead.fit, hot: lead.hot_score, emails: enr.counts.emails, verified: enr.counts.verified, dms: enr.counts.decision_makers, platform: r.platform });
+    const _verifiedEmail = (enr.emails || []).some(e => e.verified) || !!lead.email;
+    const conv = conversionScore({ fit: lead.fit, fit_score: lead.fit_score, hot_score: lead.hot_score, has_verified_email: _verifiedEmail, decision_maker: (enr.decisionMakers || []).length > 0, has_linkedin: !!lead.contact_linkedin, audit_verified: false, hiring_signal: r.hiring_signal });
+    lead.conversion_tier = conv.tier; lead.conversion_score = conv.score;
+    summary.leads.push({ domain: lead.domain, sector: lead.sector, tier: conv.tier, fit: lead.fit, hot: lead.hot_score, emails: enr.counts.emails, verified: enr.counts.verified, dms: enr.counts.decision_makers, platform: r.platform });
 
     if (o.dryRun) continue;
     // 4. persist lead (upsert by domain)
-    const ins = await q(`INSERT INTO leads (company, domain, website, sector, jurisdiction, country, source, acquisition_channel, lead_type, lifecycle_stage, aggressive_source, priority_score, platform, source_permalink, scrape_stream, hot_score, fit, fit_score, email, contact_name, contact_title, contact_linkedin, emails, decision_makers, top_finding, channel_email_ready, channel_linkedin_ready, channel_instagram_ready, sourced_at, created_at)
-      VALUES (${lit(lead.company)}, ${lit(lead.domain)}, ${lit('https://' + lead.domain)}, ${lit(lead.sector)}, ${lit(lead.country)}, ${lit(lead.country)}, ${lit(r.source)}, ${lit('ad_intel_' + r.platform)}, ${lit('commercial_' + lead.sector)}, 'sourced', ${boolL(adRunner)}, ${num(lead.hot_score)}, ${lit(r.platform)}, ${lit(r.permalink)}, ${lit(adRunner ? 'sponsored' : 'organic_top100')}, ${num(lead.hot_score)}, ${boolL(lead.fit)}, ${num(lead.fit_score)}, ${lit(lead.email)}, ${lit(lead.contact_name)}, ${lit(lead.contact_title)}, ${lit(lead.contact_linkedin)}, ${jb(lead.emails)}, ${jb(lead.decision_makers)}, ${lit(lead.top_finding)}, ${boolL(lead.channel_email_ready)}, ${boolL(lead.channel_linkedin_ready)}, ${boolL(lead.channel_instagram_ready)}, NOW(), NOW())
+    const ins = await q(`INSERT INTO leads (company, domain, website, sector, jurisdiction, country, source, acquisition_channel, lead_type, lifecycle_stage, aggressive_source, priority_score, platform, source_permalink, scrape_stream, hot_score, fit, fit_score, email, contact_name, contact_title, contact_linkedin, emails, decision_makers, top_finding, channel_email_ready, channel_linkedin_ready, channel_instagram_ready, conversion_tier, conversion_score, hiring_signal, sourced_at, created_at)
+      VALUES (${lit(lead.company)}, ${lit(lead.domain)}, ${lit('https://' + lead.domain)}, ${lit(lead.sector)}, ${lit(lead.country)}, ${lit(lead.country)}, ${lit(r.source)}, ${lit('ad_intel_' + r.platform)}, ${lit('commercial_' + lead.sector)}, 'sourced', ${boolL(adRunner)}, ${num(lead.hot_score)}, ${lit(r.platform)}, ${lit(r.permalink)}, ${lit(adRunner ? 'sponsored' : 'organic_top100')}, ${num(lead.hot_score)}, ${boolL(lead.fit)}, ${num(lead.fit_score)}, ${lit(lead.email)}, ${lit(lead.contact_name)}, ${lit(lead.contact_title)}, ${lit(lead.contact_linkedin)}, ${jb(lead.emails)}, ${jb(lead.decision_makers)}, ${lit(lead.top_finding)}, ${boolL(lead.channel_email_ready)}, ${boolL(lead.channel_linkedin_ready)}, ${boolL(lead.channel_instagram_ready)}, ${lit(lead.conversion_tier)}, ${num(lead.conversion_score)}, ${lit(r.hiring_signal || null)}, NOW(), NOW())
       RETURNING id`);
     if (ins.ok && ins.rows[0]) summary.persisted++; else if (!ins.ok) console.error('[persist] ' + lead.domain + ': ' + ins.error);
     // 5. mint audit page tied to the lead (best-effort)

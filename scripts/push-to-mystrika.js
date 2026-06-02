@@ -6,6 +6,7 @@
 const { execFileSync } = require('child_process');
 const path = require('path');
 const M = require(path.resolve(__dirname, '..', 'src', 'lib', 'mystrika', 'client.js'));
+const { conversionScore, SEND_TIERS } = require(path.resolve(__dirname, '..', 'src', 'lib', 'sourcing', 'conversion.js'));
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
 function pg(sql){ return execFileSync(path.join(__dirname,'psql'),[NEON,'-tA','-c',sql],{encoding:'utf8'}); }
 const b64d = (s)=>{ try { return Buffer.from(String(s||''),'base64').toString('utf8'); } catch(_){ return ''; } };
@@ -29,7 +30,7 @@ const DRY = process.argv.includes('--dry');
   const raw = pg(`SELECT COALESCE(NULLIF(l.contact_email,''), l.email, ''), regexp_replace(COALESCE(NULLIF(trim(l.first_name||' '||COALESCE(l.last_name,'')),''), l.company,'there'),'[\\t\\r\\n]',' ','g'),
       regexp_replace(COALESCE(l.company,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.domain,''), COALESCE(l.sector,''), COALESCE(l.audit_url,''),
       regexp_replace(COALESCE(l.personalisation_pointers->>'top_finding',''),'[\\t\\r\\n]',' ','g'), COALESCE(l.operating_city,''),
-      regexp_replace(COALESCE(l.rank_insight_sentence,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.hiring_signal,''),
+      regexp_replace(COALESCE(l.rank_insight_sentence,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.hiring_signal,''), COALESCE(l.fit_score,0), COALESCE(l.hot_score,0), CASE WHEN COALESCE(l.contact_linkedin,'')<>'' THEN '1' ELSE '0' END, CASE WHEN COALESCE(jsonb_array_length(l.decision_makers),0)>0 OR COALESCE(l.contact_name,'')<>'' THEN '1' ELSE '0' END,
       replace(encode(convert_to(COALESCE(d.t0s,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t0b,''),'UTF8'),'base64'),E'\\n',''),
       replace(encode(convert_to(COALESCE(d.t1b,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t2b,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t3b,''),'UTF8'),'base64'),E'\\n','')
     FROM leads l LEFT JOIN LATERAL (
@@ -43,17 +44,21 @@ const DRY = process.argv.includes('--dry');
   if (!rows.length) { console.log('0 new FIT leads to push (need quality_fit + qualified + audit_verified + email + not already pushed).'); return; }
   const prospects = [];
   for (const r of rows) {
-    const [email,name,company,domain,sector,audit,finding,city,ri,hiring,t0s,t0b,t1b,t2b,t3b]=r;
+    const [email,name,company,domain,sector,audit,finding,city,ri,hiring,fitScore,hotScore,hasLi,hasDm,t0s,t0b,t1b,t2b,t3b]=r;
     if (!email) continue;
-    const t0body=b64d(t0b); if (!t0body) continue; // never push a prospect without a real Touch-0 body
+    const t0body=b64d(t0b); if (!t0body) continue;
+    const conv=conversionScore({fit:true,fit_score:+fitScore||0,hot_score:+hotScore||0,has_verified_email:true,decision_maker:hasDm==='1',has_linkedin:hasLi==='1',audit_verified:true,hiring_signal:hiring});
+    if (!SEND_TIERS.has(conv.tier)) continue;  // only email leads we are VERY sure about (Tier A/B) // never push a prospect without a real Touch-0 body
     prospects.push({ email, name: name||'there', company, domain, sector, audit_url: audit, top_finding: finding, city,
-      rank_insight: ri, hiring_signal: hiring, touch0_subject: b64d(t0s), touch0_body: t0body, touch1_body: b64d(t1b), touch2_body: b64d(t2b), touch3_body: b64d(t3b) });
+      rank_insight: ri, hiring_signal: hiring, conversion_tier: conv.tier, conversion_score: conv.score, touch0_subject: b64d(t0s), touch0_body: t0body, touch1_body: b64d(t1b), touch2_body: b64d(t2b), touch3_body: b64d(t3b) });
   }
   // group by sector campaign
   const byCamp = {};
   for (const p of prospects) { const cid = campaignFor(p.sector); if (!cid) { continue; } (byCamp[cid] = byCamp[cid] || []).push(p); }
   const totalRouted = Object.values(byCamp).reduce((a,x)=>a+x.length,0);
-  console.log('Routing '+totalRouted+'/'+prospects.length+' prospects across '+Object.keys(byCamp).length+' sector campaigns'+(DRY?' (DRY)':'')+' ...');
+  prospects.sort((a,b)=>(b.conversion_score||0)-(a.conversion_score||0));  // SEND BEST FIRST
+  const tierA=prospects.filter(p=>p.conversion_tier==='A').length;
+  console.log('Routing '+totalRouted+'/'+prospects.length+' prospects ('+tierA+' Tier-A) across '+Object.keys(byCamp).length+' sector campaigns'+(DRY?' (DRY)':'')+' ...');
   if (DRY) { for (const [cid,ps] of Object.entries(byCamp)) console.log('  campaign '+cid+': '+ps.length+' prospects (e.g. '+(ps[0]||{}).company+')'); return; }
   let pushedEmails = [];
   for (const [cid, ps] of Object.entries(byCamp)) {
