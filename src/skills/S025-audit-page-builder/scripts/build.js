@@ -99,6 +99,34 @@ function groupFindings(pointers) {
   return Object.values(g).map(x => ({ ...x, count: x.items.length })).sort((a, b) => (_SEV[a.severity] ?? 3) - (_SEV[b.severity] ?? 3) || (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0) || b.count - a.count);
 }
 
+// P1.4 NIM-as-verifier: for the top fine-bearing PRESENCE findings (which carry a verbatim quote), confirm the
+// evidence entails the finding. NOT_ENTAILED -> demote to NEEDS_REVIEW + withhold the fine. Fail-open, capped for scale.
+async function verifyTopFindings(classified, env, cap = 5) {
+  const key = (env && env.NIM_API_KEY) || process.env.NIM_API_KEY;
+  if (!key) return classified;
+  const base = 'https://integrate.api.nvidia.com/v1/chat/completions';
+  const model = process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct';
+  const targets = classified
+    .filter(f => f.state === 'CONFIRMED' && f.kind === 'presence' && (f.evidence_quote || f.evidence_snippet) && (f.fine_high_gbp || f.fine_low_gbp))
+    .sort((a, b) => (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0))
+    .slice(0, cap);
+  for (const f of targets) {
+    try {
+      const quote = String(f.evidence_quote || f.evidence_snippet).slice(0, 400);
+      const rule = String(f.fact || f.description || '').slice(0, 300);
+      const prompt = 'You verify website-audit findings. Judge ONLY the quoted text; assume nothing beyond it.\nFinding: "' + rule + '"\nText quoted verbatim from the website: "' + quote + '"\nDoes the quoted text clearly support the finding? Reply with YES or NO on the first line, then a six-word reason.';
+      const r = await fetch(base, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 24, temperature: 0 }), signal: AbortSignal.timeout(20000) });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const _raw = ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
+      const _first = _raw.split(/\n|[.,]/)[0].toUpperCase();
+      if (/^\s*NO\b/.test(_first)) { f.state = 'NEEDS_REVIEW'; f.fine_low_gbp = null; f.fine_high_gbp = null; f.fine_withheld = true; f.signals = (f.signals || []).concat('nim_not_entailed'); }
+      else if (/^\s*YES\b/.test(_first)) { f.signals = (f.signals || []).concat('nim_entailed'); }
+    } catch (_e) { /* fail-open */ }
+  }
+  return classified;
+}
+
 async function buildPayload({ domain, sector, country, lead_id, env }) {
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
@@ -174,15 +202,22 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   }) : [];
 
   const sevRank = { P0: 0, P1: 1, P2: 2 };
-  const findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
-  const threeFindings = findings.slice(0, 3);
+  let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
+  // P1.2-P1.5 finding-trust: tag kind+signals+state, lock quotes on presence findings, evidence-lock fines; only CONFIRMED renders.
+  const _ft = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'finding-trust.js'));
+  const _corpusAdequate = !(comp && comp.challenge) && (comp && comp.reachable !== false);
+  let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class });
+  try { _classified = await verifyTopFindings(_classified, env || process.env); } catch (_e) {}
+  const _confirmed = _ft.confirmed(_classified);
+  const _needsReview = _ft.needsReview(_classified);
+  const threeFindings = _confirmed.slice(0, 3);
   // LLM executive summary (NIM, free) — a 2-sentence synthesis of the REAL findings only. Fallback-safe.
   let exec_summary = '';
   try {
     const _key = process.env.NIM_API_KEY || process.env.GROQ_API_KEY;
-    if (_key && findings.length) {
-      const _top = findings.slice(0, 8).map(f => '- ' + (f.severity || '') + ' ' + String(f.fact || '').slice(0, 90)).join('\n');
-      const _expo = findings.reduce((a, f) => a + (f.fine_high_gbp || 0), 0);
+    if (_key && _confirmed.length) {
+      const _top = _confirmed.slice(0, 8).map(f => '- ' + (f.severity || '') + ' ' + String(f.fact || '').slice(0, 90)).join('\n');
+      const _expo = _confirmed.reduce((a, f) => a + (f.fine_high_gbp || 0), 0);
       const _base = process.env.NIM_API_KEY ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
       const _model = process.env.NIM_API_KEY ? (process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct') : 'llama-3.3-70b-versatile';
       const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nMax fine exposure across findings: GBP ' + _expo + '.\nWrite exactly two sentences: (1) the single most serious regulatory or commercial risk and why it matters, (2) the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.';
@@ -205,9 +240,11 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     engine_jurisdictions: (comp && comp.jurisdictions) || [],
     rules,
     // Evidence-tied findings from the real site scan — surfaced at top level so any renderer can read them
-    pointers: findings.slice(0, 80),
+    pointers: _confirmed.slice(0, 80),
+    needs_review: _needsReview.slice(0, 40),
+    trust_summary: { confirmed: _confirmed.length, needs_review: _needsReview.length },
     exec_summary,
-    framework_groups: groupFindings(findings),
+    framework_groups: groupFindings(_confirmed),
     news_map: (() => { const nm = {}; const want = new Set((frameworks||[]).map(f=>String(f))); try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) { const fw = ln.slice(0, i); if (!want.size || want.has(fw)) nm[fw] = ln.slice(i + 1); } } } catch (_e) {} return nm; })(),
     keyword_map: keyword_map && keyword_map.ok ? keyword_map : null,
     ai_citation: ai_citation && ai_citation.ok ? ai_citation : null,
