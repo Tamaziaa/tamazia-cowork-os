@@ -678,14 +678,11 @@ function renderAllFindings(merged) {
   return b1 + b2 + b3;
 }
 
-// ===== Data-viz suite v2 (inline SVG, CSP-safe, no deps, accessible, self-explaining) ====================
-// Design system: a shared palette (colour is NEVER the only signal — every chart also carries text labels +
-// a legend + a "How to read this" line), a card frame, and reusable chart primitives.
+// ===== Data-viz suite v3 (inline SVG, CSP-safe, fully labelled, accessible) =============================
 const VIZ = { ink:'#3D0E0E', gold:'#C8A664', crit:'#B91C1C', high:'#D97706', ok:'#15803D', mid:'#2563EB', grid:'#e7e0d2', muted:'#6b6b6b', cream:'#F8F5EF' };
 function _money(n){ if(n>=1e6) return '£'+(n/1e6).toFixed(n>=1e7?0:1).replace('.0','')+'M'; if(n>=1e3) return '£'+Math.round(n/1e3)+'k'; return '£'+Math.round(n); }
-function _chip(color, label){ return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:0.66rem;color:#3D0E0E;margin-right:12px"><span style="width:11px;height:11px;border-radius:3px;background:'+color+';display:inline-block;flex-shrink:0"></span>'+esc(label)+'</span>'; }
+function _chip(color, label){ return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:0.66rem;color:#3D0E0E;margin-right:12px;margin-bottom:2px"><span style="width:11px;height:11px;border-radius:3px;background:'+color+';display:inline-block;flex-shrink:0"></span>'+esc(label)+'</span>'; }
 function vizLegend(items){ return '<div style="margin:6px 0 2px;line-height:1.7">'+items.map(i=>_chip(i[0],i[1])).join('')+'</div>'; }
-// Card frame: title + subtitle + legend + svg + a plain-language "how to read this" definition.
 function vizFrame(opts){
   if(!opts.svg) return '';
   return '<div style="background:#fff;border:1px solid '+VIZ.grid+';border-radius:8px;padding:14px 16px;display:flex;flex-direction:column">'
@@ -697,116 +694,141 @@ function vizFrame(opts){
     +'</div>';
 }
 function _svg(vb, maxW, aria, body){ return '<svg viewBox="0 0 '+vb+'" width="100%" style="max-width:'+maxW+'px;height:auto" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(aria)+'"><title>'+esc(aria)+'</title>'+body+'</svg>'; }
+function _short(d){ return String(d||'').replace(/^www\./,'').replace(/\/$/,'').slice(0,22); }
 
-// 1) Regulatory exposure by framework (horizontal bars, largest first).
+// 1) Regulatory exposure by framework + running total + axis label.
 function vizWaterfall(merged){
   const comp=(merged||[]).filter(p=>p.bucket==='compliance'&&p.fine_high_gbp);
   const byFw={}; for(const p of comp){ const k=p.citation||p.framework_short||'?'; byFw[k]=Math.max(byFw[k]||0,p.fine_high_gbp); }
   let rows=Object.entries(byFw).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,6);
   if(!rows.length) return '';
-  const max=rows[0].v; const W=460,rh=30,top=6,lblW=132,barW=W-lblW-72;
-  let body=''; rows.forEach((r,i)=>{ const y=top+i*rh; const w=Math.max(3,Math.round(barW*r.v/max)); const meta=(typeof FRAMEWORK_META!=='undefined'&&FRAMEWORK_META[r.k])||{name:r.k};
-    body+='<text x="0" y="'+(y+14)+'" font-size="11" fill="'+VIZ.ink+'">'+esc((meta.name||r.k).slice(0,22))+'</text>';
+  const total=Object.values(byFw).reduce((a,n)=>a+n,0);
+  const max=rows[0].v; const W=470,rh=30,top=20,lblW=150,barW=W-lblW-78;
+  let body='<text x="0" y="12" font-size="9" fill="'+VIZ.muted+'">Framework</text><text x="'+(lblW)+'" y="12" font-size="9" fill="'+VIZ.muted+'">Maximum fine exposure (£) &#8594;</text>';
+  rows.forEach((r,i)=>{ const y=top+i*rh; const w=Math.max(3,Math.round(barW*r.v/max)); const meta=(typeof FRAMEWORK_META!=='undefined'&&FRAMEWORK_META[r.k])||{name:r.k};
+    body+='<text x="0" y="'+(y+14)+'" font-size="10.5" fill="'+VIZ.ink+'">'+esc((meta.name||r.k).slice(0,24))+'</text>';
     body+='<rect x="'+lblW+'" y="'+(y+3)+'" width="'+w+'" height="16" rx="3" fill="'+VIZ.crit+'" fill-opacity="'+(1-i*0.1).toFixed(2)+'"/>';
     body+='<text x="'+(lblW+w+6)+'" y="'+(y+15)+'" font-size="10.5" font-weight="700" fill="'+VIZ.crit+'">'+_money(r.v)+'</text>';
   });
-  return _svg(W+' '+(top+rows.length*rh+4), 480, 'Regulatory fine exposure by framework', body);
+  const yT=top+rows.length*rh+6;
+  body+='<line x1="'+lblW+'" y1="'+(yT-4)+'" x2="'+W+'" y2="'+(yT-4)+'" stroke="'+VIZ.grid+'"/>';
+  body+='<text x="0" y="'+(yT+8)+'" font-size="10" font-weight="700" fill="'+VIZ.ink+'">Total exposure shown: '+_money(total)+' across '+Object.keys(byFw).length+' frameworks</text>';
+  return _svg(W+' '+(yT+14), 480, 'Regulatory fine exposure by framework, total '+_money(total), body);
 }
 
-// 2) Citation ladder (REBUILT): per buyer query, where YOU actually rank vs the rival AI cites #1.
+// 2) Citation ladder — query, your ACTUAL rank, the gap, and the named rival AI cites #1.
 function vizCitationLadder(km){
   let rows=(km&&Array.isArray(km.keywords))?km.keywords.slice(0,5):[];
   if(!rows.length) return '';
-  const W=470, rh=46, top=18, tx0=150, tw=150, nrX=tx0+tw+20; // track 1..10 then NR zone
+  const W=500, rh=48, top=30, qx=0, tx0=120, tw=120, nrX=tx0+tw+16, rivX=nrX+34;
   const posX=(pos)=>{ if(!pos) return nrX; const c=Math.max(1,Math.min(10,pos)); return tx0+((c-1)/9)*tw; };
   const youCol=(pos)=>(!pos||pos>10)?VIZ.crit:(pos<=3?VIZ.ok:VIZ.high);
-  let body='';
+  // column headers
+  let body='<text x="'+qx+'" y="12" font-size="9" font-weight="700" fill="'+VIZ.muted+'">Buyer query</text>';
+  body+='<text x="'+tx0+'" y="12" font-size="9" font-weight="700" fill="'+VIZ.muted+'">Your position (#1 best &#8594; #10 &#8594; NR)</text>';
+  body+='<text x="'+rivX+'" y="12" font-size="9" font-weight="700" fill="'+VIZ.muted+'">Who AI cites #1</text>';
   // scale ticks
-  body+='<text x="'+tx0+'" y="'+(top-6)+'" font-size="8.5" fill="'+VIZ.muted+'" text-anchor="middle">#1</text>';
-  body+='<text x="'+(tx0+tw/2)+'" y="'+(top-6)+'" font-size="8.5" fill="'+VIZ.muted+'" text-anchor="middle">#5</text>';
-  body+='<text x="'+(tx0+tw)+'" y="'+(top-6)+'" font-size="8.5" fill="'+VIZ.muted+'" text-anchor="middle">#10</text>';
-  body+='<text x="'+nrX+'" y="'+(top-6)+'" font-size="8.5" fill="'+VIZ.crit+'" text-anchor="middle">NR</text>';
-  rows.forEach((r,i)=>{ const y=top+i*rh+12;
-    body+='<text x="0" y="'+(y+1)+'" font-size="10" fill="'+VIZ.ink+'">'+esc(r.keyword.slice(0,26))+'</text>';
-    // track line
+  body+='<text x="'+tx0+'" y="'+(top-7)+'" font-size="8" fill="'+VIZ.muted+'" text-anchor="middle">#1</text>';
+  body+='<text x="'+(tx0+tw/2)+'" y="'+(top-7)+'" font-size="8" fill="'+VIZ.muted+'" text-anchor="middle">#5</text>';
+  body+='<text x="'+(tx0+tw)+'" y="'+(top-7)+'" font-size="8" fill="'+VIZ.muted+'" text-anchor="middle">#10</text>';
+  body+='<text x="'+nrX+'" y="'+(top-7)+'" font-size="8" fill="'+VIZ.crit+'" text-anchor="middle">NR</text>';
+  rows.forEach((r,i)=>{ const y=top+i*rh+10;
+    body+='<text x="'+qx+'" y="'+(y+1)+'" font-size="9.5" fill="'+VIZ.ink+'">'+esc(r.keyword.slice(0,20))+'</text>';
     body+='<line x1="'+tx0+'" y1="'+y+'" x2="'+(tx0+tw)+'" y2="'+y+'" stroke="'+VIZ.grid+'" stroke-width="3" stroke-linecap="round"/>';
-    body+='<line x1="'+(nrX-9)+'" y1="'+y+'" x2="'+(nrX+9)+'" y2="'+y+'" stroke="#f1d6d6" stroke-width="3" stroke-linecap="round"/>';
-    // rival #1 dot (gold)
-    const lp=r.leader_pos||1; body+='<circle cx="'+posX(lp).toFixed(1)+'" cy="'+y+'" r="5" fill="'+VIZ.gold+'"/>';
-    // your dot
+    body+='<line x1="'+(nrX-8)+'" y1="'+y+'" x2="'+(nrX+8)+'" y2="'+y+'" stroke="#f1d6d6" stroke-width="3" stroke-linecap="round"/>';
+    const lp=r.leader_pos||1; body+='<circle cx="'+posX(lp).toFixed(1)+'" cy="'+y+'" r="4.5" fill="'+VIZ.gold+'"/>';
     const yx=posX(r.my_position); body+='<circle cx="'+yx.toFixed(1)+'" cy="'+y+'" r="5.5" fill="'+youCol(r.my_position)+'"/>';
-    // your rank label
-    const lab=r.my_position?('You #'+r.my_position):'You NR';
-    body+='<text x="'+(nrX+18)+'" y="'+(y+3.5)+'" font-size="9" font-weight="700" fill="'+youCol(r.my_position)+'">'+lab+'</text>';
+    const lab=r.my_position?('#'+r.my_position):'NR';
+    body+='<text x="'+yx.toFixed(1)+'" y="'+(y-9)+'" font-size="8.5" font-weight="700" fill="'+youCol(r.my_position)+'" text-anchor="middle">'+lab+'</text>';
+    body+='<text x="'+rivX+'" y="'+(y+3.5)+'" font-size="8.5" font-weight="600" fill="'+VIZ.ink+'">'+esc(_short(r.leader||'—'))+'</text>';
   });
-  return _svg(W+' '+(top+rows.length*rh+6), 480, 'Where you rank vs the rival AI cites first, per buyer query', body);
+  return _svg(W+' '+(top+rows.length*rh+12), 510, 'Your search rank vs the rival AI cites first, per buyer query', body);
 }
 
-// 3) Reusable radar — pass any axes [{label,score 0..100}]. Bigger filled shape = stronger.
+// 3) Reusable radar with a numeric score printed at EVERY axis tip (shows exactly where you lack).
 function vizRadarChart(axes, color){
   if(!axes||!axes.length) return '';
-  color=color||VIZ.crit; const cx=120,cy=118,R=82,n=axes.length;
+  color=color||VIZ.crit; const cx=130,cy=125,R=80,n=axes.length;
   const pt=(i,frac)=>{ const a=(-90+i*360/n)*Math.PI/180; return [cx+R*frac*Math.cos(a), cy+R*frac*Math.sin(a)]; };
-  let grid=''; [0.25,0.5,0.75,1].forEach((f,gi)=>{ let pts=''; for(let i=0;i<n;i++){const[x,y]=pt(i,f);pts+=x.toFixed(1)+','+y.toFixed(1)+' ';} grid+='<polygon points="'+pts+'" fill="none" stroke="'+VIZ.grid+'" stroke-width="1"/>'; });
-  // ring scale labels
-  grid+='<text x="'+(cx+2)+'" y="'+(cy-R-2)+'" font-size="7.5" fill="'+VIZ.muted+'">100</text>';
-  grid+='<text x="'+(cx+2)+'" y="'+(cy-R*0.5-2)+'" font-size="7.5" fill="'+VIZ.muted+'">50</text>';
+  let grid=''; [0.25,0.5,0.75,1].forEach(f=>{ let pts=''; for(let i=0;i<n;i++){const[x,y]=pt(i,f);pts+=x.toFixed(1)+','+y.toFixed(1)+' ';} grid+='<polygon points="'+pts+'" fill="none" stroke="'+VIZ.grid+'" stroke-width="1"/>'; });
+  grid+='<text x="'+(cx+3)+'" y="'+(cy-R-1)+'" font-size="7.5" fill="'+VIZ.muted+'">100</text>';
+  grid+='<text x="'+(cx+3)+'" y="'+(cy-R*0.5-1)+'" font-size="7.5" fill="'+VIZ.muted+'">50</text>';
+  grid+='<text x="'+(cx+3)+'" y="'+(cy-4)+'" font-size="7.5" fill="'+VIZ.muted+'">0</text>';
   let axislines='',labels='';
   for(let i=0;i<n;i++){ const[x,y]=pt(i,1); axislines+='<line x1="'+cx+'" y1="'+cy+'" x2="'+x.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="'+VIZ.grid+'" stroke-width="1"/>';
-    const[lx,ly]=pt(i,1.16); const anc=Math.abs(lx-cx)<6?'middle':(lx>cx?'start':'end'); labels+='<text x="'+lx.toFixed(1)+'" y="'+(ly+3).toFixed(1)+'" font-size="9" fill="'+VIZ.ink+'" text-anchor="'+anc+'">'+esc(axes[i].label)+'</text>'; }
+    const[lx,ly]=pt(i,1.17); const anc=Math.abs(lx-cx)<6?'middle':(lx>cx?'start':'end');
+    labels+='<text x="'+lx.toFixed(1)+'" y="'+(ly).toFixed(1)+'" font-size="8.5" font-weight="600" fill="'+VIZ.ink+'" text-anchor="'+anc+'">'+esc(axes[i].label)+'</text>';
+    labels+='<text x="'+lx.toFixed(1)+'" y="'+(ly+9).toFixed(1)+'" font-size="8" fill="'+color+'" text-anchor="'+anc+'">'+Math.round(axes[i].score)+'/100</text>'; }
   let poly=''; for(let i=0;i<n;i++){const[x,y]=pt(i,Math.max(0.04,axes[i].score/100));poly+=x.toFixed(1)+','+y.toFixed(1)+' ';}
-  return _svg('240 236', 270, 'Radar: '+axes.map(a=>a.label).join(', '), grid+axislines+'<polygon points="'+poly+'" fill="'+color+'" fill-opacity="0.25" stroke="'+color+'" stroke-width="2"/>');
+  return _svg('260 250', 280, 'Radar scored 0-100 per axis: '+axes.map(a=>a.label+' '+Math.round(a.score)).join(', '), grid+axislines+'<polygon points="'+poly+'" fill="'+color+'" fill-opacity="0.25" stroke="'+color+'" stroke-width="2"/>'+labels);
 }
-// GEO readiness radar (bigger = more visible to AI). Score = strong unless a gap finding is present.
 function vizRadar(merged){
   const geo=(merged||[]).filter(p=>p.bucket==='ai_visibility'); const blob=geo.map(p=>(p.desc||p.fact||'')+' '+(p.citation||'')).join(' ').toLowerCase();
   const axes=[['Schema',/schema|organization|localbusiness|service|faqpage/],['Entity',/wikidata|wikipedia|knowledge graph|entity/],['llms.txt',/llms\.txt/],['AI crawler',/crawler|gptbot|robots/],['E-E-A-T',/e-e-a-t|author|expertise/],['Cited',/answer surface|cite|citation|position/]];
-  const a=axes.map(([label,rx])=>({label, score: rx.test(blob)?22:100}));
-  return vizRadarChart(a, VIZ.crit);
+  return vizRadarChart(axes.map(([label,rx])=>({label, score: rx.test(blob)?22:100})), VIZ.crit);
 }
-// Site-health radar (reuse of the same primitive across a different metric set) — outer = healthy.
 function vizHealthRadar(merged){
   const groups=[['Compliance',['compliance']],['SEO',['technical_seo','seo','performance','website']],['Content',['content_depth']],['AI/GEO',['ai_visibility']],['Security',['tls_dns','security']]];
-  const total=(merged||[]).length||1;
-  const a=groups.map(([label,bk])=>{ const c=(merged||[]).filter(p=>bk.includes(p.bucket)).length; const score=Math.max(8,100-Math.min(100,c*12)); return {label,score}; });
-  return vizRadarChart(a, VIZ.mid);
+  return vizRadarChart(groups.map(([label,bk])=>{ const c=(merged||[]).filter(p=>bk.includes(p.bucket)).length; return {label, score: Math.max(8,100-Math.min(100,c*12))}; }), VIZ.mid);
 }
 
-// 4) Severity heatmap with legend + P0/P1/P2 definitions.
+// 4) Severity heatmap with row totals, column totals, grand total + definitions.
 function vizHeatmap(merged){
   const cats=[['Compliance',['compliance']],['SEO / technical',['technical_seo','content_depth','website','seo','performance']],['AI / GEO',['ai_visibility']],['Security / DNS',['tls_dns','security']]];
-  const sevs=['P0','P1','P2']; const cellW=64,cellH=30,x0=128,y0=22;
+  const sevs=['P0','P1','P2']; const cellW=58,cellH=30,x0=132,y0=22;
   const cnt=(bk,sv)=>(merged||[]).filter(p=>bk.includes(p.bucket)&&p.severity===sv).length;
   let mx=1; cats.forEach(([,bk])=>sevs.forEach(sv=>{mx=Math.max(mx,cnt(bk,sv));}));
-  const col={P0:VIZ.crit,P1:VIZ.high,P2:'#a16207'};
+  const col={P0:VIZ.crit,P1:VIZ.high,P2:'#a16207'}; const totX=x0+sevs.length*cellW+6;
   let body=''; sevs.forEach((sv,j)=>{ body+='<text x="'+(x0+j*cellW+cellW/2)+'" y="'+(y0-7)+'" font-size="9.5" font-weight="700" fill="'+VIZ.ink+'" text-anchor="middle">'+sv+'</text>'; });
-  cats.forEach(([label,bk],i)=>{ const y=y0+i*cellH; body+='<text x="0" y="'+(y+cellH/2+3)+'" font-size="10" fill="'+VIZ.ink+'">'+esc(label)+'</text>';
-    sevs.forEach((sv,j)=>{ const c=cnt(bk,sv); const op=c?(0.22+0.78*c/mx):0.05; const x=x0+j*cellW;
+  body+='<text x="'+(totX+14)+'" y="'+(y0-7)+'" font-size="9" font-weight="700" fill="'+VIZ.ink+'" text-anchor="middle">All</text>';
+  let gTot=0; const colTot={P0:0,P1:0,P2:0};
+  cats.forEach(([label,bk],i)=>{ const y=y0+i*cellH; body+='<text x="0" y="'+(y+cellH/2+3)+'" font-size="10" fill="'+VIZ.ink+'">'+esc(label)+'</text>'; let rowTot=0;
+    sevs.forEach((sv,j)=>{ const c=cnt(bk,sv); rowTot+=c; colTot[sv]+=c; gTot+=c; const op=c?(0.22+0.78*c/mx):0.05; const x=x0+j*cellW;
       body+='<rect x="'+x+'" y="'+(y+2)+'" width="'+(cellW-5)+'" height="'+(cellH-5)+'" rx="3" fill="'+col[sv]+'" fill-opacity="'+op.toFixed(2)+'"/>';
-      body+='<text x="'+(x+(cellW-5)/2)+'" y="'+(y+cellH/2+3)+'" font-size="11" font-weight="700" fill="'+(c?'#fff':'#cbb')+'" text-anchor="middle">'+c+'</text>'; }); });
-  return _svg('300 '+(y0+cats.length*cellH+6), 330, 'Severity heatmap: finding counts by area and severity', body);
+      body+='<text x="'+(x+(cellW-5)/2)+'" y="'+(y+cellH/2+3)+'" font-size="11" font-weight="700" fill="'+(c?'#fff':'#cbb')+'" text-anchor="middle">'+c+'</text>'; });
+    body+='<text x="'+(totX+14)+'" y="'+(y+cellH/2+3)+'" font-size="10.5" font-weight="700" fill="'+VIZ.ink+'" text-anchor="middle">'+rowTot+'</text>'; });
+  const yT=y0+cats.length*cellH;
+  sevs.forEach((sv,j)=>{ body+='<text x="'+(x0+j*cellW+cellW/2)+'" y="'+(yT+12)+'" font-size="9.5" font-weight="700" fill="'+col[sv]+'" text-anchor="middle">'+colTot[sv]+'</text>'; });
+  body+='<text x="0" y="'+(yT+12)+'" font-size="9" fill="'+VIZ.muted+'">Total by severity</text>';
+  body+='<text x="'+(totX+14)+'" y="'+(yT+12)+'" font-size="10.5" font-weight="800" fill="'+VIZ.crit+'" text-anchor="middle">'+gTot+'</text>';
+  return _svg('320 '+(yT+20), 340, 'Severity heatmap, '+gTot+' findings by area and severity', body);
+}
+
+// 5) Score trajectory — today -> week 12 -> week 24, with value labels.
+function vizTrajectory(score, projected){
+  const today=score||30, w12=Math.round((today+ (projected||90))/2 - 8) , w24=projected||90;
+  const pts=[['Today',today,VIZ.crit],['Week 12',Math.max(today+10,Math.min(70,w12)),VIZ.high],['Week 24',w24,VIZ.ok]];
+  const W=300,H=150,base=120,bw=46,gap=44,x0=40,maxH=92;
+  let body='<text x="0" y="12" font-size="9" fill="'+VIZ.muted+'">Audit score /100 (higher = healthier)</text>';
+  body+='<line x1="'+x0+'" y1="'+base+'" x2="'+(x0+pts.length*(bw+gap))+'" y2="'+base+'" stroke="'+VIZ.grid+'"/>';
+  pts.forEach((p,i)=>{ const h=Math.round(maxH*p[1]/100); const x=x0+i*(bw+gap); const y=base-h;
+    body+='<rect x="'+x+'" y="'+y+'" width="'+bw+'" height="'+h+'" rx="3" fill="'+p[2]+'"/>';
+    body+='<text x="'+(x+bw/2)+'" y="'+(y-5)+'" font-size="12" font-weight="800" fill="'+p[2]+'" text-anchor="middle">'+p[1]+'</text>';
+    body+='<text x="'+(x+bw/2)+'" y="'+(base+13)+'" font-size="9" fill="'+VIZ.ink+'" text-anchor="middle">'+p[0]+'</text>'; });
+  return _svg(W+' '+H, 320, 'Projected audit score trajectory: today '+today+', week 12, week 24 '+w24, body);
 }
 
 function renderDataViz(merged, audit){
-  const wf=vizWaterfall(merged), cl=vizCitationLadder(audit.keyword_map), rd=vizRadar(merged), hr=vizHealthRadar(merged), hm=vizHeatmap(merged);
   const cards=[
-    vizFrame({ title:'Regulatory £ exposure', subtitle:'Maximum fine per framework, largest first.', svg:wf,
-      legend:[[VIZ.crit,'Fine ceiling (£)']], howto:'Each bar is the maximum regulator fine for that framework. Longer = more money at risk. Figures sum to the headline exposure.' }),
-    vizFrame({ title:'Where you rank vs who AI cites #1', subtitle:'Live search position per real buyer query.', svg:cl,
-      legend:[[VIZ.gold,'Rival AI cites #1'],[VIZ.ok,'You #1-3'],[VIZ.high,'You #4-10'],[VIZ.crit,'You #10+ / NR']], howto:'Dots sit on a #1 (left) to #10 (right) track; further left is better. Gold = the firm AI/Google names first. NR = No Result, meaning you are not visible at all for that query.' }),
-    vizFrame({ title:'AI-visibility radar', subtitle:'How much AI engines can see + cite you, per signal.', svg:rd,
-      legend:[[VIZ.crit,'Your AI visibility'],[VIZ.grid,'Full visibility (outer ring)']], howto:'Each spoke is an AI-readiness signal scored 0 (centre) to 100 (outer ring). The bigger the filled shape, the more visible you are. The gap to the outer ring is the opportunity.' }),
-    vizFrame({ title:'Site health by area', subtitle:'Overall standing across the five audited areas.', svg:hr,
-      legend:[[VIZ.mid,'Your health'],[VIZ.grid,'Ideal (outer ring)']], howto:'Same radar, reused across areas: outer ring = healthy, centre = many issues. The dented spokes are where Tamazia focuses first.' }),
-    vizFrame({ title:'Severity heatmap', subtitle:'Where your issues concentrate.', svg:hm,
-      legend:[[VIZ.crit,'P0 critical'],[VIZ.high,'P1 high'],['#a16207','P2 standard']], howto:'Rows are audit areas, columns are severity (P0 critical, P1 high, P2 standard). Darker + higher number = more issues of that severity in that area.' }),
+    vizFrame({ title:'Regulatory £ exposure by framework', subtitle:'Maximum fine per framework + total.', svg:vizWaterfall(merged),
+      legend:[[VIZ.crit,'Fine ceiling (£)']], howto:'Each bar = the maximum regulator fine for that framework (longer = more at risk). The total at the foot is the exposure across all frameworks shown.' }),
+    vizFrame({ title:'Where you rank vs who AI cites #1', subtitle:'Live position per real buyer query.', svg:vizCitationLadder(audit.keyword_map),
+      legend:[[VIZ.gold,'Rival cited #1'],[VIZ.ok,'You #1-3'],[VIZ.high,'You #4-10'],[VIZ.crit,'You #10+ / NR']], howto:'Each row is a real buyer query. Your dot sits on a #1 (left, best) to #10 (right) track; gold is the firm AI/Google names first, named on the right. NR = No Result: not visible at all for that query.' }),
+    vizFrame({ title:'AI-visibility radar (scored per signal)', subtitle:'How much AI engines can see + cite you.', svg:vizRadar(merged),
+      legend:[[VIZ.crit,'Your AI visibility 0-100'],[VIZ.grid,'Full (outer ring = 100)']], howto:'Each spoke is an AI-readiness signal scored 0 (centre) to 100 (outer ring); the number at each tip is your score on that signal. The dented spokes are exactly where you are invisible to AI.' }),
+    vizFrame({ title:'Site health by area (scored)', subtitle:'Your standing across the five audited areas.', svg:vizHealthRadar(merged),
+      legend:[[VIZ.mid,'Your health 0-100'],[VIZ.grid,'Ideal (outer ring)']], howto:'Same radar reused across areas: each tip shows that area\'s health score 0-100. Outer ring = healthy; the dents are where Tamazia focuses first.' }),
+    vizFrame({ title:'Severity heatmap (with totals)', subtitle:'Where your issues concentrate.', svg:vizHeatmap(merged),
+      legend:[[VIZ.crit,'P0 critical'],[VIZ.high,'P1 high'],['#a16207','P2 standard']], howto:'Rows = audit areas, columns = severity (P0 critical, P1 high, P2 standard). Each cell is the count; the right column and bottom row are row/column totals, and the bottom-right is the grand total.' }),
+    vizFrame({ title:'Your projected score trajectory', subtitle:'Where this score goes on a Tamazia mandate.', svg:vizTrajectory(audit.score, audit.projected),
+      legend:[[VIZ.crit,'Today'],[VIZ.high,'Week 12'],[VIZ.ok,'Week 24']], howto:'Audit score out of 100 (higher = healthier). Today is your current score; the next two bars are the projected score at week 12 and week 24 on a Tamazia engagement.' }),
   ].filter(Boolean);
   if(!cards.length) return '';
   return '<section style="padding:26px 24px;background:'+VIZ.cream+';border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">'
     +'<p style="font-size:0.7rem;color:'+VIZ.gold+';letter-spacing:0.2em;text-transform:uppercase;margin:0 0 6px;font-weight:700">The picture at a glance</p>'
-    +'<h2 style="font-family:\'Times New Roman\',serif;font-size:1.45rem;margin:0 0 4px;color:'+VIZ.ink+'">Your exposure, your competitors and your AI visibility, visualised.</h2>'
-    +'<p style="font-size:0.74rem;color:'+VIZ.muted+';margin:0 0 14px">Every chart below reads left-to-right or centre-out; each carries its own legend and a plain-language guide.</p>'
-    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">'+cards.join('')+'</div></div></section>';
+    +'<h2 style="font-family:\'Times New Roman\',serif;font-size:1.45rem;margin:0 0 4px;color:'+VIZ.ink+'">Every metric we judged you on, visualised.</h2>'
+    +'<p style="font-size:0.74rem;color:'+VIZ.muted+';margin:0 0 14px">Each chart is labelled on every axis, names the competitor or framework, prints the score, and carries a plain-language guide.</p>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px">'+cards.join('')+'</div></div></section>';
 }
 
 function renderInvestment(p0) {
@@ -999,7 +1021,7 @@ ${renderAIPlatform(adjAudit)}
 ${renderCitationTable(audit)}
 ${renderKeywordMap(audit.keyword_map)}
 ${renderAllFindings(merged)}
-${renderDataViz(merged, audit)}
+${renderDataViz(merged, adjAudit)}
 ${renderInvestment(adjMeta.pointer_count_p0)}
 ${renderFooterCTA()}
 ${renderDisclaimer()}
