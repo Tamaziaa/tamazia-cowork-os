@@ -348,7 +348,7 @@ function renderHeader(audit, grade) {
     <section style="background:#3D0E0E;color:#F8F5EF;padding:36px 24px 22px">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.66rem;color:#C8A664;letter-spacing:0.22em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Regulatory + SEO + AI visibility audit</p>
-        <div style="display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center">
+        <div class="tz-hero" style="display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center">
           <div style="background:${grade.color};color:#F8F5EF;padding:12px 18px;border-radius:6px;min-width:90px;text-align:center">
             <p style="margin:0;font-size:0.6rem;letter-spacing:0.08em;text-transform:uppercase;opacity:0.85">Grade</p>
             <p style="margin:1px 0;font-family:'Times New Roman',serif;font-size:2.2rem;line-height:1;font-weight:600">${grade.letter}</p>
@@ -917,6 +917,23 @@ function renderPage(audit) {
   a:hover{opacity:0.85}
   details > summary{list-style:none}
   details > summary::-webkit-details-marker{display:none}
+  /* Mobile: reflow the hero, keep tables readable, never overflow a 360px viewport */
+  @media (max-width:640px){
+    .tz-hero{grid-template-columns:1fr !important;gap:12px !important;text-align:left}
+    .tz-hero > div:last-child{text-align:left !important}
+    h1{font-size:1.5rem !important}
+    table{font-size:0.74rem}
+    section{padding-left:16px !important;padding-right:16px !important}
+  }
+  /* Print / PDF: expand every collapsible, avoid breaking boxes across pages, drop interactive chrome */
+  @media print{
+    body{font-size:11.5px}
+    details:not([open]) > *:not(summary){display:block !important}
+    details > summary{cursor:default}
+    section,details,li,svg,table{page-break-inside:avoid;break-inside:avoid}
+    a[href]{color:inherit;text-decoration:none}
+    .tz-noprint{display:none !important}
+  }
 </style>
 </head><body>
 ${renderHeader(adjAudit, grade)}
