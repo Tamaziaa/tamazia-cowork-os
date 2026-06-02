@@ -200,7 +200,7 @@ async function llmCitationProbe({ query, company }) {
   if (nim) {
     provider = 'nvidia-nim'; url = 'https://integrate.api.nvidia.com/v1/chat/completions';
     // Highest available that is actually provisioned, with fallbacks (253b/405b are listed but 404 on free tier).
-    models = (process.env.NIM_MODEL ? [process.env.NIM_MODEL] : []).concat(['meta/llama-3.3-70b-instruct', 'nvidia/llama-3.1-nemotron-70b-instruct', 'abacusai/dracarys-llama-3.1-70b-instruct']);
+    models = (process.env.NIM_MODEL ? [process.env.NIM_MODEL] : []).concat(['meta/llama-3.3-70b-instruct', 'abacusai/dracarys-llama-3.1-70b-instruct', 'meta/llama-3.1-70b-instruct']); // bench-verified working order (nemotron/mixtral 404 on free tier)
   } else if (groq) { provider = 'groq'; url = 'https://api.groq.com/openai/v1/chat/completions'; models = ['llama-3.3-70b-versatile']; }
   else if (process.env.PERPLEXITY_API_KEY) { provider = 'perplexity'; url = 'https://api.perplexity.ai/chat/completions'; models = ['sonar']; }
   else { provider = 'openai'; url = 'https://api.openai.com/v1/chat/completions'; models = ['gpt-4o-mini']; }
