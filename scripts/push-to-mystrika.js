@@ -12,10 +12,19 @@ const b64d = (s)=>{ try { return Buffer.from(String(s||''),'base64').toString('u
 const arg = (n,d)=>{ const i=process.argv.indexOf('--'+n); return i>=0?process.argv[i+1]:d; };
 const DRY = process.argv.includes('--dry');
 (async()=>{
-  const campaign = arg('campaign', process.env.MYSTRIKA_CAMPAIGN_ID);
-  if (!M._hasKey()) { console.log('No MYSTRIKA_API_KEY — paste your "tamazia-cowork-os" token value (my.mystrika.com/settings/api).'); return; }
-  if (!campaign) { console.log('Need --campaign <campaign_id> or MYSTRIKA_CAMPAIGN_ID. List campaigns with scripts/mystrika-cli.js campaigns.'); return; }
+  if (!M._hasKey()) { console.log('No MYSTRIKA_API_KEY.'); return; }
   if (!NEON) { console.log('No NEON_URL'); return; }
+  const forceCampaign = arg('campaign', process.env.MYSTRIKA_CAMPAIGN_ID || '');
+  // Build sector -> campaign map from the live campaigns ("Tamazia | Law Firms" etc.) for auto-routing.
+  let nameToId = {};
+  try { const cl = await M.listCampaigns(); const arr = (cl.data && (cl.data.data || cl.data.campaigns)) || cl.data || []; for (const c of (Array.isArray(arr)?arr:[])) nameToId[String(c.name||'').toLowerCase()] = c.id || c.campaign_id; } catch(_){}
+  const SECTOR_CAMPAIGN = { 'law-firms':'law firms','legal':'law firms','healthcare':'healthcare','dental':'healthcare','real-estate':'real estate','hospitality':'f&b','restaurants':'f&b','financial':'financial','finance':'financial','education':'education','automotive':'automotive','professional':'professional','ecommerce':'e-commerce' };
+  const campaignFor = (sector) => {
+    if (forceCampaign) return forceCampaign;
+    const want = SECTOR_CAMPAIGN[String(sector||'').toLowerCase()] || '';
+    for (const [nm,id] of Object.entries(nameToId)) { if (want && nm.includes(want)) return id; }
+    return null;
+  };
   const limit = parseInt(arg('max','200'),10);
   const raw = pg(`SELECT COALESCE(NULLIF(l.contact_email,''), l.email, ''), regexp_replace(COALESCE(NULLIF(trim(l.first_name||' '||COALESCE(l.last_name,'')),''), l.company,'there'),'[\\t\\r\\n]',' ','g'),
       regexp_replace(COALESCE(l.company,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.domain,''), COALESCE(l.sector,''), COALESCE(l.audit_url,''),
@@ -40,9 +49,17 @@ const DRY = process.argv.includes('--dry');
     prospects.push({ email, name: name||'there', company, domain, sector, audit_url: audit, top_finding: finding, city,
       rank_insight: ri, hiring_signal: hiring, touch0_subject: b64d(t0s), touch0_body: t0body, touch1_body: b64d(t1b), touch2_body: b64d(t2b), touch3_body: b64d(t3b) });
   }
-  console.log('Pushing '+prospects.length+' FIT prospects to Mystrika campaign '+campaign+(DRY?' (DRY)':'')+' ...');
-  if (DRY) { console.log('sample:', JSON.stringify({...prospects[0], touch0_body:(prospects[0]||{}).touch0_body?.slice(0,60)+'...'},null,0).slice(0,300)); return; }
-  const res = await M.addProspects(campaign, prospects, true);
-  console.log('Mystrika add: ok='+res.ok+' added='+res.added+' batches='+res.ok_batches+'/'+res.batches);
-  if (res.ok) { const emails = prospects.map(p=>"'"+String(p.email).replace(/'/g,"''")+"'").join(','); pg(`UPDATE leads SET mystrika_pushed=TRUE, mystrika_pushed_at=NOW() WHERE COALESCE(contact_email,email) IN (${emails})`); console.log('marked '+prospects.length+' leads mystrika_pushed=TRUE'); }
+  // group by sector campaign
+  const byCamp = {};
+  for (const p of prospects) { const cid = campaignFor(p.sector); if (!cid) { continue; } (byCamp[cid] = byCamp[cid] || []).push(p); }
+  const totalRouted = Object.values(byCamp).reduce((a,x)=>a+x.length,0);
+  console.log('Routing '+totalRouted+'/'+prospects.length+' prospects across '+Object.keys(byCamp).length+' sector campaigns'+(DRY?' (DRY)':'')+' ...');
+  if (DRY) { for (const [cid,ps] of Object.entries(byCamp)) console.log('  campaign '+cid+': '+ps.length+' prospects (e.g. '+(ps[0]||{}).company+')'); return; }
+  let pushedEmails = [];
+  for (const [cid, ps] of Object.entries(byCamp)) {
+    const res = await M.addProspects(cid, ps, true);
+    console.log('  -> '+cid+': ok='+res.ok+' added='+res.added+' batches='+res.ok_batches+'/'+res.batches);
+    if (res.ok) pushedEmails = pushedEmails.concat(ps.map(p=>p.email));
+  }
+  if (pushedEmails.length) { const emails = pushedEmails.map(e=>"'"+String(e).replace(/'/g,"''")+"'").join(','); pg(`UPDATE leads SET mystrika_pushed=TRUE, mystrika_pushed_at=NOW() WHERE COALESCE(contact_email,email) IN (${emails})`); console.log('marked '+pushedEmails.length+' leads mystrika_pushed=TRUE'); }
 })().catch(e=>{ console.error('push error (non-fatal):',e.message); process.exit(0); });
