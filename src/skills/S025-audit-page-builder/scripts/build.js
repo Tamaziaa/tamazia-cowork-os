@@ -19,7 +19,17 @@ function pgPath() { return path.resolve(ROOT, 'scripts', 'psql'); }
 function pg(sql) {
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
   if (!url) return null;
-  try { return execFileSync(pgPath(), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; }
+  // Large SQL (a full payload INSERT can exceed the OS single-arg limit, ~128KB) must go via a temp file (-f),
+  // not -c, or execFileSync throws E2BIG. Small statements stay on the fast -c path.
+  try {
+    if (sql && sql.length > 100000) {
+      const fsx = require('fs'); const f = path.join(ROOT, '.mint-' + process.pid + '_' + Date.now() + '.sql');
+      fsx.writeFileSync(f, sql.endsWith(';') ? sql : sql + ';');
+      try { return execFileSync(pgPath(), [url, '-f', f], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 }).toString().trim(); }
+      finally { try { fsx.unlinkSync(f); } catch (_) {} }
+    }
+    return execFileSync(pgPath(), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim();
+  } catch (_e) { return null; }
 }
 
 // 5.1.2 · 8-char hash generator. Random + collision-free check.

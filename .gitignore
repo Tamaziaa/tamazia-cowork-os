@@ -16,3 +16,4 @@ INFRASTRUCTURE-INVENTORY.md
 confirmations/
 exports/
 reports/
+.mint-*.sql .remint-*.sql

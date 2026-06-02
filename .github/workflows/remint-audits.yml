@@ -1,0 +1,35 @@
+name: Re-mint audits (manual)
+# Re-mints every existing audit_pages row onto the current engine payload (word-level quotes, AI-citation
+# table, data-viz inputs, public-archive fallback). Server-side so PageSpeed runs with the key and there is
+# no shell time cap. Resumable + per-row fail-soft; safe to re-run.
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: remint-audits
+  cancel-in-progress: false
+
+jobs:
+  remint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python deps (pg8000 for DB shim)
+        run: python -m pip install --quiet -r requirements.txt
+      - name: Materialise .env from secret
+        run: |
+          echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+          if ! grep -q '^PAGESPEED_API_KEY=' .env && [ -n "${{ secrets.PAGESPEED_API_KEY }}" ]; then
+            echo "PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}" >> .env
+          fi
+      - name: Re-mint all stale audit rows
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          node scripts/remint-audits.js
