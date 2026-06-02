@@ -111,10 +111,10 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   let keyword_map = null;
   try {
     const city = (scan.markets && scan.markets.primary_city) || '';
-    if (city) {
-      const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
-      keyword_map = await ri.buildKeywordMap({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city, html: (scan.signals && scan.signals.title) || '', country: country || 'UK', env, max: 6 });
-    }
+    // No city gate: buildKeywordMap handles no-city/global sites internally (category-level queries), so the
+    // ranking ladder populates for ecommerce/global too. (P6.4 caught this gate silently zeroing the keyword map.)
+    const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
+    keyword_map = await ri.buildKeywordMap({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city, html: (scan.signals && scan.signals.title) || '', country: country || 'UK', env, max: 6 });
   } catch (_e) {}
   // REAL AI-citation probe (cog): who owns the answer surface for the firm's category, and is the firm cited?
   let ai_citation = null; const aiCiteFindings = [];
