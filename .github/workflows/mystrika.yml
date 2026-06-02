@@ -27,4 +27,4 @@ jobs:
         run: |
           set -a; source .env 2>/dev/null; set +a
           if [ "${{ github.event.inputs.action }}" = "push" ]; then node scripts/push-to-mystrika.js --campaign "${{ github.event.inputs.campaign }}" --max "${{ github.event.inputs.max || '200' }}";
-          else node scripts/sync-mystrika-replies.js; fi
+          else node scripts/sync-mystrika-replies.js && node scripts/plane-leads-sync.js; fi
