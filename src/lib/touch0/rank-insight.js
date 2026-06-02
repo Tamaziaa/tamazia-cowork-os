@@ -107,13 +107,43 @@ async function autocomplete(seed) {
     return [...t.matchAll(/data="([^"]+)"/g)].map(m => m[1]).filter(Boolean).slice(0, 8);
   } catch (_e) { return []; }
 }
+const _catCache = {};
+// Derive the real buyer search-category for ANY site (local or global) using the free NIM LLM; cached per domain,
+// always falls back to the heuristic noun. This makes the keyword map + citation probe accurate for ecommerce/
+// global sites where the bare sector word ("ecommerce") would otherwise produce meaningless competitors.
+async function deriveCategoryNoun({ company, sector, html, domain }) {
+  const fallback = deriveServiceNoun(company, sector, html);
+  const dom = clean(domain || '');
+  if (dom && _catCache[dom]) return _catCache[dom];
+  const key = process.env.NIM_API_KEY || process.env.GROQ_API_KEY;
+  if (!key) return fallback;
+  try {
+    const text = String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+    const prompt = 'A business website. Title/snippet: "' + text + '" (company: ' + (company || dom) + ', sector: ' + sector + '). In 2 to 4 words, give the exact phrase a buyer types into Google or an AI assistant to find this kind of provider. Reply with ONLY the phrase, lowercase, no punctuation, no quotes.';
+    const base = process.env.NIM_API_KEY ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
+    const model = process.env.NIM_API_KEY ? (process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct') : 'llama-3.3-70b-versatile';
+    const r = await fetch(base, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 20, temperature: 0.1 }), signal: AbortSignal.timeout(20000) });
+    if (r.ok) { const j = await r.json(); let c = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || '').trim().toLowerCase().replace(/["'.\n]/g, '').replace(/\s+/g, ' ').trim();
+      if (c && c.split(' ').length <= 5 && c.length > 2 && c.length < 40) { if (dom) _catCache[dom] = c; return c; } }
+  } catch (_e) {}
+  return fallback;
+}
+
 async function buildKeywordMap({ domain, company, sector, city, html, country = 'UK', env = process.env, max = 8 }) {
-  const dom = clean(domain); if (!dom || !city) return { ok: false, keywords: [] };
-  const noun = deriveServiceNoun(company, sector, html);
+  const dom = clean(domain); if (!dom) return { ok: false, keywords: [] };
+  const noun = await deriveCategoryNoun({ company, sector, html, domain: dom });
   const brand = norm(company || dom.split('.')[0]);
-  let seeds = keywordsFor(sector, city, noun);
-  try { const ac = await autocomplete(noun + ' ' + city); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
-  seeds = seeds.filter(k => brand.length < 4 || !norm(k).includes(brand)).slice(0, max);
+  const ctyLabel = ({ UK: 'UK', US: 'USA', AE: 'UAE', SA: 'Saudi Arabia', QA: 'Qatar' })[String(country).toUpperCase()] || country || '';
+  let seeds;
+  if (city) {
+    seeds = keywordsFor(sector, city, noun);
+    try { const ac = await autocomplete(noun + ' ' + city); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
+  } else {
+    // No city (global / ecommerce): category-level buyer queries so the ranking ladder still populates.
+    seeds = [noun, 'best ' + noun, 'top ' + noun, (noun + ' ' + ctyLabel).trim(), 'best ' + noun + ' online'];
+    try { const ac = await autocomplete('best ' + noun); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
+  }
+  seeds = seeds.map(k => String(k).replace(/\s+/g, ' ').trim()).filter(Boolean).filter(k => brand.length < 4 || !norm(k).includes(brand)).slice(0, max);
   const out = [];
   for (const kw of seeds) {
     let r = null; try { r = await checkKeyword(kw, dom, country); } catch (_e) {}
@@ -122,7 +152,7 @@ async function buildKeywordMap({ domain, company, sector, city, html, country = 
     out.push({ keyword: kw, my_position: r.my_position, leader: leader.domain || null, leader_pos: leader.pos || null, target: (r.my_position && r.my_position <= 3) ? r.my_position : 3 });
   }
   if (!out.length) return { ok: false, keywords: [] };
-  return { ok: true, service_noun: noun, city, keywords: out };
+  return { ok: true, service_noun: noun, city: city || ctyLabel, keywords: out };
 }
 
 // ── Real AI-citation probe (free path) ────────────────────────────────────────────────────────────────────
@@ -146,7 +176,7 @@ function _probeNoun(company, sector, html) {
 }
 async function aiCitationProbe({ domain, company, sector, city, html, country = 'UK', wikidata = null }) {
   domain = clean(domain);
-  const noun = _probeNoun(company, sector, html);
+  const noun = await deriveCategoryNoun({ company, sector, html, domain });
   // Use the same real-buyer query construction as the keyword map (no superlative skew): the plain "noun city" form.
   let q;
   if (city) { const kws = keywordsFor(sector, city, noun).filter(k => !/^best |^top /i.test(k) && !/\d{4}$/.test(k)); q = kws[0] || (noun + ' ' + city); }
