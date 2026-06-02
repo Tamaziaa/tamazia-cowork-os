@@ -1,0 +1,30 @@
+name: Mystrika sync + push (gated)
+# Reply-sync (poll prospect statuses -> Neon) on a schedule; push (FIT leads -> campaign) on manual dispatch
+# after warmup. Gated on MYSTRIKA_API_KEY (in ENV_B64). Self-healing.
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # reply-sync every 6h
+  workflow_dispatch:
+    inputs:
+      action: { description: "sync | push", default: "sync" }
+      campaign: { description: "campaign_id (for push)", default: "" }
+      max: { description: "max prospects (push)", default: "200" }
+concurrency: { group: mystrika, cancel-in-progress: false }
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m pip install --quiet -r requirements.txt
+      - name: Materialise .env
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Run
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          if [ "${{ github.event.inputs.action }}" = "push" ]; then node scripts/push-to-mystrika.js --campaign "${{ github.event.inputs.campaign }}" --max "${{ github.event.inputs.max || '200' }}";
+          else node scripts/sync-mystrika-replies.js; fi
