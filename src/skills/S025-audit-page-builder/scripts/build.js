@@ -101,7 +101,7 @@ function groupFindings(pointers) {
 
 // P1.4 NIM-as-verifier: for the top fine-bearing PRESENCE findings (which carry a verbatim quote), confirm the
 // evidence entails the finding. NOT_ENTAILED -> demote to NEEDS_REVIEW + withhold the fine. Fail-open, capped for scale.
-async function verifyTopFindings(classified, env, cap = 5) {
+async function verifyTopFindings(classified, env, cap = 4) {
   const key = (env && env.NIM_API_KEY) || process.env.NIM_API_KEY;
   if (!key) return classified;
   const base = 'https://integrate.api.nvidia.com/v1/chat/completions';
@@ -128,7 +128,7 @@ async function verifyTopFindings(classified, env, cap = 5) {
   const absTargets = classified
     .filter(f => f.state === 'CONFIRMED' && f.kind === 'absence' && (f.fine_high_gbp || f.fine_low_gbp) && f.verify_context)
     .sort((a, b) => (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0))
-    .slice(0, 12);
+    .slice(0, 8);
   for (const f of absTargets) {
     try {
       const req = String(f.description || f.fact || '').slice(0, 280);
