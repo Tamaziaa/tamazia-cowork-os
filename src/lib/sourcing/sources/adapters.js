@@ -127,14 +127,22 @@ const jobspy = {
       const j = JSON.parse(raw.trim().split('\n').pop()); rows = j.rows || [];
     } catch (_e) { return []; }
     const out = []; const seen = new Set();
-    for (const r of rows.slice(0, opts.max || 40)) {
-      const d = await getJSON('https://google.serper.dev/search', { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ q: r.company + ' official website', num: 5, gl: r.country === 'UK' ? 'gb' : r.country === 'UAE' ? 'ae' : 'us' }) }, 12000);
-      let dom = '', otitle = '', osnip = '';
-      for (const o of ((d && d.organic) || [])) { const dd = rootDomain(o.link || ''); if (dd && !/indeed|glassdoor|linkedin|facebook|crunchbase|wikipedia|youtube|reed\.co|totaljobs|monster|ziprecruiter|google|bloomberg|companieshouse|trustpilot/.test(dd)) { dom = dd; otitle = o.title || ''; osnip = o.snippet || ''; break; } }
-      if (!dom || seen.has(dom)) continue; seen.add(dom);
-      // Use the company's OWN SERP description for sector classification (the job title alone can't classify a sector);
-      // keep the role in the hiring_signal + snippet so the audit + personalisation can reference "you're hiring for X".
-      out.push({ domain: dom, company: r.company, country: r.country, title: otitle || r.company, snippet: (osnip ? osnip + ' · ' : '') + 'Currently hiring: ' + r.title, adText: '', adRunner: false, hiring_signal: r.query || r.title, platform: 'indeed', source: 'jobspy', permalink: 'https://www.indeed.com/cmp/' + encodeURIComponent(String(r.company).replace(/\s+/g, '-')) });
+    const BAD = /indeed|glassdoor|linkedin|facebook|crunchbase|wikipedia|youtube|reed\.co|totaljobs|monster|ziprecruiter|bayt|naukri|google|bloomberg|companieshouse|trustpilot|yell|yelp|twitter|instagram|tiktok|apple|amazon/i;
+    const validDom = (dd) => dd && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(dd) && !/^\d+\.\d+\.\d+\.\d+$/.test(dd) && dd.length <= 60;
+    const resolve = async (company, country) => {
+      const gl = country === 'UK' ? 'gb' : country === 'UAE' ? 'ae' : country === 'EU' ? 'ie' : 'us';
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const qq = attempt === 0 ? (company + ' official website') : ('"' + company + '" website');
+        const d = await getJSON('https://google.serper.dev/search', { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ q: qq, num: 6, gl }) }, 12000);
+        for (const o of ((d && d.organic) || [])) { const dd = rootDomain(o.link || ''); if (validDom(dd) && !BAD.test(dd)) return { dom: dd, otitle: o.title || '', osnip: o.snippet || '' }; }
+        if (attempt === 0) await new Promise(r => setTimeout(r, 350));
+      }
+      return null;
+    };
+    for (const r of rows.slice(0, opts.max || 50)) {
+      let res = null; try { res = await resolve(r.company, r.country); } catch (_e) { res = null; }
+      if (!res || seen.has(res.dom)) continue; seen.add(res.dom);
+      out.push({ domain: res.dom, company: r.company, country: r.country, title: res.otitle || r.company, snippet: (res.osnip ? res.osnip + ' \u00b7 ' : '') + 'Currently hiring: ' + r.title + (r.site ? ' (' + r.site + ')' : ''), adText: '', adRunner: false, hiring_signal: r.query || r.title, job_board: r.site || 'indeed', platform: r.site || 'indeed', source: 'jobspy', permalink: 'https://www.google.com/search?q=' + encodeURIComponent(r.company + ' careers') });
     }
     return out;
   },
@@ -153,7 +161,7 @@ const maps = {
       for (const [city, country] of geos.slice(0, opts.maxGeos || 4)) {
         const d = await getJSON('https://google.serper.dev/places', { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ q: term + ' ' + city, gl: country === 'UK' ? 'gb' : country === 'UAE' ? 'ae' : 'us' }) }, 12000);
         for (const pl of ((d && d.places) || [])) {
-          const dom = rootDomain(pl.website || ''); if (!dom || seen.has(dom)) continue; seen.add(dom);
+          const dom = rootDomain(pl.website || ''); if (!dom || seen.has(dom)) continue; if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(dom) || dom.length > 60) continue; seen.add(dom);
           out.push({ domain: dom, company: (pl.title || '').trim(), country, title: pl.title || '', snippet: term + (pl.rating ? ' · rating ' + pl.rating + (pl.ratingCount ? ' (' + pl.ratingCount + ' reviews)' : '') : '') + (pl.address ? ' · ' + pl.address : ''), adText: '', adRunner: false, platform: 'google-maps', source: 'maps', permalink: pl.website || '' });
         }
       }
