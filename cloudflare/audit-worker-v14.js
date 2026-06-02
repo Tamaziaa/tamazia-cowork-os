@@ -678,6 +678,83 @@ function renderAllFindings(merged) {
   return b1 + b2 + b3;
 }
 
+// ===== Data-viz suite (inline SVG, CSP-safe, no deps) =====================================================
+function _money(n){ if(n>=1e6) return '£'+(n/1e6).toFixed(n>=1e7?0:1).replace('.0','')+'M'; if(n>=1e3) return '£'+Math.round(n/1e3)+'k'; return '£'+Math.round(n); }
+// 1) Exposure waterfall: regulatory fine exposure by framework (top 6).
+function vizWaterfall(merged){
+  const comp=(merged||[]).filter(p=>p.bucket==='compliance'&&p.fine_high_gbp);
+  const byFw={}; for(const p of comp){ const k=p.citation||p.framework_short||'?'; byFw[k]=Math.max(byFw[k]||0,p.fine_high_gbp); }
+  let rows=Object.entries(byFw).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,6);
+  if(!rows.length) return '';
+  const max=rows[0].v; const W=440,rh=30,top=8,lblW=120,barW=W-lblW-70;
+  let body=''; rows.forEach((r,i)=>{ const y=top+i*rh; const w=Math.max(3,Math.round(barW*r.v/max)); const meta=FRAMEWORK_META[r.k]||{name:r.k};
+    body+='<text x="0" y="'+(y+14)+'" font-size="11" fill="#3D0E0E">'+esc((meta.name||r.k).slice(0,20))+'</text>';
+    body+='<rect x="'+lblW+'" y="'+(y+3)+'" width="'+w+'" height="16" rx="3" fill="#B91C1C" opacity="'+(1-i*0.1)+'"/>';
+    body+='<text x="'+(lblW+w+5)+'" y="'+(y+15)+'" font-size="10.5" font-weight="700" fill="#B91C1C">'+_money(r.v)+'</text>';
+  });
+  const h=top+rows.length*rh+4;
+  return '<svg viewBox="0 0 '+W+' '+h+'" width="100%" style="max-width:480px" xmlns="http://www.w3.org/2000/svg" role="img">'+body+'</svg>';
+}
+// 2) You vs the firm AI/Google cites #1 (visibility = 11 - position, capped 0..10).
+function vizCompetitorBars(km){
+  let rows=(km&&Array.isArray(km.keywords))?km.keywords.slice(0,5):[];
+  if(!rows.length) return '';
+  const W=440,rh=42,top=8,lblW=0,barW=150,x0=150;
+  let body=''; rows.forEach((r,i)=>{ const y=top+i*rh;
+    const youV=r.my_position?Math.max(0,11-r.my_position):0; const rivV=r.leader_pos?Math.max(0,11-r.leader_pos):10;
+    body+='<text x="0" y="'+(y+11)+'" font-size="10" fill="#3D0E0E">'+esc(r.keyword.slice(0,28))+'</text>';
+    body+='<rect x="'+x0+'" y="'+(y+3)+'" width="'+(barW*youV/10)+'" height="10" rx="2" fill="'+(youV>=8?'#2E7D32':youV>0?'#E67E22':'#B91C1C')+'"/>';
+    body+='<text x="'+(x0+barW+6)+'" y="'+(y+12)+'" font-size="9" fill="#6b6b6b">You '+(r.my_position?'#'+r.my_position:'NR')+'</text>';
+    body+='<rect x="'+x0+'" y="'+(y+16)+'" width="'+(barW*rivV/10)+'" height="10" rx="2" fill="#3D0E0E"/>';
+    body+='<text x="'+(x0+barW+6)+'" y="'+(y+25)+'" font-size="9" fill="#6b6b6b">'+esc((r.leader||'rival').replace(/^www\./,'').slice(0,16))+'</text>';
+  });
+  const h=top+rows.length*rh+4;
+  return '<svg viewBox="0 0 '+W+' '+h+'" width="100%" style="max-width:480px" xmlns="http://www.w3.org/2000/svg" role="img">'+body+'</svg>';
+}
+// 3) AI-visibility radar: 6 GEO axes scored from which gaps are present (gap present => low score).
+function vizRadar(merged){
+  const geo=(merged||[]).filter(p=>p.bucket==='ai_visibility'); const blob=geo.map(p=>(p.desc||p.fact||'')+' '+(p.citation||'')).join(' ').toLowerCase();
+  const axes=[['Schema',/schema|organization|localbusiness|service|faqpage/],['Entity',/wikidata|wikipedia|knowledge graph|entity/],['llms.txt',/llms\.txt/],['AI crawler',/crawler|gptbot|robots/],['E-E-A-T',/e-e-a-t|author|expertise/],['Citation',/answer surface|cite|citation|position/]];
+  const cx=110,cy=105,R=78; const n=axes.length;
+  const scores=axes.map(([label,rx])=>({label,score: rx.test(blob)?28:100}));
+  const pt=(i,frac)=>{ const a=(-90+i*360/n)*Math.PI/180; return [cx+R*frac*Math.cos(a), cy+R*frac*Math.sin(a)]; };
+  let grid=''; [0.25,0.5,0.75,1].forEach(f=>{ let pts=''; for(let i=0;i<n;i++){const[x,y]=pt(i,f);pts+=x.toFixed(1)+','+y.toFixed(1)+' ';} grid+='<polygon points="'+pts+'" fill="none" stroke="#e5e7eb" stroke-width="1"/>'; });
+  let axislines='',labels='';
+  for(let i=0;i<n;i++){ const[x,y]=pt(i,1); axislines+='<line x1="'+cx+'" y1="'+cy+'" x2="'+x.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="#e5e7eb" stroke-width="1"/>';
+    const[lx,ly]=pt(i,1.18); labels+='<text x="'+lx.toFixed(1)+'" y="'+ly.toFixed(1)+'" font-size="9.5" fill="#3D0E0E" text-anchor="middle">'+axes[i][0]+'</text>'; }
+  let poly=''; for(let i=0;i<n;i++){const[x,y]=pt(i,scores[i].score/100);poly+=x.toFixed(1)+','+y.toFixed(1)+' ';}
+  return '<svg viewBox="0 0 220 220" width="100%" style="max-width:260px" xmlns="http://www.w3.org/2000/svg" role="img">'+grid+axislines+'<polygon points="'+poly+'" fill="#B91C1C" fill-opacity="0.22" stroke="#B91C1C" stroke-width="2"/>'+labels+'</svg>';
+}
+// 4) Severity heatmap: bucket x severity, cell shaded by count.
+function vizHeatmap(merged){
+  const cats=[['Compliance',['compliance']],['SEO / technical',['technical_seo','content_depth','website','seo','performance']],['AI / GEO',['ai_visibility']],['Security / DNS',['tls_dns','security']]];
+  const sevs=['P0','P1','P2']; const cellW=70,cellH=30,x0=120,y0=24;
+  const cnt=(bk,sv)=>(merged||[]).filter(p=>bk.includes(p.bucket)&&p.severity===sv).length;
+  let mx=1; cats.forEach(([,bk])=>sevs.forEach(sv=>{mx=Math.max(mx,cnt(bk,sv));}));
+  const col=['#B91C1C','#E67E22','#D97706'];
+  let body=''; sevs.forEach((sv,j)=>{ body+='<text x="'+(x0+j*cellW+cellW/2)+'" y="'+(y0-8)+'" font-size="10" font-weight="700" fill="#3D0E0E" text-anchor="middle">'+sv+'</text>'; });
+  cats.forEach(([label,bk],i)=>{ const y=y0+i*cellH; body+='<text x="0" y="'+(y+cellH/2+3)+'" font-size="10.5" fill="#3D0E0E">'+label+'</text>';
+    sevs.forEach((sv,j)=>{ const c=cnt(bk,sv); const op=c?(0.25+0.75*c/mx):0.06; const x=x0+j*cellW;
+      body+='<rect x="'+x+'" y="'+(y+2)+'" width="'+(cellW-4)+'" height="'+(cellH-5)+'" rx="3" fill="'+col[j]+'" fill-opacity="'+op.toFixed(2)+'"/>';
+      body+='<text x="'+(x+(cellW-4)/2)+'" y="'+(y+cellH/2+3)+'" font-size="11" font-weight="700" fill="'+(c?'#fff':'#bbb')+'" text-anchor="middle">'+c+'</text>'; }); });
+  const h=y0+cats.length*cellH+6;
+  return '<svg viewBox="0 0 320 '+h+'" width="100%" style="max-width:340px" xmlns="http://www.w3.org/2000/svg" role="img">'+body+'</svg>';
+}
+function renderDataViz(merged, audit){
+  const wf=vizWaterfall(merged), cb=vizCompetitorBars(audit.keyword_map), rd=vizRadar(merged), hm=vizHeatmap(merged);
+  if(!wf&&!cb&&!rd&&!hm) return '';
+  const card=(title,sub,svg)=> svg? '<div style="background:#fff;border:1px solid #e7e0d2;border-radius:8px;padding:14px 16px"><p style="margin:0 0 2px;font-family:\'Times New Roman\',serif;font-size:1rem;color:#3D0E0E;font-weight:600">'+title+'</p><p style="margin:0 0 8px;font-size:0.7rem;color:#6b6b6b">'+sub+'</p>'+svg+'</div>' : '';
+  return '<section style="padding:26px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">'
+    +'<p style="font-size:0.7rem;color:#C8A664;letter-spacing:0.2em;text-transform:uppercase;margin:0 0 6px;font-weight:700">The picture at a glance</p>'
+    +'<h2 style="font-family:\'Times New Roman\',serif;font-size:1.45rem;margin:0 0 14px;color:#3D0E0E">Your exposure, your competitors, and your AI visibility — visualised.</h2>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px">'
+    +card('Regulatory £ exposure','Maximum fine exposure by framework, largest first.',wf)
+    +card('You vs who AI cites #1','Visibility per buyer query (longer = higher). Maroon = the firm AI names first.',cb)
+    +card('AI-visibility radar','The smaller the red shape, the less AI engines can see and cite you.',rd)
+    +card('Severity heatmap','Where your issues concentrate, by area and severity.',hm)
+    +'</div></div></section>';
+}
+
 function renderInvestment(p0) {
   const rec = p0 >= 6 ? 'Enterprise' : p0 >= 2 ? 'Authority' : 'Foundation';
   const tiers = [
@@ -851,6 +928,7 @@ ${renderAIPlatform(adjAudit)}
 ${renderCitationTable(audit)}
 ${renderKeywordMap(audit.keyword_map)}
 ${renderAllFindings(merged)}
+${renderDataViz(merged, audit)}
 ${renderInvestment(adjMeta.pointer_count_p0)}
 ${renderFooterCTA()}
 ${renderDisclaimer()}
