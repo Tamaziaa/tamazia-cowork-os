@@ -348,6 +348,35 @@ function geoPointers({ html, signals, sector, wikidata, domain }) {
   return out;
 }
 
+// Spelling/grammar on the client's live site (LanguageTool en-GB, free). Hardened allowlist so legal/regulatory
+// acronyms (GDPR, PECR, DIFC, ADGM, RERA, etc.), the brand, and proper nouns are NEVER flagged as typos
+// (those were silent false positives). Returns only genuine misspellings. Fail-soft.
+const _SPELL_ALLOW = new Set(['gdpr','ukgdpr','pecr','ico','sra','fca','cqc','ofcom','ofsted','dpa','dpia','ccpa','cpra','vcdpa','tdpsa','hipaa','ferpa','coppa','glba','finra','nydfs','sec','ftc','difc','adgm','dfsa','rera','dld','trakheesi','tdra','pdpl','pdppl','sdaia','mhra','asa','cap','cma','dmcc','eaa','dsa','dma','nis2','eidas','psd2','psd','aml','kyc','llp','ltd','plc','vat','seo','geo','ai','llm','llms','faq','url','cta','nap','ux','ui','b2b','b2c','saas','api','crm','roi','kpi','tamazia','lexquity']);
+async function spellCheck(html){
+  try {
+    const text=String(html||'').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&[a-z]+;/gi,' ').replace(/\s+/g,' ').trim().slice(0,1600);
+    if(text.length<120) return [];
+    const r=await timed((sig)=>fetch('https://api.languagetool.org/v2/check',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:'language=en-GB&text='+encodeURIComponent(text),signal:sig}),12000);
+    if(!r.ok) return [];
+    const j=await r.json();
+    const out=[]; const seen=new Set();
+    for(const m of (j.matches||[])){
+      const rid=(m.rule&&m.rule.id)||''; if(!/MORFOLOGIK|SPELL|TYPO/i.test(rid)) continue;       // spelling only
+      const bad=(m.context.text||'').substr(m.context.offset, m.length).trim(); if(!bad) continue;
+      const low=bad.toLowerCase();
+      if(_SPELL_ALLOW.has(low)) continue;                        // known legal/brand term
+      if(/^[A-Z0-9.&'-]{2,8}$/.test(bad)) continue;              // ALL-CAPS acronym / abbreviation
+      if(/\d/.test(bad)) continue;                               // contains a digit
+      if(/^[A-Z][a-z]+$/.test(bad) && m.context.offset>0) continue; // mid-sentence proper noun (name/place)
+      if(low.length<4) continue;                                  // too short to be a confident typo
+      const sug=(m.replacements&&m.replacements[0]&&m.replacements[0].value)||''; if(!sug||sug.toLowerCase()===low) continue;
+      if(seen.has(low)) continue; seen.add(low);
+      out.push({ bad, suggestion: sug });
+      if(out.length>=8) break;
+    }
+    return out;
+  } catch(_e){ return []; }
+}
 async function scanSite({ domain, sector, env }) {
   const clean = String(domain || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
   const page = await getHtml('https://' + clean);
