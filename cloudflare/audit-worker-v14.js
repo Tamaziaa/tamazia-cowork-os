@@ -357,6 +357,7 @@ function renderHeader(audit, grade) {
           <div>
             <h1 style="font-family:'Times New Roman',serif;font-size:clamp(1.4rem,3vw,2rem);margin:0 0 4px;line-height:1.1">${esc(audit.company)}</h1>
             <p style="margin:0;font-size:0.78rem;color:rgba(248,245,239,0.75)">${esc(audit.sector || '')} · ${esc(audit.country || 'UK')} · ${esc(audit.city || 'London')} · ${esc(audit.domain || '')} · ${esc(dateStr)}</p>
+            ${audit.via_archive ? `<p style="margin:5px 0 0;font-size:0.64rem;color:rgba(200,166,100,0.85)">Assessed from your most recent public web-archive snapshot${audit.archive_date ? ' (' + esc(audit.archive_date.slice(0,4) + '-' + audit.archive_date.slice(4,6) + '-' + audit.archive_date.slice(6,8)) + ')' : ''} because your live site is behind a bot-challenge wall.</p>` : ''}
           </div>
           <div style="text-align:right">
             <a href="${TAMAZIA_BASE}/book/" style="display:inline-block;padding:11px 18px;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:600;border-radius:4px;font-size:0.8rem">Walk this with the founder →</a>
@@ -876,6 +877,9 @@ function adapt(row) {
     pointers,
     keyword_map: p.keyword_map || null,
     news_map: p.news_map || {},
+    ai_citation: p.ai_citation || null,
+    via_archive: !!p.via_archive,
+    archive_date: p.archive_date || null,
   };
 }
 

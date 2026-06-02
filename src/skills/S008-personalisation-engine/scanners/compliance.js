@@ -115,6 +115,24 @@ async function _renderViaReader(url) {
   } catch (_e) { clearTimeout(t); return ''; }
 }
 
+// Public-archive fallback (free, compliant): when a site is behind an anti-bot challenge that blocks live
+// fetch AND the JS reader, read the most recent PUBLIC Wayback Machine snapshot. This reads archive.org (a
+// public archive of public pages), not the live site, so it never touches the target's bot protection.
+async function _archiveSnapshot(url) {
+  try {
+    const a = await fetch('https://archive.org/wayback/available?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(12000) });
+    const j = await a.json();
+    const snap = j && j.archived_snapshots && j.archived_snapshots.closest;
+    if (!snap || !snap.available || !snap.url) return null;
+    const raw = snap.url.replace(/\/web\/(\d+)\//, '/web/$1id_/'); // id_ = unmodified original capture (no WB toolbar)
+    const r = await fetch(raw, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; TamaziaAuditBot/1.0)' }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
+    if (!r.ok) return null;
+    const body = await r.text();
+    if (!body || body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, '').length < 500) return null;
+    return { body, date: String(snap.timestamp || '').slice(0, 8) };
+  } catch (_e) { return null; }
+}
+
 async function gatherCorpus({ domain, maxPages = 22 }) {
   const base = 'https://' + domain;
   const corpus = []; const seenBody = new Set(); const used = new Set();
@@ -163,6 +181,21 @@ async function gatherCorpus({ domain, maxPages = 22 }) {
       }
     }
   }
+  // Public-archive fallback: still nothing readable (challenge wall or hard block) -> read public Wayback snapshots
+  // of the homepage + key legal pages so EVERY site gets an audit. Provenance is recorded honestly.
+  let _archiveDate = null;
+  if (!corpus.length) {
+    const archTargets = [base + '/', ...guessed.filter(u => /privacy|terms|cookie|legal/i.test(u)).slice(0, 4)];
+    for (const au of archTargets) {
+      const snap = await _archiveSnapshot(au);
+      if (snap && snap.body) {
+        const sig = _crypto.createHash('sha1').update(snap.body).digest('hex');
+        if (seenBody.has(sig)) continue; seenBody.add(sig);
+        corpus.push({ url: au, body: snap.body, status: 200, fetch_ms: 0, bytes: Buffer.byteLength(snap.body), archived: true, archive_date: snap.date });
+        if (snap.date && (!_archiveDate || snap.date > _archiveDate)) _archiveDate = snap.date;
+      }
+    }
+  }
   // Honest block-reason (so a held site reports WHY, not a generic note).
   const anyChallenge = (home && home.challenge) || results.some(r => r && r.challenge);
   let reason = null;
@@ -172,7 +205,7 @@ async function gatherCorpus({ domain, maxPages = 22 }) {
     else if (home && home.ok && home.body && home.body.replace(/<[^>]+>/g,' ').replace(/\s+/g,'').length < 500) reason = 'js_rendered_empty_shell';
     else reason = 'no_readable_pages';
   }
-  return { corpus, blocked: corpus.length === 0, reason, challenge: !!anyChallenge, home_status: home ? home.status : 0, pages_tried: fetchList.length };
+  return { corpus, blocked: corpus.length === 0, reason, challenge: !!anyChallenge, home_status: home ? home.status : 0, pages_tried: fetchList.length, via_archive: !!_archiveDate, archive_date: _archiveDate };
 }
 
 // Phase 7.4 · detect operating jurisdictions from the actual site corpus.
@@ -392,6 +425,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
 
   const payload = {
     domain, sector, country, ok: true, reachable: true,
+    via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
     frameworks, jurisdictions: allJurisdictions, detected_jurisdictions: detectedJurisdictions,
     rules_evaluated: rules.length, hits, misses,
     p0_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P0').length,
