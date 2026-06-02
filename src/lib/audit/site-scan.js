@@ -378,13 +378,43 @@ async function spellCheck(html){
   } catch(_e){ return []; }
 }
 async function scanSite({ domain, sector, env }) {
+  const { classifyRender } = require('./preflight.js');
   const clean = String(domain || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
-  const page = await getHtml('https://' + clean);
-  // Credibility guard: never fabricate HTML-derived findings for a site we could not load.
-  if (!page.ok || !(page.body || '').length) {
+  // P1.1 best-fetch: try apex + www, follow redirect stubs (apex->www, geo splash), keep the most real render.
+  let page, preflight;
+  {
+    const rank = { OK: 5, TINY: 4, EMPTY_SPA: 3, SOFT_404: 2, LOGIN: 2, STAGING: 2, REDIRECT_STUB: 1, CHALLENGE: 1, UNREACHABLE: 0 };
+    for (const u of ['https://' + clean, 'https://www.' + clean]) {
+      let pg = await getHtml(u);
+      let pre = classifyRender({ status: pg.status, body: pg.body, headers: pg.headers, finalUrl: pg.finalUrl || u, challenge: pg.challenge, domain: clean });
+      if (pre.klass === 'REDIRECT_STUB' && pre.target) {
+        let t = pre.target; if (t.startsWith('/')) t = 'https://' + clean + t; if (!/^https?:/i.test(t)) t = 'https://' + t;
+        try { const pg2 = await getHtml(t); if ((pg2.body || '').length) { pg = pg2; pre = classifyRender({ status: pg2.status, body: pg2.body, headers: pg2.headers, finalUrl: pg2.finalUrl || t, challenge: pg2.challenge, domain: clean }); } } catch (_e) {}
+      }
+      if (!preflight || (rank[pre.klass] || 0) > (rank[preflight.klass] || 0)) { page = pg; preflight = pre; }
+      if (preflight.klass === 'OK' || preflight.klass === 'TINY') break;
+    }
+  }
+  let via_render = false, via_archive = false;
+  if (preflight.action === 'render' || preflight.action === 'archive') {
+    try {
+      const rd = await getText('https://r.jina.ai/https://' + clean);
+      const rwc = rd ? rd.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length : 0;
+      if (rwc >= 120) {
+        via_render = preflight.action === 'render'; via_archive = preflight.action === 'archive';
+        page = Object.assign({}, page, { ok: true, rendered_text: rd });
+        preflight = Object.assign({}, preflight, { klass: via_archive ? 'CHALLENGE_ARCHIVED' : 'SPA_RENDERED', recovered_words: rwc, reasons: preflight.reasons.concat('content recovered via reader render (' + rwc + ' words)') });
+      }
+    } catch (_e) { /* fail-open */ }
+  }
+  // Credibility guard: never fabricate HTML-derived findings for a dead site or an unrecovered wall.
+  if (preflight.klass === 'UNREACHABLE' || (preflight.klass === 'CHALLENGE' && !via_archive) || !(page.body || '').length) {
     let mail = []; try { mail = await require('./extra-scanners.js').emailAuth(clean); } catch (_) {}
-    const pts = [P('website', 'P1', 'Site reachability', 'The website could not be loaded for audit.', 'We could not reach the site to assess it, which may be a server, DNS, or blocking issue worth checking first. No on-page findings are asserted because the page did not load.', 'Tamazia confirms reachability then re-audits.', 'GET / · not reachable'), ...mail];
-    return { scanned_at: new Date().toISOString(), final_url: page.finalUrl, reachable: false, signals: {}, psi: null, pointers: pts, counts: { total: pts.length, p0: 0, p1: pts.filter(p => p.severity === 'P1').length, p2: pts.filter(p => p.severity !== 'P1').length } };
+    const walled = preflight.klass === 'CHALLENGE';
+    const fact = walled ? 'Your live site is behind a bot-challenge wall, so it could not be read live for on-page assessment.' : 'The website could not be loaded for audit.';
+    const lay = walled ? 'A bot-protection wall (Cloudflare/Akamai-style) blocks automated reading of the live HTML. Compliance is still assessed from the public web archive; live on-page SEO signals could not be read.' : 'We could not reach the site to assess it, which may be a server, DNS, or blocking issue worth checking first. No on-page findings are asserted because the page did not load.';
+    const pts = [P('website', 'P1', 'Site reachability', fact, lay, 'Tamazia confirms reachability then re-audits.', 'GET / · ' + (walled ? 'bot-challenge wall' : 'not reachable')), ...mail];
+    return { scanned_at: new Date().toISOString(), final_url: page.finalUrl, reachable: false, render_class: preflight.klass, preflight, via_archive: walled, signals: {}, psi: null, pointers: pts, counts: { total: pts.length, p0: 0, p1: pts.filter(p => p.severity === 'P1').length, p2: pts.filter(p => p.severity !== 'P1').length } };
   }
   const sig = extractSignals(page);
   try { sig.ad_tech = require('./ad-tech.js').detectAdTech(page.body); } catch (_) { sig.ad_tech = { runs_ads: false, platforms: [] }; }
@@ -396,7 +426,7 @@ async function scanSite({ domain, sector, env }) {
     exists('https://' + clean + '/sitemap.xml'),
     exists('https://' + clean + '/llms.txt'),
   ]);
-  const pointers = pointersFromSignals(sig, psi, sector || '');
+  let pointers = pointersFromSignals(sig, psi, sector || '');
   for (const pp of psiPointers(psi)) pointers.push(pp);
   // AI crawler access (GEO) from robots.txt body
   try { const robotsBody = await getText('https://' + clean + '/robots.txt'); for (const pp of aiCrawlerPointers(robotsBody)) pointers.push(pp); } catch (_e) {}
@@ -442,12 +472,31 @@ async function scanSite({ domain, sector, env }) {
     if (typos.length) pointers.push(P('content_depth', typos.length >= 4 ? 'P1' : 'P2', 'Spelling & grammar errors on your live site', typos.length + ' likely spelling or grammar error(s) are published on your homepage right now.', 'Visible errors on a professional firm\'s website quietly erode trust with high-value clients and signal low quality to Google\'s helpful-content systems. For a firm selling expertise, typos on the live site are an avoidable credibility leak.', 'Tamazia proofreads and corrects every page, then sets an editorial QA gate so it does not recur.', 'homepage - ' + typos.map(t => '"' + t.bad + '" to "' + t.suggestion + '"').slice(0, 8).join(', ')));
   } catch (_e) {}
 
+  // P1.1 suppression: drop findings we cannot trust for this render class (e.g. 'thin content' on a JS shell),
+  // keeping transport/endpoint findings (headers, DNS, robots, sitemap, PSI, CrUX) which are render-independent.
+  const _supClassOf = (p) => {
+    const c = ((p.citation || '') + ' ' + (p.fact || '')).toLowerCase();
+    if (/thin page content|thin content/.test(c)) return 'thin_content';
+    if (/spelling|grammar/.test(c)) return 'content_absence';
+    if (/\bh1\b|meta description|title tag|open graph|twitter card|schema|json-?ld/.test(c)) return 'html_structure';
+    if (/sitemap freshness|no blog|few pages/.test(c)) return 'thin_sitemap';
+    return null;
+  };
+  if (preflight && preflight.suppress) pointers = pointers.filter(p => { const k = _supClassOf(p); return !(k && preflight.suppress[k]); });
+  if (['STAGING', 'SOFT_404', 'LOGIN'].includes(preflight.klass)) {
+    const noteMap = { STAGING: 'This appears to be a staging or non-production URL, so it was assessed as-is and not as the live brand site.', SOFT_404: 'This URL returned a placeholder or not-found page, so on-page content findings were withheld.', LOGIN: 'This URL is behind a login or paywall, so only publicly visible signals were assessed.' };
+    pointers.unshift(P('website', 'P2', 'Assessment scope', noteMap[preflight.klass], 'We flag this so every finding below is read in context and nothing is asserted that we could not fairly verify.', 'Tamazia re-audits the production URL on request.', 'preflight: ' + preflight.klass));
+  }
   const p0 = pointers.filter(p => p.severity === 'P0').length;
   const p1 = pointers.filter(p => p.severity === 'P1').length;
   return {
     scanned_at: new Date().toISOString(),
     final_url: page.finalUrl,
     reachable: page.ok,
+    render_class: preflight.klass,
+    preflight,
+    via_render, via_archive,
+    lang: preflight.lang, is_english: preflight.is_english, brand: preflight.brand,
     signals: sig,
     psi: psi || null,
     markets,
