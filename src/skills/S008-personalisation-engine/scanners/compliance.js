@@ -395,6 +395,10 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 3600 });
     return payload;
   }
+  // P1.5a verify-context: the best relevant page text for LLM-grounding the fine-bearing findings.
+  const _stripTxt = (h) => String(h || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const _policyText = _policyPages.map(p => _stripTxt(p.body)).join(' \n ').slice(0, 2600);
+  const _homeText = _stripTxt((corpus[0] && corpus[0].body) || '').slice(0, 2600);
   const findings = [];
   let hits = 0, misses = 0, suppressedPrivacy = 0;
   const normSector = String(sector || '').toLowerCase();
@@ -404,6 +408,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     else if (out.status === 'miss') {
       // Suppress unverifiable privacy-disclosure misses when the policy is JS-rendered/embedded (false-positive guard).
       if (privacyUnreadable && PRIVACY_FW.has(r.framework_short) && (r.rule_type === 'must_appear' || !r.rule_type)) { suppressedPrivacy++; continue; }
+      if (out.fine_low_gbp || out.fine_high_gbp) { out.verify_context = ((PRIVACY_FW.has(out.framework) && _policyText) ? _policyText : _homeText) || _homeText; }
       misses++; findings.push(out);
     }
     // Drop irrelevant rules — trigger_absent, not_applicable_to_sector, no_prohibited_pattern.

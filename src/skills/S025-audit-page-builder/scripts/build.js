@@ -124,6 +124,32 @@ async function verifyTopFindings(classified, env, cap = 5) {
       else if (/^\s*YES\b/.test(_first)) { f.signals = (f.signals || []).concat('nim_entailed'); }
     } catch (_e) { /* fail-open */ }
   }
+  // P1.5a immaculate fines: LLM-verify the top fine-bearing ABSENCE findings against the real page text.
+  const absTargets = classified
+    .filter(f => f.state === 'CONFIRMED' && f.kind === 'absence' && (f.fine_high_gbp || f.fine_low_gbp) && f.verify_context)
+    .sort((a, b) => (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0))
+    .slice(0, 12);
+  for (const f of absTargets) {
+    try {
+      const req = String(f.description || f.fact || '').slice(0, 280);
+      const ctx = String(f.verify_context || '').slice(0, 2600);
+      const prompt = 'You are a compliance auditor. Judge ONLY the provided website text; assume nothing outside it.\nRequirement the page must satisfy: "' + req + '"\nWebsite text (verbatim excerpt):\n"""' + ctx + '"""\nDoes the text above already satisfy the requirement? Answer SATISFIED or MISSING on the first line. If SATISFIED, on the next line quote the exact words from the text that satisfy it.';
+      const r = await fetch(base, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 60, temperature: 0 }), signal: AbortSignal.timeout(20000) });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const raw = ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
+      const firstLine = (raw.split('\n')[0] || '').toUpperCase();
+      const norm = (x) => String(x || '').toLowerCase().replace(/\s+/g, ' ');
+      if (/^\s*SATISFIED/.test(firstLine)) {
+        const q = (raw.split('\n').slice(1).join(' ').match(/"([^"]{6,})"/) || [])[1] || '';
+        if (q && norm(ctx).includes(norm(q).slice(0, 40))) { f.state = 'PASS'; f.fine_low_gbp = null; f.fine_high_gbp = null; f.signals = (f.signals || []).concat('nim_satisfied_dropped'); }
+        else { f.signals = (f.signals || []).concat('nim_satisfied_unverified_kept'); }
+      } else if (/^\s*MISSING/.test(firstLine)) {
+        f.signals = (f.signals || []).concat('nim_gap_confirmed');
+      }
+    } catch (_e) { /* fail-open */ }
+  }
+  for (const f of classified) { if (f.verify_context) delete f.verify_context; }
   return classified;
 }
 
@@ -191,6 +217,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     checked_urls: Array.isArray(f.checked_urls) ? f.checked_urls.slice(0, 6) : null,
     rule_type: f.rule_type || null,
     fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
+    verify_context: f.verify_context || null,
   }));
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';
   const lr = pg(`SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'`) || new Date().toISOString().slice(0, 10);
