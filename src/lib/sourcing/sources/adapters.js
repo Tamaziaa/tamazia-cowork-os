@@ -7,6 +7,8 @@
 //            compliant) | 'needs_key' (a free key would unlock API mode). candidates() runs api/free mode;
 // ingestCaptured() accepts rows captured in a Chrome session. Everything fail-open.
 'use strict';
+const { execFileSync } = require('child_process');
+const _NP = require('path');
 const UA = 'Mozilla/5.0 (compatible; TamaziaBot/1.0; +https://tamazia.co.uk)';
 async function timed(fn, ms){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);try{return await fn(c.signal);}finally{clearTimeout(t);}}
 async function getJSON(u,o,ms){try{const r=await timed(s=>fetch(u,{...o,signal:s}),ms||15000);if(!r.ok)return null;return await r.json();}catch(_){return null;}}
@@ -111,6 +113,56 @@ const social_ads = {
   ingestCaptured(items){ return (items||[]).map(i=>({ domain:rootDomain(i.url||i.advertiser_domain||i.domain||''), company:i.advertiser||i.page_name||i.company||'', country:i.country||'', title:i.advertiser||i.page_name||'', snippet:i.adText||'', adText:i.adText||'', adRunner:true, platform:(i.platform||'social')+'-ads', source:'social-ads', permalink:i.url||'' })).filter(x=>x.domain); },
 };
 
-const REGISTRY = { serp_top, reddit, youtube, x_ads, social_ads };
+// ---------- JobSpy hiring-signal · firms hiring SEO/marketing/compliance roles = budget + a gap we fill ----------
+const jobspy = {
+  name: 'jobspy', platform: 'indeed',
+  mode: (env) => env.SERPER_KEY ? 'api' : 'needs_key', // SERPER resolves company -> real website domain
+  async candidates(opts = {}, env = process.env) {
+    const key = env.SERPER_KEY; if (!key) return [];
+    let rows = [];
+    try {
+      const script = _NP.resolve(__dirname, '..', '..', '..', '..', 'scrapers', 'run_jobspy.py');
+      const cfg = JSON.stringify({ roles: opts.roles, locs: opts.locs });
+      const raw = execFileSync('python3', [script, cfg], { encoding: 'utf8', timeout: 150000, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, JOBSPY_PER: String(opts.per || 6) } });
+      const j = JSON.parse(raw.trim().split('\n').pop()); rows = j.rows || [];
+    } catch (_e) { return []; }
+    const out = []; const seen = new Set();
+    for (const r of rows.slice(0, opts.max || 40)) {
+      const d = await getJSON('https://google.serper.dev/search', { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ q: r.company + ' official website', num: 5, gl: r.country === 'UK' ? 'gb' : r.country === 'UAE' ? 'ae' : 'us' }) }, 12000);
+      let dom = '', otitle = '', osnip = '';
+      for (const o of ((d && d.organic) || [])) { const dd = rootDomain(o.link || ''); if (dd && !/indeed|glassdoor|linkedin|facebook|crunchbase|wikipedia|youtube|reed\.co|totaljobs|monster|ziprecruiter|google|bloomberg|companieshouse|trustpilot/.test(dd)) { dom = dd; otitle = o.title || ''; osnip = o.snippet || ''; break; } }
+      if (!dom || seen.has(dom)) continue; seen.add(dom);
+      // Use the company's OWN SERP description for sector classification (the job title alone can't classify a sector);
+      // keep the role in the hiring_signal + snippet so the audit + personalisation can reference "you're hiring for X".
+      out.push({ domain: dom, company: r.company, country: r.country, title: otitle || r.company, snippet: (osnip ? osnip + ' · ' : '') + 'Currently hiring: ' + r.title, adText: '', adRunner: false, hiring_signal: r.query || r.title, platform: 'indeed', source: 'jobspy', permalink: 'https://www.indeed.com/cmp/' + encodeURIComponent(String(r.company).replace(/\s+/g, '-')) });
+    }
+    return out;
+  },
+  ingestCaptured(items) { return (items || []).map(i => ({ domain: rootDomain(i.url || i.domain || ''), company: i.company || '', country: i.country || '', title: i.title || '', snippet: i.snippet || ('Currently hiring: ' + (i.title || '')), adText: '', adRunner: false, hiring_signal: i.hiring_signal || i.title || '', platform: 'indeed', source: 'jobspy', permalink: i.url || '' })).filter(x => x.domain); },
+};
+
+// ---------- Google Maps places · SERPER /places (free-keyed, no Go binary) — local service-firm ICP sourcing ----------
+const maps = {
+  name: 'maps', platform: 'google-maps',
+  mode: (env) => env.SERPER_KEY ? 'api' : 'needs_key',
+  async candidates(opts = {}, env = process.env) {
+    const key = env.SERPER_KEY; if (!key) return [];
+    const out = []; const seen = new Set();
+    const terms = opts.terms || SECTOR_TERMS; const geos = opts.geos || GEOS;
+    for (const term of terms.slice(0, opts.maxTerms || 6)) {
+      for (const [city, country] of geos.slice(0, opts.maxGeos || 4)) {
+        const d = await getJSON('https://google.serper.dev/places', { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ q: term + ' ' + city, gl: country === 'UK' ? 'gb' : country === 'UAE' ? 'ae' : 'us' }) }, 12000);
+        for (const pl of ((d && d.places) || [])) {
+          const dom = rootDomain(pl.website || ''); if (!dom || seen.has(dom)) continue; seen.add(dom);
+          out.push({ domain: dom, company: (pl.title || '').trim(), country, title: pl.title || '', snippet: term + (pl.rating ? ' · rating ' + pl.rating + (pl.ratingCount ? ' (' + pl.ratingCount + ' reviews)' : '') : '') + (pl.address ? ' · ' + pl.address : ''), adText: '', adRunner: false, platform: 'google-maps', source: 'maps', permalink: pl.website || '' });
+        }
+      }
+    }
+    return out;
+  },
+  ingestCaptured(items) { return (items || []).map(i => ({ domain: rootDomain(i.website || i.url || i.domain || ''), company: i.company || i.title || '', country: i.country || '', title: i.title || '', snippet: i.snippet || '', adText: '', adRunner: false, platform: 'google-maps', source: 'maps', permalink: i.website || i.url || '' })).filter(x => x.domain); },
+};
+
+const REGISTRY = { serp_top, reddit, youtube, x_ads, social_ads, jobspy, maps };
 function list(env = process.env){ return Object.values(REGISTRY).map(a=>({ name:a.name, platform:a.platform, mode:a.mode(env) })); }
-module.exports = { REGISTRY, list, serp_top, reddit, youtube, x_ads, social_ads, rootDomain };
+module.exports = { REGISTRY, list, serp_top, reddit, youtube, x_ads, social_ads, jobspy, maps, rootDomain };

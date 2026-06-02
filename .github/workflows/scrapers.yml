@@ -1,0 +1,43 @@
+name: Lead scrapers (daily, gated)
+# Runs all lead sources through the SAME gated pipeline (gather -> ICP pre-filter -> full audit -> ICP+hot score
+# -> enrich -> persist -> sourcing_runs tracking). New sources: jobspy (firms hiring SEO/marketing/compliance =
+# budget + a gap we fill) + maps (Google Maps places via SERPER). Self-healing: each source fail-open; a bad
+# source never wedges the run. Quality gates in src/lib/sourcing/icp.js keep the list HOT.
+on:
+  schedule:
+    - cron: "0 7 * * *"   # daily 07:00 UTC
+  workflow_dispatch:
+    inputs:
+      sources: { description: "comma sources (jobspy,maps,serp-top)", default: "jobspy,maps,serp-top" }
+      max: { description: "max leads", default: "40" }
+
+concurrency: { group: lead-scrapers, cancel-in-progress: false }
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install deps (pg8000 shim + JobSpy)
+        run: |
+          python -m pip install --quiet -r requirements.txt
+          python -m pip install --quiet python-jobspy
+          npm install --omit=dev || true
+      - name: Materialise .env from secret
+        run: |
+          echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+          if ! grep -q '^PAGESPEED_API_KEY=' .env && [ -n "${{ secrets.PAGESPEED_API_KEY }}" ]; then echo "PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}" >> .env; fi
+      - name: Run gated scrapers
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          node scripts/source-leads.js --source ${{ github.event.inputs.sources || 'jobspy,maps,serp-top' }} --max ${{ github.event.inputs.max || '40' }}
+      - name: Alert on failure
+        if: failure()
+        run: |
+          set +e; source .env 2>/dev/null
+          [ -n "$TELEGRAM_BOT_TOKEN" ] && curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" -d chat_id="$TELEGRAM_CHAT_ID" -d text="🔴 lead-scrapers run failed (run ${{ github.run_id }})." >/dev/null

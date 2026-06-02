@@ -55,6 +55,7 @@ function preFilter(raw) {
   const geoOk = inServedGeo({ country: raw.country, domain: dom });
   if (!geoOk) return { pass: false, reasons: ['out_of_served_geo'] };
   if (raw.adRunner) reasons.push('ad_runner_intent');
+  if (raw.hiring_signal) reasons.push('hiring_intent:' + raw.hiring_signal);
   reasons.push('sector:' + sector);
   return { pass: true, sector, reasons };
 }
@@ -73,11 +74,14 @@ function scoreICP(sig) {
   if (sig.aiVisibilityGap) { score += 12; reasons.push('AI-visibility gap'); }
   const seo = sig.seoGapCount || 0;
   if (seo > 0) { score += Math.min(20, seo * 4); reasons.push(seo + ' SEO/technical gaps'); }
+  if (sig.hiring_signal) { score += 18; reasons.push('actively hiring: ' + sig.hiring_signal + ' (budget + capability gap we fill)'); }
   if (sig.decisionMakerFound) { score += 6; reasons.push('decision-maker reachable'); }
   score = Math.max(0, Math.min(100, score));
   // FIT (Tamazia value): (regulated OR compliance) AND seo/AI gap AND ad-runner
   const hasGap = seo > 0 || sig.aiVisibilityGap;
-  const fit = !!(sig.sector && (def.regulated || sig.complianceApplicable || hasGap) && hasGap && sig.adRunner);
+  // Buyer INTENT = running ads OR actively hiring a marketing/SEO/compliance role (both = budget + a gap we fill).
+  const intent = !!(sig.adRunner || sig.hiring_signal);
+  const fit = !!(sig.sector && (def.regulated || sig.complianceApplicable || hasGap) && hasGap && intent);
   const band = score >= 70 ? 'hot' : score >= 45 ? 'warm' : 'cold';
   return { fit, score, band, reasons };
 }

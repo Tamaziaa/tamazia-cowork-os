@@ -92,7 +92,7 @@ async function run() {
     const adPlatforms = (adTech.platforms && adTech.platforms.length) ? adTech.platforms : [r.platform];
     summary.audited++;
     // 2. score
-    const icp = scoreICP({ sector: r.sector, country: r.country, adRunner, adPlatforms, seoGapCount: seoGap, aiVisibilityGap: aiGap, complianceApplicable: !!(SECTORS[r.sector] || {}).regulated, decisionMakerFound: false });
+    const icp = scoreICP({ sector: r.sector, country: r.country, adRunner, adPlatforms, seoGapCount: seoGap, aiVisibilityGap: aiGap, complianceApplicable: !!(SECTORS[r.sector] || {}).regulated, decisionMakerFound: false, hiring_signal: r.hiring_signal || null });
     const hot = hotScore({ adRunner, adPlatforms, adRecencyDays: adRunner ? 5 : null, seoGapSeverity: Math.min(3, Math.ceil(seoGap / 2)), aiVisibilityGap: aiGap, decisionMakerFound: false });
     // 3. enrich
     let enr = { emails: [], decisionMakers: [], counts: { emails: 0, verified: 0, decision_makers: 0 }, send_ready: false, linkedin_people: [] };
