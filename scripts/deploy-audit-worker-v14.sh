@@ -9,9 +9,12 @@ SCRIPT_NAME=${1:-tamazia-audit}
 ZONE_ID=a564b60458bb5eec33bbe7f13eb0e4e1   # tamazia.co.uk
 cp cloudflare/audit-worker-v14.js /tmp/worker.js
 # metadata with the NEON_URL secret binding (json-encoded safely)
-python3 - "$NEON_URL" > /tmp/meta.json <<'PY'
+python3 - "$NEON_URL" "${POSTHOG_KEY:-}" "${POSTHOG_HOST:-https://eu.i.posthog.com}" > /tmp/meta.json <<'PY'
 import json,sys
-print(json.dumps({"main_module":"worker.js","compatibility_date":"2026-05-01","bindings":[{"type":"secret_text","name":"NEON_URL","text":sys.argv[1]}]}))
+b=[{"type":"secret_text","name":"NEON_URL","text":sys.argv[1]}]
+if len(sys.argv)>2 and sys.argv[2]: b.append({"type":"secret_text","name":"POSTHOG_KEY","text":sys.argv[2]})
+if len(sys.argv)>3 and sys.argv[3]: b.append({"type":"secret_text","name":"POSTHOG_HOST","text":sys.argv[3]})
+print(json.dumps({"main_module":"worker.js","compatibility_date":"2026-05-01","bindings":b}))
 PY
 echo "=== uploading $SCRIPT_NAME (v14-live) ==="
 RESP=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$SCRIPT_NAME" \
