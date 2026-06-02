@@ -254,6 +254,8 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   try { _classified = await verifyTopFindings(_classified, env || process.env); } catch (_e) {}
   const _confirmed = _ft.confirmed(_classified);
   const _needsReview = _ft.needsReview(_classified);
+  // P1.8 BINGO voice: attach the 'Right now / Tamazia' lines to every confirmed finding so the v15 render speaks one voice.
+  try { const _ds = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'design-system.js')); for (const f of _confirmed) f.bingo = _ds.bingoLine(f); } catch (_e) {}
   const threeFindings = _confirmed.slice(0, 3);
   // LLM executive summary (NIM, free) — a 2-sentence synthesis of the REAL findings only. Fallback-safe.
   let exec_summary = '';
