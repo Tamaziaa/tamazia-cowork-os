@@ -84,9 +84,10 @@ function detectMarkets({ html, domain }) {
   }
   // hreflang (STRONG served-market signal)
   const HRE = { GB:'United Kingdom', UK:'United Kingdom', US:'United States', AE:'United Arab Emirates', FR:'France', DE:'Germany', ES:'Spain', IT:'Italy', IE:'Ireland', NL:'Netherlands', BE:'Belgium', CA:'Canada', AU:'Australia', SG:'Singapore', CH:'Switzerland' };
-  for (const m of b.matchAll(/hreflang=["']([a-z]{2})(?:-([a-z]{2}))?["']/gi)) { const reg=(m[2]||'').toUpperCase(); if (HRE[reg]) add(HRE[reg], 3, 'hreflang locale'); }
-  // market-selector subpaths (/us /uk /de /en-us) => STRONG
-  for (const m of b.matchAll(/\/(?:en-|fr-|de-)?(uk|us|ae|fr|de|es|it|ie|nl|be|ca|au|sg|ch)(?:[\/"'])/gi)) { const reg=m[1].toUpperCase(); if (HRE[reg]) add(HRE[reg], 2, 'market URL path'); }
+  { const _h = new Set(); for (const m of b.matchAll(/hreflang=["']([a-z]{2})(?:-([a-z]{2}))?["']/gi)) { const reg=(m[2]||'').toUpperCase(); if (HRE[reg]) _h.add(HRE[reg]); } for (const c of _h) add(c, 3, 'hreflang locale'); }
+  // market-selector subpaths (/us /uk /de /en-us) => STRONG, but counted ONCE per region (a country-selector
+  // repeated in every page header must not 40x the score and fabricate a served market).
+  { const _u = new Set(); for (const m of b.matchAll(/\/(?:en-|fr-|de-)?(uk|us|ae|fr|de|es|it|ie|nl|be|ca|au|sg|ch)(?:[\/"'])/gi)) { const reg=m[1].toUpperCase(); if (HRE[reg]) _u.add(reg); } for (const reg of _u) add(HRE[reg], 2, 'market URL path'); }
   // explicit served-region phrases
   if (/\b(across europe|throughout europe|pan-european|european clients|european union|\beea\b|customers across europe)\b/i.test(text)) { add('European Union', 3, 'serves Europe'); }
   // $ currency disambiguation: only US if a US signal already present

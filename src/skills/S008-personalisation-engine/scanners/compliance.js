@@ -391,8 +391,9 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   findings.sort((a, b) => sevRank(a.severity) - sevRank(b.severity));
 
   const payload = {
-    domain, sector, country, ok: true,
-    frameworks, rules_evaluated: rules.length, hits, misses,
+    domain, sector, country, ok: true, reachable: true,
+    frameworks, jurisdictions: allJurisdictions, detected_jurisdictions: detectedJurisdictions,
+    rules_evaluated: rules.length, hits, misses,
     p0_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P0').length,
     p1_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P1').length,
     p2_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P2').length,

@@ -176,6 +176,8 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     framework_version: fv,
     framework_last_reviewed: lr,
     applicable_frameworks: frameworks,
+    detected_jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [],
+    engine_jurisdictions: (comp && comp.jurisdictions) || [],
     rules,
     // Evidence-tied findings from the real site scan — surfaced at top level so any renderer can read them
     pointers: findings,
