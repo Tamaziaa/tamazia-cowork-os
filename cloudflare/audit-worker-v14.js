@@ -341,6 +341,13 @@ function severityBar(crit, high, std) {
 // SECTIONS · v13 information architecture
 // ============================================================
 
+function renderExecSummary(audit){
+  if(!audit.exec_summary) return '';
+  return '<section style="padding:18px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto;display:flex;gap:12px;align-items:flex-start">'
+    +'<span style="font-size:0.6rem;color:#C8A664;letter-spacing:0.12em;text-transform:uppercase;font-weight:700;white-space:nowrap;padding-top:3px">Executive read</span>'
+    +'<p style="margin:0;font-family:\'Times New Roman\',serif;font-size:1.02rem;line-height:1.5;color:#3D0E0E">'+esc(audit.exec_summary)+'</p>'
+    +'</div></section>';
+}
 function renderHeader(audit, grade) {
   const meta = audit.scan_meta || {};
   const dateStr = meta.generated_at ? new Date(meta.generated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -1013,6 +1020,7 @@ function renderPage(audit) {
 </style>
 </head><body>
 ${renderHeader(adjAudit, grade)}
+${renderExecSummary(adjAudit)}
 ${renderGlance(adjAudit, totalExposure, top3)}
 ${renderSectionGauges(syncedBuckets, sevMap)}
 ${renderCritical(top3)}
@@ -1090,6 +1098,7 @@ function adapt(row) {
     news_map: p.news_map || {},
     ai_citation: p.ai_citation || null,
     via_archive: !!p.via_archive,
+    exec_summary: p.exec_summary || '',
     archive_date: p.archive_date || null,
   };
 }

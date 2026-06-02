@@ -176,6 +176,20 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   const sevRank = { P0: 0, P1: 1, P2: 2 };
   const findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   const threeFindings = findings.slice(0, 3);
+  // LLM executive summary (NIM, free) — a 2-sentence synthesis of the REAL findings only. Fallback-safe.
+  let exec_summary = '';
+  try {
+    const _key = process.env.NIM_API_KEY || process.env.GROQ_API_KEY;
+    if (_key && findings.length) {
+      const _top = findings.slice(0, 8).map(f => '- ' + (f.severity || '') + ' ' + String(f.fact || '').slice(0, 90)).join('\n');
+      const _expo = findings.reduce((a, f) => a + (f.fine_high_gbp || 0), 0);
+      const _base = process.env.NIM_API_KEY ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
+      const _model = process.env.NIM_API_KEY ? (process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct') : 'llama-3.3-70b-versatile';
+      const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nMax fine exposure across findings: GBP ' + _expo + '.\nWrite exactly two sentences: (1) the single most serious regulatory or commercial risk and why it matters, (2) the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.';
+      const _r = await fetch(_base, { method: 'POST', headers: { authorization: 'Bearer ' + _key, 'content-type': 'application/json' }, body: JSON.stringify({ model: _model, messages: [{ role: 'user', content: _prompt }], max_tokens: 170, temperature: 0.3 }), signal: AbortSignal.timeout(25000) });
+      if (_r.ok) { const _j = await _r.json(); const _t = (_j.choices && _j.choices[0] && _j.choices[0].message && _j.choices[0].message.content || '').trim(); if (_t && _t.length > 40) exec_summary = _t.slice(0, 600); }
+    }
+  } catch (_e) {}
 
   return {
     schema_version: 'v2',
@@ -192,6 +206,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     rules,
     // Evidence-tied findings from the real site scan — surfaced at top level so any renderer can read them
     pointers: findings,
+    exec_summary,
     framework_groups: groupFindings(findings),
     news_map: (() => { const nm = {}; try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) nm[ln.slice(0, i)] = ln.slice(i + 1); } } catch (_e) {} return nm; })(),
     keyword_map: keyword_map && keyword_map.ok ? keyword_map : null,
