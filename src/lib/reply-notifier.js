@@ -47,12 +47,16 @@ function buildTelegramPayload({ lead, classification, draft }) {
   return [head, mid, tail].join('\n');
 }
 
+// Only replies that are a genuine founder decision/revenue signal interrupt live; the rest go to the digest.
+const REALTIME_CATEGORIES = new Set(['interested','positive','meeting_request','meeting_booked','question','objection','referral','pricing','hot']);
 function notifyReply({ channel, lead, original_send, reply_text, classification, draft }) {
+  const _rt = REALTIME_CATEGORIES.has(String((classification||{}).category||'').toLowerCase()) ? '1' : '0';
+  const _env = { ...process.env, NOTIFY_REALTIME: _rt };
   const slackText = buildSlackPayload({ lead, original_send, reply_text, classification, draft });
   const tgText    = buildTelegramPayload({ lead, classification, draft });
   const out = { slack: false, telegram: false };
-  try { execFileSync('bash', [NOTIFY_SLACK, channel || 'all-tamazia', slackText], { stdio: 'pipe' }); out.slack = true; } catch (_e) { /* dead-letter handled upstream */ }
-  try { execFileSync('bash', [NOTIFY_TG, tgText], { stdio: 'pipe' }); out.telegram = true; } catch (_e) { /* placeholder chat_id until first Aman ping */ }
+  try { execFileSync('bash', [NOTIFY_SLACK, channel || 'all-tamazia', slackText], { stdio: 'pipe', env: _env }); out.slack = true; } catch (_e) { /* dead-letter handled upstream */ }
+  try { execFileSync('bash', [NOTIFY_TG, tgText], { stdio: 'pipe', env: _env }); out.telegram = true; } catch (_e) { /* placeholder chat_id until first Aman ping */ }
   return out;
 }
 

@@ -6,6 +6,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 [ -f "${ROOT_DIR}/.env" ] && { set -a; source "${ROOT_DIR}/.env"; set +a; }
 
+# CEO notification policy: by default, route to the daily digest (silent) — only NOTIFY_REALTIME=1 sends live.
+if [ "${NOTIFY_REALTIME:-0}" != "1" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  [ -f "${ROOT_DIR}/.env" ] && { set -a; source "${ROOT_DIR}/.env" 2>/dev/null; set +a; }
+  U="${NEON_URL:-$NEON_CONNECTION_STRING}"
+  if [ -n "$U" ]; then ESC=$(printf '%s' "${1:-}" | sed "s/'/''/g"); "${SCRIPT_DIR}/psql" "$U" -c "INSERT INTO notifications (kind,severity,title,realtime) VALUES ('digest_telegram','info','$ESC',FALSE)" >/dev/null 2>&1; fi
+  exit 0
+fi
+
 MESSAGE="${1:-}"
 [ -z "${MESSAGE}" ] && { echo "Usage: $0 \"message\"" >&2; exit 1; }
 [ -z "${TELEGRAM_BOT_TOKEN:-}" ] && { echo "TELEGRAM_BOT_TOKEN not set" >&2; exit 2; }
