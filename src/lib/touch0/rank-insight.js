@@ -177,19 +177,22 @@ async function aiCitationProbe({ domain, company, sector, city, html, country = 
 // The free probe above always runs. THIS only fires if a key is present; otherwise it reports no_key so the
 // audit can say "free signals used; live LLM probe available." Cost when enabled: ~GBP 0.01-0.03 per audit.
 async function llmCitationProbe({ query, company }) {
-  const key = process.env.PERPLEXITY_API_KEY || process.env.OPENAI_API_KEY;
-  if (!key) return { ran: false, reason: 'no_key', note: 'Set PERPLEXITY_API_KEY or OPENAI_API_KEY to enable a live AI-answer probe (~GBP0.01-0.03/audit).' };
+  // FREE option first: Groq (free API tier, OpenAI-compatible) -> get a key at https://console.groq.com/keys
+  const groq = process.env.GROQ_API_KEY;
+  const key = groq || process.env.PERPLEXITY_API_KEY || process.env.OPENAI_API_KEY;
+  if (!key) return { ran: false, reason: 'no_key', note: 'FREE: set GROQ_API_KEY (get one free at https://console.groq.com/keys) for a live AI-answer probe at GBP0. Or PERPLEXITY_API_KEY/OPENAI_API_KEY (~GBP0.01-0.03/audit).' };
   try {
-    const isPplx = !!process.env.PERPLEXITY_API_KEY;
-    const url = isPplx ? 'https://api.perplexity.ai/chat/completions' : 'https://api.openai.com/v1/chat/completions';
-    const model = isPplx ? 'sonar' : 'gpt-4o-mini';
+    const provider = groq ? 'groq' : (process.env.PERPLEXITY_API_KEY ? 'perplexity' : 'openai');
+    const isPplx = provider === 'perplexity';
+    const url = groq ? 'https://api.groq.com/openai/v1/chat/completions' : (isPplx ? 'https://api.perplexity.ai/chat/completions' : 'https://api.openai.com/v1/chat/completions');
+    const model = groq ? 'llama-3.3-70b-versatile' : (isPplx ? 'sonar' : 'gpt-4o-mini');
     const prompt = 'List the top 8 firms a buyer would consider for "' + query + '". Reply as a plain comma-separated list of firm names only.';
     const res = await fetch(url, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 200 }), signal: AbortSignal.timeout(20000) });
     const j = await res.json();
     const text = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
     const base = String(company || '').replace(/[^a-z0-9 ]/gi, '').trim().split(/\s+/).slice(0, 2).join('.{0,3}');
     const cited = !!base && new RegExp(base, 'i').test(text);
-    return { ran: true, provider: isPplx ? 'perplexity' : 'openai', cited, answer: text.slice(0, 400) };
+    return { ran: true, provider, cited, answer: text.slice(0, 400) };
   } catch (e) { return { ran: false, reason: 'error', error: String(e.message || e) }; }
 }
 

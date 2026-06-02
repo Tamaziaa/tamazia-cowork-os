@@ -736,6 +736,45 @@ function renderDisclaimer() {
     </section>`;
 }
 
+function renderCitationTable(audit) {
+  const km = audit.keyword_map; const aic = audit.ai_citation;
+  let rows = (km && Array.isArray(km.keywords)) ? km.keywords.slice(0, 5) : [];
+  // fallback: if no keyword map, use the single AI-citation probe query + its surface owner
+  if (!rows.length && aic && aic.query) rows = [{ keyword: aic.query, my_position: aic.firm_position, leader: (aic.surface_owned_by || [])[0] || null }];
+  if (!rows.length) return '';
+  const trs = rows.map(k => {
+    const inSet = k.my_position && k.my_position <= 3;
+    const you = !k.my_position ? 'Not cited' : (k.my_position <= 3 ? 'Cited (#' + k.my_position + ')' : 'Absent (#' + k.my_position + ')');
+    const youCol = inSet ? '#2E7D32' : '#B91C1C';
+    const comp = k.leader ? esc(k.leader.replace(/^www\./, '')) : '—';
+    return `<tr style="border-top:1px solid #efe9dd">
+      <td style="padding:9px 12px;font-size:0.82rem;color:#1F2937;line-height:1.3">${esc(k.keyword)}</td>
+      <td style="padding:9px 12px;font-size:0.8rem;font-weight:700;color:${youCol};white-space:nowrap">${you}</td>
+      <td style="padding:9px 12px;font-size:0.8rem;color:#3D0E0E;font-weight:600">${comp}</td>
+    </tr>`;
+  }).join('');
+  const lose = rows.filter(k => !k.my_position || k.my_position > 3).length;
+  return `
+    <section style="padding:24px;background:#fff;border-top:1px solid #e5e7eb">
+      <div style="max-width:1100px;margin:0 auto">
+        <p style="font-size:0.68rem;color:#C8A664;letter-spacing:0.2em;text-transform:uppercase;margin:0 0 6px;font-weight:700">AI + search citation check</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.35rem;margin:0 0 4px;color:#3D0E0E;line-height:1.2">When a buyer asks AI or Google in your category, ${lose} of ${rows.length} answers name a competitor, not you.</h2>
+        <p style="font-size:0.76rem;color:#6b6b6b;margin:0 0 12px">ChatGPT, Perplexity, Google AI and Gemini cite the top-ranked, recognised sources. These are the real buyer queries for your category, who gets cited #1 today, and where you stand.</p>
+        <div style="background:#F8F5EF;border:1px solid #e7e0d2;border-radius:8px;overflow:hidden;max-width:760px">
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="background:#3D0E0E;color:#F8F5EF">
+              <th style="text-align:left;padding:10px 12px;font-size:0.66rem;text-transform:uppercase;letter-spacing:0.06em">Buyer query</th>
+              <th style="text-align:left;padding:10px 12px;font-size:0.66rem;text-transform:uppercase;letter-spacing:0.06em">You</th>
+              <th style="text-align:left;padding:10px 12px;font-size:0.66rem;text-transform:uppercase;letter-spacing:0.06em">Who AI cites #1</th>
+            </tr></thead>
+            <tbody>${trs}</tbody>
+          </table>
+        </div>
+        <p style="margin:10px 0 0;font-size:0.76rem;color:#14532d;max-width:760px"><strong>Tamazia fix:</strong> the content, schema and entity programme that moves you into the top-3 cited set for these exact queries, so AI engines name you instead of the competitor above.</p>
+      </div>
+    </section>`;
+}
+
 function renderKeywordMap(km) {
   if (!km || !Array.isArray(km.keywords) || !km.keywords.length) return '';
   const rows = km.keywords.slice(0, 12).map(k => {
@@ -809,6 +848,7 @@ ${renderSectionGauges(syncedBuckets, sevMap)}
 ${renderCritical(top3)}
 ${renderBeforeAfter(totalExposure, riskScore, projected, grade)}
 ${renderAIPlatform(adjAudit)}
+${renderCitationTable(audit)}
 ${renderKeywordMap(audit.keyword_map)}
 ${renderAllFindings(merged)}
 ${renderInvestment(adjMeta.pointer_count_p0)}
