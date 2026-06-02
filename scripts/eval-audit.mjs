@@ -19,7 +19,7 @@ for (const site of HOLDOUT.slice(start, start+count)) {
   let pay; try { pay = await build.buildPayload({ domain: site.d, sector: site.sector, country: site.country, env: process.env }); }
   catch (e) { fails.push(site.d+': buildPayload threw '+e.message); continue; }
   const pts = pay.pointers||[]; const comp = pts.filter(p=>p.bucket==='compliance'); const geo = pts.filter(p=>p.bucket==='ai_visibility');
-  const reachable = !(pay.scan && pay.scan.reachable===false) && pts.length>0;
+  const reachable = pts.length>0 && (!!pay.via_archive || !(pay.scan && pay.scan.reachable===false));
   const det = new Set([site.region]); (pay.engine_jurisdictions||[]).forEach(c=>{c=String(c).toUpperCase(); if(c==='UK')det.add('UK');else if(c==='US')det.add('US');else if(['AE','SA','QA'].includes(c))det.add('ME');else if(c==='EU'||['FR','DE','ES','IT','NL','BE','IE'].includes(c))det.add('EU');});
   const leak = comp.map(p=>regionOf(p.framework_short||p.citation)).filter(r=>r!=='GLOBAL'&&!det.has(r));
   const noCite = comp.filter(p=>!p.citation_url && !p.citation).length;
