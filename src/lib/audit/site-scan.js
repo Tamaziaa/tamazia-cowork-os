@@ -136,12 +136,23 @@ async function pageSpeed(domain, key) {
     if (dir) { const fs = require('fs'); const f = dir + '/' + domain + '.json'; if (fs.existsSync(f)) return _parsePsi(JSON.parse(fs.readFileSync(f, 'utf8'))); }
   } catch (_e) {}
   if (!key) return null;
-  try {
-    const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=mobile&category=performance&category=seo&category=accessibility&category=best-practices&key=${key}`;
-    const r = await timed((signal) => fetch(u, { signal }), 40000);
-    if (!r.ok) return null;
-    return _parsePsi(await r.json());
-  } catch (_e) { return null; }
+  const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=mobile&category=performance&category=seo&category=accessibility&category=best-practices&key=${key}`;
+  // Strongest-possible: 3 attempts with backoff (PSI/Lighthouse intermittently 429s or returns an empty run),
+  // validate the lighthouseResult is present, and write-through to the cache so re-mints never silently drop SEO.
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await timed((signal) => fetch(u, { signal }), 40000);
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.lighthouseResult && j.lighthouseResult.audits) {
+          try { const dir = process.env.PSI_CACHE_DIR; if (dir) { const fs = require('fs'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(dir + '/' + domain + '.json', JSON.stringify(j)); } } catch (_e) {}
+          return _parsePsi(j);
+        }
+      }
+    } catch (_e) { /* transient: retry */ }
+    if (i < 2) await new Promise(res => setTimeout(res, 1500 * (i + 1)));
+  }
+  return null;
 }
 
 function P(bucket, severity, citation, fact, layman, fix, evidence) {
