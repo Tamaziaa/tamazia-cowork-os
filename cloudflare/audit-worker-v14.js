@@ -687,6 +687,7 @@ function renderAllFindings(merged) {
 }
 
 // ===== Data-viz suite v3 (inline SVG, CSP-safe, fully labelled, accessible) =============================
+let _vizN = 0;
 const VIZ = { ink:'#3D0E0E', gold:'#C8A664', crit:'#B91C1C', high:'#D97706', ok:'#15803D', mid:'#2563EB', grid:'#e7e0d2', muted:'#6b6b6b', cream:'#F8F5EF' };
 function _money(n){ if(n>=1e6) return '£'+(n/1e6).toFixed(n>=1e7?0:1).replace('.0','')+'M'; if(n>=1e3) return '£'+Math.round(n/1e3)+'k'; return '£'+Math.round(n); }
 function _chip(color, label){ return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:0.66rem;color:#3D0E0E;margin-right:12px;margin-bottom:2px"><span style="width:11px;height:11px;border-radius:3px;background:'+color+';display:inline-block;flex-shrink:0"></span>'+esc(label)+'</span>'; }
@@ -721,7 +722,10 @@ function vizWaterfall(merged){
   const yT=top+rows.length*rh+6;
   body+='<line x1="'+lblW+'" y1="'+(yT-4)+'" x2="'+W+'" y2="'+(yT-4)+'" stroke="'+VIZ.grid+'"/>';
   body+='<text x="0" y="'+(yT+8)+'" font-size="10" font-weight="700" fill="'+VIZ.ink+'">Total exposure shown: '+_money(total)+' across '+Object.keys(byFw).length+' frameworks</text>';
-  return _svg(W+' '+(yT+14), 480, 'Regulatory fine exposure by framework, total '+_money(total), body);
+  var gid='wf'+(++_vizN);
+  var defs='<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#7f1d1d"/><stop offset="100%" stop-color="'+VIZ.crit+'"/></linearGradient></defs>';
+  body=body.replace(/fill="#B91C1C" fill-opacity="[0-9.]+"/g,'fill="url(#'+gid+')"');
+  return _svg(W+' '+(yT+14), 480, 'Regulatory fine exposure by framework, total '+_money(total), defs+body);
 }
 
 // 2) Citation ladder — query, your ACTUAL rank, the gap, and the named rival AI cites #1.
@@ -767,13 +771,26 @@ function vizRadarChart(axes, color){
     const[lx,ly]=pt(i,1.17); const anc=Math.abs(lx-cx)<6?'middle':(lx>cx?'start':'end');
     labels+='<text x="'+lx.toFixed(1)+'" y="'+(ly).toFixed(1)+'" font-size="8.5" font-weight="600" fill="'+VIZ.ink+'" text-anchor="'+anc+'">'+esc(axes[i].label)+'</text>';
     labels+='<text x="'+lx.toFixed(1)+'" y="'+(ly+9).toFixed(1)+'" font-size="8" fill="'+color+'" text-anchor="'+anc+'">'+Math.round(axes[i].score)+'/100</text>'; }
-  let poly=''; for(let i=0;i<n;i++){const[x,y]=pt(i,Math.max(0.04,axes[i].score/100));poly+=x.toFixed(1)+','+y.toFixed(1)+' ';}
-  return _svg('260 250', 280, 'Radar scored 0-100 per axis: '+axes.map(a=>a.label+' '+Math.round(a.score)).join(', '), grid+axislines+'<polygon points="'+poly+'" fill="'+color+'" fill-opacity="0.25" stroke="'+color+'" stroke-width="2"/>'+labels);
+  let poly=''; let dots='';
+  for(let i=0;i<n;i++){const sc=axes[i].score;const[x,y]=pt(i,Math.max(0.04,sc/100));poly+=x.toFixed(1)+','+y.toFixed(1)+' ';
+    const dc=sc>=70?VIZ.ok:sc>=40?VIZ.high:VIZ.crit;
+    dots+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="3.4" fill="'+dc+'" stroke="#fff" stroke-width="1"/>'; }
+  const gid='rg'+(++_vizN), sid='sh'+_vizN;
+  const defs='<defs><radialGradient id="'+gid+'" cx="50%" cy="50%" r="62%"><stop offset="0%" stop-color="'+color+'" stop-opacity="0.40"/><stop offset="100%" stop-color="'+color+'" stop-opacity="0.08"/></radialGradient><filter id="'+sid+'" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="1.5" stdDeviation="2.2" flood-color="'+color+'" flood-opacity="0.30"/></filter></defs>';
+  const shape='<polygon points="'+poly+'" fill="url(#'+gid+')" stroke="'+color+'" stroke-width="2.4" stroke-linejoin="round" filter="url(#'+sid+')"/>';
+  return _svg('260 250', 280, 'Radar scored 0-100 per axis: '+axes.map(a=>a.label+' '+Math.round(a.score)).join(', '), defs+grid+axislines+shape+dots+labels);
 }
-function vizRadar(merged){
+function vizRadar(merged, aic){
   const geo=(merged||[]).filter(p=>p.bucket==='ai_visibility'); const blob=geo.map(p=>(p.desc||p.fact||'')+' '+(p.citation||'')).join(' ').toLowerCase();
   const axes=[['Schema',/schema|organization|localbusiness|service|faqpage/],['Entity',/wikidata|wikipedia|knowledge graph|entity/],['llms.txt',/llms\.txt/],['AI crawler',/crawler|gptbot|robots/],['E-E-A-T',/e-e-a-t|author|expertise/],['Cited',/answer surface|cite|citation|position/]];
-  return vizRadarChart(axes.map(([label,rx])=>({label, score: rx.test(blob)?22:100})), VIZ.crit);
+  const _c=(rx)=>geo.filter(p=>rx.test(((p.desc||p.fact||'')+' '+(p.citation||'')).toLowerCase())).length;
+  const schema=Math.max(8, Math.round(100 - Math.min(6,_c(/schema|organization|localbusiness|service|faqpage|review|breadcrumb|aggregaterating/))/6*100));
+  const entity=_c(/wikidata|wikipedia|knowledge graph|entity/)?14:100;
+  const llms=_c(/llms/)?22:100;
+  const crawler=_c(/crawler|gptbot|robots|ai-crawler/)?18:100;
+  const eeat=_c(/e-e-a-t|author|expertise|person/)?34:100;
+  let cited=60; if(aic){cited=(aic.firm_position==null)?10:(aic.firm_position<=3?92:aic.firm_position<=10?52:26);}
+  return vizRadarChart([{label:'Schema',score:schema},{label:'Entity',score:entity},{label:'llms.txt',score:llms},{label:'AI crawler',score:crawler},{label:'E-E-A-T',score:eeat},{label:'AI-cited',score:cited}], VIZ.crit);
 }
 function vizHealthRadar(merged){
   const groups=[['Compliance',['compliance']],['SEO',['technical_seo','seo','performance','website']],['Content',['content_depth']],['AI/GEO',['ai_visibility']],['Security',['tls_dns','security']]];
@@ -813,7 +830,9 @@ function vizTrajectory(score, projected){
     body+='<rect x="'+x+'" y="'+y+'" width="'+bw+'" height="'+h+'" rx="3" fill="'+p[2]+'"/>';
     body+='<text x="'+(x+bw/2)+'" y="'+(y-5)+'" font-size="12" font-weight="800" fill="'+p[2]+'" text-anchor="middle">'+p[1]+'</text>';
     body+='<text x="'+(x+bw/2)+'" y="'+(base+13)+'" font-size="9" fill="'+VIZ.ink+'" text-anchor="middle">'+p[0]+'</text>'; });
-  return _svg(W+' '+H, 320, 'Projected audit score trajectory: today '+today+', week 12, week 24 '+w24, body);
+  var tg='tj'+(++_vizN);
+  var tdefs='<defs><linearGradient id="'+tg+'" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#9a3412"/><stop offset="100%" stop-color="#22c55e"/></linearGradient></defs>';
+  return _svg(W+' '+H, 320, 'Projected audit score trajectory: today '+today+', week 12, week 24 '+w24, tdefs+body);
 }
 
 function renderDataViz(merged, audit){
@@ -822,7 +841,7 @@ function renderDataViz(merged, audit){
       legend:[[VIZ.crit,'Fine ceiling (£)']], howto:'Each bar = the maximum regulator fine for that framework (longer = more at risk). The total at the foot is the exposure across all frameworks shown.' }),
     vizFrame({ title:'Where you rank vs who AI cites #1', subtitle:'Live position per real buyer query.', svg:vizCitationLadder(audit.keyword_map),
       legend:[[VIZ.gold,'Rival cited #1'],[VIZ.ok,'You #1-3'],[VIZ.high,'You #4-10'],[VIZ.crit,'You #10+ / NR']], howto:'Each row is a real buyer query. Your dot sits on a #1 (left, best) to #10 (right) track; gold is the firm AI/Google names first, named on the right. NR = No Result: not visible at all for that query.' }),
-    vizFrame({ title:'AI-visibility radar (scored per signal)', subtitle:'How much AI engines can see + cite you.', svg:vizRadar(merged),
+    vizFrame({ title:'AI-visibility radar (scored per signal)', subtitle:'How much AI engines can see + cite you.', svg:vizRadar(merged, audit.ai_citation),
       legend:[[VIZ.crit,'Your AI visibility 0-100'],[VIZ.grid,'Full (outer ring = 100)']], howto:'Each spoke is an AI-readiness signal scored 0 (centre) to 100 (outer ring); the number at each tip is your score on that signal. The dented spokes are exactly where you are invisible to AI.' }),
     vizFrame({ title:'Site health by area (scored)', subtitle:'Your standing across the five audited areas.', svg:vizHealthRadar(merged),
       legend:[[VIZ.mid,'Your health 0-100'],[VIZ.grid,'Ideal (outer ring)']], howto:'Same radar reused across areas: each tip shows that area\'s health score 0-100. Outer ring = healthy; the dents are where Tamazia focuses first.' }),
