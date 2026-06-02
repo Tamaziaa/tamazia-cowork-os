@@ -1127,7 +1127,7 @@ function adapt(row) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const m = url.pathname.match(/^\/audit\/([a-z0-9-]+)\/([A-Za-z0-9_-]+)\/?$/);
     if (!m) return new Response('Audit links are personalised. Please use the full link from your email.', { status: 404, headers: { 'content-type': 'text/plain' } });
@@ -1137,6 +1137,14 @@ export default {
     let html;
     try { html = renderPage(adapt(res.row)); }
     catch (e) { return new Response('Audit render error.', { status: 500, headers: { 'content-type': 'text/plain' } }); }
+    // Server-side PostHog capture (CSP-safe — runs in the Worker, not the browser; fire-and-forget; gated on key).
+    try {
+      if (env.POSTHOG_KEY) {
+        const host = env.POSTHOG_HOST || 'https://eu.i.posthog.com';
+        const ev = fetch(host + '/capture/', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ api_key: env.POSTHOG_KEY, event: 'audit_opened', distinct_id: (res.row && res.row.domain) || m[1], properties: { slug: m[1], domain: res.row && res.row.domain, sector: res.row && res.row.sector, country: res.row && res.row.country, lib: 'tamazia-worker' }, timestamp: new Date().toISOString() }) }).catch(() => {});
+        if (ctx && ctx.waitUntil) ctx.waitUntil(ev);
+      }
+    } catch (_e) {}
     return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v16-live-v13' } });
   }
 };
