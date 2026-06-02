@@ -153,6 +153,23 @@ async function verifyTopFindings(classified, env, cap = 5) {
   return classified;
 }
 
+// P1.7 real competitor benchmark from the live probe + keyword map (null when no probe data; never a placeholder).
+function buildCompetitiveBenchmark(aic, km) {
+  const hasAic = aic && aic.ok && ((aic.competitors && aic.competitors.length) || aic.firm_position != null);
+  const hasKm = km && km.ok && Array.isArray(km.keywords) && km.keywords.length;
+  if (!hasAic && !hasKm) return null;
+  const out = { source: 'live SERP + AI-citation probe' };
+  if (hasAic) {
+    out.query = aic.query || null;
+    out.you = { position: aic.firm_position != null ? aic.firm_position : null, cited: aic.firm_position != null && aic.firm_position <= 3 };
+    out.competitors = (aic.competitors || []).slice(0, 5).map(c => ({ name: String(c.domain || '').replace(/^www\./, ''), domain: c.domain || null, position: c.position != null ? c.position : null }));
+  }
+  if (hasKm) {
+    out.keyword_leaders = km.keywords.slice(0, 6).map(k => ({ keyword: k.keyword, your_position: k.my_position != null ? k.my_position : null, leader: k.leader || null, leader_position: k.leader_pos != null ? k.leader_pos : null }));
+  }
+  return out;
+}
+
 async function buildPayload({ domain, sector, country, lead_id, env }) {
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
@@ -271,23 +288,11 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     needs_review: _needsReview.slice(0, 40),
     trust_summary: { confirmed: _confirmed.length, needs_review: _needsReview.length },
     exec_summary,
-    framework_groups: groupFindings(_confirmed),
     news_map: (() => { const nm = {}; const want = new Set((frameworks||[]).map(f=>String(f))); try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) { const fw = ln.slice(0, i); if (!want.size || want.has(fw)) nm[fw] = ln.slice(i + 1); } } } catch (_e) {} return nm; })(),
     keyword_map: keyword_map && keyword_map.ok ? keyword_map : null,
     ai_citation: ai_citation && ai_citation.ok ? ai_citation : null,
     scan: { scanned_at: scan.scanned_at, reachable: scan.reachable, final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
-    sections: {
-      cover:                 { firm: domain.replace(/^www\./, '').split('.')[0], generated_at: new Date().toISOString() },
-      three_findings:        { items: threeFindings, count: findings.length },
-      current_vs_after:      { rows: findings.slice(0, 8).map(p => ({ current: p.fact, after: p.tamazia_fix_short, severity: p.severity })) },
-      compliance_inventory:  { count: rules.length, p0: rules.filter(r => r.severity === 'P0').length, p1: rules.filter(r => r.severity === 'P1').length, p2: rules.filter(r => r.severity === 'P2').length },
-      seo_opportunity:       { uplift_estimate_pct: 24 },
-      competitive_benchmark: { competitors_placeholder: 3 },
-      sector_case_study:     { case_study_id_placeholder: 'tbd' },
-      investment_tiers:      { tiers: ['Foundation', 'Authority', 'Dominator'], prices_gbp: [1500, 3500, 7500] },
-      calendar:              { cta_url: 'https://cal.com/tamazia/strategy-call' },
-      disclaimer:            { framework_version: fv, last_reviewed: lr, reviewer: 'Aman Pareek, International Business Lawyer' },
-    },
+    competitive_benchmark: buildCompetitiveBenchmark(ai_citation, keyword_map),
   };
 }
 
@@ -330,4 +335,4 @@ if (require.main === module) {
   build(opts).then(r => console.log(JSON.stringify(r, null, 2))).catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { build, slugify, generateHash, signUrl, verifySignedUrl, buildPayload };
+module.exports = { buildCompetitiveBenchmark, build, slugify, generateHash, signUrl, verifySignedUrl, buildPayload };
