@@ -176,23 +176,40 @@ async function aiCitationProbe({ domain, company, sector, city, html, country = 
 // ── Optional live-LLM answer probe (paid top-up, OFF by default) ─────────────────────────────────────────────
 // The free probe above always runs. THIS only fires if a key is present; otherwise it reports no_key so the
 // audit can say "free signals used; live LLM probe available." Cost when enabled: ~GBP 0.01-0.03 per audit.
+// Try a list of models in order; return the first that yields content (self-healing if one is unprovisioned/rate-limited).
+async function _chatComplete({ url, key, models, prompt }) {
+  for (const model of models) {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 220, temperature: 0.2 }), signal: AbortSignal.timeout(30000) });
+      if (!res.ok) continue;
+      const j = await res.json();
+      const text = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+      if (text && text.trim()) return { model, text };
+    } catch (_e) { /* try next model */ }
+  }
+  return null;
+}
 async function llmCitationProbe({ query, company }) {
-  // FREE option first: Groq (free API tier, OpenAI-compatible) -> get a key at https://console.groq.com/keys
+  // Priority: NVIDIA NIM (free, strongest available) -> Groq (free) -> Perplexity -> OpenAI.
+  const nim = process.env.NIM_API_KEY;
   const groq = process.env.GROQ_API_KEY;
-  const key = groq || process.env.PERPLEXITY_API_KEY || process.env.OPENAI_API_KEY;
-  if (!key) return { ran: false, reason: 'no_key', note: 'FREE: set GROQ_API_KEY (get one free at https://console.groq.com/keys) for a live AI-answer probe at GBP0. Or PERPLEXITY_API_KEY/OPENAI_API_KEY (~GBP0.01-0.03/audit).' };
+  const key = nim || groq || process.env.PERPLEXITY_API_KEY || process.env.OPENAI_API_KEY;
+  if (!key) return { ran: false, reason: 'no_key', note: 'FREE: set NIM_API_KEY (build.nvidia.com) for a live AI-answer probe at GBP0; GROQ_API_KEY also works.' };
+  const prompt = 'List the top 8 firms or providers a buyer would consider for "' + query + '". Reply as a plain comma-separated list of names only, no preamble or numbering.';
+  let provider, url, models;
+  if (nim) {
+    provider = 'nvidia-nim'; url = 'https://integrate.api.nvidia.com/v1/chat/completions';
+    // Highest available that is actually provisioned, with fallbacks (253b/405b are listed but 404 on free tier).
+    models = (process.env.NIM_MODEL ? [process.env.NIM_MODEL] : []).concat(['meta/llama-3.3-70b-instruct', 'nvidia/llama-3.1-nemotron-70b-instruct', 'abacusai/dracarys-llama-3.1-70b-instruct']);
+  } else if (groq) { provider = 'groq'; url = 'https://api.groq.com/openai/v1/chat/completions'; models = ['llama-3.3-70b-versatile']; }
+  else if (process.env.PERPLEXITY_API_KEY) { provider = 'perplexity'; url = 'https://api.perplexity.ai/chat/completions'; models = ['sonar']; }
+  else { provider = 'openai'; url = 'https://api.openai.com/v1/chat/completions'; models = ['gpt-4o-mini']; }
   try {
-    const provider = groq ? 'groq' : (process.env.PERPLEXITY_API_KEY ? 'perplexity' : 'openai');
-    const isPplx = provider === 'perplexity';
-    const url = groq ? 'https://api.groq.com/openai/v1/chat/completions' : (isPplx ? 'https://api.perplexity.ai/chat/completions' : 'https://api.openai.com/v1/chat/completions');
-    const model = groq ? 'llama-3.3-70b-versatile' : (isPplx ? 'sonar' : 'gpt-4o-mini');
-    const prompt = 'List the top 8 firms a buyer would consider for "' + query + '". Reply as a plain comma-separated list of firm names only.';
-    const res = await fetch(url, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 200 }), signal: AbortSignal.timeout(20000) });
-    const j = await res.json();
-    const text = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    const out = await _chatComplete({ url, key, models, prompt });
+    if (!out) return { ran: false, reason: 'no_response', provider };
     const base = String(company || '').replace(/[^a-z0-9 ]/gi, '').trim().split(/\s+/).slice(0, 2).join('.{0,3}');
-    const cited = !!base && new RegExp(base, 'i').test(text);
-    return { ran: true, provider, cited, answer: text.slice(0, 400) };
+    const cited = !!base && new RegExp(base, 'i').test(out.text);
+    return { ran: true, provider, model: out.model, cited, answer: out.text.slice(0, 400) };
   } catch (e) { return { ran: false, reason: 'error', error: String(e.message || e) }; }
 }
 
