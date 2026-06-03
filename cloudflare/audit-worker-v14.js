@@ -945,9 +945,10 @@ function vizHeatmap(merged){
 }
 
 // 5) Score trajectory — today -> week 12 -> week 24, with value labels.
-function vizTrajectory(score, projected){
-  const today=score||30, w12=Math.round((today+ (projected||90))/2 - 8) , w24=projected||90;
-  const pts=[['Today',today,VIZ.crit],['Week 12',Math.max(today+10,Math.min(70,w12)),VIZ.high],['Week 24',w24,VIZ.ok]];
+function vizTrajectory(score, wk12, projected){
+  const today=score||30, w24=projected||90;
+  const w12=(typeof wk12==='number' && wk12) ? wk12 : Math.round(today + (w24-today)*0.45);
+  const pts=[['Today',today,VIZ.crit],['Week 12',w12,VIZ.high],['Week 24',w24,VIZ.ok]];
   const W=300,H=150,base=120,bw=46,gap=44,x0=40,maxH=92;
   let body='<text x="0" y="12" font-size="9" fill="'+VIZ.muted+'">Audit score /100 (higher = healthier)</text>';
   body+='<line x1="'+x0+'" y1="'+base+'" x2="'+(x0+pts.length*(bw+gap))+'" y2="'+base+'" stroke="'+VIZ.grid+'"/>';
@@ -1019,7 +1020,7 @@ function renderDataViz(merged, audit){
       legend:[[VIZ.mid,'Your health 0-100'],[VIZ.grid,'Ideal (outer ring)']], howto:'Same radar reused across areas: each tip shows that area\'s health score 0-100. Outer ring = healthy; the dents are where Tamazia focuses first.' }),
     vizFrame({ title:'Severity heatmap (with totals)', subtitle:'Where your issues concentrate.', svg:vizHeatmap(merged),
       legend:[[VIZ.crit,'P0 critical'],[VIZ.high,'P1 high'],['#a16207','P2 standard']], howto:'Rows = audit areas, columns = severity (P0 critical, P1 high, P2 standard). Each cell is the count; the right column and bottom row are row/column totals, and the bottom-right is the grand total.' }),
-    vizFrame({ title:'Your projected score trajectory', subtitle:'Where this score goes on a Tamazia mandate.', svg:vizTrajectory(audit.score, audit.projected),
+    vizFrame({ title:'Your projected score trajectory', subtitle:'Where this score goes on a Tamazia mandate.', svg:vizTrajectory(audit.score, audit.wk12, audit.projected),
       legend:[[VIZ.crit,'Today'],[VIZ.high,'Week 12'],[VIZ.ok,'Week 24']], howto:'Audit score out of 100 (higher = healthier). Today is your current score; the next two bars are the projected score at week 12 and week 24 on a Tamazia engagement.' }),
   ].filter(Boolean);
   if(!cards.length) return '';
