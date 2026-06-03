@@ -435,7 +435,7 @@ function renderExecSummary(audit){
   // figure in it with the one canonical computed exposure so the page never shows an unverifiable number.
   const _canon = audit.exposure_total ? gbp(audit.exposure_total) : null;
   const _clean = _canon ? String(audit.exec_summary).replace(/(?:GBP|\u00a3)\s?[\d,]+(?:\.\d+)?(?:\s?(?:million|billion|m|bn))?/gi, _canon) : String(audit.exec_summary);
-  return '<section class="tz-reveal" style="padding:18px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto;display:flex;gap:12px;align-items:flex-start">'
+  return '<section class="tz-reveal" style="padding:12px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto;display:flex;gap:12px;align-items:flex-start">'
     +'<span style="font-size:0.6rem;color:#C8A664;letter-spacing:0.12em;text-transform:uppercase;font-weight:700;white-space:nowrap;padding-top:3px">Executive read</span>'
     +'<p style="margin:0;font-family:\'Times New Roman\',serif;font-size:1.02rem;line-height:1.5;color:#3D0E0E">'+esc(_clean)+'</p>'
     +'</div></section>';
@@ -444,7 +444,7 @@ function renderHeader(audit, grade) {
   const meta = audit.scan_meta || {};
   const dateStr = meta.generated_at ? new Date(meta.generated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   return `
-    <section class="tz-reveal" style="background:#3D0E0E;color:#F8F5EF;padding:36px 24px 22px">
+    <section class="tz-reveal" style="background:#3D0E0E;color:#F8F5EF;padding:12px 24px 12px">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.66rem;color:#C8A664;letter-spacing:0.22em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Regulatory + SEO + AI visibility audit</p>
         <div class="tz-hero" style="display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center">
@@ -476,26 +476,26 @@ function renderGlance(audit, totalExposure, top3) {
   const topReg = top3[0] ? (FRAMEWORK_META[(top3[0].citation || '').split(/\s+/)[0]]?.regulator || 'Sector regulator') : 'ICO';
   return `
     <section class="tz-reveal" style="background:white;border-bottom:1px solid #e5e7eb">
-      <div style="max-width:1100px;margin:0 auto;padding:22px 24px">
+      <div style="max-width:1100px;margin:0 auto;padding:13px 24px">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
           <div class="tz-pop" style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #B91C1C">
             <p style="margin:0 0 2px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Critical findings</p>
-            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.7rem;font-weight:600;color:#B91C1C;line-height:1">${p0}</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.28rem;font-weight:600;color:#B91C1C;line-height:1">${p0}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Same-error variants merged</p>
           </div>
           <div class="tz-pop" style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #E67E22">
             <p style="margin:0 0 2px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">High priority</p>
-            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.7rem;font-weight:600;color:#E67E22;line-height:1">${p1}</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.28rem;font-weight:600;color:#E67E22;line-height:1">${p1}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Active regulator focus</p>
           </div>
           <div class="tz-pop" style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #D97706">
             <p style="margin:0 0 2px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Standard items</p>
-            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.7rem;font-weight:600;color:#D97706;line-height:1">${p2}</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.28rem;font-weight:600;color:#D97706;line-height:1">${p2}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Operational hygiene</p>
           </div>
           <div class="tz-pop" style="background:#3D0E0E;color:#F8F5EF;padding:14px 16px;border-radius:6px">
             <p style="margin:0 0 2px;font-size:0.62rem;color:#C8A664;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Max regulatory exposure</p>
-            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#C8A664;line-height:1">${gbp(totalExposure) || 'six-figure'}</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.24rem;font-weight:600;color:#C8A664;line-height:1">${gbp(totalExposure) || 'six-figure'}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:rgba(248,245,239,0.75)">Maximum statutory ceiling · ${(audit.exposure_frameworks||0)} frameworks</p>
           </div>
         </div>
@@ -520,10 +520,10 @@ function renderSectionGauges(dims, sevMap) {
     return (d.crit||0)+' crit · '+(d.high||0)+' high · '+(d.std||0)+' std';
   };
   return `
-    <section class="tz-reveal" style="padding:26px 24px 22px;background:#F8F5EF">
+    <section class="tz-reveal" style="padding:14px 24px 10px;background:#F8F5EF">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Section scorecard \u00b7 ten dimensions</p>
-        <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">Pass \u00b7 Needs work \u00b7 Fail per dimension.</h2>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.2rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">Pass \u00b7 Needs work \u00b7 Fail per dimension.</h2>
         <p style="font-size:0.74rem;color:#6b6b6b;margin:0 0 14px">Scored from what we could read on your live site. Any critical finding drops a dimension to Fail.</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:8px">
           ${order.map(b => {
@@ -547,12 +547,12 @@ function renderSectionGauges(dims, sevMap) {
 function renderCritical(top3) {
   if (!top3.length) return '';
   return `
-    <section class="tz-reveal" id="critical" style="padding:30px 24px;background:linear-gradient(180deg,#3D0E0E 0,#2A0C14 100%);color:#F8F5EF">
+    <section class="tz-reveal" id="critical" style="padding:15px 24px;background:linear-gradient(180deg,#3D0E0E 0,#2A0C14 100%);color:#F8F5EF">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#C8A664;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">The three you fix this quarter</p>
-        <h2 style="font-family:'Times New Roman',serif;font-size:1.5rem;margin:0 0 6px;line-height:1.15">Tamazia closes all three inside the first eight weeks.</h2>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.24rem;margin:0 0 6px;line-height:1.15">Tamazia closes all three inside the first eight weeks.</h2>
         <p style="font-size:0.8rem;color:rgba(248,245,239,0.7);margin:0 0 14px">Where one issue trips multiple regulators, we surface it once and stack the badges.</p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
           ${top3.map((p, i) => {
             const code = (p._frameworks?.[0]) || (p.citation || '').split(/\s+/)[0];
             const m = FRAMEWORK_META[code] || { name: 'Sector compliance', regulator: 'Sector regulator', root: '#' };
@@ -587,25 +587,25 @@ function renderCritical(top3) {
 function renderBeforeAfter(totalExposure, score, wk12, projected, grade) {
   const wk24 = projected;
   return `
-    <section class="tz-reveal" style="padding:24px 24px;background:white;border-top:1px solid #e5e7eb">
+    <section class="tz-reveal" style="padding:14px 24px;background:white;border-top:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Where Tamazia takes you</p>
         <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:10px;align-items:center">
           <div style="background:#F8F5EF;border-left:4px solid #B91C1C;padding:12px 14px;border-radius:4px">
             <p style="margin:0 0 4px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Today · baseline</p>
-            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#B91C1C;line-height:1">${score} / 100 · ${grade.letter}</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.24rem;font-weight:600;color:#B91C1C;line-height:1">${score} / 100 · ${grade.letter}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">${gbp(totalExposure) || 'six-figure'} regulator exposure</p>
           </div>
           <div style="text-align:center;font-size:1.1rem;color:#C8A664;font-weight:700">→</div>
           <div style="background:#FEF7EF;border-left:4px solid #E67E22;padding:12px 14px;border-radius:4px">
             <p style="margin:0 0 4px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Week 12</p>
-            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#E67E22;line-height:1">${wk12} / 100 · ${gradeOf(wk12).letter}</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.24rem;font-weight:600;color:#E67E22;line-height:1">${wk12} / 100 · ${gradeOf(wk12).letter}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">All critical findings closed</p>
           </div>
           <div style="text-align:center;font-size:1.1rem;color:#C8A664;font-weight:700">→</div>
           <div style="background:#F2F8F2;border-left:4px solid #2E7D32;padding:12px 14px;border-radius:4px">
             <p style="margin:0 0 4px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Week 24 · projected</p>
-            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#2E7D32;line-height:1">${wk24} / 100 · ${gradeOf(wk24).letter}</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.24rem;font-weight:600;color:#2E7D32;line-height:1">${wk24} / 100 · ${gradeOf(wk24).letter}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Investor-grade · AI + SEO + compliance</p>
           </div>
         </div>
@@ -632,10 +632,10 @@ function renderAIPlatform(audit) {
   const rlabel = (sc) => sc < 40 ? 'Low readiness' : sc < 70 ? 'Partial readiness' : 'Strong readiness';
   const rcol = (sc) => sc < 40 ? '#B91C1C' : sc < 70 ? '#E67E22' : '#2E7D32';
   return `
-    <section class="tz-reveal" style="padding:26px 24px;background:white;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb">
+    <section class="tz-reveal" style="padding:14px 24px;background:white;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">AI search visibility</p>
-        <h2 style="font-family:'Times New Roman',serif;font-size:1.4rem;margin:0 0 10px;color:#3D0E0E;line-height:1.15">Are AI assistants recommending ${esc(audit.company)}?</h2>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.2rem;margin:0 0 10px;color:#3D0E0E;line-height:1.15">Are AI assistants recommending ${esc(audit.company)}?</h2>
         ${realBand}
         <p style="font-size:0.82rem;color:#6b6b6b;margin:0 0 14px">The scores below are modelled from your on-page signals (Schema, llms.txt, entity and E-E-A-T), the inputs that decide whether ChatGPT, Claude, Perplexity and Gemini can cite you.${aic ? ' The band above is the measured live result.' : ''}</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
@@ -645,7 +645,7 @@ function renderAIPlatform(audit) {
                 <p style="margin:0;font-size:0.72rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">${esc(p.name)}</p>
                 <span style="background:${p.color};color:white;font-size:0.56rem;font-weight:700;padding:2px 6px;border-radius:3px">${p.icon}</span>
               </div>
-              <p style="margin:4px 0 2px;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:${rcol(p.score)}">${p.score}<span style="font-size:0.8rem;color:#9ca3af">/100</span></p>
+              <p style="margin:4px 0 2px;font-family:'Times New Roman',serif;font-size:1.24rem;font-weight:600;color:${rcol(p.score)}">${p.score}<span style="font-size:0.8rem;color:#9ca3af">/100</span></p>
               <p style="margin:0;font-size:0.66rem;color:${rcol(p.score)};font-weight:600">${rlabel(p.score)}</p>
             </div>`).join('')}
         </div>
@@ -788,9 +788,9 @@ function renderFindingRow(p) {
   </div>`;
 }
 function _bracket(id, kicker, title, sub, body) {
-  return `<section class="tz-reveal" id="${id}" style="padding:26px 24px;background:white;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
+  return `<section class="tz-reveal" id="${id}" style="padding:14px 24px;background:white;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
     <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">${kicker}</p>
-    <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">${title}</h2>
+    <h2 style="font-family:'Times New Roman',serif;font-size:1.2rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">${title}</h2>
     <p style="font-size:0.78rem;color:#6b6b6b;margin:0 0 12px">${sub}</p>
     ${body}
   </div></section>`;
@@ -998,9 +998,9 @@ function renderEvidenceCards(merged, audit){
       +'<p style="margin:6px 0 0;font-size:0.7rem;color:#6b6b6b">Source: '+esc(p.evidence||'live scan')+'</p></div>';
   }).join('');
   const shotBlock = shot ? '<figure style="margin:0 0 12px"><img src="'+esc(shot)+'" alt="Screenshot of '+esc(audit.domain||audit.company||"the audited site")+'" loading="lazy" referrerpolicy="no-referrer" style="width:100%;max-width:680px;border:1px solid #e5e7eb;border-radius:8px;display:block"/><figcaption style="margin:5px 0 0;font-size:0.66rem;color:#9b9b9b">Captured live during the audit — this is the page these findings were read from.</figcaption></figure>' : '';
-  return '<section class="tz-reveal" style="padding:26px 24px;background:#fff;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">'
+  return '<section class="tz-reveal" style="padding:14px 24px;background:#fff;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">'
     +'<p style="font-size:0.7rem;color:'+VIZ.gold+';letter-spacing:0.2em;text-transform:uppercase;margin:0 0 6px;font-weight:700">The evidence</p>'
-    +'<h2 style="font-family:\'Times New Roman\',serif;font-size:1.45rem;margin:0 0 4px;color:'+VIZ.ink+'">Every finding is quoted from your own site.</h2>'
+    +'<h2 style="font-family:\'Times New Roman\',serif;font-size:1.2rem;margin:0 0 4px;color:'+VIZ.ink+'">Every finding is quoted from your own site.</h2>'
     +'<p style="font-size:0.74rem;color:'+VIZ.muted+';margin:0 0 14px">No interpretation, no guesswork: the exact text or signal each finding is built on, captured live.</p>'
     +shotBlock
     +(cards?'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">'+cards+'</div>':'')
@@ -1024,11 +1024,11 @@ function renderDataViz(merged, audit){
       legend:[[VIZ.crit,'Today'],[VIZ.high,'Week 12'],[VIZ.ok,'Week 24']], howto:'Audit score out of 100 (higher = healthier). Today is your current score; the next two bars are the projected score at week 12 and week 24 on a Tamazia engagement.' }),
   ].filter(Boolean);
   if(!cards.length) return '';
-  return '<section class="tz-reveal" style="padding:26px 24px;background:'+VIZ.cream+';border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">'
+  return '<section class="tz-reveal" style="padding:14px 24px;background:'+VIZ.cream+';border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">'
     +'<p style="font-size:0.7rem;color:'+VIZ.gold+';letter-spacing:0.2em;text-transform:uppercase;margin:0 0 6px;font-weight:700">The picture at a glance</p>'
-    +'<h2 style="font-family:\'Times New Roman\',serif;font-size:1.45rem;margin:0 0 4px;color:'+VIZ.ink+'">Every metric we judged you on, visualised.</h2>'
+    +'<h2 style="font-family:\'Times New Roman\',serif;font-size:1.2rem;margin:0 0 4px;color:'+VIZ.ink+'">Every metric we judged you on, visualised.</h2>'
     +'<p style="font-size:0.74rem;color:'+VIZ.muted+';margin:0 0 14px">Each chart is labelled on every axis, names the competitor or framework, prints the score, and carries a plain-language guide.</p>'
-    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px">'+cards.join('')+'</div></div></section>';
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">'+cards.join('')+'</div></div></section>';
 }
 
 function renderInvestment(p0, jurisdictions) {
@@ -1042,10 +1042,10 @@ function renderInvestment(p0, jurisdictions) {
     { name: 'Enterprise', price: 9500, weeks: '12+ weeks', desc: 'Multi-jurisdiction · listed / pre-IPO. 50+ keywords, full AI search dominance, 5 markets, 10 content pieces/month, crisis reputation.', cta: 'Begin Enterprise enquiry' }
   ];
   return `
-    <section class="tz-reveal" id="pricing" style="padding:28px 24px;background:white">
+    <section class="tz-reveal" id="pricing" style="padding:15px 24px;background:white">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Recommended mandate</p>
-        <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">${p0} critical findings → ${rec} mandate.</h2>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.2rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">${p0} critical findings → ${rec} mandate.</h2>
         <p style="font-size:0.78rem;color:#6b6b6b;margin:0 0 12px">Every mandate begins with the full audit. Ninety-day rolling. Work belongs to the client once paid. <a href="${TAMAZIA_BASE}/#pricing" style="color:#3D0E0E;text-decoration:underline;font-weight:600">Compare all pricing →</a></p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
           ${tiers.map(t => `
@@ -1064,10 +1064,10 @@ function renderInvestment(p0, jurisdictions) {
 
 function renderFooterCTA() {
   return `
-    <section class="tz-reveal" style="padding:28px 24px;background:#3D0E0E;color:#F8F5EF;text-align:center">
+    <section class="tz-reveal" style="padding:15px 24px;background:#3D0E0E;color:#F8F5EF;text-align:center">
       <div style="max-width:780px;margin:0 auto">
         <p style="font-size:0.66rem;color:#C8A664;letter-spacing:0.22em;text-transform:uppercase;margin:0 0 6px;font-weight:600">400+ frameworks reviewed every campaign · founder-led</p>
-        <h2 style="font-family:'Times New Roman',serif;font-size:1.4rem;margin:0 0 8px;color:#F8F5EF;line-height:1.2">Aman Pareek reviews every onboarding personally. Two new clients per practice area per jurisdiction.</h2>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.2rem;margin:0 0 8px;color:#F8F5EF;line-height:1.2">Aman Pareek reviews every onboarding personally. Two new clients per practice area per jurisdiction.</h2>
         <p style="font-size:0.84rem;color:rgba(248,245,239,0.8);margin:0 0 14px;line-height:1.5">No sales team. No discovery loop. A 30-minute confidential conversation with the founder.</p>
         <a href="${TAMAZIA_BASE}/book/" style="display:inline-block;padding:13px 22px;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:700;border-radius:4px;font-size:0.84rem">Open the founder's calendar →</a>
         <p style="margin:14px 0 0;font-size:0.68rem;color:rgba(248,245,239,0.55)">
@@ -1148,10 +1148,10 @@ function renderKeywordMap(km) {
   }).join('');
   const missing = km.keywords.filter(k => !k.my_position || k.my_position > 10).length;
   return `
-    <section class="tz-reveal" style="padding:26px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb">
+    <section class="tz-reveal" style="padding:14px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Keyword map · where the demand is going</p>
-        <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">You are off page one for ${missing} of ${km.keywords.length} high-intent ${esc(km.service_noun || 'category')} searches in ${esc(km.city || 'your area')}.</h2>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.2rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">You are off page one for ${missing} of ${km.keywords.length} high-intent ${esc(km.service_noun || 'category')} searches in ${esc(km.city || 'your area')}.</h2>
         <p style="font-size:0.78rem;color:#6b6b6b;margin:0 0 12px">Live Google positions. Every search below is buyer demand a competitor is capturing instead of you.</p>
         <div style="overflow-x:auto;background:white;border-radius:6px;border:1px solid #e5e7eb">
           <table style="width:100%;border-collapse:collapse">
@@ -1164,7 +1164,7 @@ function renderKeywordMap(km) {
     </section>`;
 }
 function statCard(label, val, col) {
-  return `<div class="tz-pop" style="flex:1;min-width:150px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px"><div style="font-size:1.7rem;font-weight:700;color:${col};font-family:'Times New Roman',serif">${esc(val)}</div><div style="font-size:0.74rem;color:#6b7280;margin-top:2px">${esc(label)}</div></div>`;
+  return `<div class="tz-pop" style="flex:1;min-width:150px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px"><div style="font-size:1.28rem;font-weight:700;color:${col};font-family:'Times New Roman',serif">${esc(val)}</div><div style="font-size:0.74rem;color:#6b7280;margin-top:2px">${esc(label)}</div></div>`;
 }
 function glossBlock(audit) {
   const g = audit.glossary; if (!g || !g.terms || !Array.isArray(g.used) || !g.used.length) return '';
@@ -1175,7 +1175,7 @@ function glossBlock(audit) {
 function renderJurisdiction(audit) {
   const j = audit.jurisdiction_statement; if (!j || !j.statement) return '';
   const chips = (j.regimes || []).map(r => `<span style="display:inline-block;background:#F8F5EF;border:1px solid #C8A664;color:#3D0E0E;border-radius:999px;padding:4px 11px;margin:3px 4px 0 0;font-size:0.72rem">${esc(r.regime)}</span>`).join('');
-  return `<section class="tz-reveal" style="padding:22px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
+  return `<section class="tz-reveal" style="padding:13px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
     <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Jurisdictions that govern you</p>
     <p style="margin:0 0 10px;font-size:0.95rem;line-height:1.6;color:#1F2937">${esc(j.statement)}</p>
     <div>${chips}</div>
@@ -1197,9 +1197,9 @@ function renderGeoVisibility(audit) {
     return `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0;overflow:auto;max-height:360px;display:flex;justify-content:center;align-items:center">${svg}</div>`;
   };
   const viz = gv ? [[gv.ai_engine_grid,false],[gv.ai_radar,false],[gv.entity_web_map,true]].filter(x=>x[0]).map(x=>_wrapViz(x[0],x[1])).join('') : '';
-  return `<section class="tz-reveal" style="padding:28px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
+  return `<section class="tz-reveal" style="padding:15px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
     <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">AI search visibility</p>
-    <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E">Can AI engines find, trust and cite you</h2>
+    <h2 style="font-family:'Times New Roman',serif;font-size:1.2rem;margin:0 0 4px;color:#3D0E0E">Can AI engines find, trust and cite you</h2>
     <p style="font-size:0.82rem;color:#6b6b6b;margin:0 0 14px">The answer engines your buyers ask first (ChatGPT, Gemini, Perplexity, Google AI) decide who to name. Here is where you stand.</p>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:6px">${stat}</div>
     ${viz}
@@ -1211,10 +1211,10 @@ function renderEmailTeaser(audit, auditUrl) {
   const top = (audit.pointers || []).slice(0, 3).map(p => `<tr><td style="padding:6px 0;border-bottom:1px solid #eee;font-family:Georgia,serif;font-size:14px;color:#1F2937">&bull; ${esc(p.fact || p.desc || '')}</td></tr>`).join('');
   const url = auditUrl || (TAMAZIA_BASE + '/');
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;font-family:Arial,sans-serif;border-collapse:collapse">
-    <tr><td style="background:#3D0E0E;color:#F8F5EF;padding:20px 22px;border-radius:8px 8px 0 0">
+    <tr><td style="background:#3D0E0E;color:#F8F5EF;padding:12px 22px;border-radius:8px 8px 0 0">
       <div style="font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#C8A664">Regulatory + SEO + AI visibility audit</div>
       <div style="font-family:Georgia,serif;font-size:22px;margin-top:4px">${esc(audit.company)} &mdash; ${audit.score}/100</div></td></tr>
-    <tr><td style="background:#fff;padding:20px 22px;border:1px solid #e5e7eb;border-top:none">
+    <tr><td style="background:#fff;padding:12px 22px;border:1px solid #e5e7eb;border-top:none">
       <p style="margin:0 0 12px;font-family:Georgia,serif;font-size:15px;color:#3D0E0E;line-height:1.5">${esc(audit.exec_summary || (audit.company + ' has ' + p0 + ' critical and ' + p1 + ' high-priority findings across regulatory, SEO and AI-visibility.'))}</p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${top}</table>
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:18px auto 4px"><tr><td style="background:#C8A664;border-radius:6px"><a href="${esc(url)}" style="display:inline-block;padding:12px 24px;color:#3D0E0E;text-decoration:none;font-weight:700;font-size:15px">Open the full audit &rarr;</a></td></tr></table>
@@ -1300,7 +1300,7 @@ function renderPage(audit, selfUrl) {
   @media (max-width:640px){
     .tz-hero{grid-template-columns:1fr !important;gap:12px !important;text-align:left}
     .tz-hero > div:last-child{text-align:left !important}
-    h1{font-size:1.5rem !important}
+    h1{font-size:1.24rem !important}
     table{font-size:0.74rem}
     section{padding-left:16px !important;padding-right:16px !important}
   }
