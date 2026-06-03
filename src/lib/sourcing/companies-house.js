@@ -45,7 +45,7 @@ async function searchByKeywordPublic(keyword, opts = {}) {
   const results = [];
   // Each result is in <li class="type-company"> with embedded company_number + name
   // Pattern: href="/company/12345678">Company Name</a>
-  const re = /<a[^>]+href="\/company\/(\w+)"[^>]*>([^<]+)<\/a>[\s\S]{0,400}?(?:Incorporated on\s+<span[^>]*>([^<]+)<\/span>)?/g;
+  const re = /<a[^>]+href="\/company\/([A-Z0-9]{6,10})"[^>]*>\s*([^<]{2,120}?)\s*<\/a>/g;
   let m; let count = 0;
   while ((m = re.exec(r.body)) !== null && count < 50) {
     const company_number = m[1];
@@ -99,7 +99,61 @@ async function getCompany(company_number) {
   };
 }
 
-module.exports = { searchByKeyword, getCompany, hasApiKey };
+// Officers / directors = the decision-makers. Official API when keyed, else scrape the PUBLIC officers page
+// (find-and-update.../company/{num}/officers) which lists every appointment with role + resigned status.
+const _ROLE = /(director|llp[\s-]?member|designated member|secretary|partner|chief|founder|principal|owner)/i;
+function _titleCase(n){ return String(n||'').toLowerCase().replace(/\b([a-z])/g,(m,c)=>c.toUpperCase()).replace(/\bLlp\b/g,'LLP').trim(); }
+async function getOfficers(company_number, opts = {}) {
+  if (!company_number) return [];
+  if (hasApiKey()) {
+    const url = `${API_BASE}/company/${company_number}/officers?items_per_page=50&register_view=false`;
+    const r = await fetchWithRetry(url, { headers: { 'User-Agent': UA, 'Accept': 'application/json', ...authHeader() }, timeout: 15000, retries: 1 });
+    if (r.ok) { try {
+      const j = JSON.parse(r.body);
+      const out = (j.items || []).filter(o => !o.resigned_on).map(o => ({ name: _titleCase(o.name && o.name.includes(',') ? o.name.split(',').reverse().join(' ') : o.name), role: o.officer_role || '', appointed_on: o.appointed_on || null, source: 'companies_house_api' }));
+      if (out.length) return out;
+    } catch (_e) {} }
+  }
+  // £0 fallback: scrape the public officers page
+  const url = `${PUBLIC_BASE}/company/${company_number}/officers`;
+  const r = await fetchWithRetry(url, { headers: { 'User-Agent': UA, 'Accept': 'text/html' }, timeout: 15000, retries: 1 });
+  if (!r.ok) return [];
+  const out = []; const seen = new Set();
+  // Split into per-officer blocks at each appointment anchor, so role/resigned are scoped to that officer.
+  const parts = r.body.split(/<a[^>]+href="\/officers\/[^"]+\/appointments"[^>]*>/);
+  for (let i = 1; i < parts.length && out.length < 30; i++) {
+    const seg = parts[i];
+    const nameM = seg.match(/^\s*([^<]{2,90}?)\s*<\/a>/); if (!nameM) continue;
+    let raw = nameM[1].replace(/\s+/g, ' ').trim();
+    if (raw.includes(',')) { const [sur, rest] = raw.split(','); raw = (rest || '').trim() + ' ' + sur.trim(); } // SURNAME, First -> First Surname
+    const name = _titleCase(raw);
+    if (!name || seen.has(name.toLowerCase())) continue;
+    const block = seg.slice(0, 800);
+    if (/Resigned\s*<|>\s*Resigned/i.test(block)) continue; // active only
+    const roleM = block.match(/Role\s*<\/dt>\s*<dd[^>]*>\s*([^<]+)/i) || block.match(/Role[\s\S]{0,60}?<(?:dd|strong|span)[^>]*>\s*([^<]+)/i);
+    const role = roleM ? roleM[1].trim() : '';
+    seen.add(name.toLowerCase());
+    out.push({ name, role, appointed_on: null, source: 'companies_house_public' });
+  }
+  return out;
+}
+// Convenience: company name/domain -> active decision-makers (search best match -> officers).
+async function findDecisionMakers({ company, domain, items = 8 } = {}) {
+  const kw = company || (domain || '').replace(/\.(co\.uk|com|org|net|uk).*$/, '').replace(/[-_]/g, ' ');
+  if (!kw) return { company_number: null, officers: [] };
+  const hits = await searchByKeyword(kw, { items_per_page: 5 });
+  // prefer an active company whose name shares a token with the query
+  const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ');
+  const qToks = new Set(norm(kw).split(/\s+/).filter(t => t.length > 2));
+  const ranked = hits.filter(h => h.company_number).sort((a, b) => {
+    const score = h => norm(h.company).split(/\s+/).filter(t => qToks.has(t)).length + (/(llp|solicitors|limited|ltd)/i.test(h.company) ? 0.5 : 0);
+    return score(b) - score(a);
+  });
+  const top = ranked[0]; if (!top) return { company_number: null, officers: [] };
+  const officers = await getOfficers(top.company_number, { items });
+  return { company_number: top.company_number, company: top.company, ch_url: top.ch_url, officers };
+}
+module.exports = { searchByKeyword, getCompany, getOfficers, findDecisionMakers, hasApiKey };
 
 if (require.main === module) {
   (async () => {
