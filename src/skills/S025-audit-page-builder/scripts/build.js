@@ -249,7 +249,9 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   }) : [];
 
   const sevRank = { P0: 0, P1: 1, P2: 2 };
-  let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
+  // P2.11/P2.12 SEO depth: the live you-vs-competitor keyword finding (free-serp powered).
+  let _seoFindings = []; try { _seoFindings = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'seo-deep.js')).seoDeepFindings({ keyword_map }); } catch (_e) {}
+  let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // P1.2-P1.5 finding-trust: tag kind+signals+state, lock quotes on presence findings, evidence-lock fines; only CONFIRMED renders.
   const _ft = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'finding-trust.js'));
   const _corpusAdequate = !(comp && comp.challenge) && (comp && comp.reachable !== false);
