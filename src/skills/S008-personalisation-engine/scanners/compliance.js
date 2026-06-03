@@ -32,14 +32,15 @@ function loadRules({ frameworks }) {
            COALESCE(layman_explanation, '') AS layman,
            COALESCE(tamazia_fix_short, '') AS tamazia_fix,
            COALESCE(service_page_path, '/services/regulatory-compliance/') AS service_page_path,
-           COALESCE(pricing_tier, 'Authority') AS pricing_tier
+           COALESCE(pricing_tier, 'Authority') AS pricing_tier,
+           COALESCE(enforcement_example, '') AS enforcement_example
     FROM compliance_rules
     WHERE framework_short IN (${inList}) AND active = TRUE
     ORDER BY CASE severity WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 ELSE 2 END, framework_short, rule_id`;
   const raw = pg(sql);
   if (!raw) return [];
   return raw.split('\n').filter(Boolean).map(line => {
-    const [id, fw, rid, desc, pat, urlCheck, sev, cite, ruleType, triggerPat, sectorsStr, fineLow, fineHigh, layman, tamaziaFix, svcPath, tier] = line.split('\t');
+    const [id, fw, rid, desc, pat, urlCheck, sev, cite, ruleType, triggerPat, sectorsStr, fineLow, fineHigh, layman, tamaziaFix, svcPath, tier, enforcement] = line.split('\t');
     return {
       id: Number(id), framework_short: fw, rule_id: rid, description: desc,
       regex_pattern: pat === '' || pat === 'NULL' ? null : pat,
@@ -53,7 +54,8 @@ function loadRules({ frameworks }) {
       layman_explanation: layman || null,
       tamazia_fix_short: tamaziaFix || null,
       service_page_path: svcPath || '/services/regulatory-compliance/',
-      pricing_tier: tier || 'Authority'
+      pricing_tier: tier || 'Authority',
+      enforcement_example: enforcement && enforcement !== 'NULL' ? enforcement : null
     };
   });
 }
@@ -307,13 +309,13 @@ function ruleCheck(rule, corpus, sector) {
     // Trigger present — now check whether the disclosure is also present.
     for (const c of corpus) { if (c.body.match(re)) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'hit_after_trigger', trigger_evidence: triggerEvidence }; }
     // Trigger present but disclosure missing → real breach.
-    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, evidence_url: triggerEvidence?.url, evidence_quote: triggerEvidence?.quote, trigger_evidence: triggerEvidence };
+    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: triggerEvidence?.url, evidence_quote: triggerEvidence?.quote, trigger_evidence: triggerEvidence };
   }
   // prohibit: breach if pattern IS present (e.g. "no GLP-1 on consumer pages")
   if (rule.rule_type === 'prohibit') {
     for (const c of corpus) {
       const m = c.body.match(re);
-      if (m) { const q = _extractQuote(c.body, re); return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, evidence_url: c.url, evidence_snippet: (q && q.matched) || m[0].slice(0, 80), evidence_quote: q && q.quote }; }
+      if (m) { const q = _extractQuote(c.body, re); return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: c.url, evidence_snippet: (q && q.matched) || m[0].slice(0, 80), evidence_quote: q && q.quote }; }
     }
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'no_prohibited_pattern' };
   }
@@ -333,7 +335,7 @@ function ruleCheck(rule, corpus, sector) {
     status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url,
     fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp,
     layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short,
-    service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier,
+    service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example,
     checked_urls: pool.map(c => c.url),
     rule_pattern_summary: rule.regex_pattern.slice(0, 80)
   };
@@ -420,6 +422,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       description: 'Privacy/cookie policy does not render as static text (JavaScript or embed only)',
       citation_url: 'https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/right-to-be-informed/',
       fine_low_gbp: null, fine_high_gbp: null,
+      enforcement_example: 'ICO: fines up to GBP 17.5M or 4% of global turnover plus enforcement notices; action register at ico.org.uk/action-weve-taken.',
       layman_explanation: 'Your privacy/cookie policy loads only when JavaScript runs, so search engines, AI assistants (ChatGPT, Claude, Perplexity, Google AI) and many privacy tools cannot read it as text. We therefore could not verify it carries the GDPR Article 13 essentials (controller identity, purposes, lawful basis, retention, data-subject rights, the right to complain to the ICO). JavaScript-only legal content is also invisible to AI search engines that increasingly answer "is this firm trustworthy" questions.',
       tamazia_fix_short: 'Tamazia serves the privacy and cookie policy as crawlable server-rendered text and confirms every GDPR Article 13 disclosure is present.',
       evidence_url: (corpus.find(c => /privacy|data-protection/i.test(c.url)) || {}).url || ('https://' + domain + '/privacy'),

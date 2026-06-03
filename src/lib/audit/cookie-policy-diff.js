@@ -30,6 +30,7 @@ function cookiePolicyDiff({ corpus = [], trackers = [] }) {
       tamazia_fix_short: 'Tamazia produces an accurate, auto-maintained cookie register that declares every tracker the site actually loads, and gates each behind consent.',
       evidence_quote: names.join(', ') + ' detected loading; absent from the cookie/privacy policy text',
       evidence: 'tracker-detect vs policy-page text diff · ' + policyPages.length + ' policy page(s) scanned',
+      enforcement_example: 'ICO under PECR: enforcement notices and fines up to GBP 500,000, plus GDPR-level fines (up to GBP 17.5M or 4% of turnover) where consent is the lawful basis; the ICO has run cookie-consent sweeps against major UK sites.',
       fine_low_gbp: null, fine_high_gbp: 17500000,
     },
   };
