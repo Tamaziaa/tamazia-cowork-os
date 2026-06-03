@@ -260,7 +260,15 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     const _agRes = await _ag.authorityGap({ domain, competitors: _leaders, env });
     if (_agRes && _agRes.finding) { _authFindings = [_agRes.finding]; payload_authority = { you: _agRes.you, top: _agRes.top, ranked: _agRes.ranked, last_updated: _agRes.last_updated }; }
   } catch (_e) {}
-  let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
+  // P2.15 local-pack / GBP readiness (OSM presence + LocalBusiness schema + NAP) — gated on city + local sector.
+  let _localFindings = [];
+  try {
+    const _lp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'local-pack.js'));
+    const _lpCity = (scan.markets && scan.markets.primary_city) || '';
+    const _lpRes = await _lp.localPackReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city: _lpCity, env });
+    if (_lpRes && _lpRes.finding) _localFindings = [_lpRes.finding];
+  } catch (_e) {}
+  let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // P1.2-P1.5 finding-trust: tag kind+signals+state, lock quotes on presence findings, evidence-lock fines; only CONFIRMED renders.
   const _ft = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'finding-trust.js'));
   const _corpusAdequate = !(comp && comp.challenge) && (comp && comp.reachable !== false);
