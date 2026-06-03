@@ -252,6 +252,8 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   let payload_authority = null;
   let payload_ai_readiness = null;
   let payload_geo_probe = null;
+  let payload_geo_visuals = null;
+  let payload_screenshots = null;
   let jurisdiction_statement = null;
   const sevRank = { P0: 0, P1: 1, P2: 2 };
   // P2.11/P2.12 SEO depth: the live you-vs-competitor keyword finding (free-serp powered).
@@ -279,13 +281,42 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     const _airRes = await _air.aiReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], env });
     if (_airRes && _airRes.ok) { _aiReadyFindings = _airRes.findings || []; payload_ai_readiness = { score: _airRes.score, blocked_ai_bots: _airRes.blocked_ai_bots, has_llms_txt: _airRes.has_llms_txt, has_org_schema: _airRes.has_org_schema, has_same_as: _airRes.has_same_as, in_wikidata: _airRes.in_wikidata }; }
   } catch (_e) {}
+  // P3.V1-3 GEO visuals + P3.8 screenshots, built from the live GEO data
+  try {
+    const _v = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-visuals.js'));
+    const _sc = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'screenshot.js'));
+    const air = payload_ai_readiness || {}; const gp = payload_geo_probe || {};
+    const youCited = !!(gp.grounded && gp.grounded.you_cited);
+    const engines = ['ChatGPT', 'Gemini', 'Perplexity', 'Claude', 'Copilot', 'Grok', 'Meta AI', 'Google AI'].map(nm => ({ name: nm, cited: youCited }));
+    const radarAxes = [
+      { label: 'Entity', value: air.score || 0 },
+      { label: 'Crawler access', value: (air.blocked_ai_bots && air.blocked_ai_bots.length) ? 40 : (air.score != null ? 100 : 0) },
+      { label: 'Share of voice', value: gp.share_of_voice || 0 },
+      { label: 'Schema', value: air.has_org_schema ? 100 : 0 },
+      { label: 'Knowledge graph', value: air.in_wikidata ? 100 : 0 },
+      { label: 'Citations', value: youCited ? 100 : 0 },
+    ];
+    const nodes = [].concat((gp.top_competitors || []).map(c => ({ label: c.name, type: 'competitor' })), ((gp.grounded && gp.grounded.source_domains) || []).map(d => ({ label: d, type: 'source' })));
+    payload_geo_visuals = { ai_engine_grid: _v.aiEngineGrid(engines), ai_radar: _v.aiRadar(radarAxes), entity_web_map: _v.entityWebMap({ you: (domain || '').replace(/^www\./, '').split('.')[0], nodes }) };
+    payload_screenshots = _sc.screenshotUrls({ domain, query: (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '') });
+  } catch (_e) {}
   try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: country, company: (domain || '').replace(/^www\./, '').split('.')[0] }); } catch (_e) {}
   // P3.1/3.3/3.4/3.5 multi-sample GEO probe (repeatability + share-of-voice + entrenched leaders). Rate-limit-graceful.
   let _geoFindings = [];
   try {
     const _gp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-probe.js'));
     const _q = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
-    if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: (domain || '').replace(/^www\./, '').split('.')[0], env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, top_competitors: _gpr.top_competitors }; if (_gpr.finding) _geoFindings = [_gpr.finding]; } }
+    if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
+  } catch (_e) {}
+  // P3.9 hallucination + sentiment (free-LLM chain)
+  try {
+    const _hr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'hallucination.js')).hallucinationCheck({ company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env });
+    if (_hr && _hr.ok) { payload_geo_probe = payload_geo_probe || {}; payload_geo_probe.ai_knows = _hr.ai_knows; payload_geo_probe.ai_sentiment = _hr.sentiment; if (_hr.finding) _geoFindings.push(_hr.finding); }
+  } catch (_e) {}
+  // P3.6 source-gap (free SERP authority sources)
+  try {
+    const _sgQ = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
+    if (_sgQ) { const _sgr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'source-gap.js')).sourceGap({ query: _sgQ, domain, env }); if (_sgr && _sgr.finding) _geoFindings.push(_sgr.finding); }
   } catch (_e) {}
   let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings, ..._aiReadyFindings, ..._geoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // P1.2-P1.5 finding-trust: tag kind+signals+state, lock quotes on presence findings, evidence-lock fines; only CONFIRMED renders.
@@ -341,6 +372,8 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     authority: payload_authority,
     ai_readiness: payload_ai_readiness,
     geo_probe: payload_geo_probe,
+    geo_visuals: payload_geo_visuals,
+    screenshots: payload_screenshots,
     jurisdiction_statement,
     glossary: (() => { try { const _g = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'glossary.js')); const _txt = (_confirmed || []).map(f => (f.fact || '') + ' ' + (f.citation || '') + ' ' + (f.layman_explanation || '')).join(' '); return { terms: _g.GLOSSARY, used: _g.termsUsed(_txt) }; } catch (_e) { return null; } })(),
   };
