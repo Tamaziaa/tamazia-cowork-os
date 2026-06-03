@@ -329,11 +329,25 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     if (_sgQ) { const _sgr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'source-gap.js')).sourceGap({ query: _sgQ, domain, env }); if (_sgr && _sgr.finding) _geoFindings.push(_sgr.finding); }
   } catch (_e) {}
   let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings, ..._aiReadyFindings, ..._geoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
+  // ── REACHABILITY RECONCILIATION (anti-fabrication red line) ──────────────────────────────────
+  // Two independent corpus paths can disagree: site-scan's direct fetch + PSI may fail (timeout / bot-block)
+  // while compliance's multi-fallback fetch (direct -> JS-render -> DISCLOSED public archive) genuinely reads
+  // the site, or vice-versa. The payload previously reported only site-scan's verdict, so a site compliance
+  // DID read could be stamped reachable:false while carrying real findings -- which the integrity eval rightly
+  // treats as fabrication. Reconcile to ONE signal: the audit is "assessable" iff at least one path genuinely
+  // read the site. compliance.reachable is true ONLY after its credibility guard passes (challenge walls and
+  // empty corpora already return reachable:false), so it is a trustworthy "we read the content" signal.
+  const _siteRead = !!(scan && scan.reachable === true);
+  const _compRead = !!(comp && comp.reachable === true);
+  const _assessable = _siteRead || _compRead;
+  // Hard zero-fabrication gate: if NEITHER path read the site, no finding may survive -- a held/unreadable
+  // site yields an empty, honestly-flagged audit, never findings about content we could not read.
+  if (!_assessable) findings = [];
   // P1.2-P1.5 finding-trust: tag kind+signals+state, lock quotes on presence findings, evidence-lock fines; only CONFIRMED renders.
   // P2.9: guarantee 100% of compliance findings carry a real enforcement regime (catalogue rules already do; this backfills code-generated ones).
   try { const _enf = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'enforcement-map.js')); for (const _f of findings) { if (_f && _f.bucket === 'compliance' && !_f.enforcement_example) _f.enforcement_example = _enf.enforcementFor(_f.framework_short || _f.citation); } } catch (_e) {}
   const _ft = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'finding-trust.js'));
-  const _corpusAdequate = !(comp && comp.challenge) && (comp && comp.reachable !== false);
+  const _corpusAdequate = _assessable && !(comp && comp.challenge);
   let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class });
   try { _classified = await verifyTopFindings(_classified, env || process.env); } catch (_e) {}
   const _confirmed = _ft.confirmed(_classified);
@@ -377,7 +391,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     news_map: (() => { const nm = {}; const want = new Set((frameworks||[]).map(f=>String(f))); try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) { const fw = ln.slice(0, i); if (!want.size || want.has(fw)) nm[fw] = ln.slice(i + 1); } } } catch (_e) {} return nm; })(),
     keyword_map: keyword_map && keyword_map.ok ? keyword_map : null,
     ai_citation: ai_citation && ai_citation.ok ? ai_citation : null,
-    scan: { scanned_at: scan.scanned_at, reachable: scan.reachable, final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
+    scan: { scanned_at: scan.scanned_at, reachable: _assessable, site_scan_reachable: !!(scan && scan.reachable), final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
     competitive_benchmark: buildCompetitiveBenchmark(ai_citation, keyword_map),
     authority: payload_authority,
     ai_readiness: payload_ai_readiness,
