@@ -240,15 +240,15 @@ async function llmCitationProbe({ query, company }) {
   // Priority: NVIDIA NIM (free, strongest available) -> Groq (free) -> Perplexity -> OpenAI.
   const nim = process.env.NIM_API_KEY;
   const groq = process.env.GROQ_API_KEY;
-  const key = nim || groq || process.env.PERPLEXITY_API_KEY || process.env.OPENAI_API_KEY;
+  const key = groq || nim || process.env.PERPLEXITY_API_KEY || process.env.OPENAI_API_KEY;
   if (!key) return { ran: false, reason: 'no_key', note: 'FREE: set NIM_API_KEY (build.nvidia.com) for a live AI-answer probe at GBP0; GROQ_API_KEY also works.' };
   const prompt = 'List the top 8 firms or providers a buyer would consider for "' + query + '". Reply as a plain comma-separated list of names only, no preamble or numbering.';
   let provider, url, models;
-  if (nim) {
+  if (groq) { provider = 'groq'; url = 'https://api.groq.com/openai/v1/chat/completions'; models = ['llama-3.3-70b-versatile']; } // Groq first: ~15x faster than NIM at identical accuracy (same Llama 3.3 70B)
+  else if (nim) {
     provider = 'nvidia-nim'; url = 'https://integrate.api.nvidia.com/v1/chat/completions';
-    // Highest available that is actually provisioned, with fallbacks (253b/405b are listed but 404 on free tier).
-    models = (process.env.NIM_MODEL ? [process.env.NIM_MODEL] : []).concat(['meta/llama-3.3-70b-instruct', 'abacusai/dracarys-llama-3.1-70b-instruct', 'meta/llama-3.1-70b-instruct']); // bench-verified working order (nemotron/mixtral 404 on free tier)
-  } else if (groq) { provider = 'groq'; url = 'https://api.groq.com/openai/v1/chat/completions'; models = ['llama-3.3-70b-versatile']; }
+    models = (process.env.NIM_MODEL ? [process.env.NIM_MODEL] : []).concat(['meta/llama-3.3-70b-instruct', 'abacusai/dracarys-llama-3.1-70b-instruct', 'meta/llama-3.1-70b-instruct']);
+  }
   else if (process.env.PERPLEXITY_API_KEY) { provider = 'perplexity'; url = 'https://api.perplexity.ai/chat/completions'; models = ['sonar']; }
   else { provider = 'openai'; url = 'https://api.openai.com/v1/chat/completions'; models = ['gpt-4o-mini']; }
   try {

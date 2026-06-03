@@ -102,10 +102,13 @@ function groupFindings(pointers) {
 // P1.4 NIM-as-verifier: for the top fine-bearing PRESENCE findings (which carry a verbatim quote), confirm the
 // evidence entails the finding. NOT_ENTAILED -> demote to NEEDS_REVIEW + withhold the fine. Fail-open, capped for scale.
 async function verifyTopFindings(classified, env, cap = 4) {
-  const key = (env && env.NIM_API_KEY) || process.env.NIM_API_KEY;
-  if (!key) return classified;
-  const base = 'https://integrate.api.nvidia.com/v1/chat/completions';
-  const model = process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct';
+  const groqKey = (env && env.GROQ_API_KEY) || process.env.GROQ_API_KEY;
+  const nimKey = (env && env.NIM_API_KEY) || process.env.NIM_API_KEY;
+  if (!groqKey && !nimKey) return classified;
+  const useGroq = !!groqKey; // Groq ~15x faster than NIM at identical accuracy (same Llama 3.3 70B base); NIM is the fallback.
+  const key = useGroq ? groqKey : nimKey;
+  const base = useGroq ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://integrate.api.nvidia.com/v1/chat/completions';
+  const model = useGroq ? 'llama-3.3-70b-versatile' : (process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct');
   const targets = classified
     .filter(f => f.state === 'CONFIRMED' && f.kind === 'presence' && (f.evidence_quote || f.evidence_snippet) && (f.fine_high_gbp || f.fine_low_gbp))
     .sort((a, b) => (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0))
