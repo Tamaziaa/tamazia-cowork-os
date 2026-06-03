@@ -333,6 +333,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     authority: payload_authority,
     ai_readiness: payload_ai_readiness,
     jurisdiction_statement,
+    glossary: (() => { try { const _g = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'glossary.js')); const _txt = (_confirmed || []).map(f => (f.fact || '') + ' ' + (f.citation || '') + ' ' + (f.layman_explanation || '')).join(' '); return { terms: _g.GLOSSARY, used: _g.termsUsed(_txt) }; } catch (_e) { return null; } })(),
   };
 }
 
