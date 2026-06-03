@@ -425,6 +425,14 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       evidence_url: (corpus.find(c => /privacy|data-protection/i.test(c.url)) || {}).url || ('https://' + domain + '/privacy'),
       evidence: 'policy page present, only ' + _privacyAnchors + ' privacy anchor terms in static text (JS-rendered/embedded)' });
   }
+  // P2.2 cookie-policy vs actual-tracker diff (UK/EU only, so no cross-region leakage). Self-incriminating: undeclared trackers.
+  try {
+    if (allJurisdictions.includes('UK') || allJurisdictions.includes('EU') || mk.serves_eu) {
+      const { cookiePolicyDiff } = require('../../../lib/audit/cookie-policy-diff.js');
+      const _cpd = cookiePolicyDiff({ corpus, trackers: (signals && signals.trackers) || [] });
+      if (_cpd.finding) { misses++; findings.push(_cpd.finding); }
+    }
+  } catch (_e) {}
   // Most severe first
   findings.sort((a, b) => sevRank(a.severity) - sevRank(b.severity));
 
