@@ -38,13 +38,20 @@ async function viaSerpApi(query, country, num = 100) {
 }
 
 /** Run one SERP query. Returns {ads, organic, provider} or {error}. */
-async function search(query, country = 'UK', num = 100) {
+async function search(query, country = 'UK', num = 100, opts = {}) {
+  // P1.0 free-first SERP: query-cached SearXNG (self-hosted, unlimited) -> Brave -> DuckDuckGo, then SERPER/SerpApi as backup.
+  let free = null; try { free = require('./free-serp.js'); } catch (_e) {}
+  if (free) { try { const fr = await free.search(query, country, num, opts); if (fr && (fr.organic || []).length) return fr; } catch (_e) {} }
   for (const fn of [viaSerper, viaSerpApi]) {
     const r = await fn(query, country, num);
-    if (r && !r.error && (r.ads || r.organic)) return r;
-    if (r && r.error) return r; // surface the error (key invalid / quota)
+    if (r && !r.error && (r.organic || r.ads)) {
+      // Cache backup-provider successes under the free-SERP key so a quota'd key is not burned twice on the same query.
+      if (free) { try { require('../../skills/S008-personalisation-engine/lib/http.js').writeCache({ domain: (GL[country] || 'gb') + '|' + String(query).toLowerCase().trim(), scanner: 'serp_v1', payload: { organic: r.organic || [], ads: r.ads || [], provider: r.provider }, ttl_seconds: 30 * 86400 }); } catch (_e) {} }
+      return r;
+    }
+    // never short-circuit on a provider error: a quota-exhausted key must not kill the whole SERP.
   }
-  return { error: 'no_serp_key', hint: 'Set SERPER_KEY (serper.dev, 2500 free) or SERPAPI_KEY in .env' };
+  return { error: 'no_serp_result', hint: 'Free SERP (SearXNG/DDG) returned nothing and SERPER/SerpApi unavailable. Set SEARXNG_URL (self-hosted SearXNG, unlimited free) to scale to 15k/mo.' };
 }
 
 function hasKey() { return !!(process.env.SERPER_KEY || process.env.SERPAPI_KEY || process.env.SCRAPERAPI_KEY); }
