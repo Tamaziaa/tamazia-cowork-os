@@ -852,10 +852,57 @@ function vizTrajectory(score, projected){
   return _svg(W+' '+H, 320, 'Projected audit score trajectory: today '+today+', week 12, week 24 '+w24, tdefs+body);
 }
 
+function vizRiskMatrix(merged){
+  if(!Array.isArray(merged) || !merged.length) return '';
+  // impact row (0 low .. 4 catastrophic) from fine ceiling; likelihood col (0 low .. 4 near-certain) from severity.
+  const band = f => f>=1e7?4 : f>=1e6?3 : f>=1e5?2 : f>=1e4?1 : 0;
+  const sevCol = s => s==='P0'?4 : s==='P1'?3 : 1;
+  const grid = Array.from({length:5},()=>Array(5).fill(0));
+  for(const p of merged){ const r = band(p.fine_high_gbp||p.fine_low_gbp||0); const c = sevCol(p.severity); grid[r][c]++; }
+  const W=340,H=300,L=58,T=14,cw=(W-L-10)/5,ch=(H-T-44)/5;
+  const cellColor=(r,c)=>{ const risk=(r+c)/8; return risk>=0.72?VIZ.crit : risk>=0.5?VIZ.high : risk>=0.3?'#a16207' : VIZ.ok; };
+  const impactLab=['<£10k','£10k+','£100k+','£1M+','£10M+']; const likeLab=['Rare','Low','Pos.','High','Near-cert'];
+  let cells='';
+  for(let r=0;r<5;r++){ for(let c=0;c<5;c++){
+    const x=L+c*cw, y=T+(4-r)*ch, n=grid[r][c];
+    cells+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+(cw-2).toFixed(1)+'" height="'+(ch-2).toFixed(1)+'" rx="3" fill="'+cellColor(r,c)+'" opacity="'+(n?0.92:0.16)+'"/>';
+    if(n) cells+='<text x="'+(x+(cw-2)/2).toFixed(1)+'" y="'+(y+(ch-2)/2+4).toFixed(1)+'" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#fff" font-weight="700">'+n+'</text>';
+  }}
+  let yLab=''; for(let r=0;r<5;r++) yLab+='<text x="'+(L-6)+'" y="'+(T+(4-r)*ch+ch/2+3).toFixed(1)+'" text-anchor="end" font-family="Arial" font-size="8.5" fill="'+VIZ.muted+'">'+impactLab[r]+'</text>';
+  let xLab=''; for(let c=0;c<5;c++) xLab+='<text x="'+(L+c*cw+cw/2).toFixed(1)+'" y="'+(H-26)+'" text-anchor="middle" font-family="Arial" font-size="8.5" fill="'+VIZ.muted+'">'+likeLab[c]+'</text>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Risk matrix: financial impact by likelihood of regulator action">'
+    +cells+yLab+xLab
+    +'<text x="'+(L+(W-L-10)/2)+'" y="'+(H-10)+'" text-anchor="middle" font-family="Arial" font-size="9" fill="'+VIZ.ink+'" font-weight="600">Likelihood of regulator action →</text>'
+    +'<text x="12" y="'+(T+ (H-T-44)/2)+'" text-anchor="middle" font-family="Arial" font-size="9" fill="'+VIZ.ink+'" font-weight="600" transform="rotate(-90 12 '+(T+(H-T-44)/2)+')">Financial impact →</text>'
+    +'</svg>';
+}
+function renderEvidenceCards(merged, audit){
+  const withQuote = (merged||[]).filter(p => p.evidence_quote && String(p.evidence_quote).trim().length > 3).slice(0, 4);
+  const shot = (audit.screenshots && (audit.screenshots.homepage || audit.screenshots.answer_surface)) || '';
+  if(!withQuote.length && !shot) return '';
+  const cards = withQuote.map(p => {
+    const sev = SEV[p.severity] || SEV.P2;
+    return '<div style="background:#fff;border:1px solid #e7e0d2;border-left:4px solid '+sev.bg+';border-radius:8px;padding:13px 15px">'
+      +'<p style="margin:0 0 6px;font-size:0.8rem;font-weight:600;color:#3D0E0E;line-height:1.3">'+esc(p.desc||p.fact||'')+'</p>'
+      +'<blockquote style="margin:0;padding:8px 11px;background:#F8F5EF;border-radius:5px;font-family:ui-monospace,Menlo,monospace;font-size:0.72rem;color:#1F2937;line-height:1.45;word-break:break-word">&ldquo;'+esc(String(p.evidence_quote).slice(0,180))+'&rdquo;</blockquote>'
+      +(p.locator?'<p style="margin:5px 0 0;font-size:0.64rem;color:#8a6b6b;font-family:ui-monospace,monospace">where: '+esc(p.locator)+'</p>':'')
+      +'<p style="margin:6px 0 0;font-size:0.7rem;color:#6b6b6b">Source: '+esc(p.evidence||'live scan')+'</p></div>';
+  }).join('');
+  const shotBlock = shot ? '<figure style="margin:0 0 12px"><img src="'+esc(shot)+'" alt="Screenshot of '+esc(audit.domain||audit.company||"the audited site")+'" loading="lazy" referrerpolicy="no-referrer" style="width:100%;max-width:680px;border:1px solid #e5e7eb;border-radius:8px;display:block"/><figcaption style="margin:5px 0 0;font-size:0.66rem;color:#9b9b9b">Captured live during the audit — this is the page these findings were read from.</figcaption></figure>' : '';
+  return '<section class="tz-reveal" style="padding:26px 24px;background:#fff;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">'
+    +'<p style="font-size:0.7rem;color:'+VIZ.gold+';letter-spacing:0.2em;text-transform:uppercase;margin:0 0 6px;font-weight:700">The evidence</p>'
+    +'<h2 style="font-family:\'Times New Roman\',serif;font-size:1.45rem;margin:0 0 4px;color:'+VIZ.ink+'">Every finding is quoted from your own site.</h2>'
+    +'<p style="font-size:0.74rem;color:'+VIZ.muted+';margin:0 0 14px">No interpretation, no guesswork: the exact text or signal each finding is built on, captured live.</p>'
+    +shotBlock
+    +(cards?'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">'+cards+'</div>':'')
+    +'</div></section>';
+}
 function renderDataViz(merged, audit){
   const cards=[
     vizFrame({ title:'Regulatory £ exposure by framework', subtitle:'Maximum fine per framework + total.', svg:vizWaterfall(merged),
       legend:[[VIZ.crit,'Fine ceiling (£)']], howto:'Each bar = the maximum regulator fine for that framework (longer = more at risk). The total at the foot is the exposure across all frameworks shown.' }),
+    vizFrame({ title:'Risk matrix: impact x likelihood', subtitle:'Every finding placed by fine size and how actively the regulator acts.', svg:vizRiskMatrix(merged),
+      legend:[[VIZ.crit,'Severe + likely'],[VIZ.high,'Elevated'],[VIZ.ok,'Lower risk']], howto:'A standard 5x5 risk grid. Up = bigger maximum fine; right = the regulator acts more often on that severity. The number in each cell is how many of your findings land there; the red top-right is what to fix first.' }),
     vizFrame({ title:'Where you rank vs who AI cites #1', subtitle:'Live position per real buyer query.', svg:vizCitationLadder(audit.keyword_map),
       legend:[[VIZ.gold,'Rival cited #1'],[VIZ.ok,'You #1-3'],[VIZ.high,'You #4-10'],[VIZ.crit,'You #10+ / NR']], howto:'Each row is a real buyer query. Your dot sits on a #1 (left, best) to #10 (right) track; gold is the firm AI/Google names first, named on the right. NR = No Result: not visible at all for that query.' }),
     vizFrame({ title:'AI-visibility radar (scored per signal)', subtitle:'How much AI engines can see + cite you.', svg:vizRadar(merged, audit.ai_citation),
@@ -1179,6 +1226,7 @@ ${renderCitationTable(audit)}
 ${renderKeywordMap(audit.keyword_map)}
 ${renderAllFindings(merged)}
 ${renderDataViz(merged, adjAudit)}
+${renderEvidenceCards(merged, adjAudit)}
 ${renderInvestment(adjMeta.pointer_count_p0)}
 ${renderForward(adjAudit, selfUrl)}
 ${renderTrustBand()}
@@ -1289,7 +1337,7 @@ export default {
         if (ctx && ctx.waitUntil) ctx.waitUntil(ev);
       }
     } catch (_e) {}
-    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v19-live-v15-p5' } });
+    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v20-live-v15-p5' } });
   }
 };
 
