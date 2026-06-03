@@ -258,6 +258,16 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   const sevRank = { P0: 0, P1: 1, P2: 2 };
   // P2.11/P2.12 SEO depth: the live you-vs-competitor keyword finding (free-serp powered).
   let _seoFindings = []; try { _seoFindings = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'seo-deep.js')).seoDeepFindings({ keyword_map }); } catch (_e) {}
+  // P2.16 content-gap (INTERNAL content-planning data only — NOT a client finding: generic-autocomplete gaps carry
+  // location/intent noise that would breach the zero-false-positive bar on the client render). For Tamazia's team.
+  let payload_content_gap = null;
+  try {
+    const _cg = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'content-gap.js'));
+    const _sn = (keyword_map && keyword_map.service_noun) || (scan.signals && scan.signals.service_noun) || sector;
+    const _cgCity = (scan.markets && scan.markets.primary_city) || '';
+    const _cgr = await _cg.contentGap({ domain, serviceNoun: _sn, city: _cgCity, sector, env });
+    if (_cgr && _cgr.pages) payload_content_gap = { pages: _cgr.pages, gaps: _cgr.gaps || [] };
+  } catch (_e) {}
   // P2.17 backlink/authority gap (OpenPageRank) — compare against the exact competitors from the keyword map.
   let _authFindings = [];
   try {
@@ -374,6 +384,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     geo_probe: payload_geo_probe,
     geo_visuals: payload_geo_visuals,
     screenshots: payload_screenshots,
+    content_gap: payload_content_gap,
     jurisdiction_statement,
     glossary: (() => { try { const _g = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'glossary.js')); const _txt = (_confirmed || []).map(f => (f.fact || '') + ' ' + (f.citation || '') + ' ' + (f.layman_explanation || '')).join(' '); return { terms: _g.GLOSSARY, used: _g.termsUsed(_txt) }; } catch (_e) { return null; } })(),
   };
