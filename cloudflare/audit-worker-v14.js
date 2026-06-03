@@ -1031,8 +1031,11 @@ function renderDataViz(merged, audit){
     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px">'+cards.join('')+'</div></div></section>';
 }
 
-function renderInvestment(p0) {
-  const rec = p0 >= 6 ? 'Enterprise' : p0 >= 2 ? 'Authority' : 'Foundation';
+function renderInvestment(p0, jurisdictions) {
+  // Enterprise is for multi-jurisdiction / multi-location firms. A single-jurisdiction clinic or independent
+  // firm caps at Authority no matter the finding count -- never push Enterprise onto a one-location practice.
+  const _multiJur = (jurisdictions || 0) > 1;
+  const rec = (_multiJur && p0 >= 6) ? 'Enterprise' : (p0 >= 2 ? 'Authority' : 'Foundation');
   const tiers = [
     { name: 'Foundation', price: 2500, weeks: '4 weeks', desc: 'Single location · independent firm. Full audit, 1 content piece/month, GBP, technical fixes, single jurisdiction.', cta: 'Begin Foundation enquiry' },
     { name: 'Authority',  price: 4500, weeks: '8 weeks', desc: '3-10 partners · multi-location · two jurisdictions. 30 keywords, 4 content pieces/month, editorial placements, OTA-reduction, GEO.', cta: 'Begin Authority enquiry' },
@@ -1185,7 +1188,15 @@ function renderGeoVisibility(audit) {
   if (air && typeof air.score === 'number') stat += statCard('AI entity-readiness', air.score + '/100', air.score < 50 ? '#B23A3A' : '#2E7D52');
   if (gp && typeof gp.share_of_voice === 'number') stat += statCard('AI share of voice', gp.share_of_voice + '/100', gp.share_of_voice < 34 ? '#B23A3A' : '#2E7D52');
   if (air && Array.isArray(air.blocked_ai_bots) && air.blocked_ai_bots.length) stat += statCard('AI crawlers you block', String(air.blocked_ai_bots.length), '#B23A3A');
-  const viz = gv ? [gv.ai_engine_grid, gv.ai_radar, gv.entity_web_map].filter(Boolean).map(svg => `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0;overflow:auto">${svg}</div>`).join('') : '';
+  // A knowledge-graph SVG with no edges (<line>) means the firm has no entity connections -- render a compact
+  // honest empty-state instead of one giant lone node. All geo visuals are height-capped so none can blow up the page.
+  const _wrapViz = (svg, isEntity) => {
+    if (isEntity && svg && !svg.includes('<line')) {
+      return `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin:10px 0;text-align:center"><p style="margin:0 0 4px;font-family:'Times New Roman',serif;font-size:0.98rem;color:#3D0E0E;font-weight:600">You are not in the AI knowledge graph yet</p><p style="margin:0;font-size:0.78rem;color:#6b6b6b;line-height:1.4">No Wikidata entity and no sameAs links, so AI engines have nothing to connect you to and cannot cite you as a known provider. Tamazia establishes your machine-readable entity.</p></div>`;
+    }
+    return `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0;overflow:auto;max-height:360px;display:flex;justify-content:center;align-items:center">${svg}</div>`;
+  };
+  const viz = gv ? [[gv.ai_engine_grid,false],[gv.ai_radar,false],[gv.entity_web_map,true]].filter(x=>x[0]).map(x=>_wrapViz(x[0],x[1])).join('') : '';
   return `<section class="tz-reveal" style="padding:28px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
     <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">AI search visibility</p>
     <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E">Can AI engines find, trust and cite you</h2>
@@ -1341,7 +1352,7 @@ ${renderKeywordMap(audit.keyword_map)}
 ${renderAllFindings(merged)}
 ${renderDataViz(merged, adjAudit)}
 ${renderEvidenceCards(merged, adjAudit)}
-${renderInvestment(adjMeta.pointer_count_p0)}
+${renderInvestment(adjMeta.pointer_count_p0, (adjAudit.detected_jurisdictions || []).length)}
 ${renderForward(adjAudit, selfUrl)}
 ${renderTrustBand()}
 ${renderClosing(adjAudit, riskScore, projected, totalExposure)}
