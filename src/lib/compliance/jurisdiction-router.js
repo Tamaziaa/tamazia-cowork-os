@@ -165,7 +165,7 @@ function routeForMarkets({ markets, country, sector, signals }) {
   for (const name of opCountries) { const code = NAME_TO_CODE[name]; if (code) for (const f of routeJurisdictions({ country: code, sector })) out.add(f); }
   out.add('GOOGLE_EEAT'); // Google ranking standards apply to every site regardless of jurisdiction
   if (ctx.eu) { out.add('EU_GDPR'); out.add('EU_EPRIVACY'); }
-  if (ctx.us) { out.add('US_FTC'); out.add('US_CPRA'); }
+  if (ctx.us) { out.add('US_FTC'); out.add('US_CPRA'); out.add('US_CAN_SPAM'); }
   if (ctx.me) out.add('UAE_PDPL');
   // trigger layer: inject conditional laws only when their trigger passes, and strip any that slipped in but do not.
   for (const code of CONDITIONAL) { if (conditionalOK(code, ctx)) out.add(code); else out.delete(code); }
