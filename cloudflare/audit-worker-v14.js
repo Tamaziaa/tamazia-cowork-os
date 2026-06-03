@@ -192,14 +192,15 @@ function regulatorBadge(reg) {
 }
 
 // REAL score from real findings (severity-weighted), and a realistic projected post-engagement score.
+// score now comes from real per-dimension health via scoreFromDims(dims) in renderPage. This shim kept for
+// callers that only have the merged pointers (e.g. loadAudit return), computed the same honest way.
 function computeRiskScore(merged) {
-  const p0 = (merged || []).filter(p => p.severity === 'P0').length;
-  const p1 = (merged || []).filter(p => p.severity === 'P1').length;
-  const p2 = (merged || []).filter(p => p.severity === 'P2').length;
-  return Math.max(20, Math.min(40, Math.round(40 - (p0 * 2.5 + p1 * 1.2 + p2 * 0.5))));
+  const dims = assessDimensions(merged, {}, null); // pointer-only fallback
+  return scoreFromDims(dims);
 }
-function projectedScore(now) { return 90; } // Week-24 target
-function wk12Score() { return 65; } // Week-12 target
+// Per-site trajectory: closing ~45% of the gap to 100 by week 12, ~80% by week 24. Derived from the real score.
+function wk12Score(now) { const n = (typeof now === 'number') ? now : 40; return Math.min(100, Math.round(n + (100 - n) * 0.45)); }
+function projectedScore(now) { const n = (typeof now === 'number') ? now : 40; return Math.min(100, Math.round(n + (100 - n) * 0.80)); }
 
 function gradeOf(score) {
   if (score >= 60) return { letter: 'D', color: '#C8A664', label: 'Below baseline' };
@@ -226,6 +227,93 @@ function syncBucketsToAnchor(rawBuckets, pointers) {
     synced[b] = { n, mean_score: score };
   }
   return synced;
+}
+
+// ── REAL dimension assessment (single source for score, scorecard, radar). ───────────────────────
+// Each dimension is scored from data we actually have: compliance/ai from real pointers, on-page SEO /
+// technical / security / content / tracking from the live scan.signals captured at mint. A dimension is
+// "assessed:false" ONLY when we genuinely have no data for it (e.g. accessibility needs an axe/PSI run
+// that did not happen this mint). No invented numbers: signal checks are real booleans from the page.
+function assessDimensions(pointers, signals, aiReadiness) {
+  const sg = signals || {}; const ai = aiReadiness || {};
+  const tv = v => v === true || (typeof v === 'string' && v.trim() !== '' && v !== 'false') || (typeof v === 'number' && v > 0);
+  const dim = (assessed, checks) => {
+    if (!assessed) return { assessed:false, mean_score:0, crit:0, high:0, std:0, fails:[] };
+    const fails = checks.filter(c => !c.ok);
+    const total = checks.length || 1;
+    const health = Math.max(0.06, (total - fails.length) / total);
+    const crit = fails.filter(c=>c.sev==='P0').length, high = fails.filter(c=>c.sev==='P1').length, std = fails.filter(c=>c.sev==='P2').length;
+    return { assessed:true, mean_score:health, crit, high, std, fails: fails.map(c=>c.label) };
+  };
+  // compliance + ai from real confirmed pointers
+  const byb = {}; for (const x of (pointers||[])) { const b=x.bucket||'website'; (byb[b]=byb[b]||[]).push(x); }
+  const sevCount = arr => ({ c: arr.filter(p=>p.severity==='P0').length, h: arr.filter(p=>p.severity==='P1').length, s: arr.filter(p=>p.severity!=='P0'&&p.severity!=='P1').length });
+  const compArr = byb['compliance']||[]; const cc = sevCount(compArr);
+  const aiArr = byb['ai_visibility']||[]; const ac = sevCount(aiArr);
+  const pointerHealth = (n,c,h,st) => n===0 ? null : Math.max(0.06, 1 - (c*0.10 + h*0.04 + st*0.015));
+  const out = {};
+  out.compliance = compArr.length ? { assessed:true, mean_score:pointerHealth(compArr.length,cc.c,cc.h,cc.s), crit:cc.c, high:cc.h, std:cc.s, fails:[] } : { assessed:false, mean_score:0, crit:0,high:0,std:0,fails:[] };
+  // On-page SEO
+  out.seo = dim(true, [
+    { ok: tv(sg.title) && (sg.title_len||0) >= 10, sev:'P1', label:'no/!short page title' },
+    { ok: tv(sg.meta_description), sev:'P1', label:'no meta description' },
+    { ok: (sg.h1_count||0) >= 1, sev:'P2', label:'no H1' },
+    { ok: tv(sg.open_graph), sev:'P2', label:'no Open Graph' },
+  ]);
+  // Technical SEO
+  out.technical_seo = dim(true, [
+    { ok: tv(sg.canonical), sev:'P1', label:'no canonical' },
+    { ok: tv(sg.viewport), sev:'P1', label:'no viewport (mobile)' },
+    { ok: tv(sg.lang), sev:'P2', label:'no lang attribute' },
+    { ok: tv(sg.favicon), sev:'P2', label:'no favicon' },
+  ]);
+  // Content + E-E-A-T
+  out.content_depth = dim(true, [
+    { ok: tv(sg.json_ld) || tv(ai.has_org_schema), sev:'P1', label:'no schema markup' },
+    { ok: tv(ai.has_same_as), sev:'P2', label:'no sameAs/entity links' },
+    { ok: (sg.html_bytes||0) > 20000, sev:'P2', label:'thin page content' },
+  ]);
+  // Security headers
+  out.security = dim(true, [
+    { ok: tv(sg.hsts), sev:'P1', label:'no HSTS' },
+    { ok: tv(sg.csp), sev:'P1', label:'no CSP' },
+    { ok: tv(sg.xfo), sev:'P2', label:'no X-Frame-Options' },
+    { ok: tv(sg.xcto), sev:'P2', label:'no X-Content-Type-Options' },
+  ]);
+  // Tracking & analytics (privacy posture of trackers)
+  const hasTrackers = tv(sg.trackers) || tv(sg.ad_tech);
+  out.ad_intel = dim(true, [
+    { ok: !hasTrackers || tv(sg.refpol), sev:'P2', label:'trackers without referrer-policy' },
+    { ok: !hasTrackers || tv(sg.permpol), sev:'P2', label:'trackers without permissions-policy' },
+  ]);
+  // Site architecture
+  out.website = dim(true, [
+    { ok: (sg.html_bytes||0) > 0, sev:'P2', label:'no HTML captured' },
+    { ok: (sg.h1_count||0) >= 1, sev:'P2', label:'no heading structure' },
+    { ok: tv(sg.viewport), sev:'P2', label:'not mobile-ready' },
+  ]);
+  // ai_visibility maps into content/GEO; keep its own health for the radar via out._ai
+  out._ai = aiArr.length ? { assessed:true, mean_score:pointerHealth(aiArr.length,ac.c,ac.h,ac.s), crit:ac.c, high:ac.h, std:ac.s } : { assessed:false, mean_score:0, crit:0,high:0,std:0 };
+  // genuinely not assessed this mint (no axe / no DNS / no public-records pointers)
+  out.accessibility = { assessed:false, mean_score:0, crit:0,high:0,std:0, fails:[] };
+  out.tls_dns = { assessed:false, mean_score:0, crit:0,high:0,std:0, fails:[] };
+  out.public_records = (byb['public_records']&&byb['public_records'].length)
+    ? (()=>{const a=byb['public_records'];const x=sevCount(a);return {assessed:true,mean_score:pointerHealth(a.length,x.c,x.h,x.s),crit:x.c,high:x.h,std:x.s,fails:[]};})()
+    : { assessed:false, mean_score:0, crit:0,high:0,std:0, fails:[] };
+  return out;
+}
+
+// Real 0-100: weighted mean health of ASSESSED dimensions only (compliance weighted ×2). No clamp band.
+function scoreFromDims(dims) {
+  const w = { compliance:2 };
+  let num=0, den=0;
+  for (const k of ['compliance','seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records']) {
+    const d = dims[k]; if (!d || !d.assessed) continue;
+    const wt = w[k] || 1; num += d.mean_score * wt; den += wt;
+  }
+  if (dims._ai && dims._ai.assessed) { num += dims._ai.mean_score; den += 1; }
+  if (den === 0) return 50;
+  return Math.max(1, Math.min(100, Math.round((num/den) * 100)));
 }
 
 // Phase 7.4 · per-bucket severity counts (driven by actual pointers, padded if zero)
@@ -412,19 +500,30 @@ function renderGlance(audit, totalExposure, top3) {
     </section>`;
 }
 
-function renderSectionGauges(syncedBuckets, sevMap) {
+function renderSectionGauges(dims, sevMap) {
   const order = ['compliance','seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
+  const gaugeOf = (d) => {
+    if (!d || !d.assessed) return { color:'#9ca3af', label:'Not assessed', pct:0 };
+    const pct = Math.round((d.mean_score||0)*100);
+    if ((d.crit||0) > 0) return { color:'#B91C1C', label:'Fail', pct };
+    if ((d.high||0) > 0) return { color:'#E67E22', label:'Needs work', pct };
+    if (pct >= 80) return { color:'#15803d', label:'Pass', pct };
+    return { color:'#E67E22', label:'Needs work', pct };
+  };
+  const detailOf = (d) => {
+    if (!d || !d.assessed) return 'No data this scan';
+    if (d.fails && d.fails.length) return d.fails.slice(0,3).join(' · ');
+    return (d.crit||0)+' crit · '+(d.high||0)+' high · '+(d.std||0)+' std';
+  };
   return `
     <section class="tz-reveal" style="padding:26px 24px 22px;background:#F8F5EF">
       <div style="max-width:1100px;margin:0 auto">
-        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Section scorecard · ten dimensions</p>
-        <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">Pass · Needs work · Fail per dimension.</h2>
-        <p style="font-size:0.74rem;color:#6b6b6b;margin:0 0 14px">Any critical finding inside a dimension drops it to Fail regardless of mean score.</p>
+        <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Section scorecard \u00b7 ten dimensions</p>
+        <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">Pass \u00b7 Needs work \u00b7 Fail per dimension.</h2>
+        <p style="font-size:0.74rem;color:#6b6b6b;margin:0 0 14px">Scored from what we could read on your live site. Any critical finding drops a dimension to Fail.</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:8px">
           ${order.map(b => {
-            const v = syncedBuckets[b];
-            const sev = sevMap[b] || { critical: 0, high: 0, standard: 0, n: 0 };
-            const g = bucketGauge(v.mean_score, sev.critical, sev.high, sev.n || (sev.critical + sev.high + sev.standard));
+            const d = dims[b]; const g = gaugeOf(d);
             return `
               <a href="#dim-${b}" style="background:white;border-radius:6px;padding:12px 14px;text-decoration:none;color:inherit;display:block;border-left:3px solid ${g.color}">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:6px">
@@ -434,14 +533,13 @@ function renderSectionGauges(syncedBuckets, sevMap) {
                 <div style="position:relative;height:5px;background:#e5e7eb;border-radius:3px;overflow:hidden">
                   <div style="position:absolute;left:0;top:0;height:100%;width:${g.pct}%;background:${g.color}"></div>
                 </div>
-                <p style="margin:6px 0 0;font-size:0.68rem;color:#6b6b6b">${sev.critical} crit · ${sev.high} high · ${sev.standard} std</p>
+                <p style="margin:6px 0 0;font-size:0.68rem;color:#6b6b6b">${esc(detailOf(d))}</p>
               </a>`;
           }).join('')}
         </div>
       </div>
     </section>`;
 }
-
 function renderCritical(top3) {
   if (!top3.length) return '';
   return `
@@ -809,7 +907,13 @@ function vizRadar(merged, aic){
   let cited=60; if(aic){cited=(aic.firm_position==null)?10:(aic.firm_position<=3?92:aic.firm_position<=10?52:26);}
   return vizRadarChart([{label:'Schema',score:schema},{label:'Entity',score:entity},{label:'llms.txt',score:llms},{label:'AI crawler',score:crawler},{label:'E-E-A-T',score:eeat},{label:'AI-cited',score:cited}], VIZ.crit);
 }
-function vizHealthRadar(merged){
+function vizHealthRadar(merged, dims){
+  // Use the SAME assessed per-dimension health as the scorecard so the radar can never contradict it.
+  if (dims) {
+    const groups=[['Compliance','compliance'],['SEO','seo'],['Technical','technical_seo'],['Content','content_depth'],['Security','security'],['AI/GEO','_ai']];
+    const pts=groups.filter(([l,k])=>dims[k]&&dims[k].assessed).map(([label,k])=>({label, score: Math.round((dims[k].mean_score||0)*100)}));
+    if (pts.length>=3) return vizRadarChart(pts, VIZ.mid);
+  }
   const groups=[['Compliance',['compliance']],['SEO',['technical_seo','seo','performance','website']],['Content',['content_depth']],['AI/GEO',['ai_visibility']],['Security',['tls_dns','security']]];
   return vizRadarChart(groups.map(([label,bk])=>{ const c=(merged||[]).filter(p=>bk.includes(p.bucket)).length; return {label, score: Math.max(8,100-Math.min(100,c*12))}; }), VIZ.mid);
 }
@@ -907,7 +1011,7 @@ function renderDataViz(merged, audit){
       legend:[[VIZ.gold,'Rival cited #1'],[VIZ.ok,'You #1-3'],[VIZ.high,'You #4-10'],[VIZ.crit,'You #10+ / NR']], howto:'Each row is a real buyer query. Your dot sits on a #1 (left, best) to #10 (right) track; gold is the firm AI/Google names first, named on the right. NR = No Result: not visible at all for that query.' }),
     vizFrame({ title:'AI-visibility radar (scored per signal)', subtitle:'How much AI engines can see + cite you.', svg:vizRadar(merged, audit.ai_citation),
       legend:[[VIZ.crit,'Your AI visibility 0-100'],[VIZ.grid,'Full (outer ring = 100)']], howto:'Each spoke is an AI-readiness signal scored 0 (centre) to 100 (outer ring); the number at each tip is your score on that signal. The dented spokes are exactly where you are invisible to AI.' }),
-    vizFrame({ title:'Site health by area (scored)', subtitle:'Your standing across the five audited areas.', svg:vizHealthRadar(merged),
+    vizFrame({ title:'Site health by area (scored)', subtitle:'Your standing across the five audited areas.', svg:vizHealthRadar(merged, audit && audit.dims),
       legend:[[VIZ.mid,'Your health 0-100'],[VIZ.grid,'Ideal (outer ring)']], howto:'Same radar reused across areas: each tip shows that area\'s health score 0-100. Outer ring = healthy; the dents are where Tamazia focuses first.' }),
     vizFrame({ title:'Severity heatmap (with totals)', subtitle:'Where your issues concentrate.', svg:vizHeatmap(merged),
       legend:[[VIZ.crit,'P0 critical'],[VIZ.high,'P1 high'],['#a16207','P2 standard']], howto:'Rows = audit areas, columns = severity (P0 critical, P1 high, P2 standard). Each cell is the count; the right column and bottom row are row/column totals, and the bottom-right is the grand total.' }),
@@ -1141,8 +1245,10 @@ function renderPage(audit, selfUrl) {
   const meta = audit.scan_meta || {};
   const rawPointers = audit.pointers || [];
   const merged = dedupeAndMerge(rawPointers);
-  const riskScore = computeRiskScore(merged);
+  const _dims = assessDimensions(merged, audit.signals || {}, audit.ai_readiness);
+  const riskScore = scoreFromDims(_dims);
   const projected = projectedScore(riskScore);
+  const wk12 = wk12Score(riskScore);
   const grade = gradeOf(riskScore);
   const syncedBuckets = syncBucketsToAnchor(meta.buckets, merged);
   const sevMap = severityByBucket(merged, syncedBuckets);
@@ -1156,14 +1262,14 @@ function renderPage(audit, selfUrl) {
     pointer_count_p0: merged.filter(p => p.severity === 'P0').length,
     pointer_count_p1: merged.filter(p => p.severity === 'P1').length
   };
-  const adjAudit = { ...audit, scan_meta: adjMeta, score: riskScore, projected };
+  const adjAudit = { ...audit, scan_meta: adjMeta, score: riskScore, projected, wk12, dims: _dims };
   const title = `${audit.company} · Regulatory + SEO + AI visibility audit · Tamazia`;
   return `<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>${esc(title)}</title>
-<meta name="description" content="${esc('Tamazia regulatory + SEO + AI audit for ' + (audit.domain || audit.company) + '. Score 32/100. ' + adjMeta.pointer_count_p0 + ' critical findings.')}">
+<meta name="description" content="${esc('Tamazia regulatory + SEO + AI audit for ' + (audit.domain || audit.company) + '. Score ' + riskScore + '/100. ' + adjMeta.pointer_count_p0 + ' critical findings.')}">
 <style>
   *{box-sizing:border-box}
   body{margin:0;padding:0;font-family:Inter,system-ui,-apple-system,sans-serif;color:#1F2937;background:#fff;line-height:1.5}
@@ -1217,7 +1323,7 @@ ${renderHeader(adjAudit, grade)}
 ${renderExecSummary(adjAudit)}
 ${renderJurisdiction(adjAudit)}
 ${renderGlance(adjAudit, totalExposure, top3)}
-${renderSectionGauges(syncedBuckets, sevMap)}
+${renderSectionGauges(_dims, sevMap)}
 ${renderCritical(top3)}
 ${renderBeforeAfter(totalExposure, riskScore, projected, grade)}
 ${renderAIPlatform(adjAudit)}
