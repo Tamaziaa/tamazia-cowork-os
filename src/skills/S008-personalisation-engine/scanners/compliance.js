@@ -391,7 +391,21 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   } catch (_e) {
     const fs2 = new Set(); for (const j of allJurisdictions) for (const f of routeJurisdictions({ country: j, sector })) fs2.add(f); frameworks = Array.from(fs2);
   }
-  const rules = loadRules({ frameworks });
+  let rules = loadRules({ frameworks });
+  // ── SECTOR SUB-GATE (kills cross-sector false positives) ────────────────────────────────────────
+  // ABPI (pharmaceutical-company promotion / PMCPA), GPHC (pharmacy regulator) and MHRA (medicines
+  // advertising) apply ONLY to sites that ARE a pharmacy / pharma company or actually sell or advertise
+  // medicines. A dental practice or private clinic must NOT inherit drug-promotion disclosure rules just
+  // because it is tagged "healthcare". Gate these frameworks on real medicine/pharmacy corpus signals.
+  {
+    const _medSig = /\b(pharmac(y|ies|ist)|dispensing chemist|online pharmacy|prescription[- ]only medicine|marketing authorisation|summary of product characteristics|\bSmPC\b|patient information leaflet|\bGPhC\b|superintendent pharmacist|buy[a-z ]{0,25}medicines?|over[- ]the[- ]counter medicine)\b/i;
+    if (!_medSig.test(corpusText)) {
+      const PHARMA_FW = new Set(['UK_ABPI','UK_GPHC','UK_MHRA']);
+      const _before = rules.length;
+      rules = rules.filter(r => !PHARMA_FW.has(r.framework_short));
+      if (rules.length !== _before) frameworks = frameworks.filter(f => !PHARMA_FW.has(f));
+    }
+  }
   if (!rules.length) {
     const payload = { domain, sector, country, frameworks, detected_jurisdictions: detectedJurisdictions, ok: true, rules_evaluated: 0, findings: [], note: 'no_active_rules_for_routing' };
     writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 3600 });
