@@ -343,7 +343,7 @@ function severityBar(crit, high, std) {
 
 function renderExecSummary(audit){
   if(!audit.exec_summary) return '';
-  return '<section style="padding:18px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto;display:flex;gap:12px;align-items:flex-start">'
+  return '<section class="tz-reveal" style="padding:18px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto;display:flex;gap:12px;align-items:flex-start">'
     +'<span style="font-size:0.6rem;color:#C8A664;letter-spacing:0.12em;text-transform:uppercase;font-weight:700;white-space:nowrap;padding-top:3px">Executive read</span>'
     +'<p style="margin:0;font-family:\'Times New Roman\',serif;font-size:1.02rem;line-height:1.5;color:#3D0E0E">'+esc(audit.exec_summary)+'</p>'
     +'</div></section>';
@@ -352,7 +352,7 @@ function renderHeader(audit, grade) {
   const meta = audit.scan_meta || {};
   const dateStr = meta.generated_at ? new Date(meta.generated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   return `
-    <section style="background:#3D0E0E;color:#F8F5EF;padding:36px 24px 22px">
+    <section class="tz-reveal" style="background:#3D0E0E;color:#F8F5EF;padding:36px 24px 22px">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.66rem;color:#C8A664;letter-spacing:0.22em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Regulatory + SEO + AI visibility audit</p>
         <div class="tz-hero" style="display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center">
@@ -383,25 +383,25 @@ function renderGlance(audit, totalExposure, top3) {
   const p2 = Math.max(0, (meta.pointer_count || 0) - p0 - p1);
   const topReg = top3[0] ? (FRAMEWORK_META[(top3[0].citation || '').split(/\s+/)[0]]?.regulator || 'Sector regulator') : 'ICO';
   return `
-    <section style="background:white;border-bottom:1px solid #e5e7eb">
+    <section class="tz-reveal" style="background:white;border-bottom:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto;padding:22px 24px">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-          <div style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #B91C1C">
+          <div class="tz-pop" style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #B91C1C">
             <p style="margin:0 0 2px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Critical findings</p>
             <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.7rem;font-weight:600;color:#B91C1C;line-height:1">${p0}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Same-error variants merged</p>
           </div>
-          <div style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #E67E22">
+          <div class="tz-pop" style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #E67E22">
             <p style="margin:0 0 2px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">High priority</p>
             <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.7rem;font-weight:600;color:#E67E22;line-height:1">${p1}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Active regulator focus</p>
           </div>
-          <div style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #D97706">
+          <div class="tz-pop" style="background:#F8F5EF;padding:14px 16px;border-radius:6px;border-left:4px solid #D97706">
             <p style="margin:0 0 2px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Standard items</p>
             <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.7rem;font-weight:600;color:#D97706;line-height:1">${p2}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Operational hygiene</p>
           </div>
-          <div style="background:#3D0E0E;color:#F8F5EF;padding:14px 16px;border-radius:6px">
+          <div class="tz-pop" style="background:#3D0E0E;color:#F8F5EF;padding:14px 16px;border-radius:6px">
             <p style="margin:0 0 2px;font-size:0.62rem;color:#C8A664;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Regulator exposure</p>
             <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#C8A664;line-height:1">${gbp(totalExposure) || 'six-figure'}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:rgba(248,245,239,0.75)">Summed across the findings below · ${esc(topReg)}</p>
@@ -415,7 +415,7 @@ function renderGlance(audit, totalExposure, top3) {
 function renderSectionGauges(syncedBuckets, sevMap) {
   const order = ['compliance','seo','technical_seo','content_depth','security','accessibility','tls_dns','website','public_records','ad_intel'];
   return `
-    <section style="padding:26px 24px 22px;background:#F8F5EF">
+    <section class="tz-reveal" style="padding:26px 24px 22px;background:#F8F5EF">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Section scorecard · ten dimensions</p>
         <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">Pass · Needs work · Fail per dimension.</h2>
@@ -445,7 +445,7 @@ function renderSectionGauges(syncedBuckets, sevMap) {
 function renderCritical(top3) {
   if (!top3.length) return '';
   return `
-    <section id="critical" style="padding:30px 24px;background:linear-gradient(180deg,#3D0E0E 0,#2A0C14 100%);color:#F8F5EF">
+    <section class="tz-reveal" id="critical" style="padding:30px 24px;background:linear-gradient(180deg,#3D0E0E 0,#2A0C14 100%);color:#F8F5EF">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#C8A664;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">The three you fix this quarter</p>
         <h2 style="font-family:'Times New Roman',serif;font-size:1.5rem;margin:0 0 6px;line-height:1.15">Tamazia closes all three inside the first eight weeks.</h2>
@@ -485,7 +485,7 @@ function renderCritical(top3) {
 function renderBeforeAfter(totalExposure, score, projected, grade) {
   const wk12 = 65, wk24 = 90;
   return `
-    <section style="padding:24px 24px;background:white;border-top:1px solid #e5e7eb">
+    <section class="tz-reveal" style="padding:24px 24px;background:white;border-top:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Where Tamazia takes you</p>
         <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:10px;align-items:center">
@@ -530,7 +530,7 @@ function renderAIPlatform(audit) {
   const rlabel = (sc) => sc < 40 ? 'Low readiness' : sc < 70 ? 'Partial readiness' : 'Strong readiness';
   const rcol = (sc) => sc < 40 ? '#B91C1C' : sc < 70 ? '#E67E22' : '#2E7D32';
   return `
-    <section style="padding:26px 24px;background:white;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb">
+    <section class="tz-reveal" style="padding:26px 24px;background:white;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">AI search visibility</p>
         <h2 style="font-family:'Times New Roman',serif;font-size:1.4rem;margin:0 0 10px;color:#3D0E0E;line-height:1.15">Are AI assistants recommending ${esc(audit.company)}?</h2>
@@ -686,7 +686,7 @@ function renderFindingRow(p) {
   </div>`;
 }
 function _bracket(id, kicker, title, sub, body) {
-  return `<section id="${id}" style="padding:26px 24px;background:white;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
+  return `<section class="tz-reveal" id="${id}" style="padding:26px 24px;background:white;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
     <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">${kicker}</p>
     <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">${title}</h2>
     <p style="font-size:0.78rem;color:#6b6b6b;margin:0 0 12px">${sub}</p>
@@ -868,7 +868,7 @@ function renderDataViz(merged, audit){
       legend:[[VIZ.crit,'Today'],[VIZ.high,'Week 12'],[VIZ.ok,'Week 24']], howto:'Audit score out of 100 (higher = healthier). Today is your current score; the next two bars are the projected score at week 12 and week 24 on a Tamazia engagement.' }),
   ].filter(Boolean);
   if(!cards.length) return '';
-  return '<section style="padding:26px 24px;background:'+VIZ.cream+';border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">'
+  return '<section class="tz-reveal" style="padding:26px 24px;background:'+VIZ.cream+';border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">'
     +'<p style="font-size:0.7rem;color:'+VIZ.gold+';letter-spacing:0.2em;text-transform:uppercase;margin:0 0 6px;font-weight:700">The picture at a glance</p>'
     +'<h2 style="font-family:\'Times New Roman\',serif;font-size:1.45rem;margin:0 0 4px;color:'+VIZ.ink+'">Every metric we judged you on, visualised.</h2>'
     +'<p style="font-size:0.74rem;color:'+VIZ.muted+';margin:0 0 14px">Each chart is labelled on every axis, names the competitor or framework, prints the score, and carries a plain-language guide.</p>'
@@ -883,7 +883,7 @@ function renderInvestment(p0) {
     { name: 'Enterprise', price: 9500, weeks: '12+ weeks', desc: 'Multi-jurisdiction · listed / pre-IPO. 50+ keywords, full AI search dominance, 5 markets, 10 content pieces/month, crisis reputation.', cta: 'Begin Enterprise enquiry' }
   ];
   return `
-    <section id="pricing" style="padding:28px 24px;background:white">
+    <section class="tz-reveal" id="pricing" style="padding:28px 24px;background:white">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Recommended mandate</p>
         <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">${p0} critical findings → ${rec} mandate.</h2>
@@ -905,7 +905,7 @@ function renderInvestment(p0) {
 
 function renderFooterCTA() {
   return `
-    <section style="padding:28px 24px;background:#3D0E0E;color:#F8F5EF;text-align:center">
+    <section class="tz-reveal" style="padding:28px 24px;background:#3D0E0E;color:#F8F5EF;text-align:center">
       <div style="max-width:780px;margin:0 auto">
         <p style="font-size:0.66rem;color:#C8A664;letter-spacing:0.22em;text-transform:uppercase;margin:0 0 6px;font-weight:600">400+ frameworks reviewed every campaign · founder-led</p>
         <h2 style="font-family:'Times New Roman',serif;font-size:1.4rem;margin:0 0 8px;color:#F8F5EF;line-height:1.2">Aman Pareek reviews every onboarding personally. Two new clients per practice area per jurisdiction.</h2>
@@ -926,7 +926,7 @@ function renderFooterCTA() {
 
 function renderDisclaimer(audit) {
   return `
-    <section style="padding:16px 24px;background:#1F2937;color:rgba(248,245,239,0.6);font-size:0.7rem;line-height:1.55">
+    <section class="tz-reveal" style="padding:16px 24px;background:#1F2937;color:rgba(248,245,239,0.6);font-size:0.7rem;line-height:1.55">
       <div style="max-width:1100px;margin:0 auto">
         <p style="margin:0 0 6px"><strong style="color:rgba(248,245,239,0.8)">How to read this report.</strong> This is an automated marketing diagnostic generated by the Tamazia audit engine from publicly observable signals on your website at the time of the scan${audit.via_archive ? ' (or, where your live site was unreachable, the most recent public web-archive snapshot)' : ''}. It is not legal advice, not a legal determination, and creates no adviser-client relationship.</p>
         <p style="margin:0 0 6px">The monetary figures are the <strong style="color:rgba(248,245,239,0.8)">statutory maximum fines</strong> a regulator could impose under each framework — worst-case ceilings to indicate exposure, not predictions that a penalty will be levied against you. Automated checks can miss context or produce false positives; nothing here should be acted on without verification.</p>
@@ -954,7 +954,7 @@ function renderCitationTable(audit) {
   }).join('');
   const lose = rows.filter(k => !k.my_position || k.my_position > 3).length;
   return `
-    <section style="padding:24px;background:#fff;border-top:1px solid #e5e7eb">
+    <section class="tz-reveal" style="padding:24px;background:#fff;border-top:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.68rem;color:#C8A664;letter-spacing:0.2em;text-transform:uppercase;margin:0 0 6px;font-weight:700">AI + search citation check</p>
         <h2 style="font-family:'Times New Roman',serif;font-size:1.35rem;margin:0 0 4px;color:#3D0E0E;line-height:1.2">When a buyer asks AI or Google in your category, ${lose} of ${rows.length} answers name a competitor, not you.</h2>
@@ -989,7 +989,7 @@ function renderKeywordMap(km) {
   }).join('');
   const missing = km.keywords.filter(k => !k.my_position || k.my_position > 10).length;
   return `
-    <section style="padding:26px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb">
+    <section class="tz-reveal" style="padding:26px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto">
         <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Keyword map · where the demand is going</p>
         <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E;line-height:1.15">You are off page one for ${missing} of ${km.keywords.length} high-intent ${esc(km.service_noun || 'category')} searches in ${esc(km.city || 'your area')}.</h2>
@@ -1005,7 +1005,7 @@ function renderKeywordMap(km) {
     </section>`;
 }
 function statCard(label, val, col) {
-  return `<div style="flex:1;min-width:150px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px"><div style="font-size:1.7rem;font-weight:700;color:${col};font-family:'Times New Roman',serif">${esc(val)}</div><div style="font-size:0.74rem;color:#6b7280;margin-top:2px">${esc(label)}</div></div>`;
+  return `<div class="tz-pop" style="flex:1;min-width:150px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px"><div style="font-size:1.7rem;font-weight:700;color:${col};font-family:'Times New Roman',serif">${esc(val)}</div><div style="font-size:0.74rem;color:#6b7280;margin-top:2px">${esc(label)}</div></div>`;
 }
 function glossBlock(audit) {
   const g = audit.glossary; if (!g || !g.terms || !Array.isArray(g.used) || !g.used.length) return '';
@@ -1016,7 +1016,7 @@ function glossBlock(audit) {
 function renderJurisdiction(audit) {
   const j = audit.jurisdiction_statement; if (!j || !j.statement) return '';
   const chips = (j.regimes || []).map(r => `<span style="display:inline-block;background:#F8F5EF;border:1px solid #C8A664;color:#3D0E0E;border-radius:999px;padding:4px 11px;margin:3px 4px 0 0;font-size:0.72rem">${esc(r.regime)}</span>`).join('');
-  return `<section style="padding:22px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
+  return `<section class="tz-reveal" style="padding:22px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
     <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Jurisdictions that govern you</p>
     <p style="margin:0 0 10px;font-size:0.95rem;line-height:1.6;color:#1F2937">${esc(j.statement)}</p>
     <div>${chips}</div>
@@ -1030,13 +1030,45 @@ function renderGeoVisibility(audit) {
   if (gp && typeof gp.share_of_voice === 'number') stat += statCard('AI share of voice', gp.share_of_voice + '/100', gp.share_of_voice < 34 ? '#B23A3A' : '#2E7D52');
   if (air && Array.isArray(air.blocked_ai_bots) && air.blocked_ai_bots.length) stat += statCard('AI crawlers you block', String(air.blocked_ai_bots.length), '#B23A3A');
   const viz = gv ? [gv.ai_engine_grid, gv.ai_radar, gv.entity_web_map].filter(Boolean).map(svg => `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0;overflow:auto">${svg}</div>`).join('') : '';
-  return `<section style="padding:28px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
+  return `<section class="tz-reveal" style="padding:28px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
     <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">AI search visibility</p>
     <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E">Can AI engines find, trust and cite you</h2>
     <p style="font-size:0.82rem;color:#6b6b6b;margin:0 0 14px">The answer engines your buyers ask first (ChatGPT, Gemini, Perplexity, Google AI) decide who to name. Here is where you stand.</p>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:6px">${stat}</div>
     ${viz}
     ${glossBlock(audit)}
+  </div></section>`;
+}
+function renderEmailTeaser(audit, auditUrl) {
+  const meta = audit.scan_meta || {}; const p0 = meta.pointer_count_p0 || 0; const p1 = meta.pointer_count_p1 || 0;
+  const top = (audit.pointers || []).slice(0, 3).map(p => `<tr><td style="padding:6px 0;border-bottom:1px solid #eee;font-family:Georgia,serif;font-size:14px;color:#1F2937">&bull; ${esc(p.fact || p.desc || '')}</td></tr>`).join('');
+  const url = auditUrl || (TAMAZIA_BASE + '/');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;font-family:Arial,sans-serif;border-collapse:collapse">
+    <tr><td style="background:#3D0E0E;color:#F8F5EF;padding:20px 22px;border-radius:8px 8px 0 0">
+      <div style="font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#C8A664">Regulatory + SEO + AI visibility audit</div>
+      <div style="font-family:Georgia,serif;font-size:22px;margin-top:4px">${esc(audit.company)} &mdash; ${audit.score}/100</div></td></tr>
+    <tr><td style="background:#fff;padding:20px 22px;border:1px solid #e5e7eb;border-top:none">
+      <p style="margin:0 0 12px;font-family:Georgia,serif;font-size:15px;color:#3D0E0E;line-height:1.5">${esc(audit.exec_summary || (audit.company + ' has ' + p0 + ' critical and ' + p1 + ' high-priority findings across regulatory, SEO and AI-visibility.'))}</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${top}</table>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:18px auto 4px"><tr><td style="background:#C8A664;border-radius:6px"><a href="${esc(url)}" style="display:inline-block;padding:12px 24px;color:#3D0E0E;text-decoration:none;font-weight:700;font-size:15px">Open the full audit &rarr;</a></td></tr></table>
+    </td></tr>
+    <tr><td style="background:#fff;padding:0 22px 18px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;text-align:center"><span style="font-size:11px;color:#9b9b9b">Tamazia &middot; UK &middot; EU &middot; Middle East</span></td></tr>
+  </table>`;
+}
+function scoreTrajectorySVG(now, after) {
+  const w = 520, h = 150, pad = 36; const x0 = pad, x1 = w - pad; const y = v => h - pad - (Math.max(0, Math.min(100, v)) / 100) * (h - 2 * pad);
+  return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Your score is ${now} out of 100 now, rising to about ${after} after Tamazia"><line x1="${x0}" y1="${h - pad}" x2="${x1}" y2="${h - pad}" stroke="rgba(248,245,239,0.25)"/><polyline points="${x0},${y(now).toFixed(0)} ${x1},${y(after).toFixed(0)}" fill="none" stroke="#C8A664" stroke-width="3"/><circle cx="${x0}" cy="${y(now).toFixed(0)}" r="5" fill="#E66"/><circle cx="${x1}" cy="${y(after).toFixed(0)}" r="5" fill="#7FD1A8"/><text x="${x0}" y="${(y(now) - 12).toFixed(0)}" font-family="Georgia,serif" font-size="13" fill="#F1B0B0">Now ${now}</text><text x="${x1}" y="${(y(after) - 12).toFixed(0)}" text-anchor="end" font-family="Georgia,serif" font-size="13" fill="#7FD1A8">After Tamazia ${after}</text></svg>`;
+}
+function renderTrustBand() {
+  return `<section class="tz-reveal" style="padding:16px 24px;background:#fff;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto;text-align:center"><p style="margin:0;font-size:0.7rem;letter-spacing:0.14em;text-transform:uppercase;color:#9b9b9b;line-height:1.7">Tamazia works across hospitality, healthcare, professional services and real estate &middot; UK &middot; EU &middot; Middle East &middot; 100+ verified client reviews</p></div></section>`;
+}
+function renderClosing(audit, score, projected, totalExposure) {
+  return `<section class="tz-reveal" style="padding:38px 24px;background:linear-gradient(180deg,#3D0E0E,#2A0C14);color:#F8F5EF"><div style="max-width:900px;margin:0 auto;text-align:center">
+    <p style="font-size:0.7rem;letter-spacing:0.2em;text-transform:uppercase;color:#C8A664;margin:0 0 10px">The bottom line</p>
+    <h2 style="font-family:'Times New Roman',serif;font-size:clamp(1.4rem,3vw,1.85rem);margin:0 0 14px;color:#F8F5EF;line-height:1.2">${esc(audit.company)} scores ${score} out of 100 today. The same site, fixed, reaches about ${projected}.</h2>
+    <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(200,166,100,0.3);border-radius:10px;padding:14px;margin:0 auto 18px;max-width:560px">${scoreTrajectorySVG(score, projected)}</div>
+    <p style="font-size:0.95rem;line-height:1.65;color:rgba(248,245,239,0.9);margin:0 0 20px">Every gap on this page is something a regulator, a search engine or an AI answer engine is already acting on.${totalExposure ? ' You are carrying ' + gbp(totalExposure) + ' of avoidable regulatory exposure.' : ''} The firms ranked and cited above you are not waiting. The single decision that moves all of it is a 30-minute working session with the founder, walking this report line by line.</p>
+    <a href="${TAMAZIA_BASE}/book/" style="display:inline-block;padding:14px 30px;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:700;border-radius:6px;font-size:0.95rem">Walk this report with the founder &rarr;</a>
   </div></section>`;
 }
 function renderPage(audit) {
@@ -1082,6 +1114,25 @@ function renderPage(audit) {
     table{font-size:0.74rem}
     section{padding-left:16px !important;padding-right:16px !important}
   }
+  /* Phase 4 motion + chrome — CSS-only, progressive enhancement, compositor-driven, reduced-motion-safe, CSP-immune */
+  .tz-progress{position:fixed;top:0;left:0;height:3px;width:100%;transform-origin:0 50%;transform:scaleX(0);background:linear-gradient(90deg,#C8A664,#B91C1C);z-index:60}
+  .tz-stickybar{position:sticky;top:0;z-index:50;background:rgba(61,14,14,0.97);color:#F8F5EF;display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:0.78rem;border-bottom:1px solid rgba(200,166,100,0.4)}
+  .tz-fab{position:fixed;right:18px;bottom:18px;z-index:60;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:999px;box-shadow:0 6px 22px rgba(0,0,0,0.28);font-size:0.82rem}
+  .tz-fab:hover{opacity:1;transform:translateY(-1px)}
+  .tz-reveal{opacity:1}
+  .tz-skip:focus{left:8px !important;border-radius:0 0 6px 0}
+  @supports (animation-timeline:view()){
+    @media (prefers-reduced-motion:no-preference){
+      .tz-progress{animation:tz-grow auto linear;animation-timeline:scroll(root)}
+      @keyframes tz-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+      .tz-reveal{animation:tz-rise both linear;animation-timeline:view();animation-range:entry 0% cover 18%}
+      @keyframes tz-rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+      .tz-pop{animation:tz-pop both linear;animation-timeline:view();animation-range:entry 0% cover 20%}
+      @keyframes tz-pop{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:none}}
+    }
+  }
+  @media print{ .tz-progress,.tz-stickybar,.tz-fab{display:none !important} }
+  @media (max-width:640px){ .tz-fab{right:10px;bottom:10px;padding:10px 14px;font-size:0.76rem} .tz-stickybar{font-size:0.7rem;padding:7px 12px} }
   /* Print / PDF: expand every collapsible, avoid breaking boxes across pages, drop interactive chrome */
   @media print{
     body{font-size:11.5px}
@@ -1093,7 +1144,11 @@ function renderPage(audit) {
   }
 </style>
 </head><body>
+<a href="#tz-main" style="position:absolute;left:-9999px;top:0;background:#3D0E0E;color:#fff;padding:8px 14px;z-index:70" class="tz-skip">Skip to content</a>
+<div class="tz-progress" aria-hidden="true"></div>
 ${renderHeader(adjAudit, grade)}
+<div class="tz-stickybar tz-noprint" role="navigation" aria-label="Audit summary"><strong style="font-family:'Times New Roman',serif">${esc(audit.company)}</strong><span style="opacity:0.85">${riskScore}/100 · ${adjMeta.pointer_count_p0} critical</span><a href="${TAMAZIA_BASE}/book/" style="margin-left:auto;background:#C8A664;color:#3D0E0E;padding:5px 13px;border-radius:999px;text-decoration:none;font-weight:700;font-size:0.72rem">Book the founder &rarr;</a></div>
+<main id="tz-main">
 ${renderExecSummary(adjAudit)}
 ${renderJurisdiction(adjAudit)}
 ${renderGlance(adjAudit, totalExposure, top3)}
@@ -1107,8 +1162,12 @@ ${renderKeywordMap(audit.keyword_map)}
 ${renderAllFindings(merged)}
 ${renderDataViz(merged, adjAudit)}
 ${renderInvestment(adjMeta.pointer_count_p0)}
+${renderTrustBand()}
+${renderClosing(adjAudit, riskScore, projected, totalExposure)}
 ${renderFooterCTA()}
 ${renderDisclaimer(adjAudit)}
+</main>
+<a class="tz-fab tz-noprint" href="${TAMAZIA_BASE}/book/" aria-label="Book a working session with the founder">Walk this with the founder &rarr;</a>
 </body></html>`;
 }
 
@@ -1211,8 +1270,8 @@ export default {
         if (ctx && ctx.waitUntil) ctx.waitUntil(ev);
       }
     } catch (_e) {}
-    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v17-live-v15' } });
+    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v18-live-v15-p4' } });
   }
 };
 
-export { adapt, renderPage, loadAudit, computeRiskScore };
+export { adapt, renderPage, renderEmailTeaser, loadAudit, computeRiskScore };
