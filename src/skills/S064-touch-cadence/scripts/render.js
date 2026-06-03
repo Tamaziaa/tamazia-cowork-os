@@ -124,6 +124,10 @@ function buildTouch2({ lead, findings }) {
   const recipient = pickRecipientName(lead);
   const primary = (findings[0] || 'compliance review');
   const subject = `re: ${lead.company}`;
+  // P5.7 permission-first founder video. DORMANT until FOUNDER_VIDEO_URL is set (Aman records a 60-90s Loom
+  // and provides the URL). When unset, the cadence is unchanged. No commercial term, no fabrication.
+  const _fv = (process.env.FOUNDER_VIDEO_URL || '').trim();
+  const _videoLine = _fv ? `\n\nIf it would help, I recorded a 90-second walkthrough of the one fix I would make first for ${lead.company}. No pitch, just the finding: ${_fv}` : '';
   const body = `${recipient},
 
 One direct question on ${lead.company}. Has the ${primary} on the home page been reviewed and signed off this quarter?
@@ -132,7 +136,7 @@ If yes, apologies for the noise. If no, the audit has the fix:
 
 ${absAudit(lead.audit_url) || 'https://tamazia.co.uk/audit/' + (lead.company || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-complimentary-audit'}
 
-Stays live for 180 days. Worth comparing line by line against the last report your current agency delivered.
+Stays live for 180 days. Worth comparing line by line against the last report your current agency delivered.${_videoLine}
 
 Best,
 __SIGNATURE__`;
