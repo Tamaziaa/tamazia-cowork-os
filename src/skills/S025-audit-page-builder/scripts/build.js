@@ -248,10 +248,19 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     return { framework_short, rule_id, severity, description, citation_url };
   }) : [];
 
+  let payload_authority = null;
   const sevRank = { P0: 0, P1: 1, P2: 2 };
   // P2.11/P2.12 SEO depth: the live you-vs-competitor keyword finding (free-serp powered).
   let _seoFindings = []; try { _seoFindings = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'seo-deep.js')).seoDeepFindings({ keyword_map }); } catch (_e) {}
-  let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
+  // P2.17 backlink/authority gap (OpenPageRank) — compare against the exact competitors from the keyword map.
+  let _authFindings = [];
+  try {
+    const _ag = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'authority-gap.js'));
+    const _leaders = ((keyword_map && keyword_map.keywords) || []).map(k => k.leader).filter(Boolean);
+    const _agRes = await _ag.authorityGap({ domain, competitors: _leaders, env });
+    if (_agRes && _agRes.finding) { _authFindings = [_agRes.finding]; payload_authority = { you: _agRes.you, top: _agRes.top, ranked: _agRes.ranked, last_updated: _agRes.last_updated }; }
+  } catch (_e) {}
+  let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // P1.2-P1.5 finding-trust: tag kind+signals+state, lock quotes on presence findings, evidence-lock fines; only CONFIRMED renders.
   const _ft = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'finding-trust.js'));
   const _corpusAdequate = !(comp && comp.challenge) && (comp && comp.reachable !== false);
@@ -300,6 +309,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     ai_citation: ai_citation && ai_citation.ok ? ai_citation : null,
     scan: { scanned_at: scan.scanned_at, reachable: scan.reachable, final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
     competitive_benchmark: buildCompetitiveBenchmark(ai_citation, keyword_map),
+    authority: payload_authority,
   };
 }
 
