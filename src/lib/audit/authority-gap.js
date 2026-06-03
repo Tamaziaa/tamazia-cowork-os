@@ -40,29 +40,34 @@ async function authorityGap({ domain, competitors = [], env = {} } = {}) {
   const ranked = comps.map(c => ({ domain: c, ...(data[c] || {}) })).filter(c => typeof c.dr === 'number').sort((a, b) => b.dr - a.dr);
   const top = ranked[0] || null;
   const stamp = 'OpenPageRank · authority as of ' + (data._last_updated || 'latest');
+  const da100 = (dr) => Math.round((Number(dr) || 0) * 10); // OpenPageRank 0-10 -> /100 scale clients expect
+  const top3 = ranked.slice(0, 3).map(c => ({ domain: c.domain, da_100: da100(c.dr), dr: c.dr }));
   let finding = null;
   if (top && top.dr - you.dr >= 1) {
     const mult = you.dr > 0 ? (top.dr / you.dr) : null;
     const sev = (top.dr - you.dr) >= 2 ? 'P1' : 'P2';
+    const top3txt = top3.map(c => c.domain + ' ' + c.da_100 + '/100').join(', ');
     finding = {
       bucket: 'seo', severity: sev, rule_type: 'observed', kind: 'observed',
       citation: 'Domain authority', framework_short: 'SEO', citation_url: '',
-      fact: 'Your domain authority is ' + you.dr.toFixed(2) + '/10; ' + top.domain + ' is ' + top.dr.toFixed(2) + '/10' + (mult ? ' (' + mult.toFixed(1) + 'x stronger)' : '') + '.',
-      layman_explanation: 'Domain authority is the backlink-trust score Google and AI engines use to decide who to rank and cite. ' + top.domain + ' carries ' + (mult ? mult.toFixed(1) + ' times' : 'materially more') + ' of it than you, which is the structural reason they sit above you for your buyer queries and get cited in AI answers while you do not. Closing a rank gap without closing the authority gap rarely holds.',
-      tamazia_fix_short: 'Tamazia runs the digital-PR and authority-building programme (earned links, citations, entity coverage) that lifts your domain authority toward the firms outranking you.',
-      evidence_quote: 'you ' + you.dr.toFixed(2) + '/10 (global rank ' + (you.rank ? you.rank.toLocaleString() : 'n/a') + ') vs ' + top.domain + ' ' + top.dr.toFixed(2) + '/10',
+      metric: { label: 'Domain Authority', you: da100(you.dr), scale: 100, competitors: top3 },
+      fact: 'Your Domain Authority is ' + da100(you.dr) + '/100. Your top ' + top3.length + ' competitor' + (top3.length > 1 ? 's' : '') + ': ' + top3txt + '.',
+      layman_explanation: 'Domain Authority is the backlink-trust score (here on a 0 to 100 scale) that Google and AI engines use to decide who to rank and cite. ' + top.domain + ' carries ' + (mult ? mult.toFixed(1) + ' times' : 'materially more') + ' of it than you, which is the structural reason these firms sit above you for your buyer queries and get cited in AI answers while you do not. Closing a rank gap without closing the authority gap rarely holds.',
+      tamazia_fix_short: 'Tamazia runs the digital-PR and authority-building programme (earned links, citations, entity coverage) that lifts your Domain Authority toward the firms outranking you.',
+      evidence_quote: 'you ' + da100(you.dr) + '/100 (global rank ' + (you.rank ? you.rank.toLocaleString() : 'n/a') + ') vs ' + top3txt,
       evidence: stamp, fine_low_gbp: null, fine_high_gbp: null,
     };
   } else if (you.dr > 0 && you.dr < 1.5 && !ranked.length) {
     finding = {
       bucket: 'seo', severity: 'P2', rule_type: 'observed', kind: 'observed',
       citation: 'Domain authority', framework_short: 'SEO', citation_url: '',
-      fact: 'Your domain authority is only ' + you.dr.toFixed(2) + '/10 (global rank ' + (you.rank ? you.rank.toLocaleString() : 'n/a') + ').',
+      fact: 'Your Domain Authority is only ' + da100(you.dr) + '/100 (global rank ' + (you.rank ? you.rank.toLocaleString() : 'n/a') + ').',
       layman_explanation: 'Domain authority is the backlink-trust score search and AI engines use to decide who to rank and cite. At this level your site has almost no earned-link trust, so it struggles to rank or be cited for competitive buyer queries regardless of on-page work.',
       tamazia_fix_short: 'Tamazia runs the digital-PR and authority-building programme that earns the links and citations to lift your domain authority.',
-      evidence_quote: 'domain authority ' + you.dr.toFixed(2) + '/10', evidence: stamp, fine_low_gbp: null, fine_high_gbp: null,
+      metric: { label: 'Domain Authority', you: da100(you.dr), scale: 100, competitors: [] },
+      evidence_quote: 'Domain Authority ' + da100(you.dr) + '/100', evidence: stamp, fine_low_gbp: null, fine_high_gbp: null,
     };
   }
-  return { ok: true, you, top, ranked, finding, last_updated: data._last_updated };
+  return { ok: true, you: { ...you, da_100: da100(you.dr) }, top, top3, ranked, finding, last_updated: data._last_updated };
 }
 module.exports = { authorityGap, fetchOPR };
