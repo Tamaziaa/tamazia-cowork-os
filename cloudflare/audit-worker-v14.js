@@ -626,6 +626,7 @@ function renderFrameworkBlock(code, list) {
               </div>
               <p style="margin:0 0 3px;font-size:0.84rem;color:#1F2937;line-height:1.4;font-weight:600">${esc(p.desc || p.fact || '')}</p>
               ${evidenceLine(p)}
+              ${p.enforcement_example ? `<p style="margin:0 0 3px;font-size:0.7rem;color:#6b6b6b"><strong>Enforcement:</strong> ${esc(p.enforcement_example)}</p>` : ''}
               <p style="margin:0;font-size:0.78rem;color:#14532d;line-height:1.4"><strong>Tamazia fix:</strong> ${esc(p.tamazia_fix_short || p.recommendation || '')}</p>
             </li>`;
         }).join('')}
@@ -679,6 +680,8 @@ function renderFindingRow(p) {
     </div>
     ${p.layman_explanation ? `<p style="margin:5px 0 0;font-size:0.8rem;color:#1F2937;line-height:1.45">${esc(p.layman_explanation)}</p>` : ''}
     ${p.evidence ? `<p style="margin:4px 0 0;font-size:0.7rem;color:#6b6b6b">Evidence: ${esc(p.evidence)}</p>` : ''}
+    ${p.locator ? `<p style="margin:4px 0 0;font-size:0.68rem;color:#8a6b6b;font-family:ui-monospace,monospace">Where: ${esc(p.locator)}</p>` : ''}
+    ${p.enforcement_example ? `<p style="margin:4px 0 0;font-size:0.7rem;color:#6b6b6b"><strong>Enforcement:</strong> ${esc(p.enforcement_example)}</p>` : ''}
     <p style="margin:5px 0 0;font-size:0.8rem;color:#14532d"><strong>Tamazia fix:</strong> ${esc(p.tamazia_fix_short || p.recommendation || '')}</p>
   </div>`;
 }
@@ -1001,6 +1004,41 @@ function renderKeywordMap(km) {
       </div>
     </section>`;
 }
+function statCard(label, val, col) {
+  return `<div style="flex:1;min-width:150px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px"><div style="font-size:1.7rem;font-weight:700;color:${col};font-family:'Times New Roman',serif">${esc(val)}</div><div style="font-size:0.74rem;color:#6b7280;margin-top:2px">${esc(label)}</div></div>`;
+}
+function glossBlock(audit) {
+  const g = audit.glossary; if (!g || !g.terms || !Array.isArray(g.used) || !g.used.length) return '';
+  const items = g.used.slice(0, 24).map(k => { const d = g.terms[k]; return d ? `<li style="margin:0 0 8px"><strong style="color:#3D0E0E;text-transform:capitalize">${esc(k)}</strong> &mdash; ${esc(d)}</li>` : ''; }).filter(Boolean).join('');
+  if (!items) return '';
+  return `<details style="margin-top:14px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px 16px"><summary style="cursor:pointer;font-weight:600;color:#3D0E0E;font-size:0.9rem">Plain-English glossary (${g.used.length} terms)</summary><ul style="margin:12px 0 0;padding-left:18px;font-size:0.82rem;line-height:1.5;color:#374151">${items}</ul></details>`;
+}
+function renderJurisdiction(audit) {
+  const j = audit.jurisdiction_statement; if (!j || !j.statement) return '';
+  const chips = (j.regimes || []).map(r => `<span style="display:inline-block;background:#F8F5EF;border:1px solid #C8A664;color:#3D0E0E;border-radius:999px;padding:4px 11px;margin:3px 4px 0 0;font-size:0.72rem">${esc(r.regime)}</span>`).join('');
+  return `<section style="padding:22px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
+    <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">Jurisdictions that govern you</p>
+    <p style="margin:0 0 10px;font-size:0.95rem;line-height:1.6;color:#1F2937">${esc(j.statement)}</p>
+    <div>${chips}</div>
+  </div></section>`;
+}
+function renderGeoVisibility(audit) {
+  const air = audit.ai_readiness, gp = audit.geo_probe, gv = audit.geo_visuals;
+  if (!air && !gp && !gv) return '';
+  let stat = '';
+  if (air && typeof air.score === 'number') stat += statCard('AI entity-readiness', air.score + '/100', air.score < 50 ? '#B23A3A' : '#2E7D52');
+  if (gp && typeof gp.share_of_voice === 'number') stat += statCard('AI share of voice', gp.share_of_voice + '/100', gp.share_of_voice < 34 ? '#B23A3A' : '#2E7D52');
+  if (air && Array.isArray(air.blocked_ai_bots) && air.blocked_ai_bots.length) stat += statCard('AI crawlers you block', String(air.blocked_ai_bots.length), '#B23A3A');
+  const viz = gv ? [gv.ai_engine_grid, gv.ai_radar, gv.entity_web_map].filter(Boolean).map(svg => `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0;overflow:auto">${svg}</div>`).join('') : '';
+  return `<section style="padding:28px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
+    <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">AI search visibility</p>
+    <h2 style="font-family:'Times New Roman',serif;font-size:1.45rem;margin:0 0 4px;color:#3D0E0E">Can AI engines find, trust and cite you</h2>
+    <p style="font-size:0.82rem;color:#6b6b6b;margin:0 0 14px">The answer engines your buyers ask first (ChatGPT, Gemini, Perplexity, Google AI) decide who to name. Here is where you stand.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:6px">${stat}</div>
+    ${viz}
+    ${glossBlock(audit)}
+  </div></section>`;
+}
 function renderPage(audit) {
   NEWS_LIVE = audit.news_map || {};
   const meta = audit.scan_meta || {};
@@ -1057,11 +1095,13 @@ function renderPage(audit) {
 </head><body>
 ${renderHeader(adjAudit, grade)}
 ${renderExecSummary(adjAudit)}
+${renderJurisdiction(adjAudit)}
 ${renderGlance(adjAudit, totalExposure, top3)}
 ${renderSectionGauges(syncedBuckets, sevMap)}
 ${renderCritical(top3)}
 ${renderBeforeAfter(totalExposure, riskScore, projected, grade)}
 ${renderAIPlatform(adjAudit)}
+${renderGeoVisibility(adjAudit)}
 ${renderCitationTable(audit)}
 ${renderKeywordMap(audit.keyword_map)}
 ${renderAllFindings(merged)}
@@ -1116,6 +1156,11 @@ function adapt(row) {
       evidence_quote: x.evidence_quote || null,
       checked_urls: Array.isArray(x.checked_urls) ? x.checked_urls : null,
       rule_type: x.rule_type || null,
+      enforcement_example: x.enforcement_example || null,
+      metric: x.metric || null,
+      locator: x.locator || null,
+      evidence_html: x.evidence_html || null,
+      competitors: Array.isArray(x.competitors) ? x.competitors : null,
     };
   });
   return {
@@ -1137,6 +1182,13 @@ function adapt(row) {
     exec_summary: p.exec_summary || '',
     detected_jurisdictions: p.detected_jurisdictions || p.engine_jurisdictions || [],
     archive_date: p.archive_date || null,
+    jurisdiction_statement: p.jurisdiction_statement || null,
+    authority: p.authority || null,
+    ai_readiness: p.ai_readiness || null,
+    geo_probe: p.geo_probe || null,
+    geo_visuals: p.geo_visuals || null,
+    screenshots: p.screenshots || null,
+    glossary: p.glossary || null,
   };
 }
 
@@ -1159,7 +1211,7 @@ export default {
         if (ctx && ctx.waitUntil) ctx.waitUntil(ev);
       }
     } catch (_e) {}
-    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v16-live-v13' } });
+    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v17-live-v15' } });
   }
 };
 
