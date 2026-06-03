@@ -250,6 +250,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   }) : [];
 
   let payload_authority = null;
+  let payload_ai_readiness = null;
   const sevRank = { P0: 0, P1: 1, P2: 2 };
   // P2.11/P2.12 SEO depth: the live you-vs-competitor keyword finding (free-serp powered).
   let _seoFindings = []; try { _seoFindings = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'seo-deep.js')).seoDeepFindings({ keyword_map }); } catch (_e) {}
@@ -269,7 +270,14 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     const _lpRes = await _lp.localPackReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city: _lpCity, env });
     if (_lpRes && _lpRes.finding) _localFindings = [_lpRes.finding];
   } catch (_e) {}
-  let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
+  // P3.7 + P3.10 AI / entity-readiness (robots AI-crawler access + llms.txt + entity schema + Wikidata) — deterministic, GBP0, no quota.
+  let _aiReadyFindings = [];
+  try {
+    const _air = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'ai-readiness.js'));
+    const _airRes = await _air.aiReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], env });
+    if (_airRes && _airRes.ok) { _aiReadyFindings = _airRes.findings || []; payload_ai_readiness = { score: _airRes.score, blocked_ai_bots: _airRes.blocked_ai_bots, has_llms_txt: _airRes.has_llms_txt, has_org_schema: _airRes.has_org_schema, has_same_as: _airRes.has_same_as, in_wikidata: _airRes.in_wikidata }; }
+  } catch (_e) {}
+  let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings, ..._aiReadyFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // P1.2-P1.5 finding-trust: tag kind+signals+state, lock quotes on presence findings, evidence-lock fines; only CONFIRMED renders.
   // P2.9: guarantee 100% of compliance findings carry a real enforcement regime (catalogue rules already do; this backfills code-generated ones).
   try { const _enf = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'enforcement-map.js')); for (const _f of findings) { if (_f && _f.bucket === 'compliance' && !_f.enforcement_example) _f.enforcement_example = _enf.enforcementFor(_f.framework_short || _f.citation); } } catch (_e) {}
@@ -321,6 +329,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     scan: { scanned_at: scan.scanned_at, reachable: scan.reachable, final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
     competitive_benchmark: buildCompetitiveBenchmark(ai_citation, keyword_map),
     authority: payload_authority,
+    ai_readiness: payload_ai_readiness,
   };
 }
 
