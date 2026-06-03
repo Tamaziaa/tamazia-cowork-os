@@ -431,9 +431,13 @@ function severityBar(crit, high, std) {
 
 function renderExecSummary(audit){
   if(!audit.exec_summary) return '';
+  // Anti-fabrication: the LLM exec summary sometimes invents a precise fine figure. Replace ANY currency
+  // figure in it with the one canonical computed exposure so the page never shows an unverifiable number.
+  const _canon = audit.exposure_total ? gbp(audit.exposure_total) : null;
+  const _clean = _canon ? String(audit.exec_summary).replace(/(?:GBP|\u00a3)\s?[\d,]+(?:\.\d+)?(?:\s?(?:million|billion|m|bn))?/gi, _canon) : String(audit.exec_summary);
   return '<section class="tz-reveal" style="padding:18px 24px;background:#fff;border-bottom:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto;display:flex;gap:12px;align-items:flex-start">'
     +'<span style="font-size:0.6rem;color:#C8A664;letter-spacing:0.12em;text-transform:uppercase;font-weight:700;white-space:nowrap;padding-top:3px">Executive read</span>'
-    +'<p style="margin:0;font-family:\'Times New Roman\',serif;font-size:1.02rem;line-height:1.5;color:#3D0E0E">'+esc(audit.exec_summary)+'</p>'
+    +'<p style="margin:0;font-family:\'Times New Roman\',serif;font-size:1.02rem;line-height:1.5;color:#3D0E0E">'+esc(_clean)+'</p>'
     +'</div></section>';
 }
 function renderHeader(audit, grade) {
@@ -490,9 +494,9 @@ function renderGlance(audit, totalExposure, top3) {
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Operational hygiene</p>
           </div>
           <div class="tz-pop" style="background:#3D0E0E;color:#F8F5EF;padding:14px 16px;border-radius:6px">
-            <p style="margin:0 0 2px;font-size:0.62rem;color:#C8A664;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Regulator exposure</p>
+            <p style="margin:0 0 2px;font-size:0.62rem;color:#C8A664;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Max regulatory exposure</p>
             <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#C8A664;line-height:1">${gbp(totalExposure) || 'six-figure'}</p>
-            <p style="margin:2px 0 0;font-size:0.72rem;color:rgba(248,245,239,0.75)">Summed across the findings below · ${esc(topReg)}</p>
+            <p style="margin:2px 0 0;font-size:0.72rem;color:rgba(248,245,239,0.75)">Maximum statutory ceiling · ${(audit.exposure_frameworks||0)} frameworks</p>
           </div>
         </div>
         <p style="margin:14px 0 0;font-size:0.86rem;color:#1F2937;line-height:1.5">${esc(audit.company)} sits at <strong style="color:#B91C1C">${audit.score} / 100</strong> against the regulatory + SEO + AI-visibility baseline for ${esc(audit.sector || 'this sector')}. The four numbers above are the deal. The rest of this page shows where each one lives and which Tamazia mandate fixes it. <a href="#critical" style="color:#3D0E0E;text-decoration:underline;font-weight:600">See the three you fix this quarter →</a></p>
@@ -580,8 +584,8 @@ function renderCritical(top3) {
     </section>`;
 }
 
-function renderBeforeAfter(totalExposure, score, projected, grade) {
-  const wk12 = 65, wk24 = 90;
+function renderBeforeAfter(totalExposure, score, wk12, projected, grade) {
+  const wk24 = projected;
   return `
     <section class="tz-reveal" style="padding:24px 24px;background:white;border-top:1px solid #e5e7eb">
       <div style="max-width:1100px;margin:0 auto">
@@ -595,13 +599,13 @@ function renderBeforeAfter(totalExposure, score, projected, grade) {
           <div style="text-align:center;font-size:1.1rem;color:#C8A664;font-weight:700">→</div>
           <div style="background:#FEF7EF;border-left:4px solid #E67E22;padding:12px 14px;border-radius:4px">
             <p style="margin:0 0 4px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Week 12</p>
-            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#E67E22;line-height:1">${wk12} / 100 · C</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#E67E22;line-height:1">${wk12} / 100 · ${gradeOf(wk12).letter}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">All critical findings closed</p>
           </div>
           <div style="text-align:center;font-size:1.1rem;color:#C8A664;font-weight:700">→</div>
           <div style="background:#F2F8F2;border-left:4px solid #2E7D32;padding:12px 14px;border-radius:4px">
             <p style="margin:0 0 4px;font-size:0.62rem;color:#6b6b6b;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Week 24 · projected</p>
-            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#2E7D32;line-height:1">${wk24} / 100 · A</p>
+            <p style="margin:0;font-family:'Times New Roman',serif;font-size:1.5rem;font-weight:600;color:#2E7D32;line-height:1">${wk24} / 100 · ${gradeOf(wk24).letter}</p>
             <p style="margin:2px 0 0;font-size:0.72rem;color:#1F2937">Investor-grade · AI + SEO + compliance</p>
           </div>
         </div>
@@ -1252,8 +1256,11 @@ function renderPage(audit, selfUrl) {
   const grade = gradeOf(riskScore);
   const syncedBuckets = syncBucketsToAnchor(meta.buckets, merged);
   const sevMap = severityByBucket(merged, syncedBuckets);
-  const uniqExposures = new Set(merged.filter(p => p.fine_high_gbp).map(p => p.fine_high_gbp));
-  const totalExposure = Array.from(uniqExposures).reduce((a, n) => a + n, 0);
+  // Canonical regulator exposure: MAXIMUM statutory fine per framework, summed -- a clearly-labelled ceiling
+  // (not a prediction), computed ONCE and used in hero, matrix, before/after and exec read.
+  const _expByFw = {}; for (const _p of merged) { if (!_p.fine_high_gbp) continue; const _k = _p.framework_short || (_p.citation || '').split(/\s+/)[0] || '?'; _expByFw[_k] = Math.max(_expByFw[_k] || 0, _p.fine_high_gbp); }
+  const totalExposure = Object.values(_expByFw).reduce((a, n) => a + n, 0);
+  const exposureFrameworks = Object.keys(_expByFw).length;
   const top3 = topThree(merged);
   // Patch meta counts after dedupe so the Glance panel reflects the deduped reality
   const adjMeta = {
@@ -1262,7 +1269,7 @@ function renderPage(audit, selfUrl) {
     pointer_count_p0: merged.filter(p => p.severity === 'P0').length,
     pointer_count_p1: merged.filter(p => p.severity === 'P1').length
   };
-  const adjAudit = { ...audit, scan_meta: adjMeta, score: riskScore, projected, wk12, dims: _dims };
+  const adjAudit = { ...audit, scan_meta: adjMeta, score: riskScore, projected, wk12, dims: _dims, exposure_total: totalExposure, exposure_frameworks: exposureFrameworks };
   const title = `${audit.company} · Regulatory + SEO + AI visibility audit · Tamazia`;
   return `<!DOCTYPE html>
 <html lang="en"><head>
@@ -1325,7 +1332,7 @@ ${renderJurisdiction(adjAudit)}
 ${renderGlance(adjAudit, totalExposure, top3)}
 ${renderSectionGauges(_dims, sevMap)}
 ${renderCritical(top3)}
-${renderBeforeAfter(totalExposure, riskScore, projected, grade)}
+${renderBeforeAfter(totalExposure, riskScore, wk12, projected, grade)}
 ${renderAIPlatform(adjAudit)}
 ${renderGeoVisibility(adjAudit)}
 ${renderCitationTable(audit)}
