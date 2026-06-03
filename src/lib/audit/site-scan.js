@@ -125,7 +125,7 @@ function _parsePsi(d) {
       tbt_ms: num('total-blocking-time'),
       fcp_ms: num('first-contentful-paint'),
       audits: Object.values(a).filter(x => x && x.score !== null && x.score < 0.9 && ['binary','numeric','metricSavings'].includes(x.scoreDisplayMode))
-        .map(x => ({ id: x.id, title: x.title || '', description: String(x.description || '').replace(/\s*\[[^\]]*\]\([^)]*\)/g, '').trim(), score: x.score, displayValue: x.displayValue || '', items: (x.details && x.details.items && x.details.items.length) || 0 })),
+        .map(x => { const _it = (x.details && x.details.items) || []; const _n = _it.map(q => q && q.node).filter(Boolean)[0] || null; return { id: x.id, title: x.title || '', description: String(x.description || '').replace(/\s*\[[^\]]*\]\([^)]*\)/g, '').trim(), score: x.score, displayValue: x.displayValue || '', items: _it.length || 0, node_snippet: (_n && _n.snippet) ? String(_n.snippet) : '', node_selector: (_n && _n.selector) ? String(_n.selector) : '', node_count: _it.filter(q => q && q.node).length }; }),
     };
   } catch (_e) { return null; }
 }
@@ -272,6 +272,7 @@ const PSI_MAP = {
   'deprecations': ['technical_seo','P2','Tamazia removes deprecated browser APIs.'],
   'errors-in-console': ['technical_seo','P2','Tamazia clears the JavaScript console errors.'],
 };
+function _escClip(s, n) { s = String(s || '').replace(/\s+/g, ' ').trim(); if (s.length > n) s = s.slice(0, n) + '\u2026'; return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function psiPointers(psi) {
   if (!psi || !Array.isArray(psi.audits)) return [];
   const out = [];
@@ -280,11 +281,15 @@ function psiPointers(psi) {
     const [bucket, baseSev, fix] = map;
     const sev = au.score === 0 ? baseSev : (baseSev === 'P0' ? 'P1' : baseSev === 'P1' ? (au.score < 0.5 ? 'P1' : 'P2') : 'P2');
     const ev = au.displayValue ? au.displayValue : (au.items ? au.items + ' element(s) affected' : 'measured by Google PageSpeed (mobile)');
-    out.push(P(bucket, sev, au.title,
+    const ptr = P(bucket, sev, au.title,
       au.title,
       (au.description || '') + ' Measured live by Google PageSpeed Insights on your mobile site.',
       fix,
-      'Google PageSpeed (mobile) · ' + au.id + ' · ' + ev));
+      'Google PageSpeed (mobile) · ' + au.id + ' · ' + ev);
+    // P2.10 element pinpointing: Lighthouse's own failing DOM node (real Chrome) -> exact element + CSS selector. No false positives.
+    if (au.node_snippet) { ptr.evidence_html = _escClip(au.node_snippet, 220); ptr.element_count = au.node_count || 1; }
+    if (au.node_selector) ptr.locator = _escClip(au.node_selector, 120);
+    out.push(ptr);
   }
   return out;
 }
