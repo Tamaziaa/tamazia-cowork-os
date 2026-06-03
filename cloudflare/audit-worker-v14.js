@@ -775,17 +775,9 @@ function renderSeoBlock(bucket, list) {
 function _bySev(a, b) { const S = { P0: 0, P1: 1, P2: 2, P3: 3 }; return (S[a.severity] ?? 3) - (S[b.severity] ?? 3) || ((b.fine_high_gbp || 0) - (a.fine_high_gbp || 0)); }
 function renderFindingRow(p) {
   const sev = SEV[p.severity] || SEV.P2;
-  return `<div style="background:white;border:1px solid #e5e7eb;border-left:4px solid ${sev.bg};border-radius:6px;padding:11px 14px;margin-bottom:8px">
-    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
-      <p style="margin:0;font-weight:600;font-size:0.9rem;color:#3D0E0E;line-height:1.3">${esc(p.desc || p.fact || '')}</p>
-      <span style="background:${sev.bg};color:#fff;font-size:0.58rem;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap">${sev.label}</span>
-    </div>
-    ${p.layman_explanation ? `<p style="margin:5px 0 0;font-size:0.8rem;color:#1F2937;line-height:1.45">${esc(p.layman_explanation)}</p>` : ''}
-    ${p.evidence ? `<p style="margin:4px 0 0;font-size:0.7rem;color:#6b6b6b">Evidence: ${esc(p.evidence)}</p>` : ''}
-    ${p.locator ? `<p style="margin:4px 0 0;font-size:0.68rem;color:#8a6b6b;font-family:ui-monospace,monospace">Where: ${esc(p.locator)}</p>` : ''}
-    ${p.enforcement_example ? `<p style="margin:4px 0 0;font-size:0.7rem;color:#6b6b6b"><strong>Enforcement:</strong> ${esc(p.enforcement_example)}</p>` : ''}
-    <p style="margin:5px 0 0;font-size:0.8rem;color:#14532d"><strong>Tamazia fix:</strong> ${esc(p.tamazia_fix_short || p.recommendation || '')}</p>
-  </div>`;
+  const fine = (p.fine_low_gbp || p.fine_high_gbp) ? (gbp(p.fine_low_gbp || 0) + '\u2013' + gbp(p.fine_high_gbp || 0)) : '';
+  const detail = `${p.layman_explanation ? `<p style="margin:6px 0 0;font-size:0.8rem;color:#1F2937;line-height:1.45">${esc(p.layman_explanation)}</p>` : ''}${p.evidence ? `<p style="margin:4px 0 0;font-size:0.7rem;color:#6b6b6b">Evidence: ${esc(p.evidence)}</p>` : ''}${p.locator ? `<p style="margin:4px 0 0;font-size:0.68rem;color:#8a6b6b;font-family:ui-monospace,monospace">Where: ${esc(p.locator)}</p>` : ''}${p.enforcement_example ? `<p style="margin:4px 0 0;font-size:0.7rem;color:#6b6b6b"><strong>Enforcement:</strong> ${esc(p.enforcement_example)}</p>` : ''}<p style="margin:6px 0 0;font-size:0.8rem;color:#14532d"><strong>Tamazia fix:</strong> ${esc(p.tamazia_fix_short || p.recommendation || '')}</p>`;
+  return `<details style="background:white;border:1px solid #e5e7eb;border-left:4px solid ${sev.bg};border-radius:6px;margin-bottom:6px"><summary style="list-style:none;cursor:pointer;padding:9px 12px;display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-weight:600;font-size:0.84rem;color:#3D0E0E;line-height:1.3">${esc(p.desc || p.fact || '')}</span><span style="display:flex;gap:7px;align-items:center;white-space:nowrap">${fine ? `<span style="font-size:0.64rem;color:#B91C1C;font-weight:700">${fine}</span>` : ''}<span style="background:${sev.bg};color:#fff;font-size:0.55rem;font-weight:700;padding:2px 6px;border-radius:4px">${sev.label}</span></span></summary><div style="padding:0 12px 11px">${detail}</div></details>`;
 }
 function _bracket(id, kicker, title, sub, body) {
   return `<section class="tz-reveal" id="${id}" style="padding:14px 24px;background:white;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
@@ -1014,12 +1006,6 @@ function renderDataViz(merged, audit){
       legend:[[VIZ.crit,'Severe + likely'],[VIZ.high,'Elevated'],[VIZ.ok,'Lower risk']], howto:'A standard 5x5 risk grid. Up = bigger maximum fine; right = the regulator acts more often on that severity. The number in each cell is how many of your findings land there; the red top-right is what to fix first.' }),
     vizFrame({ title:'Where you rank vs who AI cites #1', subtitle:'Live position per real buyer query.', svg:vizCitationLadder(audit.keyword_map),
       legend:[[VIZ.gold,'Rival cited #1'],[VIZ.ok,'You #1-3'],[VIZ.high,'You #4-10'],[VIZ.crit,'You #10+ / NR']], howto:'Each row is a real buyer query. Your dot sits on a #1 (left, best) to #10 (right) track; gold is the firm AI/Google names first, named on the right. NR = No Result: not visible at all for that query.' }),
-    vizFrame({ title:'AI-visibility radar (scored per signal)', subtitle:'How much AI engines can see + cite you.', svg:vizRadar(merged, audit.ai_citation),
-      legend:[[VIZ.crit,'Your AI visibility 0-100'],[VIZ.grid,'Full (outer ring = 100)']], howto:'Each spoke is an AI-readiness signal scored 0 (centre) to 100 (outer ring); the number at each tip is your score on that signal. The dented spokes are exactly where you are invisible to AI.' }),
-    vizFrame({ title:'Site health by area (scored)', subtitle:'Your standing across the five audited areas.', svg:vizHealthRadar(merged, audit && audit.dims),
-      legend:[[VIZ.mid,'Your health 0-100'],[VIZ.grid,'Ideal (outer ring)']], howto:'Same radar reused across areas: each tip shows that area\'s health score 0-100. Outer ring = healthy; the dents are where Tamazia focuses first.' }),
-    vizFrame({ title:'Severity heatmap (with totals)', subtitle:'Where your issues concentrate.', svg:vizHeatmap(merged),
-      legend:[[VIZ.crit,'P0 critical'],[VIZ.high,'P1 high'],['#a16207','P2 standard']], howto:'Rows = audit areas, columns = severity (P0 critical, P1 high, P2 standard). Each cell is the count; the right column and bottom row are row/column totals, and the bottom-right is the grand total.' }),
     vizFrame({ title:'Your projected score trajectory', subtitle:'Where this score goes on a Tamazia mandate.', svg:vizTrajectory(audit.score, audit.wk12, audit.projected),
       legend:[[VIZ.crit,'Today'],[VIZ.high,'Week 12'],[VIZ.ok,'Week 24']], howto:'Audit score out of 100 (higher = healthier). Today is your current score; the next two bars are the projected score at week 12 and week 24 on a Tamazia engagement.' }),
   ].filter(Boolean);
