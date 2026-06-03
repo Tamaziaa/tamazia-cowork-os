@@ -29,6 +29,9 @@ jobs:
           if ! grep -q '^PAGESPEED_API_KEY=' .env && [ -n "${{ secrets.PAGESPEED_API_KEY }}" ]; then
             echo "PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}" >> .env
           fi
+          if ! grep -q '^OPENPAGERANK_API_KEY=' .env && [ -n "${{ secrets.OPENPAGERANK_API_KEY }}" ]; then
+            echo "OPENPAGERANK_API_KEY=${{ secrets.OPENPAGERANK_API_KEY }}" >> .env
+          fi
       - name: Re-mint all stale audit rows
         run: |
           set -a; source .env 2>/dev/null; set +a
