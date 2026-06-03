@@ -27,17 +27,19 @@ function deriveServiceNoun(company, sector, html) {
 const clean = d => String(d || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '').toLowerCase();
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 // Directories/aggregators/social/gov — true competitors are filtered apart from these so the email names a real peer firm.
-const AGGREGATORS = new Set(['legal500.com','chambers.com','chambersandpartners.com','chambersstudent.co.uk','reviewsolicitors.co.uk','lawsociety.org.uk','solicitors.lawsociety.org.uk','sra.org.uk','yell.com','yelp.com','yelp.co.uk','trustpilot.com','tripadvisor.com','tripadvisor.co.uk','bing.com','wikipedia.org','facebook.com','linkedin.com','instagram.com','twitter.com','x.com','youtube.com','indeed.com','glassdoor.com','glassdoor.co.uk','thelawyer.com','prospects.ac.uk','checkatrade.com','bark.com','clutch.co','g2.com','expertise.com','threebestrated.co.uk','findlaw.com','avvo.com','reddit.com','quora.com','mumsnet.com','which.co.uk','booking.com','expedia.com','hotels.com','opentable.com','rightmove.co.uk','zoopla.co.uk','onthemarket.com','primelocation.com','gov.uk','nhs.uk','apple.com','amazon.com']);
+const AGGREGATORS = new Set(['legal500.com','chambers.com','chambersandpartners.com','chambersstudent.co.uk','reviewsolicitors.co.uk','lawsociety.org.uk','solicitors.lawsociety.org.uk','sra.org.uk','yell.com','yelp.com','yelp.co.uk','trustpilot.com','tripadvisor.com','tripadvisor.co.uk','bing.com','wikipedia.org','facebook.com','linkedin.com','instagram.com','twitter.com','x.com','youtube.com','indeed.com','glassdoor.com','glassdoor.co.uk','thelawyer.com','prospects.ac.uk','checkatrade.com','bark.com','clutch.co','g2.com','expertise.com','threebestrated.co.uk','findlaw.com','avvo.com','reddit.com','quora.com','mumsnet.com','which.co.uk','booking.com','expedia.com','hotels.com','opentable.com','rightmove.co.uk','zoopla.co.uk','onthemarket.com','primelocation.com','gov.uk','nhs.uk','apple.com','amazon.com','zocdoc.com','yellowpages.com','yellowpages.co.uk','yell.co.uk','whatclinic.com','whatclinic.co.uk','doctify.com','topdoctors.co.uk','topdoctors.com','healthgrades.com','vitals.com','ratemds.com','treatwell.co.uk','justdial.com','thomsonlocal.com','freeindex.co.uk','hotfrog.co.uk','cylex-uk.co.uk','scoot.co.uk','192.com','bing.co.uk','yahoo.com','duckduckgo.com','pinterest.com','tiktok.com']);
 function isAggregator(d){ d = String(d||'').replace(/^www\./,'').toLowerCase(); if (AGGREGATORS.has(d)) return true; return /(^|\.)(wikipedia\.org|facebook\.com|linkedin\.com|youtube\.com|gov\.uk|nhs\.uk)$/.test(d) || /(^|\.)google\./.test(d); }
 
 function keywordsFor(sector, city, serviceNoun) {
   const noun = serviceNoun || SECTOR_NOUN[sector] || String(sector || 'business').replace(/-/g, ' ');
   const titles = (titleCat.sectors[sector] || []).filter(t => t.intent >= 8).slice(0, 3).map(t => t.title);
   // prioritised pool: most-relevant local-intent first, then sector titles, then year/variants
+  // Only on-vertical seeds: the firm's own service noun + city. The title-catalogue mixed other healthcare
+  // sub-sectors (aesthetic, dermatology) onto e.g. a dental audit, producing irrelevant queries + magazine
+  // 'leaders'. Brand/hyperlocal seeds (where the firm actually ranks) are added in buildKeywordMap from company.
   const kws = [
-    `best ${noun} in ${city}`, `${noun} ${city}`, `top ${noun} ${city}`,
-    ...titles.map(t => `best ${t} ${city}`), ...titles.map(t => `${t} ${city}`),
-    `${noun} near ${city}`, `${noun} ${city} 2026`,
+    `${noun} ${city}`, `best ${noun} in ${city}`, `top ${noun} ${city}`,
+    `${noun} near me`, `${noun} ${city} reviews`,
   ];
   return Array.from(new Set(kws.map(k => k.replace(/\s+/g, ' ').trim())));
 }
