@@ -1071,7 +1071,25 @@ function renderClosing(audit, score, projected, totalExposure) {
     <a href="${TAMAZIA_BASE}/book/" style="display:inline-block;padding:14px 30px;background:#C8A664;color:#3D0E0E;text-decoration:none;font-weight:700;border-radius:6px;font-size:0.95rem">Walk this report with the founder &rarr;</a>
   </div></section>`;
 }
-function renderPage(audit) {
+function sectorServiceUrl(sector) {
+  const m = { legal:'law-firm', law:'law-firm', 'law-firms':'law-firm', healthcare:'healthcare', medical:'healthcare', dental:'healthcare', clinic:'healthcare', hospitality:'hospitality', hotels:'hospitality', hotel:'hospitality', real_estate:'real-estate', 'real-estate':'real-estate', property:'real-estate', finance:'financial-services', financial:'financial-services', fintech:'financial-services' };
+  const slug = m[String(sector || '').toLowerCase()];
+  return TAMAZIA_BASE + '/services/' + (slug || '');
+}
+function renderForward(audit, selfUrl) {
+  const url = selfUrl || (TAMAZIA_BASE + '/');
+  const subj = encodeURIComponent('Tamazia audit: ' + (audit.company || 'our firm'));
+  const body = encodeURIComponent('Worth a look. The regulatory, SEO and AI-visibility audit for ' + (audit.company || 'our firm') + ' — findings, exposure and the fixes are all here:\n\n' + url + '\n\n(forwarded from the Tamazia audit)');
+  const svc = sectorServiceUrl(audit.sector);
+  return `<section class="tz-reveal tz-noprint" style="padding:24px;background:#fff;border-top:1px solid #e5e7eb"><div style="max-width:900px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between">
+    <div style="flex:1;min-width:240px"><p style="margin:0 0 4px;font-family:'Times New Roman',serif;font-size:1.05rem;color:#3D0E0E">This audit is built to be shared.</p><p style="margin:0;font-size:0.84rem;color:#6b6b6b;line-height:1.5">Send it to whoever owns risk and growth: your managing partner, COO, GC or marketing lead. The findings, the exposure and the fixes are all on this page.</p></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="mailto:?subject=${subj}&body=${body}" style="display:inline-block;padding:10px 16px;background:#3D0E0E;color:#F8F5EF;text-decoration:none;font-weight:600;border-radius:6px;font-size:0.8rem">Forward this audit &rarr;</a>
+      <a href="${svc}" style="display:inline-block;padding:10px 16px;background:#F8F5EF;border:1px solid #C8A664;color:#3D0E0E;text-decoration:none;font-weight:600;border-radius:6px;font-size:0.8rem">See how Tamazia fixes this &rarr;</a>
+    </div>
+  </div></section>`;
+}
+function renderPage(audit, selfUrl) {
   NEWS_LIVE = audit.news_map || {};
   const meta = audit.scan_meta || {};
   const rawPointers = audit.pointers || [];
@@ -1162,6 +1180,7 @@ ${renderKeywordMap(audit.keyword_map)}
 ${renderAllFindings(merged)}
 ${renderDataViz(merged, adjAudit)}
 ${renderInvestment(adjMeta.pointer_count_p0)}
+${renderForward(adjAudit, selfUrl)}
 ${renderTrustBand()}
 ${renderClosing(adjAudit, riskScore, projected, totalExposure)}
 ${renderFooterCTA()}
@@ -1260,7 +1279,7 @@ export default {
     if (res.error === 'expired') return Response.redirect(TAMAZIA_BASE + '/expired', 302);
     if (res.error) return new Response('Audit not found or not yet minted (' + res.error + ').', { status: 404, headers: { 'content-type': 'text/plain' } });
     let html;
-    try { html = renderPage(adapt(res.row)); }
+    try { html = renderPage(adapt(res.row), url.href); }
     catch (e) { return new Response('Audit render error.', { status: 500, headers: { 'content-type': 'text/plain' } }); }
     // Server-side PostHog capture (CSP-safe — runs in the Worker, not the browser; fire-and-forget; gated on key).
     try {
@@ -1270,7 +1289,7 @@ export default {
         if (ctx && ctx.waitUntil) ctx.waitUntil(ev);
       }
     } catch (_e) {}
-    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v18-live-v15-p4' } });
+    return new Response(html, { status: 200, headers: { 'content-type': 'text/html;charset=utf-8', 'cache-control': 'public,max-age=120', 'x-tamazia-audit': 'v19-live-v15-p5' } });
   }
 };
 
