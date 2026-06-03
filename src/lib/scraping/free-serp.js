@@ -25,7 +25,7 @@ function parseDdgHtml(html) {
 async function viaSearxng(query, gl, num) {
   const base = process.env.SEARXNG_URL; if (!base) return null;
   const u = base.replace(/\/$/, '') + '/search?format=json&safesearch=0&language=' + (gl || 'gb') + '&q=' + encodeURIComponent(query);
-  const r = await fetchWithRetry(u, { timeout: 15000, retries: 1 });
+  const r = await fetchWithRetry(u, { timeout: 12000, retries: 1 });
   if (!r.ok) return { error: 'searxng ' + r.status };
   const p = parseSearxng(r.body); return p ? { organic: p.organic.slice(0, num || 100), ads: [], provider: 'searxng' } : { error: 'searxng_empty' };
 }
@@ -37,9 +37,10 @@ async function viaBrave(query, gl, num) {
   try { const j = JSON.parse(r.body); const w = (j.web && j.web.results) || []; const organic = w.map((o, i) => ({ title: o.title, url: o.url, domain: rootDomain(o.url), rank: i + 1 })); return organic.length ? { organic, ads: [], provider: 'brave' } : { error: 'brave_empty' }; } catch (e) { return { error: e.message }; }
 }
 async function viaDuckDuckGo(query) {
-  const r = await fetchWithRetry('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), { timeout: 15000, retries: 1, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36' } });
-  if (!r.ok) return { error: 'ddg ' + r.status };
-  return parseDdgHtml(r.body) || { error: 'ddg_blocked_or_empty' };
+  // Tight timeout + no retry + fast challenge-skip: keep the engine snappy at 15k/mo; a hung SERP must never stall a mint.
+  const r = await fetchWithRetry('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), { timeout: 8000, retries: 0, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36' } });
+  if (!r.ok || /anomaly|unusual traffic|are you a robot|challenge-platform/i.test(r.body || '')) return { error: 'ddg_blocked' };
+  return parseDdgHtml(r.body) || { error: 'ddg_empty' };
 }
 async function search(query, country = 'UK', num = 100, opts = {}) {
   const gl = GL[country] || 'gb';
