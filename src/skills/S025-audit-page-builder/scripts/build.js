@@ -188,7 +188,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     // No city gate: buildKeywordMap handles no-city/global sites internally (category-level queries), so the
     // ranking ladder populates for ecommerce/global too. (P6.4 caught this gate silently zeroing the keyword map.)
     const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
-    keyword_map = await ri.buildKeywordMap({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city, html: (scan.signals && scan.signals.title) || '', country: country || 'UK', env, max: 6 });
+    keyword_map = await ri.buildKeywordMap({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city, html: [scan.signals && scan.signals.title, scan.signals && scan.signals.meta_description].filter(Boolean).join(' '), country: country || 'UK', env, max: 7 });
   } catch (_e) {}
   // REAL AI-citation probe (cog): who owns the answer surface for the firm's category, and is the firm cited?
   let ai_citation = null; const aiCiteFindings = [];
@@ -274,7 +274,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     const _ag = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'authority-gap.js'));
     const _leaders = ((keyword_map && keyword_map.keywords) || []).map(k => k.leader).filter(Boolean);
     const _agRes = await _ag.authorityGap({ domain, competitors: _leaders, env });
-    if (_agRes && _agRes.finding) { _authFindings = [_agRes.finding]; payload_authority = { you: _agRes.you, top: _agRes.top, ranked: _agRes.ranked, last_updated: _agRes.last_updated }; }
+    if (_agRes && _agRes.ok && _agRes.you) { if (_agRes.finding) _authFindings = [_agRes.finding]; payload_authority = { you: _agRes.you, top: _agRes.top, ranked: _agRes.ranked, last_updated: _agRes.last_updated }; }
   } catch (_e) {}
   // P2.15 local-pack / GBP readiness (OSM presence + LocalBusiness schema + NAP) — gated on city + local sector.
   let _localFindings = [];
@@ -384,7 +384,14 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     engine_jurisdictions: (comp && comp.jurisdictions) || [],
     rules,
     // Evidence-tied findings from the real site scan — surfaced at top level so any renderer can read them
-    pointers: _confirmed.slice(0, 80),
+    pointers: (() => {
+      const _rk = f => ({ P0:0, P1:1, P2:2, P3:3 }[f.severity] ?? 4);
+      const _byb = {}; for (const f of _confirmed) (_byb[f.bucket] = _byb[f.bucket] || []).push(f);
+      const _quota = { compliance:60, seo:14, technical_seo:16, security:10, accessibility:8, ai_visibility:14, content_depth:6, public_records:4, website:4, tls_dns:6 };
+      const _out = [];
+      for (const b of Object.keys(_byb)) { _byb[b].sort((a,c)=>_rk(a)-_rk(c)); _out.push(..._byb[b].slice(0, _quota[b] ?? 6)); }
+      _out.sort((a,c)=>_rk(a)-_rk(c)); return _out.slice(0, 140);
+    })(),
     needs_review: _needsReview.slice(0, 40),
     trust_summary: { confirmed: _confirmed.length, needs_review: _needsReview.length },
     exec_summary,

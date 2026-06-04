@@ -21,6 +21,16 @@ async function geoProbe({ query, company, domain, env = process.env, samples = 2
     const names = _parseNames(r.text);
     if (names.length) runs.push(names);
   }
+  // B3 resilience: if every sample came back empty (transient provider rate-limit), retry one more round
+  // before giving up, so a recoverable blip doesn't zero the whole GEO section.
+  if (!runs.length) {
+    for (let i = 0; i < samples; i++) {
+      const r = await askLLM(prompt, { temperature: 0.5, maxTokens: 220 }, env);
+      provider = provider || r.provider;
+      const names = _parseNames(r.text);
+      if (names.length) runs.push(names);
+    }
+  }
   // P3.2b/3.2c: real Google-grounded citation layer (graceful — null when Gemini quota exhausted)
   let grounded = null;
   try {

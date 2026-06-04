@@ -125,7 +125,7 @@ function _parsePsi(d) {
       tbt_ms: num('total-blocking-time'),
       fcp_ms: num('first-contentful-paint'),
       audits: Object.values(a).filter(x => x && x.score !== null && x.score < 0.9 && ['binary','numeric','metricSavings'].includes(x.scoreDisplayMode))
-        .map(x => { const _it = (x.details && x.details.items) || []; const _n = _it.map(q => q && q.node).filter(Boolean)[0] || null; return { id: x.id, title: x.title || '', description: String(x.description || '').replace(/\s*\[[^\]]*\]\([^)]*\)/g, '').trim(), score: x.score, displayValue: x.displayValue || '', items: _it.length || 0, node_snippet: (_n && _n.snippet) ? String(_n.snippet) : '', node_selector: (_n && _n.selector) ? String(_n.selector) : '', node_count: _it.filter(q => q && q.node).length }; }),
+        .map(x => { const _it = Array.isArray(x.details && x.details.items) ? x.details.items : []; const _n = _it.map(q => q && q.node).filter(Boolean)[0] || null; return { id: x.id, title: x.title || '', description: String(x.description || '').replace(/\s*\[[^\]]*\]\([^)]*\)/g, '').trim(), score: x.score, displayValue: x.displayValue || '', items: _it.length || 0, node_snippet: (_n && _n.snippet) ? String(_n.snippet) : '', node_selector: (_n && _n.selector) ? String(_n.selector) : '', node_count: _it.filter(q => q && q.node).length }; }),
     };
   } catch (_e) { return null; }
 }
@@ -136,7 +136,7 @@ async function pageSpeed(domain, key) {
     if (dir) { const fs = require('fs'); const f = dir + '/' + domain + '.json'; if (fs.existsSync(f)) return _parsePsi(JSON.parse(fs.readFileSync(f, 'utf8'))); }
   } catch (_e) {}
   if (!key) return null;
-  const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=mobile&category=performance&category=seo&category=accessibility&category=best-practices&key=${key}`;
+  const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=mobile&category=performance&category=seo&category=accessibility&key=${key}`;
   // Strongest-possible: 3 attempts with backoff (PSI/Lighthouse intermittently 429s or returns an empty run),
   // validate the lighthouseResult is present, and write-through to the cache so re-mints never silently drop SEO.
   for (let i = 0; i < 3; i++) {

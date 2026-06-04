@@ -67,6 +67,17 @@ async function authorityGap({ domain, competitors = [], env = {} } = {}) {
       metric: { label: 'Domain Authority', you: da100(you.dr), scale: 100, competitors: [] },
       evidence_quote: 'Domain Authority ' + da100(you.dr) + '/100', evidence: stamp, fine_low_gbp: null, fine_high_gbp: null,
     };
+  } else if (you && ranked.length) {
+    const top3txt = top3.map(c => c.domain + ' ' + c.da_100 + '/100').join(', ');
+    finding = {
+      bucket: 'seo', severity: 'P3', rule_type: 'observed', kind: 'observed',
+      citation: 'Domain authority', framework_short: 'SEO', citation_url: '',
+      metric: { label: 'Domain Authority', you: da100(you.dr), scale: 100, competitors: top3 },
+      fact: 'Your Domain Authority is ' + da100(you.dr) + '/100. Top competitors: ' + top3txt + '.',
+      layman_explanation: 'Domain Authority is the backlink-trust score search and AI engines use to decide who to rank and cite. This is where you stand against the firms competing for your buyers; staying ahead protects both your rankings and your AI citations.',
+      tamazia_fix_short: 'Tamazia runs the digital-PR and authority-building programme (earned links, citations, entity coverage) that defends and extends your Domain Authority lead.',
+      evidence_quote: 'you ' + da100(you.dr) + '/100 vs ' + top3txt, evidence: stamp, fine_low_gbp: null, fine_high_gbp: null,
+    };
   }
   return { ok: true, you: { ...you, da_100: da100(you.dr) }, top, top3, ranked, finding, last_updated: data._last_updated };
 }

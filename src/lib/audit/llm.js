@@ -5,7 +5,7 @@
 // citations when Gemini's free grounding quota is available (graceful: returns null when exhausted).
 const https = require('https');
 
-function _post(url, key, payload, timeout = 18000) {
+function _post(url, key, payload, timeout = 9000) {
   return new Promise((resolve) => {
     const body = JSON.stringify(payload); const u = new URL(url);
     const req = https.request(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key }, timeout }, (r) => {
@@ -26,7 +26,7 @@ function _providers(env) {
   return p;
 }
 
-async function _geminiPlain(prompt, key, temperature, maxTokens, timeout = 18000) {
+async function _geminiPlain(prompt, key, temperature, maxTokens, timeout = 9000) {
   const r = await new Promise((resolve) => {
     const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature, maxOutputTokens: maxTokens } });
     const req = https.request('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout }, (res) => { let b = ''; res.on('data', d => b += d); res.on('end', () => resolve({ status: res.statusCode, body: b })); });
@@ -51,7 +51,7 @@ async function askLLM(prompt, { temperature = 0.4, maxTokens = 400, json = false
 }
 
 // P3.2b: REAL Google-grounded answer + the sources Google's AI actually cites. Graceful: null when quota exhausted.
-async function askGeminiGrounded(prompt, env = process.env, timeout = 22000) {
+async function askGeminiGrounded(prompt, env = process.env, timeout = 12000) {
   const key = env.GEMINI_API_KEY; if (!key) return null;
   const r = await new Promise((resolve) => {
     const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ google_search: {} }] });

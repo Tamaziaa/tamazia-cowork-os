@@ -133,7 +133,8 @@ async function deriveCategoryNoun({ company, sector, html, domain }) {
 
 async function buildKeywordMap({ domain, company, sector, city, html, country = 'UK', env = process.env, max = 8 }) {
   const dom = clean(domain); if (!dom) return { ok: false, keywords: [] };
-  const noun = await deriveCategoryNoun({ company, sector, html, domain: dom });
+  let noun = await deriveCategoryNoun({ company, sector, html, domain: dom });
+  if (city) { const _cx = city.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); noun = noun.replace(new RegExp('\\b' + _cx + '\\b','gi'),'').replace(/\s{2,}/g,' ').replace(/^[ ,]+|[ ,]+$/g,'').trim() || noun; }
   const brand = norm(company || dom.split('.')[0]);
   const ctyLabel = ({ UK: 'UK', US: 'USA', AE: 'UAE', SA: 'Saudi Arabia', QA: 'Qatar' })[String(country).toUpperCase()] || country || '';
   let seeds;
@@ -145,7 +146,19 @@ async function buildKeywordMap({ domain, company, sector, city, html, country = 
     seeds = [noun, 'best ' + noun, 'top ' + noun, (noun + ' ' + ctyLabel).trim(), 'best ' + noun + ' online'];
     try { const ac = await autocomplete('best ' + noun); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
   }
-  seeds = seeds.map(k => String(k).replace(/\s+/g, ' ').trim()).filter(Boolean).filter(k => brand.length < 4 || !norm(k).includes(brand)).slice(0, max);
+  // B1: seed the firm's own brand + specific-service long-tail (terms it plausibly ranks for) ahead of the
+  // generic head terms, so the map shows a credible MIX of real positions + honest gaps — never "Not ranking"
+  // on every row. The live SERP validates every position; nothing is invented.
+  const _specific = deriveServiceNoun(company, sector, html);
+  const _brandTerm = String(company || '').replace(/-/g, ' ').trim();
+  const _longtail = city
+    ? [_brandTerm, (_specific + ' ' + city).trim(), ('private ' + noun + ' ' + city).trim(), (noun + ' near me').trim()]
+    : [_brandTerm, _specific, 'best ' + _specific];
+  seeds = Array.from(new Set([..._longtail.filter(Boolean), ...seeds]));
+  const _brandNorm = norm(_brandTerm);
+  seeds = seeds.map(k => String(k).replace(/\s+/g, ' ').trim()).filter(Boolean)
+    .filter(k => (norm(k) === _brandNorm) ? true : (brand.length < 4 || !norm(k).includes(brand)))
+    .slice(0, max);
   const out = [];
   for (const kw of seeds) {
     let r = null; try { r = await checkKeyword(kw, dom, country); } catch (_e) {}
