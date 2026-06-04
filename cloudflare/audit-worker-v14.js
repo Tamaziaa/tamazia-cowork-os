@@ -294,9 +294,13 @@ function assessDimensions(pointers, signals, aiReadiness) {
   ]);
   // ai_visibility maps into content/GEO; keep its own health for the radar via out._ai
   out._ai = aiArr.length ? { assessed:true, mean_score:pointerHealth(aiArr.length,ac.c,ac.h,ac.s), crit:ac.c, high:ac.h, std:ac.s } : { assessed:false, mean_score:0, crit:0,high:0,std:0 };
-  // genuinely not assessed this mint (no axe / no DNS / no public-records pointers)
-  out.accessibility = { assessed:false, mean_score:0, crit:0,high:0,std:0, fails:[] };
-  out.tls_dns = { assessed:false, mean_score:0, crit:0,high:0,std:0, fails:[] };
+  // D1/D2: accessibility (Lighthouse a11y) + tls_dns (SPF/DMARC/DNSSEC) now assess from real confirmed pointers.
+  out.accessibility = (byb['accessibility']&&byb['accessibility'].length)
+    ? (()=>{const a=byb['accessibility'];const x=sevCount(a);return {assessed:true,mean_score:pointerHealth(a.length,x.c,x.h,x.s),crit:x.c,high:x.h,std:x.s,fails:a.slice(0,4).map(p=>p.citation||p.fact||'')};})()
+    : { assessed:false, mean_score:0, crit:0,high:0,std:0, fails:[] };
+  out.tls_dns = (byb['tls_dns']&&byb['tls_dns'].length)
+    ? (()=>{const a=byb['tls_dns'];const x=sevCount(a);return {assessed:true,mean_score:pointerHealth(a.length,x.c,x.h,x.s),crit:x.c,high:x.h,std:x.s,fails:a.slice(0,4).map(p=>p.citation||p.fact||'')};})()
+    : { assessed:false, mean_score:0, crit:0,high:0,std:0, fails:[] };
   out.public_records = (byb['public_records']&&byb['public_records'].length)
     ? (()=>{const a=byb['public_records'];const x=sevCount(a);return {assessed:true,mean_score:pointerHealth(a.length,x.c,x.h,x.s),crit:x.c,high:x.h,std:x.s,fails:[]};})()
     : { assessed:false, mean_score:0, crit:0,high:0,std:0, fails:[] };
@@ -1452,4 +1456,4 @@ export default {
   }
 };
 
-export { adapt, renderPage, renderEmailTeaser, loadAudit, computeRiskScore };
+export { adapt, renderPage, renderEmailTeaser, loadAudit, computeRiskScore, assessDimensions, scoreFromDims };
