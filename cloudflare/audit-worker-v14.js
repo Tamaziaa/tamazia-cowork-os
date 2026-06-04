@@ -1190,7 +1190,7 @@ function renderGeoVisibility(audit) {
   return `<section class="tz-reveal" style="padding:15px 24px;background:#F8F5EF;border-top:1px solid #e5e7eb"><div style="max-width:1100px;margin:0 auto">
     <p style="font-size:0.7rem;color:#3D0E0E;letter-spacing:0.18em;text-transform:uppercase;margin:0 0 6px;font-weight:600">AI search visibility</p>
     <h2 style="font-family:'Times New Roman',serif;font-size:1.2rem;margin:0 0 4px;color:#3D0E0E">Can AI engines find, trust and cite you</h2>
-    <p style="font-size:0.82rem;color:#6b6b6b;margin:0 0 14px">The answer engines your buyers ask first (ChatGPT, Gemini, Perplexity, Google AI) decide who to name. Here is where you stand.</p>
+    <p style="font-size:0.82rem;color:#6b6b6b;margin:0 0 14px">The answer engines your buyers ask first (ChatGPT, Gemini, Perplexity, Google AI) decide who to name. Here is where you stand. <span style="color:#9ca3af">The engine grid reflects a single Google-grounded citation signal applied across engines (a modelled view), not eight separate measurements; the share-of-voice figure is a live multi-sample AI probe.</span></p>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:6px">${stat}</div>
     ${viz}
     ${glossBlock(audit)}
