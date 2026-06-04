@@ -3,8 +3,8 @@
 const vesc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const vgbp = n => { n=Number(n)||0; if(!n) return '£0'; if(n>=1e6) return '£'+(n/1e6).toFixed(n>=1e7?0:1).replace(/\.0$/,'')+'m'; if(n>=1e3) return '£'+Math.round(n/1e3)+'k'; return '£'+n.toLocaleString(); };
 const titleCase = s => String(s||'').replace(/\b([a-z])/g,(m,c)=>c.toUpperCase());
-const SEV = { P0:{l:'Critical',c:'#b3261e',bg:'linear-gradient(90deg,#fbeceb,#fff)'}, P1:{l:'High',c:'#9a6212',bg:'linear-gradient(90deg,#fdf3e2,#fff)'}, P2:{l:'Standard',c:'#5b6b78',bg:'#fff'}, P3:{l:'Minor',c:'#8595a1',bg:'#fff'} };
-const vsev = s => SEV[s]||SEV.P2;
+const V21SEV = { P0:{l:'Critical',c:'#b3261e',bg:'linear-gradient(90deg,#fbeceb,#fff)'}, P1:{l:'High',c:'#9a6212',bg:'linear-gradient(90deg,#fdf3e2,#fff)'}, P2:{l:'Standard',c:'#5b6b78',bg:'#fff'}, P3:{l:'Minor',c:'#8595a1',bg:'#fff'} };
+const vsev = s => V21SEV[s]||V21SEV.P2;
 const gradeColor = g => g && g[0]==='A'?'#1f7a44': g && g[0]==='B'?'#3a7d44': g && g[0]==='C'?'#9a6212': g==='D'||g==='D-'?'#b06a12':'#b3261e';
 
 function ringSVG(score, grade){

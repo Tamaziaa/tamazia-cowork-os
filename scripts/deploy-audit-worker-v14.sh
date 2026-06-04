@@ -7,9 +7,9 @@ source .env 2>/dev/null || true
 : "${NEON_URL:=${NEON_CONNECTION_STRING:-}}"; : "${NEON_URL:?required}"
 SCRIPT_NAME=${1:-tamazia-audit}
 ZONE_ID=a564b60458bb5eec33bbe7f13eb0e4e1   # tamazia.co.uk
-cp cloudflare/audit-worker-v14.js /tmp/worker.js
+cp cloudflare/audit-worker-v14.js /tmp/tzw_2.js
 # metadata with the NEON_URL secret binding (json-encoded safely)
-python3 - "$NEON_URL" "${POSTHOG_KEY:-}" "${POSTHOG_HOST:-https://eu.i.posthog.com}" > /tmp/meta.json <<'PY'
+python3 - "$NEON_URL" "${POSTHOG_KEY:-}" "${POSTHOG_HOST:-https://eu.i.posthog.com}" > /tmp/tzm_2.json <<'PY'
 import json,sys
 b=[{"type":"secret_text","name":"NEON_URL","text":sys.argv[1]}]
 if len(sys.argv)>2 and sys.argv[2]: b.append({"type":"secret_text","name":"POSTHOG_KEY","text":sys.argv[2]})
@@ -19,8 +19,8 @@ PY
 echo "=== uploading $SCRIPT_NAME (v14-live) ==="
 RESP=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$SCRIPT_NAME" \
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  -F "metadata=@/tmp/meta.json;type=application/json" \
-  -F "worker.js=@/tmp/worker.js;filename=worker.js;type=application/javascript+module")
+  -F "metadata=@/tmp/tzm_2.json;type=application/json" \
+  -F "worker.js=@/tmp/tzw_2.js;filename=worker.js;type=application/javascript+module")
 echo "$RESP" | python3 -c "import sys,json;d=json.load(sys.stdin);print('upload_success:',d.get('success'));print('errors:',d.get('errors'));print('messages:',d.get('messages'))"
 echo "=== ensure route tamazia.co.uk/audit/* -> $SCRIPT_NAME ==="
 EXISTING=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/workers/routes" | python3 -c "import sys,json;d=json.load(sys.stdin);print(next((r['id'] for r in d.get('result',[]) if 'audit' in r.get('pattern','')),''))")

@@ -1246,6 +1246,17 @@ function renderForward(audit, selfUrl) {
     </div>
   </div></section>`;
 }
+
+// Exposure ceiling de-duplication: frameworks that share ONE statutory ceiling (the GDPR/DPA/PECR family;
+// the US state-privacy family) must not each add their own maximum — that triple-counts a single breach.
+// We take the MAX once per ceiling family, then sum families. A defensible statutory ceiling, not an inflated sum.
+function _expFamily(fw){ const f=String(fw||'').toUpperCase();
+  if(/GDPR|UK_DPA|DPA_2018|PECR|ICO_COOKIES|EPRIVACY/.test(f)) return 'DATA_PROTECTION';
+  if(/CCPA|CPRA|VCDPA|TDPSA|US_STATE_PRIVACY/.test(f)) return 'US_STATE_PRIVACY';
+  return f; }
+function collapseExposure(byFw){ const fam={}; for(const k of Object.keys(byFw)){ const g=_expFamily(k); fam[g]=Math.max(fam[g]||0, byFw[k]); }
+  return { total: Object.values(fam).reduce((a,n)=>a+n,0), frameworks: Object.keys(fam).length }; }
+
 function renderPage(audit, selfUrl) {
   NEWS_LIVE = audit.news_map || {};
   const meta = audit.scan_meta || {};
@@ -1261,8 +1272,9 @@ function renderPage(audit, selfUrl) {
   // Canonical regulator exposure: MAXIMUM statutory fine per framework, summed -- a clearly-labelled ceiling
   // (not a prediction), computed ONCE and used in hero, matrix, before/after and exec read.
   const _expByFw = {}; for (const _p of merged) { if (!_p.fine_high_gbp) continue; const _k = _p.framework_short || (_p.citation || '').split(/\s+/)[0] || '?'; _expByFw[_k] = Math.max(_expByFw[_k] || 0, _p.fine_high_gbp); }
-  const totalExposure = Object.values(_expByFw).reduce((a, n) => a + n, 0);
-  const exposureFrameworks = Object.keys(_expByFw).length;
+  const _expC = collapseExposure(_expByFw);
+  const totalExposure = _expC.total;
+  const exposureFrameworks = _expC.frameworks;
   const top3 = topThree(merged);
   // Patch meta counts after dedupe so the Glance panel reflects the deduped reality
   const adjMeta = {
@@ -1465,7 +1477,7 @@ function renderV21Page(audit){
   const score = scoreFromDims(dims);
   const _e={}; for(const p of merged){ if(!p.fine_high_gbp) continue; const k=p.framework_short||(p.citation||'').split(/\s+/)[0]||'?'; _e[k]=Math.max(_e[k]||0,p.fine_high_gbp); }
   const ctx={ dims, score, wk12: wk12Score(score), projected: projectedScore(score), grade: gradeOf(score).letter,
-    exposure_total: Object.values(_e).reduce((a,n)=>a+n,0), exposure_frameworks: Object.keys(_e).length, top3: topThree(merged).slice(0,3) };
+    ...(function(){const c=collapseExposure(_e);return {exposure_total:c.total,exposure_frameworks:c.frameworks};})(), top3: topThree(merged).slice(0,3) };
   return renderV21({ ...audit, pointers: merged }, ctx);
 }
 
@@ -1474,8 +1486,8 @@ function renderV21Page(audit){
 const vesc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const vgbp = n => { n=Number(n)||0; if(!n) return '£0'; if(n>=1e6) return '£'+(n/1e6).toFixed(n>=1e7?0:1).replace(/\.0$/,'')+'m'; if(n>=1e3) return '£'+Math.round(n/1e3)+'k'; return '£'+n.toLocaleString(); };
 const titleCase = s => String(s||'').replace(/\b([a-z])/g,(m,c)=>c.toUpperCase());
-const SEV = { P0:{l:'Critical',c:'#b3261e',bg:'linear-gradient(90deg,#fbeceb,#fff)'}, P1:{l:'High',c:'#9a6212',bg:'linear-gradient(90deg,#fdf3e2,#fff)'}, P2:{l:'Standard',c:'#5b6b78',bg:'#fff'}, P3:{l:'Minor',c:'#8595a1',bg:'#fff'} };
-const vsev = s => SEV[s]||SEV.P2;
+const V21SEV = { P0:{l:'Critical',c:'#b3261e',bg:'linear-gradient(90deg,#fbeceb,#fff)'}, P1:{l:'High',c:'#9a6212',bg:'linear-gradient(90deg,#fdf3e2,#fff)'}, P2:{l:'Standard',c:'#5b6b78',bg:'#fff'}, P3:{l:'Minor',c:'#8595a1',bg:'#fff'} };
+const vsev = s => V21SEV[s]||V21SEV.P2;
 const gradeColor = g => g && g[0]==='A'?'#1f7a44': g && g[0]==='B'?'#3a7d44': g && g[0]==='C'?'#9a6212': g==='D'||g==='D-'?'#b06a12':'#b3261e';
 
 function ringSVG(score, grade){
