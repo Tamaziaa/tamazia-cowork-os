@@ -3,7 +3,12 @@ name: Re-mint audits (manual)
 # table, data-viz inputs, public-archive fallback). Server-side so PageSpeed runs with the key and there is
 # no shell time cap. Resumable + per-row fail-soft; safe to re-run.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      hashes:
+        description: "comma-separated audit hashes to re-mint (blank = all stale)"
+        required: false
+        default: """
 
 concurrency:
   group: remint-audits
@@ -35,4 +40,5 @@ jobs:
       - name: Re-mint all stale audit rows
         run: |
           set -a; source .env 2>/dev/null; set +a
+          export REMINT_HASHES="${{ inputs.hashes }}"
           node scripts/remint-audits.js

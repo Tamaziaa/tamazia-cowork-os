@@ -17,7 +17,11 @@ function q(s) { return String(s == null ? '' : s).replace(/'/g, "''"); }
   const sinceArg = (process.argv.find(a => a.startsWith('--since=')) || '').split('=')[1];
   const cutoff = sinceArg || new Date(Date.now() - 2 * 3600 * 1000).toISOString(); // rows minted before this are stale
   const lim = limit ? (' LIMIT ' + limit) : '';
-  const raw = pg("SELECT id, domain, sector, country FROM audit_pages WHERE payload_json IS NOT NULL AND (generated_at IS NULL OR generated_at < '" + cutoff + "') ORDER BY id" + lim).trim();
+  const hashes = (process.env.REMINT_HASHES || '').split(',').map(x => x.trim()).filter(Boolean);
+  const where = hashes.length
+    ? ("hash IN (" + hashes.map(h => "'" + h.replace(/'/g, "''") + "'").join(',') + ")")
+    : ("payload_json IS NOT NULL AND (generated_at IS NULL OR generated_at < '" + cutoff + "')");
+  const raw = pg("SELECT id, domain, sector, country FROM audit_pages WHERE " + where + " ORDER BY id" + lim).trim();
   if (!raw) { console.log('nothing to re-mint (all current as of ' + cutoff + ')'); return; }
   const rows = raw.split('\n').map(l => { const [id, domain, sector, country] = l.split('\t'); return { id, domain, sector, country }; });
   console.log('re-minting ' + rows.length + ' rows (cutoff ' + cutoff + ')');
