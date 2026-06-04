@@ -44,7 +44,8 @@ async function geoProbe({ query, company, domain, env = process.env, samples = 2
   if (!runs.length && !grounded) return { ok: false, reason: 'all_providers_unavailable' };
   const N = runs.length || 1;
   const firmKey = _norm(company);
-  const firmAppears = runs.filter(r => r.some(n => firmKey && (_norm(n).includes(firmKey) || firmKey.includes(_norm(n))))).length;
+  // strict: the named entity must contain the FULL firm key (avoids matching a different 'Harley Street Dental Studio')
+  const firmAppears = runs.filter(r => r.some(n => firmKey && firmKey.length >= 6 && _norm(n).includes(firmKey))).length;
   const freq = {};
   runs.forEach(r => { const seen = new Set(); r.forEach(n => { const k = _norm(n); if (!k || (firmKey && (k.includes(firmKey) || firmKey.includes(k)))) return; if (seen.has(k)) return; seen.add(k); freq[k] = freq[k] || { name: n, count: 0 }; freq[k].count++; }); });
   const ranked = Object.values(freq).sort((a, b) => b.count - a.count);

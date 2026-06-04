@@ -150,14 +150,21 @@ async function buildKeywordMap({ domain, company, sector, city, html, country = 
   // generic head terms, so the map shows a credible MIX of real positions + honest gaps — never "Not ranking"
   // on every row. The live SERP validates every position; nothing is invented.
   const _specific = deriveServiceNoun(company, sector, html);
-  const _brandTerm = String(company || '').replace(/-/g, ' ').trim();
+  const _hay = String(html || '');
+  // neighbourhood/district the firm trades in (in their own copy) — specialists genuinely rank for these
+  const _areaM = _hay.match(/\b([A-Z][a-z]+(?: [A-Z][a-z]+)? (?:Street|Road|Avenue|Square|Lane|Hill|Park|Gardens|Mews|Place|Quarter|Village)|Mayfair|Marylebone|Knightsbridge|Kensington|Chelsea|Belgravia|Soho|Fitzrovia|Shoreditch|Clerkenwell|Canary Wharf)\b/);
+  const _area = _areaM ? _areaM[0].trim() : '';
+  const _PROC = { healthcare:['invisalign','veneers','dental implants','teeth whitening','composite bonding','orthodontics','smile makeover','facial aesthetics'], 'law-firms':['conveyancing','divorce','probate','employment law','personal injury','commercial litigation','immigration'], 'real-estate':['property valuation','lettings','new homes','commercial property'], hospitality:['afternoon tea','spa day','wedding venue','fine dining'], financial:['mortgage advice','pension transfer','tax planning','wealth management'] };
+  const _procs = (_PROC[sector]||[]).filter(p => new RegExp('\\b'+p.replace(/\s+/g,'\\s+')+'\\b','i').test(_hay)).slice(0,3);
+  // priority seeds: neighbourhood + procedure long-tail (rank-worthy) first, then the head terms (honest gaps)
   const _longtail = city
-    ? [_brandTerm, (_specific + ' ' + city).trim(), ('private ' + noun + ' ' + city).trim(), (noun + ' near me').trim()]
-    : [_brandTerm, _specific, 'best ' + _specific];
+    ? [ ...(_area ? [(_specific+' '+_area).trim(), (noun+' '+_area).trim()] : []),
+        ..._procs.map(p => (p+' '+(_area||city)).trim()),
+        (_specific+' '+city).trim(), (noun+' near me').trim() ]
+    : [ _specific, 'best '+_specific, ..._procs ];
   seeds = Array.from(new Set([..._longtail.filter(Boolean), ...seeds]));
-  const _brandNorm = norm(_brandTerm);
   seeds = seeds.map(k => String(k).replace(/\s+/g, ' ').trim()).filter(Boolean)
-    .filter(k => (norm(k) === _brandNorm) ? true : (brand.length < 4 || !norm(k).includes(brand)))
+    .filter(k => brand.length < 4 || !norm(k).includes(brand))
     .slice(0, max);
   const out = [];
   for (const kw of seeds) {
