@@ -8,7 +8,7 @@ on:
       hashes:
         description: "comma-separated audit hashes to re-mint (blank = all stale)"
         required: false
-        default: """
+        default: ""
 
 concurrency:
   group: remint-audits
