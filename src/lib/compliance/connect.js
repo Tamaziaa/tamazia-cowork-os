@@ -52,6 +52,15 @@ function signalSatisfiesTrigger(triggerPattern, signals) {
   return false;
 }
 
+// CAPABILITY GATE (Aman directive): some frameworks bind ONLY if the firm actually exhibits the capability
+// on its live site — a real structured signal OR an explicit on-page mention. A clinic with no AI system is
+// not subject to the EU AI Act; a firm that markets no medical device is not subject to EU MDR. This stops
+// universal/jurisdiction attachment from inflating exposure (e.g. the AI Act's GBP30m ceiling) with no basis.
+const CAP_GATE = {
+  EU_AI_ACT: { sig: 'uses_ai', rx: /\b(automated decision[- ]?making|\bA\.?I\.? system|machine learning model|generative a\.?i\.?|large language model|recommendation engine|facial recognition|biometric (identification|categorisation)|predictive analytics|virtual assistant|chatbot)\b/i },
+  EU_MDR:    { sig: null,      rx: /\b(medical device|ce[- ]?mark(ed|ing)?|in[- ]vitro|implantable|class ii[ab]|software as a medical device|\bSaMD\b|notified body)\b/i },
+};
+
 // catalogue = { frameworks:[{framework_short,jurisdiction}], rules:[{framework_short,sector_relevance[],rule_type,trigger_pattern,...}] }
 function connect({ catalogue, jurisdictions, sector, signals, text }) {
   const sec = String(sector || '').toLowerCase().trim();
@@ -71,6 +80,9 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     if (!jurOK) { gates.jurisdiction_filtered.push(fw); continue; }
     // GATE B0 · framework-sector applicability (stops pharma/accounting/energy frameworks leaking into, say, a law firm)
     if (!fwSectorOK(fw, sec, byFw[fw])) { gates.sector_filtered.push(fw); continue; }
+    // CAPABILITY GATE: capability-scoped frameworks require a real on-site signal or explicit mention.
+    const _cap = CAP_GATE[fw];
+    if (_cap && !((_cap.sig && sig[_cap.sig]) || (_cap.rx && _cap.rx.test(t)))) { gates.trigger_filtered.push(fw); continue; }
     let anyRule = false, triggerHeld = false, sectorHeld = false;
     for (const r of byFw[fw]) {
       const sectors = Array.isArray(r.sector_relevance) ? r.sector_relevance : [];
