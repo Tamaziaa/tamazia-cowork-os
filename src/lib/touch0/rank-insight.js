@@ -27,8 +27,42 @@ function deriveServiceNoun(company, sector, html) {
 const clean = d => String(d || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '').toLowerCase();
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 // Directories/aggregators/social/gov — true competitors are filtered apart from these so the email names a real peer firm.
-const AGGREGATORS = new Set(['legal500.com','chambers.com','chambersandpartners.com','chambersstudent.co.uk','reviewsolicitors.co.uk','lawsociety.org.uk','solicitors.lawsociety.org.uk','sra.org.uk','yell.com','yelp.com','yelp.co.uk','trustpilot.com','tripadvisor.com','tripadvisor.co.uk','bing.com','wikipedia.org','facebook.com','linkedin.com','instagram.com','twitter.com','x.com','youtube.com','indeed.com','glassdoor.com','glassdoor.co.uk','thelawyer.com','prospects.ac.uk','checkatrade.com','bark.com','clutch.co','g2.com','expertise.com','threebestrated.co.uk','findlaw.com','avvo.com','reddit.com','quora.com','mumsnet.com','which.co.uk','booking.com','expedia.com','hotels.com','opentable.com','rightmove.co.uk','zoopla.co.uk','onthemarket.com','primelocation.com','gov.uk','nhs.uk','apple.com','amazon.com','zocdoc.com','yellowpages.com','yellowpages.co.uk','yell.co.uk','whatclinic.com','whatclinic.co.uk','doctify.com','topdoctors.co.uk','topdoctors.com','healthgrades.com','vitals.com','ratemds.com','treatwell.co.uk','justdial.com','thomsonlocal.com','freeindex.co.uk','hotfrog.co.uk','cylex-uk.co.uk','scoot.co.uk','192.com','bing.co.uk','yahoo.com','duckduckgo.com','pinterest.com','tiktok.com']);
-function isAggregator(d){ d = String(d||'').replace(/^www\./,'').toLowerCase(); if (AGGREGATORS.has(d)) return true; return /(^|\.)(wikipedia\.org|facebook\.com|linkedin\.com|youtube\.com|gov\.uk|nhs\.uk)$/.test(d) || /(^|\.)google\./.test(d); }
+const AGGREGATORS = new Set(['legal500.com','chambers.com','chambersandpartners.com','chambersstudent.co.uk','reviewsolicitors.co.uk','lawsociety.org.uk','solicitors.lawsociety.org.uk','sra.org.uk','yell.com','yelp.com','yelp.co.uk','trustpilot.com','tripadvisor.com','tripadvisor.co.uk','bing.com','wikipedia.org','facebook.com','linkedin.com','instagram.com','twitter.com','x.com','youtube.com','indeed.com','glassdoor.com','glassdoor.co.uk','thelawyer.com','prospects.ac.uk','checkatrade.com','bark.com','clutch.co','g2.com','expertise.com','threebestrated.co.uk','findlaw.com','avvo.com','reddit.com','quora.com','mumsnet.com','which.co.uk','booking.com','expedia.com','hotels.com','opentable.com','rightmove.co.uk','zoopla.co.uk','onthemarket.com','primelocation.com','gov.uk','nhs.uk','apple.com','amazon.com','zocdoc.com','yellowpages.com','yellowpages.co.uk','yell.co.uk','whatclinic.com','whatclinic.co.uk','doctify.com','topdoctors.co.uk','topdoctors.com','healthgrades.com','vitals.com','ratemds.com','treatwell.co.uk','justdial.com','thomsonlocal.com','freeindex.co.uk','hotfrog.co.uk','cylex-uk.co.uk','scoot.co.uk','192.com','bing.co.uk','yahoo.com','duckduckgo.com','pinterest.com','tiktok.com',
+  // US legal directories (SPEC §5)
+  'justia.com','nolo.com','lawyers.com','superlawyers.com','martindale.com','lawinfo.com','hg.org','findlaw.co.uk',
+  // 'best/top' listicle & review aggregators that leak into authority/competitor sets
+  'bestlawfirms.com','usnews.com','forbes.com','forbes.co.uk','time.com','timeout.com','bestinlondon.uk','wunderlustlondon.co.uk','theurbanlist.com','squaremeal.co.uk','designmynight.com','hardens.com','luxurylondon.co.uk','citymapper.com',
+  // regional/MENA directories & listings
+  'edarabia.com','dubaisells.com','propertyfinder.ae','bayut.com','dubizzle.com','connectingdubai.com','lovinmalta.com','lovindubai.com','timeoutdubai.com','timeoutabudhabi.com','gulfnews.com','khaleejtimes.com',
+  // ecommerce / shopping aggregators & guides (so a sofa retailer's peers aren't 'online shopping platform' sites)
+  'amazon.co.uk','amazon.ae','ebay.com','ebay.co.uk','etsy.com','aliexpress.com','wayfair.com','wayfair.co.uk','houzz.com','houzz.co.uk','ecommerceguide.com','shopify.com','trustpilot.co.uk','idealo.co.uk','pricerunner.com','google.com','reviews.io','feefo.com',
+  // generic content/SEO/'guide' magazines
+  'medium.com','wordpress.com','blogspot.com','substack.com','businessinsider.com','techradar.com','expertreviews.co.uk','reviewed.com','thespruce.com','wikihow.com',
+  // OTA / travel aggregators (a hotel's peers are hotels, never lastminute/agoda/skyscanner)
+  'lastminute.com','agoda.com','trivago.com','trivago.co.uk','kayak.com','kayak.co.uk','skyscanner.net','airbnb.com','vrbo.com','hostelworld.com','laterooms.com','travelsupermarket.com',
+  // news/magazine/listicle hosts whose stems dodge the token patterns (ibtimes != "times",
+  // lawyermag != "magazine", bestinlondon has no separator after "best") — they co-rank by aggregating firms
+  'ibtimes.co.uk','ibtimes.com','lawyermag.co.uk','lawyermonthly.com','legalfutures.co.uk','bestinlondon.london','bestlondon.co.uk','citymatters.london','londonpost.news','thelondoneconomic.com','standard.co.uk','mirror.co.uk','dailymail.co.uk','telegraph.co.uk','independent.co.uk','metro.co.uk','huffingtonpost.co.uk',
+  // real-estate portals (a developer/agent's peers are developers/agents, never the portal)
+  'realtor.com','homes.com','redfin.com','trulia.com','apartments.com','loopnet.com',
+  // tech/SaaS review-aggregator & roundup blogs (NOT real vendors — real vendors are kept)
+  'geekflare.com','g2crowd.com','capterra.com','getapp.com','softwareadvice.com','trustradius.com','pcmag.com','cnet.com','techcrunch.com','venturebeat.com','producthunt.com','saashub.com','slashdot.org','sourceforge.net','financesonline.com','softwaresuggest.com','selecthub.com',
+]);
+// Heuristic blocklist (SPEC §5): a host whose registrable label reads like a directory/listicle/review/guide/
+// magazine is almost never a real competitor firm — it co-ranks because it AGGREGATES the firms. We drop those
+// even when not enumerated above. Tuned to avoid eating real firm names (must be a STANDALONE token, not a substring
+// of e.g. 'bestcaredental' → 'best'+'care' is fine, but 'best-dentists-london' is a listicle).
+const _AGG_TOKEN = /(?:^|[.-])(?:best|top\d*|top-?\d+|review(?:s|ed)?|rated|directory|listings?|compare|comparison|guide|magazine|insider|nearme|near-me|ranking|rankings|bestof|find(?:a|my)?|vs|versus|cheapest|deals|voucher|coupon|discount)(?:[.-]|$)/i;
+function isAggregator(d){
+  d = String(d||'').replace(/^https?:\/\//,'').replace(/\/.*$/,'').replace(/^www\./,'').toLowerCase();
+  if (!d) return true;
+  if (AGGREGATORS.has(d)) return true;
+  if (/(^|\.)(wikipedia\.org|facebook\.com|linkedin\.com|youtube\.com|gov\.uk|nhs\.uk|gov\.ae|gov\.sa)$/.test(d) || /(^|\.)google\./.test(d)) return true;
+  // heuristic: directory/listicle/review/guide pattern in the registrable host label
+  const label = d.replace(/\.(co|com|org|net|gov|ac|me)?\.[a-z]{2,}$/,'').replace(/\.[a-z]{2,}$/,'');
+  if (_AGG_TOKEN.test(d) || _AGG_TOKEN.test(label)) return true;
+  return false;
+}
 
 function keywordsFor(sector, city, serviceNoun) {
   const noun = serviceNoun || SECTOR_NOUN[sector] || String(sector || 'business').replace(/-/g, ' ');
@@ -47,9 +81,12 @@ function keywordsFor(sector, city, serviceNoun) {
 async function checkKeyword(keyword, domain, country) {
   const r = await serp.search(keyword, country, 100); // full depth → real live position
   if (!r || r.error || !((r.organic || []).length)) return null; // GATE: unverified → drop
+  // `organic` excludes ads (the SERP client returns ads separately), and is rank-ordered, so walking it past
+  // self + aggregators yields the REAL first-place operating business — never a directory, aggregator or ad.
   const ranked = r.organic.map(o => ({ pos: o.rank, domain: o.domain })).filter(x => x.domain);
   const mine = ranked.find(x => x.domain === domain);
-  // Name only REAL competitors — exclude the lead itself and directories/aggregators/social/gov.
+  // Name only REAL competitors — exclude the lead itself and directories/aggregators/social/gov. top3[0] is the
+  // first genuine competitor by SERP rank (the "who actually outranks you"), with aggregators/ads walked past.
   const top3 = ranked.filter(x => x.domain !== domain && !isAggregator(x.domain)).slice(0, 3);
   // Evidence must let the fact-check gate verify the named competitors AND the lead's own position.
   const top6 = ranked.slice(0, 6);
@@ -110,41 +147,142 @@ async function autocomplete(seed) {
   } catch (_e) { return []; }
 }
 const _catCache = {};
+// Stopwords a category noun must never END on (#17): "law firms near", "estate agents in", "dentist the" are
+// broken seeds — the location word/preposition belongs to the query template, not the noun.
+const _NOUN_TAIL_STOP = new Set(['near', 'in', 'the', 'a', 'an', 'of', 'for', 'and', 'or', 'to', 'at', 'on', 'me', 'best', 'top', 'your', 'our', 'my']);
+const _NOUN_HEAD_STOP = new Set(['best', 'top', 'the', 'a', 'an', 'find', 'leading', 'premier', 'trusted', 'local']);
+// Cities/locales that must not be baked INTO the category noun (#17: "dubai property developers" must become
+// "property developers" so the engine doesn't emit "dubai property developers Reading"). The query template
+// adds the firm's REAL city separately.
+const _CITY_RX = /\b(london|manchester|birmingham|edinburgh|glasgow|leeds|bristol|liverpool|sheffield|newcastle|nottingham|leicester|coventry|cardiff|belfast|aberdeen|brighton|oxford|cambridge|reading|southampton|norwich|exeter|derby|plymouth|wolverhampton|dubai|abu dhabi|sharjah|new york|miami|los angeles|san francisco|chicago|boston|seattle|austin|dallas|houston|washington|atlanta|denver|paris|madrid|barcelona|berlin|munich|frankfurt|amsterdam|brussels|luxembourg|dublin|geneva|zurich|singapore|hong kong|doha|riyadh|jeddah|toronto|sydney|melbourne|uk|usa|uae|ksa|qatar)\b/gi;
+// Sanitise an LLM/heuristic category noun into a clean, on-template seed (#17). Strips leading/trailing stopwords,
+// removes any baked-in city, collapses "near near"/"near me" tails, and rejects garbage → returns '' if unusable.
+function sanitiseNoun(raw, city) {
+  let c = String(raw || '').toLowerCase().replace(/["'.,:;!?()]/g, '').replace(/\s+/g, ' ').trim();
+  if (!c) return '';
+  // strip the firm's own operating city and any other city token from the noun
+  if (city) { const cx = String(city).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); c = c.replace(new RegExp('\\b' + cx + '\\b', 'gi'), ' '); }
+  c = c.replace(_CITY_RX, ' ');
+  // kill trailing location-template fragments the LLM sometimes appends: "near me", "near", "in", "online shopping platform"
+  c = c.replace(/\b(near\s+me|near|in|within|around)\s*$/i, ' ');
+  let words = c.split(/\s+/).filter(Boolean);
+  while (words.length && _NOUN_HEAD_STOP.has(words[0])) words.shift();
+  while (words.length && _NOUN_TAIL_STOP.has(words[words.length - 1])) words.pop();
+  // de-dupe immediate repeats ("near near", "firms firms")
+  words = words.filter((w, i) => w !== words[i - 1]);
+  c = words.join(' ').trim();
+  if (!c || c.length < 3 || c.length > 40 || words.length > 5) return '';
+  return c;
+}
+
+// ── Keyword accuracy: scale-awareness, position bands, free-LLM relevance (Gate 2 / Gate 7 / §5.5) ──
+// A national/global brand does NOT compete on city-localised search ("business bank account London" misrepresents
+// a national bank; "hotel London" misrepresents a UAE hotel group). We seed CATEGORY-level terms for such firms
+// and city+category for genuinely-local ones. Signals: an inherently-national/global sector, OR a multi-market
+// footprint (3+ jurisdictions / 2+ offices) from the firm profile. A single-site clinic/gym/agent stays local.
+const _NATIONAL_SECTOR_RX = /\b(bank|banking|fintech|finance|financial|insurance|insurtech|software|saas|platform|technology|telecom|airline|aviation|group|chain|retail|ecommerce|e-commerce|marketplace|enterprise|logistics|manufacturing|pharma)\b/i;
+function isBigBrandSeed({ sector, jurisdictions, firmProfile } = {}) {
+  const sec = String(sector || '').toLowerCase();
+  const profSecs = (firmProfile && Array.isArray(firmProfile.sectors) ? firmProfile.sectors.join(' ') : '').toLowerCase();
+  const jurs = Array.isArray(jurisdictions) ? jurisdictions.length : 0;
+  const offices = (firmProfile && Array.isArray(firmProfile.office_countries)) ? firmProfile.office_countries.length : 0;
+  return _NATIONAL_SECTOR_RX.test(sec) || _NATIONAL_SECTOR_RX.test(profSecs) || jurs >= 3 || offices >= 2;
+}
+// Recruitment / careers / informational queries are not buyer intent and must never be seeded or shown.
+const _KW_NOISE_RX = /\b(work experience|training contract|vacation scheme|graduate scheme|internship|apprenticeship|jobs?|vacancies|vacancy|careers?|salary|salaries|recruitment|hiring|interview|wikipedia|meaning|definition|how to|what is)\b/i;
+// Local-intent pattern a national brand never competes on (kept separate from the email/touch-0 path).
+const LOCAL_RX_SEED = /\bnear(\s?(me|you|by))?\b|\bnearby\b|\blocal\b|\bin my area\b/i;
+// Position bands. The "almost winning" band (the one-push-away hook the audit sells) is roughly SERP 20-50:
+// close enough that a focused push wins it, not a top-10 the firm already owns nor an invisible 100+ term.
+function positionBand(pos) {
+  if (pos == null) return 'absent';        // not in the checked depth at all
+  if (pos <= 10) return 'winning';          // already on page one — no urgency, not the hook
+  if (pos <= 19) return 'striking';         // page two top — very close
+  if (pos <= 50) return 'almost';           // the "one push away" sweet spot
+  return 'distant';                         // 51-100, a real gap but a longer climb
+}
+// Free-LLM topical-relevance scorer: given the firm's brand profile + intent and a list of candidate terms,
+// return the subset that genuinely matches the firm's brand and commercial/service vertical. Batched (one call),
+// cheap (Groq/NIM free), and FAIL-OPEN — any error/no-key keeps every candidate, so the map never empties on a
+// classifier hiccup. Drops obviously off-brand terms (a bank getting "dental implants", a law firm getting "saas").
+async function scoreKeywordRelevance(terms, { company, sector, brandProfile, corpus, env = process.env } = {}) {
+  const list = Array.from(new Set((terms || []).map((t) => String(t || '').trim()).filter(Boolean)));
+  if (list.length <= 1) return list;
+  const key = env.GROQ_API_KEY || env.NIM_API_KEY;
+  if (!key) return list;                                  // fail-open: no key → keep all
+  try {
+    const ctx = String(brandProfile || corpus || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1200);
+    const prompt = 'A business. Company: "' + (company || '') + '". Sector: "' + (sector || '') + '". '
+      + (ctx ? ('What it does: "' + ctx + '". ') : '')
+      + 'Here is a numbered list of candidate search keywords:\n'
+      + list.map((t, i) => (i + 1) + '. ' + t).join('\n')
+      + '\nReturn ONLY the numbers of the keywords that a real buyer would plausibly type to find THIS company\'s '
+      + 'core commercial service or product — drop any that are off-topic, the wrong industry, recruitment/jobs, '
+      + 'or informational. Reply as a plain comma-separated list of numbers only (e.g. "1, 3, 4"). If all fit, list all.';
+    const groq = env.GROQ_API_KEY;
+    const base = groq ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://integrate.api.nvidia.com/v1/chat/completions';
+    const model = groq ? 'llama-3.3-70b-versatile' : (env.NIM_MODEL || 'meta/llama-3.3-70b-instruct');
+    const r = await fetch(base, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 60, temperature: 0 }), signal: AbortSignal.timeout(20000) });
+    if (!r.ok) return list;
+    const j = await r.json();
+    const txt = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    const nums = [...String(txt).matchAll(/\d+/g)].map((m) => parseInt(m[0], 10)).filter((n) => n >= 1 && n <= list.length);
+    if (!nums.length) return list;                        // model gave nothing usable → keep all
+    const kept = Array.from(new Set(nums)).map((n) => list[n - 1]).filter(Boolean);
+    return kept.length ? kept : list;                     // never return empty
+  } catch (_e) { return list; }                           // fail-open
+}
 // Derive the real buyer search-category for ANY site (local or global) using the free NIM LLM; cached per domain,
 // always falls back to the heuristic noun. This makes the keyword map + citation probe accurate for ecommerce/
 // global sites where the bare sector word ("ecommerce") would otherwise produce meaningless competitors.
-async function deriveCategoryNoun({ company, sector, html, domain }) {
-  const fallback = deriveServiceNoun(company, sector, html);
+// #17: classifies over the FULL scraped corpus (passed as `corpus`/`html`), not a 500-char title, so the noun
+// reflects what the firm actually sells; the result is sanitised (no city, no trailing stopword, on-vertical).
+async function deriveCategoryNoun({ company, sector, html, corpus, domain, city }) {
+  const fallback = sanitiseNoun(deriveServiceNoun(company, sector, html), city) || deriveServiceNoun(company, sector, html);
   const dom = clean(domain || '');
   if (dom && _catCache[dom]) return _catCache[dom];
   const key = process.env.NIM_API_KEY || process.env.GROQ_API_KEY;
   if (!key) return fallback;
   try {
-    const text = String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
-    const prompt = 'A business website. Title/snippet: "' + text + '" (company: ' + (company || dom) + ', sector: ' + sector + '). In 2 to 4 words, give the exact phrase a buyer types into Google or an AI assistant to find this kind of provider. Reply with ONLY the phrase, lowercase, no punctuation, no quotes.';
+    // Prefer the FULL page corpus (more representative than the title); fall back to html/title. Cap to keep the
+    // prompt cheap but give the model real body copy, not just the <title>.
+    const src = (corpus && String(corpus).length > 80) ? corpus : html;
+    const text = String(src || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
+    const prompt = 'A business website. Page content: "' + text + '" (company: ' + (company || dom) + ', sector: ' + sector + '). In 2 to 4 words, give the GENERIC category phrase a buyer types into Google or an AI assistant to find this kind of provider — the provider TYPE only. Do NOT include any city, country, the word "near", "best", "top", or the business name. Examples: "dental clinic", "family law solicitors", "luxury sofa retailer", "commercial property developers". Reply with ONLY the phrase, lowercase, no punctuation, no quotes.';
     const base = process.env.NIM_API_KEY ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
     const model = process.env.NIM_API_KEY ? (process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct') : 'llama-3.3-70b-versatile';
     const r = await fetch(base, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 20, temperature: 0.1 }), signal: AbortSignal.timeout(20000) });
-    if (r.ok) { const j = await r.json(); let c = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || '').trim().toLowerCase().replace(/["'.\n]/g, '').replace(/\s+/g, ' ').trim();
+    if (r.ok) { const j = await r.json(); let c = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || '').trim().toLowerCase();
+      c = sanitiseNoun(c, city);
       if (c && c.split(' ').length <= 5 && c.length > 2 && c.length < 40) { if (dom) _catCache[dom] = c; return c; } }
   } catch (_e) {}
   return fallback;
 }
 
-async function buildKeywordMap({ domain, company, sector, city, html, country = 'UK', env = process.env, max = 8 }) {
+async function buildKeywordMap({ domain, company, sector, city, html, corpus, country = 'UK', env = process.env, max = 8, jurisdictions = null, firmProfile = null }) {
   const dom = clean(domain); if (!dom) return { ok: false, keywords: [] };
-  let noun = await deriveCategoryNoun({ company, sector, html, domain: dom });
-  if (city) { const _cx = city.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); noun = noun.replace(new RegExp('\\b' + _cx + '\\b','gi'),'').replace(/\s{2,}/g,' ').replace(/^[ ,]+|[ ,]+$/g,'').trim() || noun; }
+  // #17 keyword spine: derive the category noun over the FULL corpus (not the title), then sanitise it so it
+  // never carries the city or a trailing stopword. ONE noun feeds the whole map (and, via build.js, the citation
+  // probe + competitor set), so keyword_map / geo_probe / competitive_benchmark / ai_citation share one spine.
+  let noun = await deriveCategoryNoun({ company, sector, html, corpus, domain: dom, city });
+  noun = sanitiseNoun(noun, city) || noun;
   const brand = norm(company || dom.split('.')[0]);
   const ctyLabel = ({ UK: 'UK', US: 'USA', AE: 'UAE', SA: 'Saudi Arabia', QA: 'Qatar' })[String(country).toUpperCase()] || country || '';
+  // SCALE-AWARENESS: a national/global brand (inherently-national sector, or a multi-market footprint from the
+  // firm profile) must be seeded at CATEGORY level, never "<service> <city>" — a bank does not rank for
+  // "business bank account London". For such firms we IGNORE the detected operating city for keyword seeds so the
+  // ladder is built from brand/vertical terms. A genuinely-local firm keeps its city. (kw-scale · Gate 7)
+  const bigBrand = isBigBrandSeed({ sector, jurisdictions, firmProfile });
+  const seedCity = bigBrand ? '' : city;
   let seeds;
-  if (city) {
-    seeds = keywordsFor(sector, city, noun);
-    try { const ac = await autocomplete(noun + ' ' + city); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
+  if (seedCity) {
+    seeds = keywordsFor(sector, seedCity, noun);
+    try { const ac = await autocomplete(noun + ' ' + seedCity); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
   } else {
-    // No city (global / ecommerce): category-level buyer queries so the ranking ladder still populates.
-    seeds = [noun, 'best ' + noun, 'top ' + noun, (noun + ' ' + ctyLabel).trim(), 'best ' + noun + ' online'];
-    try { const ac = await autocomplete('best ' + noun); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
+    // National brand or no city (global / ecommerce): category-level + vertical buyer queries so the ranking
+    // ladder still populates from brand-relevant terms, never city-localised ones.
+    seeds = [noun, 'best ' + noun, 'top ' + noun, (noun + ' ' + ctyLabel).trim()];
+    try { const ac = await autocomplete(noun); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
   }
   // B1: seed the firm's own brand + specific-service long-tail (terms it plausibly ranks for) ahead of the
   // generic head terms, so the map shows a credible MIX of real positions + honest gaps — never "Not ranking"
@@ -156,25 +294,60 @@ async function buildKeywordMap({ domain, company, sector, city, html, country = 
   const _area = _areaM ? _areaM[0].trim() : '';
   const _PROC = { healthcare:['invisalign','veneers','dental implants','teeth whitening','composite bonding','orthodontics','smile makeover','facial aesthetics'], 'law-firms':['conveyancing','divorce','probate','employment law','personal injury','commercial litigation','immigration'], 'real-estate':['property valuation','lettings','new homes','commercial property'], hospitality:['afternoon tea','spa day','wedding venue','fine dining'], financial:['mortgage advice','pension transfer','tax planning','wealth management'] };
   const _procs = (_PROC[sector]||[]).filter(p => new RegExp('\\b'+p.replace(/\s+/g,'\\s+')+'\\b','i').test(_hay)).slice(0,3);
-  // priority seeds: neighbourhood + procedure long-tail (rank-worthy) first, then the head terms (honest gaps)
-  const _longtail = city
+  // priority seeds: neighbourhood + procedure long-tail (rank-worthy) first, then the head terms (honest gaps).
+  // Uses seedCity (empty for national brands) so a big brand never gets a city long-tail. (kw-scale)
+  const _longtail = seedCity
     ? [ ...(_area ? [(_specific+' '+_area).trim(), (noun+' '+_area).trim()] : []),
-        ..._procs.map(p => (p+' '+(_area||city)).trim()),
-        (_specific+' '+city).trim(), (noun+' near me').trim() ]
-    : [ _specific, 'best '+_specific, ..._procs ];
+        ..._procs.map(p => (p+' '+(_area||seedCity)).trim()),
+        (_specific+' '+seedCity).trim(), (noun+' near me').trim() ]
+    : [ _specific, ..._procs ];                  // brand/vertical service terms, no superlatives or city
   seeds = Array.from(new Set([..._longtail.filter(Boolean), ...seeds]));
-  seeds = seeds.map(k => String(k).replace(/\s+/g, ' ').trim()).filter(Boolean)
+  // #17 SPINE CLEAN: collapse duplicate words ("near near me"), reject any seed that ends on a bare stopword,
+  // and drop seeds that smuggle in a DIFFERENT city than the firm's (so a London dentist never gets a "Reading"
+  // or "Dubai" keyword from autocomplete bleed). The firm's own city is allowed; everything else is noise.
+  // For a national brand seedCity is '' so ANY city token in a seed is foreign and dropped; for a local firm
+  // its own city is allowed and everything else is noise.
+  const _cityLc = String(seedCity || '').toLowerCase();
+  const _cleanSeed = (k) => {
+    let s = String(k).toLowerCase().replace(/\s+/g, ' ').trim();
+    s = s.split(' ').filter((w, i, a) => w !== a[i - 1]).join(' ');             // collapse immediate repeats
+    s = s.replace(/\b(near)\s+\1\b/gi, '$1');                                    // "near near" → "near"
+    return s.replace(/\s+/g, ' ').trim();
+  };
+  const _seedOk = (k) => {
+    const w = k.split(' ').filter(Boolean);
+    if (!w.length) return false;
+    if (_KW_NOISE_RX.test(k)) return false;                                      // recruitment/informational, not a buyer term
+    if (bigBrand && LOCAL_RX_SEED.test(k)) return false;                         // national brand never gets "near me"/"local"
+    if (_NOUN_TAIL_STOP.has(w[w.length - 1]) && !(w.length >= 2 && w[w.length - 1] === 'me' && w[w.length - 2] === 'near')) return false; // trailing stopword (allow "near me")
+    // a city baked in the seed that is NOT the firm's own city (always foreign for a big brand) → drop
+    let foreign = false; const m = k.match(_CITY_RX); _CITY_RX.lastIndex = 0;
+    if (m) for (const tok of m) { if (_cityLc && tok.toLowerCase() === _cityLc) continue; if (_cityLc && _cityLc.includes(tok.toLowerCase())) continue; foreign = true; break; }
+    return !foreign;
+  };
+  seeds = seeds.map(_cleanSeed).filter(Boolean)
     .filter(k => brand.length < 4 || !norm(k).includes(brand))
-    .slice(0, max);
+    .filter(_seedOk);
+  seeds = Array.from(new Set(seeds));
+  // RELEVANCE GATE: free-LLM scores each candidate against the firm's brand profile + vertical, dropping
+  // off-brand terms (a bank getting "dental implants"). Fail-open: keeps all on no-key/error. Then cap.
+  try { seeds = await scoreKeywordRelevance(seeds, { company, sector, brandProfile: (firmProfile && (firmProfile.summary || firmProfile.description)) || '', corpus, env }); } catch (_e) {}
+  seeds = seeds.slice(0, max);
   const out = [];
   for (const kw of seeds) {
     let r = null; try { r = await checkKeyword(kw, dom, country); } catch (_e) {}
     if (!r) continue;
     const leader = r.top3[0] || {};
-    out.push({ keyword: kw, my_position: r.my_position, leader: leader.domain || null, leader_pos: leader.pos || null, target: (r.my_position && r.my_position <= 3) ? r.my_position : 3 });
+    // POSITION-AWARE: record the band so the render can lead with the "one push away" terms (SERP 20-50)
+    // and de-emphasise both the top-10 the firm already owns and the invisible 100+ terms. (Gate 2)
+    out.push({ keyword: kw, my_position: r.my_position, band: positionBand(r.my_position), leader: leader.domain || null, leader_pos: leader.pos || null, target: (r.my_position && r.my_position <= 3) ? r.my_position : 3 });
   }
   if (!out.length) return { ok: false, keywords: [] };
-  return { ok: true, service_noun: noun, city: city || ctyLabel, keywords: out };
+  // Order so the "almost winning" band leads (the audit's hook), then striking, distant, absent, already-winning.
+  const _bandRank = { almost: 0, striking: 1, distant: 2, absent: 3, winning: 4 };
+  out.sort((a, b) => (_bandRank[a.band] ?? 5) - (_bandRank[b.band] ?? 5));
+  // city is recorded as the country label for a national brand so downstream knows the map is category-level.
+  return { ok: true, service_noun: noun, city: bigBrand ? ctyLabel : (city || ctyLabel), scale: bigBrand ? 'national' : 'local', keywords: out };
 }
 
 // ── Real AI-citation probe (free path) ────────────────────────────────────────────────────────────────────
@@ -204,13 +377,19 @@ function parseLlmCompetitors(answer, company) {
     .filter(x => { const n = x.toLowerCase().replace(/[^a-z0-9 ]/g, ''); return self ? !n.includes(self) : true; })
     .slice(0, 5);
 }
-async function aiCitationProbe({ domain, company, sector, city, html, country = 'UK', wikidata = null }) {
+async function aiCitationProbe({ domain, company, sector, city, html, corpus, country = 'UK', wikidata = null, jurisdictions = null, firmProfile = null }) {
   domain = clean(domain);
-  const noun = await deriveCategoryNoun({ company, sector, html, domain });
+  let noun = await deriveCategoryNoun({ company, sector, html, corpus, domain, city });
+  noun = sanitiseNoun(noun, city) || noun;
+  // SCALE-AWARENESS: a national/global brand's AI-visibility query must be category-level too (a buyer asks an AI
+  // for "online bank", not "online bank London"), keeping ai_citation consistent with the scale-aware keyword
+  // spine. A local firm keeps its city. (kw-scale)
+  const bigBrand = isBigBrandSeed({ sector, jurisdictions, firmProfile });
+  const probeCity = bigBrand ? '' : city;
   // Use the same real-buyer query construction as the keyword map (no superlative skew): the plain "noun city" form.
   let q;
-  if (city) { const kws = keywordsFor(sector, city, noun).filter(k => !/^best |^top /i.test(k) && !/\d{4}$/.test(k)); q = kws[0] || (noun + ' ' + city); }
-  else { q = noun + ' ' + country; }
+  if (probeCity) { const kws = keywordsFor(sector, probeCity, noun).filter(k => !/^best |^top /i.test(k) && !/\d{4}$/.test(k)); q = kws[0] || (noun + ' ' + probeCity); }
+  else { q = (noun + ' ' + country).trim(); }
   let r = null; try { r = await serp.search(q, country, 20); } catch (_e) {}
   if (!r || r.error || !((r.organic || []).length)) {
     // SERP unavailable: fall back to the FREE NIM-only probe so the AI-visibility section still populates at GBP 0.
@@ -282,7 +461,7 @@ async function llmCitationProbe({ query, company }) {
   } catch (e) { return { ran: false, reason: 'error', error: String(e.message || e) }; }
 }
 
-module.exports = { buildRankInsight, keywordsFor, checkKeyword, deriveServiceNoun, buildKeywordMap, autocomplete, aiCitationProbe, llmCitationProbe };
+module.exports = { buildRankInsight, keywordsFor, checkKeyword, deriveServiceNoun, deriveCategoryNoun, sanitiseNoun, buildKeywordMap, autocomplete, aiCitationProbe, llmCitationProbe, isAggregator, AGGREGATORS, isBigBrandSeed, positionBand, scoreKeywordRelevance };
 
 // Fact-check gate — every claim (leader domain, my_position) must appear in the carried SERP evidence,
 // or the insight is rejected. This is the layer that guarantees the Touch-0 never asserts an invented rank.

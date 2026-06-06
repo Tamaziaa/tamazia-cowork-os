@@ -181,47 +181,80 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
   try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: country || 'UK', signals: scan.signals }); } catch (_e) {}
-  // KEYWORD MAP (cog 5): where they rank now vs the top-3 target, real SERP via SERPER + free autocomplete. Fail-open.
+  // Propagate the LLM firm-profiler's detected sector (corrects a mis-tagged row — e.g. a gym tagged
+  // "hospitality") to EVERY downstream engine (keywords, competitors, content-gap, local-pack) and the
+  // payload label, so the whole audit speaks the firm's REAL sector, not the row's stale guess. (F-profile)
+  if (comp && comp.detected_sector && comp.detected_sector !== sector) sector = comp.detected_sector;
+  // ── TIER 1 (parallel, after Tier 0): all need only the corrected sector / domain / scan ──
+  // (a) keyword_map, (b) ai_citation + aiCiteFindings, (c) ai-readiness, (d) local-pack readiness.
+  // Vars hoisted here so each thunk closes over them; each thunk keeps its own fail-open try/catch.
   let keyword_map = null;
-  try {
-    const city = (scan.markets && scan.markets.primary_city) || '';
-    // No city gate: buildKeywordMap handles no-city/global sites internally (category-level queries), so the
-    // ranking ladder populates for ecommerce/global too. (P6.4 caught this gate silently zeroing the keyword map.)
-    const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
-    keyword_map = await ri.buildKeywordMap({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city, html: [scan.signals && scan.signals.title, scan.signals && scan.signals.meta_description].filter(Boolean).join(' '), country: country || 'UK', env, max: 7 });
-  } catch (_e) {}
-  // REAL AI-citation probe (cog): who owns the answer surface for the firm's category, and is the firm cited?
   let ai_citation = null; const aiCiteFindings = [];
-  try {
-    const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
-    const _city = (scan.markets && scan.markets.primary_city) || '';
-    const _wd = (scan.signals && scan.signals.wikidata) || scan.wikidata || null;
-    ai_citation = await ri.aiCitationProbe({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city: _city, html: (scan.signals && scan.signals.title) || '', country: country || 'UK', wikidata: _wd });
-    if (ai_citation && ai_citation.ok) {
-      const comps = (ai_citation.competitors || []).map(c => c.domain);
-      if (ai_citation.firm_position == null && comps.length) {
-        aiCiteFindings.push({ bucket: 'ai_visibility', severity: 'P1',
-          fact: 'Absent from the AI / search answer surface for "' + ai_citation.query + '"',
-          layman_explanation: 'When a buyer asks ChatGPT, Perplexity, Google AI or a search engine for "' + ai_citation.query + '", your site is not in the top ' + ai_citation.checked + ' results these engines read and cite. The firms that own that answer surface today are ' + comps.slice(0, 3).join(', ') + '. AI engines synthesise answers from these ranked, recognised sources, so they name your competitors and not you.',
-          tamazia_fix_short: 'Tamazia runs the GEO + entity programme (Schema.org, llms.txt, a Wikidata entity and authoritative content) that puts you into the set of sources AI engines read and cite for your category.',
-          recommendation: '', citation: 'GEO', framework_short: 'GEO', citation_url: '',
-          evidence: 'live SERP: ' + ai_citation.query, evidence_quote: null, ai_competitors: ai_citation.competitors });
-      } else if (ai_citation.firm_position && ai_citation.firm_position > 3 && comps.length) {
-        aiCiteFindings.push({ bucket: 'ai_visibility', severity: 'P2',
-          fact: 'You rank #' + ai_citation.firm_position + ' for "' + ai_citation.query + '"; positions 1-3 own the AI citations',
-          layman_explanation: 'AI answer engines overwhelmingly cite the top 3 results for a category. You appear at position ' + ai_citation.firm_position + ', below ' + comps.slice(0, 3).join(', ') + ', so AI answers name them ahead of you.',
-          tamazia_fix_short: 'Tamazia closes the ranking + entity gap to move you into the top-3 set AI engines cite.',
-          recommendation: '', citation: 'GEO', framework_short: 'GEO', citation_url: '', evidence: 'live SERP: ' + ai_citation.query, ai_competitors: ai_citation.competitors });
+  let _aiReadyFindings = [];
+  let payload_ai_readiness = null;
+  let _localFindings = [];
+  await Promise.all([
+    // KEYWORD MAP (cog 5): where they rank now vs the top-3 target, real SERP via SERPER + free autocomplete. Fail-open.
+    (async () => {
+    try {
+      const city = (scan.markets && scan.markets.primary_city) || '';
+      // No city gate: buildKeywordMap handles no-city/global sites internally (category-level queries), so the
+      // ranking ladder populates for ecommerce/global too. (P6.4 caught this gate silently zeroing the keyword map.)
+      const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
+      keyword_map = await ri.buildKeywordMap({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city, html: [scan.signals && scan.signals.title, scan.signals && scan.signals.meta_description].filter(Boolean).join(' '), corpus: (scan.signals && scan.signals.corpus) || '', country: country || 'UK', env, max: 7, jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [], firmProfile: (comp && comp.firm_profile) || null });
+    } catch (_e) {}
+    })(),
+    // REAL AI-citation probe (cog): who owns the answer surface for the firm's category, and is the firm cited?
+    (async () => {
+    try {
+      const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
+      const _city = (scan.markets && scan.markets.primary_city) || '';
+      const _wd = (scan.signals && scan.signals.wikidata) || scan.wikidata || null;
+      ai_citation = await ri.aiCitationProbe({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city: _city, html: (scan.signals && scan.signals.title) || '', corpus: (scan.signals && scan.signals.corpus) || '', country: country || 'UK', wikidata: _wd, jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [], firmProfile: (comp && comp.firm_profile) || null });
+      if (ai_citation && ai_citation.ok) {
+        const comps = (ai_citation.competitors || []).map(c => c.domain);
+        if (ai_citation.firm_position == null && comps.length) {
+          aiCiteFindings.push({ bucket: 'ai_visibility', severity: 'P1',
+            fact: 'Absent from the AI / search answer surface for "' + ai_citation.query + '"',
+            layman_explanation: 'When a buyer asks ChatGPT, Perplexity, Google AI or a search engine for "' + ai_citation.query + '", your site is not in the top ' + ai_citation.checked + ' results these engines read and cite. The firms that own that answer surface today are ' + comps.slice(0, 3).join(', ') + '. AI engines synthesise answers from these ranked, recognised sources, so they name your competitors and not you.',
+            tamazia_fix_short: 'Tamazia runs the GEO + entity programme (Schema.org, llms.txt, a Wikidata entity and authoritative content) that puts you into the set of sources AI engines read and cite for your category.',
+            recommendation: '', citation: 'GEO', framework_short: 'GEO', citation_url: '',
+            evidence: 'live SERP: ' + ai_citation.query, evidence_quote: null, ai_competitors: ai_citation.competitors });
+        } else if (ai_citation.firm_position && ai_citation.firm_position > 3 && comps.length) {
+          aiCiteFindings.push({ bucket: 'ai_visibility', severity: 'P2',
+            fact: 'You rank #' + ai_citation.firm_position + ' for "' + ai_citation.query + '"; positions 1-3 own the AI citations',
+            layman_explanation: 'AI answer engines overwhelmingly cite the top 3 results for a category. You appear at position ' + ai_citation.firm_position + ', below ' + comps.slice(0, 3).join(', ') + ', so AI answers name them ahead of you.',
+            tamazia_fix_short: 'Tamazia closes the ranking + entity gap to move you into the top-3 set AI engines cite.',
+            recommendation: '', citation: 'GEO', framework_short: 'GEO', citation_url: '', evidence: 'live SERP: ' + ai_citation.query, ai_competitors: ai_citation.competitors });
+        }
+        if (ai_citation.llm && ai_citation.llm.ran && ai_citation.llm.cited === false) {
+          aiCiteFindings.push({ bucket: 'ai_visibility', severity: 'P1',
+            fact: 'A live ' + ai_citation.llm.provider + ' query did not name your firm for your category',
+            layman_explanation: 'We asked ' + ai_citation.llm.provider + ' to list the top firms for "' + ai_citation.query + '". Your firm was not named, confirming you are absent from the real AI answers buyers receive.',
+            tamazia_fix_short: 'Tamazia builds the entity + authoritative-content footprint that gets you named in live AI answers.',
+            recommendation: '', citation: 'GEO', framework_short: 'GEO', citation_url: '', evidence: 'live ' + ai_citation.llm.provider + ' answer probe' });
+        }
       }
-      if (ai_citation.llm && ai_citation.llm.ran && ai_citation.llm.cited === false) {
-        aiCiteFindings.push({ bucket: 'ai_visibility', severity: 'P1',
-          fact: 'A live ' + ai_citation.llm.provider + ' query did not name your firm for your category',
-          layman_explanation: 'We asked ' + ai_citation.llm.provider + ' to list the top firms for "' + ai_citation.query + '". Your firm was not named, confirming you are absent from the real AI answers buyers receive.',
-          tamazia_fix_short: 'Tamazia builds the entity + authoritative-content footprint that gets you named in live AI answers.',
-          recommendation: '', citation: 'GEO', framework_short: 'GEO', citation_url: '', evidence: 'live ' + ai_citation.llm.provider + ' answer probe' });
-      }
-    }
-  } catch (_e) {}
+    } catch (_e) {}
+    })(),
+    // P3.7 + P3.10 AI / entity-readiness (robots AI-crawler access + llms.txt + entity schema + Wikidata) — deterministic, GBP0, no quota.
+    (async () => {
+    try {
+      const _air = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'ai-readiness.js'));
+      const _airRes = await _air.aiReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], env });
+      if (_airRes && _airRes.ok) { _aiReadyFindings = _airRes.findings || []; payload_ai_readiness = { score: _airRes.score, blocked_ai_bots: _airRes.blocked_ai_bots, has_llms_txt: _airRes.has_llms_txt, has_org_schema: _airRes.has_org_schema, has_same_as: _airRes.has_same_as, in_wikidata: _airRes.in_wikidata }; }
+    } catch (_e) {}
+    })(),
+    // P2.15 local-pack / GBP readiness (OSM presence + LocalBusiness schema + NAP) — gated on city + local sector.
+    (async () => {
+    try {
+      const _lp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'local-pack.js'));
+      const _lpCity = (scan.markets && scan.markets.primary_city) || '';
+      const _lpRes = await _lp.localPackReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city: _lpCity, env });
+      if (_lpRes && _lpRes.finding) _localFindings = [_lpRes.finding];
+    } catch (_e) {}
+    })(),
+  ]);
   const frameworks = (comp.frameworks && comp.frameworks.length)
     ? comp.frameworks
     : (router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector, signals: scan.signals }) : router.routeJurisdictions({ country, sector }));
@@ -250,48 +283,114 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   }) : [];
 
   let payload_authority = null;
-  let payload_ai_readiness = null;
   let payload_geo_probe = null;
   let payload_geo_visuals = null;
   let payload_screenshots = null;
   let jurisdiction_statement = null;
   const sevRank = { P0: 0, P1: 1, P2: 2 };
-  // P2.11/P2.12 SEO depth: the live you-vs-competitor keyword finding (free-serp powered).
-  let _seoFindings = []; try { _seoFindings = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'seo-deep.js')).seoDeepFindings({ keyword_map }); } catch (_e) {}
-  // P2.16 content-gap (INTERNAL content-planning data only — NOT a client finding: generic-autocomplete gaps carry
-  // location/intent noise that would breach the zero-false-positive bar on the client render). For Tamazia's team.
+
+  // ── TIER 2 (parallel, after Tier 1): each needs keyword_map and/or ai_citation ──
+  // (a) content-gap, (b) organic-competitor set, (c) GEO probe, (d) source-gap, (e) SEO depth (sync).
+  // Concurrent .push() to _geoFindings is safe in single-threaded JS — pushes run after each await resolves.
+  let _seoFindings = [];
   let payload_content_gap = null;
-  try {
-    const _cg = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'content-gap.js'));
-    const _sn = (keyword_map && keyword_map.service_noun) || (scan.signals && scan.signals.service_noun) || sector;
-    const _cgCity = (scan.markets && scan.markets.primary_city) || '';
-    const _cgr = await _cg.contentGap({ domain, serviceNoun: _sn, city: _cgCity, sector, env });
-    if (_cgr && _cgr.pages) payload_content_gap = { pages: _cgr.pages, gaps: _cgr.gaps || [] };
-  } catch (_e) {}
-  // P2.17 backlink/authority gap (OpenPageRank) — compare against the exact competitors from the keyword map.
+  let _organicComps = [];
+  let _geoFindings = [];
+  await Promise.all([
+    // P2.16 content-gap (INTERNAL content-planning data only — NOT a client finding: generic-autocomplete gaps carry
+    // location/intent noise that would breach the zero-false-positive bar on the client render). For Tamazia's team.
+    (async () => {
+    try {
+      const _cg = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'content-gap.js'));
+      const _sn = (keyword_map && keyword_map.service_noun) || (scan.signals && scan.signals.service_noun) || sector;
+      const _cgCity = (scan.markets && scan.markets.primary_city) || '';
+      const _cgr = await _cg.contentGap({ domain, serviceNoun: _sn, city: _cgCity, sector, env });
+      if (_cgr && _cgr.pages) payload_content_gap = { pages: _cgr.pages, gaps: _cgr.gaps || [] };
+    } catch (_e) {}
+    })(),
+    // ── §5 REAL organic-competitor set (free SERP-overlap ∪ LLM peers, isAggregator-filtered, optional HF-relevance) ──
+    // ONE canonical peer set: domains that co-rank with the firm across its buyer queries, unioned with the peer
+    // firms the LLM named (ai_citation), all through the shared isAggregator() blocklist. Feeds DR (below),
+    // keyword leaders, and AI-visibility — replacing single-keyword guesses. Fail-open to the keyword leaders.
+    (async () => {
+    try {
+      const _co = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'competitor-overlap.js'));
+      const _llmPeers = ((ai_citation && ai_citation.competitors) || []).map(c => (c && (c.domain || c.name))).filter(Boolean);
+      const _firmText = (scan.signals && (scan.signals.corpus || scan.signals.title)) || '';
+      _organicComps = await _co.organicCompetitors({ keyword_map, domain, llmPeers: _llmPeers, firmText: _firmText, country: country || 'UK', env, want: 9 }) || [];
+    } catch (_e) {}
+    })(),
+    // P3.1/3.3/3.4/3.5 multi-sample GEO probe (repeatability + share-of-voice + entrenched leaders). Rate-limit-graceful.
+    (async () => {
+    try {
+      const _gp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-probe.js'));
+      const _q = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
+      if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
+    } catch (_e) {}
+    })(),
+    // P3.6 source-gap (free SERP authority sources)
+    (async () => {
+    try {
+      const _sgQ = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
+      if (_sgQ) { const _sgr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'source-gap.js')).sourceGap({ query: _sgQ, domain, env }); if (_sgr && _sgr.finding) _geoFindings.push(_sgr.finding); }
+    } catch (_e) {}
+    })(),
+    // P2.11/P2.12 SEO depth: the live you-vs-competitor keyword finding (free-serp powered). (sync — wrapped for the tier)
+    (async () => {
+    try { _seoFindings = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'seo-deep.js')).seoDeepFindings({ keyword_map }); } catch (_e) {}
+    })(),
+  ]);
+
+  // ── TIER 3 ──
+  // Step A (parallel): authority gap (needs _organicComps) ∥ Bing-volume + HF-intent keyword enrichment (need only keyword_map).
   let _authFindings = [];
+  await Promise.all([
+    // P2.17 backlink/authority gap (OpenPageRank) — over the REAL overlap set (falls back to keyword leaders).
+    (async () => {
+    try {
+      const _ag = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'authority-gap.js'));
+      const _leaders = ((keyword_map && keyword_map.keywords) || []).map(k => k.leader).filter(Boolean);
+      const _comps = (_organicComps.length ? _organicComps : _leaders);
+      const _agRes = await _ag.authorityGap({ domain, competitors: _comps, env });
+      if (_agRes && _agRes.ok && _agRes.you) { if (_agRes.finding) _authFindings = [_agRes.finding]; payload_authority = { you: _agRes.you, top: _agRes.top, ranked: _agRes.ranked, last_updated: _agRes.last_updated, peer_source: _organicComps.length ? 'SERP-overlap + LLM peers (OpenPageRank-derived DR)' : 'keyword leaders (OpenPageRank-derived DR)' }; }
+    } catch (_e) {}
+    })(),
+    // ── §3 + §4 keyword volume (Bing GetKeywordStats) + intent (HF zero-shot), attached to the keyword_map ──────
+    // Both fail-open: no BING_WEBMASTER_KEY → volume omitted (as today); no HF_TOKEN / out of credit → intent omitted.
+    (async () => {
+    try {
+      const _bv = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'bing-volume.js'));
+      const _hf = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'hf-ml.js'));
+      const _kws = (keyword_map && keyword_map.keywords) || [];
+      if (_bv.enabled(env)) await Promise.all(_kws.slice(0, 8).map(async k => { if (k.volume == null) { const v = await _bv.keywordVolume(k.keyword, country || 'UK', env); if (v != null) k.volume = v; } }));
+      if (_hf.enabled(env)) { const _labels = ['commercial', 'transactional', 'informational', 'navigational']; await Promise.all(_kws.slice(0, 8).map(async k => { const z = await _hf.zeroShot(k.keyword, _labels, { env }); if (z && z.labels && z.labels.length) k.intent = z.labels[0]; })); }
+    } catch (_e) {}
+    })(),
+  ]);
+  // ── §2 Common Crawl footprint (firm + top-3 competitors): real indexed-page depth + on-site topics, keyless ──
+  // Step B (serial): needs payload_authority.ranked from Step A. CC's inner 3-competitor loop is parallelized.
+  // Fail-open: CC's public CDX front-end is periodically overloaded (504s) → returns null and the engine continues.
   try {
-    const _ag = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'authority-gap.js'));
-    const _leaders = ((keyword_map && keyword_map.keywords) || []).map(k => k.leader).filter(Boolean);
-    const _agRes = await _ag.authorityGap({ domain, competitors: _leaders, env });
-    if (_agRes && _agRes.ok && _agRes.you) { if (_agRes.finding) _authFindings = [_agRes.finding]; payload_authority = { you: _agRes.you, top: _agRes.top, ranked: _agRes.ranked, last_updated: _agRes.last_updated }; }
+    const _cc = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'cc-index.js'));
+    const _meFoot = await _cc.ccFootprint({ domain });
+    if (_meFoot && _meFoot.indexed_pages != null) {
+      payload_authority = payload_authority || {};
+      payload_authority.cc_indexed_pages = _meFoot.indexed_pages;                    // content-depth signal (real)
+      if (payload_content_gap && _meFoot.topics && _meFoot.topics.length) payload_content_gap.cc_topics = _meFoot.topics;
+      if (payload_authority.ranked) await Promise.all(payload_authority.ranked.slice(0, 3).map(async r => {
+        const f = await _cc.ccFootprint({ domain: r.domain }); if (f && f.indexed_pages != null) r.cc_indexed_pages = f.indexed_pages;
+      }));
+    }
   } catch (_e) {}
-  // P2.15 local-pack / GBP readiness (OSM presence + LocalBusiness schema + NAP) — gated on city + local sector.
-  let _localFindings = [];
+  // P3.9 hallucination + sentiment (free-LLM chain)
+  // Step C (serial): MUST stay after geoProbe — it augments the payload_geo_probe geoProbe set (ai_knows / ai_sentiment),
+  // so running it concurrently would race and drop those fields.
   try {
-    const _lp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'local-pack.js'));
-    const _lpCity = (scan.markets && scan.markets.primary_city) || '';
-    const _lpRes = await _lp.localPackReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city: _lpCity, env });
-    if (_lpRes && _lpRes.finding) _localFindings = [_lpRes.finding];
-  } catch (_e) {}
-  // P3.7 + P3.10 AI / entity-readiness (robots AI-crawler access + llms.txt + entity schema + Wikidata) — deterministic, GBP0, no quota.
-  let _aiReadyFindings = [];
-  try {
-    const _air = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'ai-readiness.js'));
-    const _airRes = await _air.aiReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], env });
-    if (_airRes && _airRes.ok) { _aiReadyFindings = _airRes.findings || []; payload_ai_readiness = { score: _airRes.score, blocked_ai_bots: _airRes.blocked_ai_bots, has_llms_txt: _airRes.has_llms_txt, has_org_schema: _airRes.has_org_schema, has_same_as: _airRes.has_same_as, in_wikidata: _airRes.in_wikidata }; }
+    const _hr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'hallucination.js')).hallucinationCheck({ company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env });
+    if (_hr && _hr.ok) { payload_geo_probe = payload_geo_probe || {}; payload_geo_probe.ai_knows = _hr.ai_knows; payload_geo_probe.ai_sentiment = _hr.sentiment; if (_hr.finding) _geoFindings.push(_hr.finding); }
   } catch (_e) {}
   // P3.V1-3 GEO visuals + P3.8 screenshots, built from the live GEO data
+  // Step D (serial): reads payload_ai_readiness (Tier 1) + payload_geo_probe (now fully populated by geoProbe + hallucination).
   try {
     const _v = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-visuals.js'));
     const _sc = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'screenshot.js'));
@@ -311,23 +410,6 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     payload_screenshots = _sc.screenshotUrls({ domain, query: (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '') });
   } catch (_e) {}
   try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: country, company: (domain || '').replace(/^www\./, '').split('.')[0] }); } catch (_e) {}
-  // P3.1/3.3/3.4/3.5 multi-sample GEO probe (repeatability + share-of-voice + entrenched leaders). Rate-limit-graceful.
-  let _geoFindings = [];
-  try {
-    const _gp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-probe.js'));
-    const _q = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
-    if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
-  } catch (_e) {}
-  // P3.9 hallucination + sentiment (free-LLM chain)
-  try {
-    const _hr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'hallucination.js')).hallucinationCheck({ company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env });
-    if (_hr && _hr.ok) { payload_geo_probe = payload_geo_probe || {}; payload_geo_probe.ai_knows = _hr.ai_knows; payload_geo_probe.ai_sentiment = _hr.sentiment; if (_hr.finding) _geoFindings.push(_hr.finding); }
-  } catch (_e) {}
-  // P3.6 source-gap (free SERP authority sources)
-  try {
-    const _sgQ = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
-    if (_sgQ) { const _sgr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'source-gap.js')).sourceGap({ query: _sgQ, domain, env }); if (_sgr && _sgr.finding) _geoFindings.push(_sgr.finding); }
-  } catch (_e) {}
   let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings, ..._aiReadyFindings, ..._geoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // ── REACHABILITY RECONCILIATION (anti-fabrication red line) ──────────────────────────────────
   // Two independent corpus paths can disagree: site-scan's direct fetch + PSI may fail (timeout / bot-block)
@@ -348,10 +430,13 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   try { const _enf = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'enforcement-map.js')); for (const _f of findings) { if (_f && _f.bucket === 'compliance' && !_f.enforcement_example) _f.enforcement_example = _enf.enforcementFor(_f.framework_short || _f.citation); } } catch (_e) {}
   const _ft = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'finding-trust.js'));
   const _corpusAdequate = _assessable && !(comp && comp.challenge);
-  let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class });
+  let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class, jurisdictions: (comp && comp.jurisdictions) || [], sector });
   try { _classified = await verifyTopFindings(_classified, env || process.env); } catch (_e) {}
   const _confirmed = _ft.confirmed(_classified);
   const _needsReview = _ft.needsReview(_classified);
+  // UNIQUE Tamazia-fix language — rewrite each confirmed finding's fix so no two repeat (founder: never
+  // repeat lines). Transform-only, fail-open per item. Runs on the confirmed set before quota/render. (F-uniquefix)
+  try { await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'fix-writer.js')).uniqueFixes(_confirmed, { company: (comp && comp.firm_profile && comp.firm_profile.hq_country ? domain : domain), env: env || process.env }); } catch (_e) {}
   // P1.8 BINGO voice: attach the 'Right now / Tamazia' lines to every confirmed finding so the v15 render speaks one voice.
   try { const _ds = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'design-system.js')); for (const f of _confirmed) f.bingo = _ds.bingoLine(f); } catch (_e) {}
   const threeFindings = _confirmed.slice(0, 3);
@@ -380,6 +465,8 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     framework_last_reviewed: lr,
     applicable_frameworks: frameworks,
     detected_jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [],
+    detected_sector: (comp && comp.detected_sector) || sector,
+    firm_profile: (comp && comp.firm_profile) || null,
     via_archive: !!(comp && comp.via_archive), archive_date: (comp && comp.archive_date) || null,
     engine_jurisdictions: (comp && comp.jurisdictions) || [],
     rules,

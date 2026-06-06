@@ -41,8 +41,8 @@ function detectMarkets({ html, domain }) {
   // Each country accrues weight from independent signals; included only at/above threshold so a
   // stray mention never false-positives, but a genuinely-served market is always caught.
   const hasUKPostcode = /\b(?:[A-Z]{1,2}[0-9][A-Z0-9]?)\s*[0-9][A-Z]{2}\b/.test(text);
-  const score = {}; const ev = {};
-  const add = (country, w, why) => { if (!country) return; score[country] = (score[country] || 0) + w; (ev[country] = ev[country] || []).push(why); };
+  const score = {}; const ev = {}; const maxW = {};
+  const add = (country, w, why) => { if (!country) return; score[country] = (score[country] || 0) + w; if (w > (maxW[country] || 0)) maxW[country] = w; (ev[country] = ev[country] || []).push(why); };
   // country meta: regulators (STRONG), city/keyword (WEAK), phone code, EU flag, gulf flag
   const C = [
     { c:'United Kingdom', region:'UK', kw:/\b(united kingdom|\buk\b|britain|british|england|scotland|wales|northern ireland)\b/i, regs:/\b(sra|fca|ico|cqc|ofcom|ofsted|gdc|fos|fscs|companies house|hmrc)\b/i, phone:'44', tld:/\.co\.uk$|\.uk$/i, cur:/£|\bgbp\b/i },
@@ -66,7 +66,7 @@ function detectMarkets({ html, domain }) {
   const serveRx = /(serv(e|es|ing|ices?)|client|customer|operat|work with|advise|advising|present in|available in|markets? (include|served)|across|throughout|ship(ping)? to|deliver(y|ing)? to)/i;
   for (const m of C) {
     if (m.tld && m.tld.test(domain)) add(m.c, 4, 'registered TLD');                 // STRONG: registered here
-    if (m.regs && m.regs.test(text)) add(m.c, 3, 'regulator named');                // STRONG: names that jurisdiction's regulator
+    if (m.regs && m.regs.test(text)) add(m.c, 2, 'regulator named');                // CORROBORATING (not strong alone): an advisory firm — esp. a law firm — names a foreign jurisdiction's regulator (SEC, FTC, CCPA…) because it ADVISES on that regime, not because it is regulated there. Only TLD/stated-office/hreflang/postcode make a FOREIGN market "strong". (F2c — stops US attaching to a UAE law firm)
     if (m.kw.test(text)) add(m.c, 1, 'mentioned');                                   // WEAK: bare mention
     // office/HQ near the country name => STRONG operating signal
     if (m.kw.test(text)) { const around = lc.match(new RegExp('([^.]{0,60})('+m.kw.source.replace(/\\b/g,'').replace(/^\(|\)$/g,'')+')','i')); if (around && officeRx.test(around[1])) add(m.c, 3, 'office/HQ stated'); if (around && serveRx.test(around[1])) add(m.c, 2, 'serves clients there'); }
@@ -118,6 +118,11 @@ function detectMarkets({ html, domain }) {
 
   return {
     operating_countries: list,
+    // STRONG-evidence markets = a country backed by at least one strong individual signal (registered
+    // TLD, named regulator, stated office/HQ, hreflang, UK postcode) — NOT an accumulation of weak
+    // mentions/phone/currency. Foreign law should attach only to these; the registered country is
+    // always primary regardless. (C-jur: stops US-on-a-MENA-firm from a stray "+1"/"$"/city mention)
+    strong_markets: list.filter(c => (maxW[c] || 0) >= 3),
     eu_countries: euCountriesIncluded,
     serves_eu: servesEU,
     regions: Array.from(new Set(regions)),
