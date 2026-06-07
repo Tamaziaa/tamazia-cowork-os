@@ -5,7 +5,23 @@
 // citations when Gemini's free grounding quota is available (graceful: returns null when exhausted).
 const https = require('https');
 
-function _post(url, key, payload, timeout = 9000) {
+// Global token-bucket: cap LLM calls across ALL concurrent mints so worker concurrency never trips
+// Groq's free ~100 req/min ceiling. Configurable via LLM_MAX_PER_MIN (0/blank = unlimited).
+const _RL = { max: parseInt(process.env.LLM_MAX_PER_MIN || '90', 10), hits: [] };
+function _rlWait() {
+  if (!_RL.max || _RL.max <= 0) return Promise.resolve();
+  return new Promise((res) => {
+    const tick = () => {
+      const now = Date.now();
+      _RL.hits = _RL.hits.filter((t) => now - t < 60000);
+      if (_RL.hits.length < _RL.max) { _RL.hits.push(now); res(); } else { setTimeout(tick, 200); }
+    };
+    tick();
+  });
+}
+
+async function _post(url, key, payload, timeout = 9000) {
+  await _rlWait();
   return new Promise((resolve) => {
     const body = JSON.stringify(payload); const u = new URL(url);
     const req = https.request(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key }, timeout }, (r) => {
@@ -23,6 +39,8 @@ function _providers(env) {
   if (env.DEEPSEEK_API_KEY) p.push({ name: 'deepseek', url: 'https://api.deepseek.com/chat/completions', key: env.DEEPSEEK_API_KEY, model: 'deepseek-chat' });
   if (env.PERPLEXITY_API_KEY) p.push({ name: 'perplexity', url: 'https://api.perplexity.ai/chat/completions', key: env.PERPLEXITY_API_KEY, model: 'sonar' });
   if (env.OPENAI_API_KEY) p.push({ name: 'openai', url: 'https://api.openai.com/v1/chat/completions', key: env.OPENAI_API_KEY, model: 'gpt-4o-mini' });
+  // Zero-cost mode: keep only the free provider (Groq); Gemini free is added separately in askLLM.
+  if (/^(1|true|yes|on)$/i.test(env.LLM_FREE_ONLY || '')) return p.filter((x) => x.name === 'groq');
   return p;
 }
 
