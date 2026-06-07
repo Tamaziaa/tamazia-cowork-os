@@ -1,6 +1,7 @@
 'use strict';
-// P2.17 backlink/authority gap — powered by OpenPageRank (free, 1000/day, distilled from Common Crawl's
-// web graph: the strongest free domain-authority signal in its category). Compares the firm's Domain Rating
+// P2.17 backlink/authority gap — powered by OpenPageRank (free, 10,000 calls/hour × 100 domains/call,
+// distilled from Common Crawl's web graph: the strongest free domain-authority signal in its category).
+// Compares the firm's Domain Rating
 // against the exact competitors already surfaced in the keyword map, so the audit can say WHY they outrank you.
 const https = require('https');
 

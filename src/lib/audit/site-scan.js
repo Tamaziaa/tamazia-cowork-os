@@ -81,7 +81,12 @@ function extractSignals({ body, headers }) {
   const titleMatch = b.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const descMatch = b.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["']/i);
   const h1Count = (lc.match(/<h1[\s>]/g) || []).length;
+  // #17 keyword spine: a bounded plain-text corpus of the homepage so the category-noun classifier reads the
+  // firm's ACTUAL body copy (what it sells), not just the <title>. Additive — nothing read signals.corpus before.
+  const _corpus = b.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 4000);
   return {
+    corpus: _corpus,
     title: titleMatch ? titleMatch[1].trim() : '',
     title_len: titleMatch ? titleMatch[1].trim().length : 0,
     meta_description: !!descMatch,

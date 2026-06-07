@@ -54,6 +54,11 @@ const SECTOR_MAP = {
   'hospitality':          ['UK_FSA', 'UK_LICENSING_ACT', 'UK_HSE', 'UK_DMCC_2024'],
   'food':                 ['UK_FSA', 'UK_FOOD_INFO_2014'],
 
+  // Fitness / leisure (membership auto-renewal + pricing = DMCC/CMA; accessibility = Equality; equipment = HSE).
+  // NEVER food/aviation/licensing unless the club actually sells those — the firm-profiler routes a gym here,
+  // not to 'hospitality', so a gym no longer inherits ATOL/food law. (F11)
+  'fitness':              ['UK_DMCC_2024', 'UK_CMA', 'UK_EQUALITY_2010', 'UK_HSE'],
+
   // E-commerce & retail (DMCC, OSA where UGC, DSA, EAA, CPRA, TCPA, VCDPA, TDPSA, FTC endorse, CRA, Equality, France, Germany)
   'ecommerce':            ['UK_CMA', 'UK_TRADING_STANDARDS', 'UK_ASA_CAP', 'UK_DMCC_2024', 'UK_OSA_2023', 'UK_CRA_2015', 'UK_EQUALITY_2010', 'EU_DSA', 'EU_EAA_2025', 'FR_CNIL_2025', 'DE_BDSG', 'US_CPRA', 'US_TCPA', 'US_TDPSA', 'US_VCDPA', 'US_BIPA', 'US_FTC_ENDORSE'],
   'retail':               ['UK_CMA', 'UK_TRADING_STANDARDS', 'UK_DMCC_2024', 'UK_CRA_2015', 'UK_EQUALITY_2010', 'EU_DSA', 'EU_EAA_2025', 'FR_CNIL_2025', 'DE_BDSG', 'US_CPRA', 'US_TCPA', 'US_TDPSA', 'US_VCDPA', 'US_FTC_ENDORSE'],
@@ -79,6 +84,7 @@ const SECTOR_ALIASES = {
   'rail': 'transport', 'airline': 'aviation', 'logistics': 'transport',
   'pharmacy': 'pharma', 'pharmaceutical': 'pharma', 'medicine': 'pharma',
   'restaurant': 'hospitality', 'hotel': 'hospitality', 'pub': 'hospitality',
+  'gym': 'fitness', 'gyms': 'fitness', 'leisure': 'fitness', 'wellness': 'fitness', 'health-club': 'fitness', 'health-clubs': 'fitness', 'studio': 'fitness', 'pilates': 'fitness', 'yoga': 'fitness',
   'agency': 'marketing', 'creative': 'marketing', 'advertising': 'marketing',
   'shop': 'ecommerce', 'store': 'ecommerce', 'd2c': 'ecommerce', 'b2c': 'ecommerce',
   'software': 'saas', 'platform': 'saas', 'startup': 'saas',
@@ -154,12 +160,22 @@ function routeForMarkets({ markets, country, sector, signals }) {
   const m = markets || {}; const sig = signals || {};
   const sec = normaliseSector(sector);
   const regions = m.regions || []; const opCountries = m.operating_countries || [];
+  // REGISTERED country is the PRIMARY jurisdiction (always on); OPERATING markets attach only with
+  // STRONG evidence (a real office/regulator/TLD/hreflang) — not a stray mention/phone/currency/city.
+  // This restores the home jurisdiction (was silently dropped for UAE/Gulf firms — ctx.me never checked
+  // `country`) and stops US law attaching to a MENA firm on weak signals. (C-jur)
+  const reg = String(country || '').toUpperCase();
+  const regRegion = ({ UK: 'UK', GB: 'UK', GBR: 'UK', US: 'US', USA: 'US', AE: 'ME', UAE: 'ME', SA: 'ME', SAU: 'ME', KSA: 'ME', QA: 'ME', KW: 'ME', BH: 'ME', OM: 'ME' })[reg] || (EU_MEMBER_STATES.has(reg) ? 'EU' : null);
+  const strongOps = new Set(m.strong_markets || m.operating_countries || []); // fallback: pre-`strong_markets` payloads → all operating (keeps old behaviour)
+  const GULF_NAMES = ['United Arab Emirates', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman'];
+  const euOps = opCountries.filter(n => EU_MEMBER_STATES.has(NAME_TO_CODE[n] || ''));
+  const opStrong = (names) => names.some(n => opCountries.includes(n) && strongOps.has(n));
   const ctx = {
     sector: sec, sig,
-    uk: country === 'UK' || country === 'GB' || !country || regions.includes('UK') || opCountries.includes('United Kingdom'),
-    eu: !!m.serves_eu || regions.includes('EU') || opCountries.some(n => EU_MEMBER_STATES.has(NAME_TO_CODE[n] || '')),
-    us: regions.includes('US') || opCountries.includes('United States') || country === 'US' || country === 'USA',
-    me: regions.includes('Middle East') || opCountries.some(n => ['Saudi Arabia','Qatar','Kuwait','Bahrain','Oman','United Arab Emirates'].includes(n)),
+    uk: regRegion === 'UK' || !reg || opStrong(['United Kingdom']),
+    eu: regRegion === 'EU' || !!m.serves_eu || opStrong(euOps),
+    us: regRegion === 'US' || opStrong(['United States']),
+    me: regRegion === 'ME' || opStrong(GULF_NAMES),
   };
   const out = new Set(routeJurisdictions({ country, sector }));
   for (const name of opCountries) { const code = NAME_TO_CODE[name]; if (code) for (const f of routeJurisdictions({ country: code, sector })) out.add(f); }

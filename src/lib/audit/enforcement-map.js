@@ -23,6 +23,19 @@ const MAP = {
   US_BIPA: 'Illinois BIPA private right of action: USD 1,000 (negligent) or USD 5,000 (intentional) per violation; large class-action settlements.',
   US_ADA: 'US DOJ and private suits under the ADA: injunctive relief, damages and attorney fees; web-accessibility suits are common.',
   EU_EAA_2025: 'Market-surveillance authorities under the European Accessibility Act (in force 28 June 2025): penalties and withdrawal of non-compliant services.',
+  // MENA / GCC — real regulators + statutory penalty ceilings (factual, not invented).
+  UAE_PDPL: 'UAE Data Office under Federal Decree-Law No. 45 of 2021 (PDPL): administrative fines set by the Executive Regulations, plus corrective directions and suspension of processing; enforced federally across the UAE.',
+  DIFC_DPL: 'DIFC Commissioner of Data Protection under DIFC Data Protection Law No. 5 of 2020: fines up to USD 100,000 per contravention, general/remedial directions, and data-subject compensation claims; decisions published at difc.ae.',
+  ADGM_DPR: 'ADGM Office of Data Protection under the Data Protection Regulations 2021: administrative fines up to USD 28M, enforcement notices and directions; aligned with the GDPR penalty structure.',
+  SAUDI_PDPL: 'Saudi Data & AI Authority (SDAIA) under the PDPL: fines up to SAR 5M (≈ USD 1.3M), doubled for repeat breaches, plus imprisonment for unlawful disclosure of sensitive data.',
+  QATAR_PDPPL: 'Qatar National Cyber Security Agency (Data Protection) under Law No. 13 of 2016: fines up to QAR 5M (≈ USD 1.37M) per violation.',
+  AE_RERA: 'Dubai Land Department / RERA: listing requires a valid Trakheesi advertising permit; unpermitted or misleading property ads draw fines, ad takedowns and brokerage-licence sanctions.',
+  UAE_RERA: 'Dubai Land Department / RERA: listing requires a valid Trakheesi advertising permit; unpermitted or misleading property ads draw fines, ad takedowns and brokerage-licence sanctions.',
+  UK_GDC: 'General Dental Council: fitness-to-practise sanctions from conditions and suspension to erasure from the register; advertising must meet the GDC/ASA standards; decisions published at gdc-uk.org.',
+  UK_CQC: 'Care Quality Commission: registration conditions, warning notices, civil penalties and prosecution; ratings and enforcement published at cqc.org.uk.',
+  UK_RICS: 'RICS: disciplinary action, fines and removal from the register for breaches of the Rules of Conduct and valuation/agency standards.',
+  UK_FCA_CONC25: 'Financial Conduct Authority: unlimited fines, public censure, redress orders and permission withdrawal; financial promotions must be fair, clear and not misleading (FSMA s.21).',
+  UK_ASA_CAP: 'Advertising Standards Authority / CAP: ad removal, referral to Trading Standards/Ofcom, and paid-search sanctions for misleading or unsubstantiated claims; rulings published weekly at asa.org.uk.',
 };
 function _fam(fw) {
   fw = String(fw || '').toUpperCase();

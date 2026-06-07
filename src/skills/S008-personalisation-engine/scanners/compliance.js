@@ -377,19 +377,43 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // ROBUST jurisdiction detection over the FULL multi-page corpus (confidence-scored, 10+ parameters):
   // offices, addresses, postcodes, phone codes, currencies, hreflang, regulators, served-market language, cities, TLD.
   let mk = {}; try { mk = require('../../../lib/sourcing/markets.js').detectMarkets({ html: corpusText, domain }); } catch (_e) {}
-  const codes = new Set(); if (country) codes.add(String(country).toUpperCase());
-  const R = mk.regions || [];
-  if (R.includes('UK')) codes.add('UK'); if (R.includes('US')) codes.add('US'); if (R.includes('Middle East')) codes.add('AE'); if (mk.serves_eu) codes.add('EU');
-  for (const n of (mk.operating_countries || [])) { if (n === 'United Kingdom') codes.add('UK'); else if (n === 'United States') codes.add('US'); else if (n === 'United Arab Emirates') codes.add('AE'); else if (n === 'Saudi Arabia') codes.add('SA'); else if (n === 'Qatar') codes.add('QA'); else if (['Kuwait','Bahrain','Oman'].includes(n)) codes.add('AE'); else if (n === 'France') codes.add('FR'); else if (n === 'Germany') codes.add('DE'); }
-  const detectedJurisdictions = mk.operating_countries || [];
-  const allJurisdictions = Array.from(codes);
+  const codes = new Set(); if (country) codes.add(String(country).toUpperCase());   // registered country = PRIMARY jurisdiction (always present)
+  // OPERATING markets attach only with STRONG evidence (a real office/regulator/TLD/hreflang) — never a
+  // stray mention/phone/currency/city. Stops a UAE firm picking up US law from a "+1"/"$"/"America"
+  // mention while the home jurisdiction is treated as just another foreign hit. (F2/C-jur)
+  const _strong = new Set(mk.strong_markets || mk.operating_countries || []);    // fallback: pre-strong_markets payloads → all (old behaviour)
+  const _N2C = { 'United Kingdom': 'UK', 'United States': 'US', 'United Arab Emirates': 'AE', 'Saudi Arabia': 'SA', 'Qatar': 'QA', 'Kuwait': 'AE', 'Bahrain': 'AE', 'Oman': 'AE', 'France': 'FR', 'Germany': 'DE' };
+  for (const n of (mk.operating_countries || [])) { if (_strong.has(n) && _N2C[n]) codes.add(_N2C[n]); }
+  if (mk.serves_eu) codes.add('EU');
+  const _regName = ({ UK: 'United Kingdom', GB: 'United Kingdom', GBR: 'United Kingdom', US: 'United States', USA: 'United States', AE: 'United Arab Emirates', UAE: 'United Arab Emirates', SA: 'Saudi Arabia', KSA: 'Saudi Arabia', QA: 'Qatar' })[String(country || '').toUpperCase()] || country || '';
+  // LLM FIRM-PROFILER (cross-referenced): sharpen jurisdiction + sector recall for international firms
+  // WITHOUT hallucinating — a foreign jurisdiction is added only when the LLM names it AND a real on-site
+  // signal (markets-strong OR its evidence quote in the corpus) corroborates. Registered country stays
+  // primary; the LLM-detected sector corrects a mis-tagged row (e.g. a gym tagged "hospitality"). (F-profile)
+  let firmProfile = null, mergedJur = null;
+  try {
+    const { profileFirm, mergeJurisdictions } = require('../../../lib/audit/firm-profile.js');
+    firmProfile = await profileFirm({ corpus: corpusText, domain, country, sector, env: process.env });
+    mergedJur = mergeJurisdictions({ profile: firmProfile, markets: mk, registeredCountry: country, corpus: corpusText });
+  } catch (_e) {}
+  // FOREIGN-JURISDICTION GATE (F2b/C-jur — Al Tamimi → AE, not US). Keyword market-detection over-fires on
+  // ADVISORY firms: a UAE law firm whose corpus is saturated with "SEC", "CCPA", "New York", "America" is NOT
+  // US-regulated — it advises clients ON those regimes. So for FOREIGN jurisdictions we trust ONLY the LLM-gated
+  // set (mergedJur = registered country + two-signal-corroborated markets) and do NOT union in the raw markets.js
+  // `codes` (which carry that keyword noise). The registered country is always inside mergedJur, so it can never
+  // be lost; we fall back to the raw codes only if the LLM profiler failed entirely.
+  const allJurisdictions = (mergedJur && mergedJur.length) ? Array.from(new Set(mergedJur)) : Array.from(codes);
+  // client-facing detected names, derived from the SAME gated code set — never the raw markets.js keyword noise.
+  const _C2N = { UK: 'United Kingdom', US: 'United States', AE: 'United Arab Emirates', SA: 'Saudi Arabia', QA: 'Qatar', EU: 'European Union', FR: 'France', DE: 'Germany', IE: 'Ireland', SG: 'Singapore', IN: 'India', CA: 'Canada', AU: 'Australia', NL: 'Netherlands', ES: 'Spain', IT: 'Italy' };
+  const detectedJurisdictions = Array.from(new Set(allJurisdictions.map((c) => _C2N[c] || _regName || c)));
+  const effectiveSector = (firmProfile && firmProfile.primary_sector) || sector;
   // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
   let frameworks;
   try {
     const { connect, loadCatalogue } = require('../../../lib/compliance/connect.js');
-    frameworks = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector, signals, text: corpusText }).frameworks;
+    frameworks = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector: effectiveSector, signals, text: corpusText }).frameworks;
   } catch (_e) {
-    const fs2 = new Set(); for (const j of allJurisdictions) for (const f of routeJurisdictions({ country: j, sector })) fs2.add(f); frameworks = Array.from(fs2);
+    const fs2 = new Set(); for (const j of allJurisdictions) for (const f of routeJurisdictions({ country: j, sector: effectiveSector })) fs2.add(f); frameworks = Array.from(fs2);
   }
   let rules = loadRules({ frameworks });
   // ── SECTOR SUB-GATE (kills cross-sector false positives) ────────────────────────────────────────
@@ -457,6 +481,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     domain, sector, country, ok: true, reachable: true,
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
     frameworks, jurisdictions: allJurisdictions, detected_jurisdictions: detectedJurisdictions,
+    firm_profile: firmProfile, detected_sector: effectiveSector,
     rules_evaluated: rules.length, hits, misses,
     p0_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P0').length,
     p1_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P1').length,

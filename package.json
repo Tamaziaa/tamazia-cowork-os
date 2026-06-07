@@ -7,5 +7,7 @@
     "cycle": "bash scripts/run-engine-cycle.sh",
     "pulse": "node scripts/intel-pulse.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1063.0"
+  }
 }
