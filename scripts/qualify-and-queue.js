@@ -23,14 +23,16 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
 
 (async () => {
   const limit = Number(process.argv[2] || 12);
-  // Eligible: scraped (sponsored auto, or organic approved) OR aggressive_selected, not yet quality-scored,
-  // not wrong-track, has a domain.
+  // additive guard: provider column for the verification that promoted a lead (idempotent, safe)
+  try { pg(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS primary_email_verified_by text`); } catch (_e) {}
+  // Eligible: ANY un-scored lead with a domain (enriched first). scoreLead IS the quality gate — it tiers every
+  // lead (T1 auto / T2 approval / T3 reject), so organic_top100 backlog no longer needs verify_status='approved'.
   const raw = pg(`
     SELECT to_jsonb(l) FROM leads l
     WHERE l.quality_score IS NULL AND COALESCE(l.domain,'') <> ''
-      AND ( l.scrape_stream='sponsored' OR (l.scrape_stream='organic_top100' AND l.verify_status='approved') OR l.aggressive_selected=TRUE )
       AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal')
-    ORDER BY l.priority_score DESC NULLS LAST, l.id DESC LIMIT ${limit}`);
+      AND COALESCE(l.status,'') NOT IN ('duplicate','suppressed','dnc','bounced')
+    ORDER BY (l.enriched_at IS NOT NULL) DESC, l.enriched_at DESC NULLS LAST, l.priority_score DESC NULLS LAST, l.id DESC LIMIT ${limit}`);
   if (!raw) { console.log('[qualify] no eligible leads to score.'); return; }
   const leads = raw.split('\n').filter(Boolean).map(j => { try { return JSON.parse(j); } catch (_e) { return null; } }).filter(Boolean);
 
@@ -38,6 +40,22 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
   for (const lead of leads) {
     let q;
     try { q = await scoreLead(lead); } catch (e) { console.log(`  ${lead.domain} score err: ${e.message}`); continue; }
+    // PROMOTION GATE (organic-first, Apify only where it pays): a strong-buyer lead blocked ONLY by an unverified
+    // DM email gets that ONE email authoritatively checked (NeverBounce free -> Apify email-verifier, cost-governed).
+    // A 'good'/'valid' result flips email_verified TRUE and re-scores -> Tier-1 (auto). Keeps paid verifies tiny.
+    try {
+      const VE = require(path.join(ROOT, 'src', 'lib', 'enrich', 'verify-email.js'));
+      if (VE.isVerifyWorthIt(q, lead)) {
+        const dm = lead.primary_email || lead.contact_email;
+        const vr = await VE.verifyEmailBest(dm, process.env, { allowApify: true });
+        if (vr.verified) {
+          lead.email_verified = true; lead.verify_status = vr.status;
+          pg(`UPDATE leads SET email_verified=TRUE, verify_status=${esc(vr.status)}, primary_email_verified_by=${esc(vr.provider)} WHERE id=${lead.id}`);
+          const q2 = await scoreLead(lead); if (q2 && q2.tier) q = q2;
+          console.log(`  ↑ ${lead.domain} DM verified via ${vr.provider} (${vr.status}) -> tier ${q.tier}`);
+        }
+      }
+    } catch (_e) {}
     const tier = q.tier || 3;
     // Tier 1 -> qualified (auto-mint + auto-send). Tier 2 -> pending_approval (mint only after founder approves).
     // Tier 3 -> rejected. quality_fit drives the existing enqueue/auto-send path, so ONLY Tier 1 is TRUE.
