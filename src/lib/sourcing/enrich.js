@@ -255,7 +255,11 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
   try { dmsel = require('../enrich/dm-email-scoring.js').selectDecisionMaker({ emails, decisionMakers: dms }); } catch (_) {}
   // Apify escalation (opt-in via apify:true, cost-governed) — ONLY when free-DIY produced no VERIFIED
   // decision-maker email. This is the cost-minimizing gate: the cheap actors run on the gated subset only.
-  if (apify && (!dmsel.primary || !dmsel.primary.verified)) {
+  // ORGANIC-FIRST cost discipline: Apify DM/contact fallback fires ONLY when organic found NO decision-maker at
+  // all (a real miss, ~9% of leads) — NOT merely 'found-but-unverified'. Validating an unverified-but-found DM
+  // is done at the qualify promotion gate on the small would-be-Tier-1 set (verify-email.js), so the $25 cap is
+  // spent on authoritative email validation, not on re-enriching the whole backlog.
+  if (apify && !dmsel.primary) {
     try {
       const A = require('../apify/client.js');
       const [leadsFound, cd] = await Promise.all([
