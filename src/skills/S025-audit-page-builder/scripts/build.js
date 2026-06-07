@@ -326,7 +326,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     try {
       const _gp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-probe.js'));
       const _q = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
-      if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
+      if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, competitor_consistency: _gpr.competitor_consistency ?? null, providers_used: _gpr.providers_used || null, from_cache: _gpr.from_cache || false, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
     } catch (_e) {}
     })(),
     // P3.6 source-gap (free SERP authority sources)
@@ -510,10 +510,19 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     hash = generateHash();
   }
   const payload = await buildPayload({ domain, sector, country: country || 'UK', lead_id, env: env || process.env });
+
+  // R2 storage offload (AUDIT_PAYLOAD_STORE: 'neon' | 'both' | 'r2'; default 'neon' keeps current behaviour)
+  const { putAudit } = require('../../../lib/r2');
+  const mode = process.env.AUDIT_PAYLOAD_STORE || 'neon';
+  if (mode === 'both' || mode === 'r2') {
+    try { await putAudit(slug, hash, payload); } catch (e) { if (mode === 'r2') throw e; }
+  }
+  const neonPayload = (mode === 'r2') ? { r2: true, framework_version: payload.framework_version } : payload;
+
   const expSeconds = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
   const signed = signUrl({ slug, hash, lead_id, expSeconds });
 
-  const payloadJsonE = JSON.stringify(payload).replace(/'/g, "''");
+  const payloadJsonE = JSON.stringify(neonPayload).replace(/'/g, "''");
   pg(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${lead_id ? lead_id : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sector}', '${(country || 'UK').toUpperCase()}', '${payload.framework_version}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}))`);
 
   return { slug, hash, signed_url: signed.url, signed_exp: signed.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };
