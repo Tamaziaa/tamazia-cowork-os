@@ -509,10 +509,19 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     hash = generateHash();
   }
   const payload = await buildPayload({ domain, sector, country: country || 'UK', lead_id, env: env || process.env });
+
+  // R2 storage offload (AUDIT_PAYLOAD_STORE: 'neon' | 'both' | 'r2'; default 'neon' keeps current behaviour)
+  const { putAudit } = require('../../../lib/r2');
+  const mode = process.env.AUDIT_PAYLOAD_STORE || 'neon';
+  if (mode === 'both' || mode === 'r2') {
+    try { await putAudit(slug, hash, payload); } catch (e) { if (mode === 'r2') throw e; }
+  }
+  const neonPayload = (mode === 'r2') ? { r2: true, framework_version: payload.framework_version } : payload;
+
   const expSeconds = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
   const signed = signUrl({ slug, hash, lead_id, expSeconds });
 
-  const payloadJsonE = JSON.stringify(payload).replace(/'/g, "''");
+  const payloadJsonE = JSON.stringify(neonPayload).replace(/'/g, "''");
   pg(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${lead_id ? lead_id : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sector}', '${(country || 'UK').toUpperCase()}', '${payload.framework_version}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}))`);
 
   return { slug, hash, signed_url: signed.url, signed_exp: signed.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };

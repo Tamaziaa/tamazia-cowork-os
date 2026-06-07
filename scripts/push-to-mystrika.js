@@ -38,7 +38,7 @@ const DRY = process.argv.includes('--dry');
              MAX(CASE WHEN draft_metadata->>'touch'='1' THEN draft_body END) t1b, MAX(CASE WHEN draft_metadata->>'touch'='2' THEN draft_body END) t2b, MAX(CASE WHEN draft_metadata->>'touch'='3' THEN draft_body END) t3b
       FROM outreach_drafts od WHERE od.lead_id=l.id AND od.channel='email') d ON TRUE
     WHERE l.quality_fit=TRUE AND COALESCE(l.lifecycle_stage,'')='qualified' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal')
-      AND COALESCE(l.audit_verified,FALSE)=TRUE AND COALESCE(l.contact_email,l.email,'') <> '' AND COALESCE(l.mystrika_pushed,FALSE)=FALSE
+      AND COALESCE(l.audit_verified,FALSE)=TRUE AND COALESCE(l.audit_url,'') <> '' AND COALESCE(l.contact_email,l.email,'') <> '' AND COALESCE(l.mystrika_pushed,FALSE)=FALSE
     ORDER BY COALESCE(l.quality_score,0) DESC NULLS LAST, l.id DESC LIMIT ${limit}`);
   const rows = raw.split('\n').filter(Boolean).map(r=>r.split('\t'));
   if (!rows.length) { console.log('0 new FIT leads to push (need quality_fit + qualified + audit_verified + email + not already pushed).'); return; }
@@ -46,11 +46,37 @@ const DRY = process.argv.includes('--dry');
   for (const r of rows) {
     const [email,name,company,domain,sector,audit,finding,city,ri,hiring,fitScore,hotScore,hasLi,hasDm,t0s,t0b,t1b,t2b,t3b]=r;
     if (!email) continue;
+    if (!audit) continue;  // touch-1 guard: never push a lead without a minted audit_url
     const t0body=b64d(t0b); if (!t0body) continue;
     const conv=conversionScore({fit:true,fit_score:+fitScore||0,hot_score:+hotScore||0,has_verified_email:true,decision_maker:hasDm==='1',has_linkedin:hasLi==='1',audit_verified:true,hiring_signal:hiring});
     if (!SEND_TIERS.has(conv.tier)) continue;  // only email leads we are VERY sure about (Tier A/B) // never push a prospect without a real Touch-0 body
     prospects.push({ email, name: name||'there', company, domain, sector, audit_url: audit, top_finding: finding, city,
       rank_insight: ri, hiring_signal: hiring, conversion_tier: conv.tier, conversion_score: conv.score, touch0_subject: b64d(t0s), touch0_body: t0body, touch1_body: b64d(t1b), touch2_body: b64d(t2b), touch3_body: b64d(t3b) });
+  }
+  // TOUCH-1 CORRECTNESS GUARD: assert each prospect's audit_url (slug,hash) maps to ITS OWN domain in audit_pages.
+  // Guarantees an email can never carry another firm's audit (slug-collision / cross-bind guard). Skips + logs on mismatch.
+  {
+    const parsed = prospects.map(p => { const m = String(p.audit_url||'').match(/\/audit\/([^\/?#]+)\/([^\/?#]+)/); return m ? { slug:m[1], hash:m[2] } : null; });
+    const pairs = [...new Set(parsed.filter(Boolean).map(x => `('${x.slug.replace(/'/g,"''")}','${x.hash.replace(/'/g,"''")}')`))];
+    const pageDomain = {};
+    if (pairs.length) {
+      const out = pg(`SELECT slug, hash, domain FROM audit_pages WHERE (slug,hash) IN (${pairs.join(',')})`);
+      for (const ln of out.split('\n').filter(Boolean)) { const [sl,h,dom] = ln.split('|'); pageDomain[sl+'/'+h] = (dom||'').toLowerCase().trim(); }
+    }
+    const kept = [];
+    for (let i = 0; i < prospects.length; i++) {
+      const p = prospects[i], pr = parsed[i];
+      if (!pr) { console.log('  SKIP (guard): unparseable audit_url for '+p.email+' ['+p.audit_url+']'); continue; }
+      const dom = pageDomain[pr.slug+'/'+pr.hash];
+      if (!dom) { console.log('  SKIP (guard): audit_pages row missing for '+p.email+' ('+pr.slug+'/'+pr.hash+')'); continue; }
+      const leadDom = String(p.domain||'').toLowerCase().trim();
+      if (dom !== leadDom) { console.log('  SKIP (guard): domain mismatch for '+p.email+' lead='+leadDom+' audit_page='+dom+' ('+pr.slug+'/'+pr.hash+')'); continue; }
+      kept.push(p);
+    }
+    const dropped = prospects.length - kept.length;
+    if (dropped) console.log('touch-1 guard: dropped '+dropped+'/'+prospects.length+' prospects; '+kept.length+' verified domain<->slug');
+    else console.log('touch-1 guard: all '+prospects.length+' prospects passed domain<->slug assertion');
+    prospects.length = 0; prospects.push(...kept);
   }
   // group by sector campaign
   const byCamp = {};
