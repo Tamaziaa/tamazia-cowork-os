@@ -9,7 +9,7 @@
 const https = require('https');
 let _ledger = {}; try { _ledger = require('../cost-ledger.js'); } catch (_) { _ledger = {}; }
 const logUsage = _ledger.logUsage || (async () => {});
-const monthSpend = _ledger.monthSpend || (async () => 0);
+const monthSpend = _ledger.monthSpend || (async () => NaN); // no ledger → cannot verify budget → fail-closed
 
 const ENABLED = (env) => /^(1|true|yes|on)$/i.test(env.APIFY_ENABLE || '');
 const CAP_USD = (env) => Number(env.APIFY_MONTHLY_CAP_USD || 29);
@@ -42,7 +42,8 @@ async function runActor({ actorId, input, kind = 'starter', unit = 0, env = proc
   if (!tok || !actorId) return [];
   if (kind !== 'creator') {
     const spent = await monthSpend('apify');
-    if (spent >= CAP_USD(env)) { console.log(`[apify] cap reached ($${spent.toFixed(2)}/$${CAP_USD(env)}) — skipping ${label || actorId}`); return []; }
+    // Fail-CLOSED: if spend can't be verified (NaN from a ledger outage) OR the cap is reached, skip the paid call.
+    if (!Number.isFinite(spent) || spent >= CAP_USD(env)) { console.log(`[apify] budget guard (spent=${spent}, cap=$${CAP_USD(env)}) — skipping ${label || actorId}`); return []; }
   }
   const id = String(actorId).replace('/', '~');
   const url = `https://api.apify.com/v2/acts/${id}/run-sync-get-dataset-items?token=${encodeURIComponent(tok)}`;

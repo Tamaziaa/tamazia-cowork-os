@@ -17,7 +17,9 @@ async function logUsage(source, units = 1, meta = {}) {
   try { await ensure(); const u = Number(units) || 0; await sql(`INSERT INTO cost_ledger (source, units, meta) VALUES ('${esc(source)}', ${u}, '${esc(JSON.stringify(meta || {}))}'::jsonb)`); } catch (_) {}
 }
 // Month-to-date sum of `units` for a source (e.g. USD spent on 'apify'). Powers the Apify cost governor.
+// Returns NaN (NOT 0) on any DB failure so the governor can fail-CLOSED — never let a ledger outage read
+// as "$0 spent" and unlock unbounded paid calls. A genuine no-spend month returns 0 (COALESCE), which is finite.
 async function monthSpend(source) {
-  try { await ensure(); const r = await sql(`SELECT COALESCE(SUM(units),0) AS s FROM cost_ledger WHERE source='${esc(source)}' AND run_at >= date_trunc('month', NOW())`); return (r.ok && r.rows && r.rows[0]) ? Number(r.rows[0].s || 0) : 0; } catch (_) { return 0; }
+  try { await ensure(); const r = await sql(`SELECT COALESCE(SUM(units),0) AS s FROM cost_ledger WHERE source='${esc(source)}' AND run_at >= date_trunc('month', NOW())`); if (!(r.ok && r.rows && r.rows[0])) return NaN; return Number(r.rows[0].s || 0); } catch (_) { return NaN; }
 }
 module.exports = { logUsage, monthSpend };

@@ -233,8 +233,15 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
     }
   }
   let emails = Object.values(byEmail);
-  // verify (free MX/disposable/role; NeverBounce booster) — cap to protect any keyed quota
-  if (verify) { for (const e of emails.slice(0, 25)) { const v = await verifyFree(e.value, env); e.verified = v.verified; e.verify_status = v.status; e.verify_provider = v.provider; e.role = v.role; } }
+  // verify (free MX/disposable/role; NeverBounce booster) — cap to protect any keyed quota, but verify the
+  // NAMED / decision-maker emails FIRST so a register/CH-derived DM beyond index 25 isn't left unverified
+  // (which would wrongly demote a real buyer out of Tier 1).
+  const _VCAP = Math.max(25, parseInt(env.ENRICH_VERIFY_CAP || '40', 10));
+  if (verify) {
+    const _dmEmails = new Set(dms.map(d => d.email).filter(Boolean));
+    const _ordered = [...emails].sort((a, b) => ((b.name ? 2 : 0) + (_dmEmails.has(b.value) ? 1 : 0)) - ((a.name ? 2 : 0) + (_dmEmails.has(a.value) ? 1 : 0)));
+    for (const e of _ordered.slice(0, _VCAP)) { const v = await verifyFree(e.value, env); e.verified = v.verified; e.verify_status = v.status; e.verify_provider = v.provider; e.role = v.role; }
+  }
   for (const d of dms) if (d.email) { const e = emails.find(x => x.value === d.email); if (e) d.verified = !!e.verified; }
   // Phase C: registry officers are decision-makers too
   for (const o of (_firmo.officers || [])) { const k = (o.name || '').toLowerCase(); if (o.name && !seen.has(k)) { seen.add(k); dms.push({ name: o.name, title: o.role || 'Officer', email: '', linkedin: '', source: 'companies_house' }); } }
@@ -258,7 +265,7 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
       for (const e of (cd.emails || [])) { const v = (e.value || '').toLowerCase(); if (v && !byEmail[v]) byEmail[v] = { value: v, type: v.split('@')[0].length <= 4 ? 'generic' : 'personal', source: 'apify_contact' }; }
       for (const [k, u] of Object.entries(cd.socials || {})) { if (u && !(_social.socials || {})[k]) { _social.socials = _social.socials || {}; _social.socials[k] = { url: u }; } }
       emails = Object.values(byEmail);
-      if (verify) { for (const e of emails) if (e.verified == null) { const v = await verifyFree(e.value, env); e.verified = v.verified; e.verify_status = v.status; e.verify_provider = v.provider; e.role = v.role; } }
+      if (verify) { for (const e of emails.filter(x => x.verified == null).slice(0, _VCAP)) { const v = await verifyFree(e.value, env); e.verified = v.verified; e.verify_status = v.status; e.verify_provider = v.provider; e.role = v.role; } }
       // Optional Apify deliverability verify on still-unverified candidates (final gate).
       try {
         const unver = emails.filter(e => !e.verified).map(e => e.value);

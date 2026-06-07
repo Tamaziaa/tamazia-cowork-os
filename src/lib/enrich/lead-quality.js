@@ -36,7 +36,7 @@ const { isAggregator } = require('../scraping/serp-engine.js'); // domain-bounda
 
 const truthy = (v) => v === true || /^(1|t|true|yes|y|on)$/i.test(String(v == null ? '' : v));
 // Tolerant parsers — accept a JSON string (tab-row callers) OR an already-parsed value (to_jsonb callers).
-const asArr = (v) => { if (Array.isArray(v)) return v; try { return v ? JSON.parse(v) : []; } catch (_e) { return []; } };
+const asArr = (v) => { if (Array.isArray(v)) return v; try { const p = v ? JSON.parse(v) : []; return Array.isArray(p) ? p : []; } catch (_e) { return []; } };
 const asObj = (v) => { if (v && typeof v === 'object' && !Array.isArray(v)) return v; try { const p = v ? JSON.parse(v) : {}; return (p && typeof p === 'object') ? p : {}; } catch (_e) { return {}; } };
 
 async function fetchSite(domain) {
@@ -82,7 +82,7 @@ async function scoreLead(lead) {
   // Layer 3 — DECISION-MAKER CONTACT (named email) — now the strongest conversion predictor (16 pts)
   const primaryEmail = lead.primary_email || lead.contact_email || '';
   const dmConf = Number(lead.decision_maker_confidence || lead.contact_confidence || 0);
-  const dmEmailVerified = truthy(lead.email_verified) || /valid/i.test(String(lead.verify_status || ''));
+  const dmEmailVerified = truthy(lead.email_verified) || /^(valid|deliverable|ok|accept|role_valid)/i.test(String(lead.verify_status || ''));
   const hasNamed = !!(primaryEmail && /@/.test(primaryEmail)) && dmConf >= 60;
   add('3_decision_maker_contact', 16, hasNamed, primaryEmail ? `${primaryEmail} (${dmConf}%${dmEmailVerified ? ', verified' : ''})` : 'none');
 

@@ -3409,6 +3409,11 @@
 "audit_critical": { "type": "integer", "default": null, "notnull": false, "identity": false },
 "audit_high": { "type": "integer", "default": null, "notnull": false, "identity": false },
 "approved_at": { "type": "timestamptz", "default": null, "notnull": false, "identity": false },
+"conversion_tier": { "type": "text", "default": null, "notnull": false, "identity": false },
+"conversion_score": { "type": "integer", "default": null, "notnull": false, "identity": false },
+"hiring_signal": { "type": "text", "default": null, "notnull": false, "identity": false },
+"mystrika_pushed": { "type": "boolean", "default": "false", "notnull": false, "identity": false },
+"mystrika_pushed_at": { "type": "timestamptz", "default": null, "notnull": false, "identity": false },
 "created_at": {
 "type": "timestamptz",
 "default": "now()",

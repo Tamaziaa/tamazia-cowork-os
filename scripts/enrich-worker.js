@@ -38,7 +38,7 @@ function claimBatch() {
         AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal')
       ORDER BY priority_score DESC NULLS LAST, id DESC
       LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
-    RETURNING id, COALESCE(domain,''), COALESCE(company,''), COALESCE(sector,'');`;
+    RETURNING id, regexp_replace(COALESCE(domain,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(sector,''),'[\t\r\n]+',' ','g');`;
   const out = (pg(sql) || '').trim();
   if (!out) return [];
   return out.split('\n').map((l) => { const [id, domain, company, sector] = l.split('\t'); return { id, domain, company, sector }; });
