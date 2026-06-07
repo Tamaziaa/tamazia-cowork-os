@@ -16,4 +16,8 @@ async function ensure() { if (_ensured) return; _ensured = true; await sql(`CREA
 async function logUsage(source, units = 1, meta = {}) {
   try { await ensure(); const u = Number(units) || 0; await sql(`INSERT INTO cost_ledger (source, units, meta) VALUES ('${esc(source)}', ${u}, '${esc(JSON.stringify(meta || {}))}'::jsonb)`); } catch (_) {}
 }
-module.exports = { logUsage };
+// Month-to-date sum of `units` for a source (e.g. USD spent on 'apify'). Powers the Apify cost governor.
+async function monthSpend(source) {
+  try { await ensure(); const r = await sql(`SELECT COALESCE(SUM(units),0) AS s FROM cost_ledger WHERE source='${esc(source)}' AND run_at >= date_trunc('month', NOW())`); return (r.ok && r.rows && r.rows[0]) ? Number(r.rows[0].s || 0) : 0; } catch (_) { return 0; }
+}
+module.exports = { logUsage, monthSpend };

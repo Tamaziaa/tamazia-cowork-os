@@ -1,6 +1,8 @@
-// Tamazia ICP filter + FIT scorer. The gate that keeps the sourced list HOT and on-target.
-// A lead qualifies only when: served SECTOR + served GEO + real BUSINESS (not a platform/aggregator),
-// and (regulated OR compliance-gap) AND has a fixable SEO/AI-visibility gap AND is an ad-runner (intent).
+// Tamazia ICP filter + 3-TIER FIT scorer. The gate that keeps the sourced list HOT and on-target.
+// preFilter (source-time): served SECTOR + served GEO + real BUSINESS (not a platform/aggregator).
+// scoreICP (post-audit): tiers a lead. Ads are NOT a gate (regulated firms rarely advertise) — they are a
+// small score booster only. Tier 1 = regulated + a fixable gap + ESTABLISHED + a VERIFIED decision-maker;
+// Tier 2 = regulated + a gap but missing one of those (approval required); Tier 3 = reject.
 // Pure + deterministic so it is unit-testable and identical across every source.
 'use strict';
 
@@ -60,30 +62,38 @@ function preFilter(raw) {
   return { pass: true, sector, reasons };
 }
 
-// Full FIT score after the audit/site-scan supplies gap signals.
-// sig: { sector, country, adRunner, adPlatforms[], seoGapCount, complianceApplicable, aiVisibilityGap, decisionMakerFound }
+// Full 3-tier FIT score after the audit/site-scan supplies gap signals.
+// sig: { sector, country, adRunner, adPlatforms[], seoGapCount, complianceApplicable, aiVisibilityGap,
+//        decisionMakerFound, decisionMakerVerified, decisionMakerConfidence, established, siteMature,
+//        emailCount, hasSocial, hiring_signal }
 function scoreICP(sig) {
   if (!sig || typeof sig !== 'object') sig = {};
   const def = SECTORS[sig.sector] || {};
   let score = 0; const reasons = [];
-  if (sig.sector) { score += 18; reasons.push('served sector ' + sig.sector); }
-  if (sig.adRunner) { score += 22; reasons.push('actively running ads'); }
-  const plat = (sig.adPlatforms || []).length;
-  if (plat > 1) { score += Math.min(12, plat * 4); reasons.push(plat + ' ad platforms'); }
-  if (def.regulated || sig.complianceApplicable) { score += 16; reasons.push('regulated / compliance-relevant'); }
+  const regulated = !!(def.regulated || sig.complianceApplicable);
+  if (sig.sector) { score += 14; reasons.push('served sector ' + sig.sector); }
+  if (regulated) { score += 14; reasons.push('regulated / compliance-relevant'); }
   if (sig.aiVisibilityGap) { score += 12; reasons.push('AI-visibility gap'); }
   const seo = sig.seoGapCount || 0;
-  if (seo > 0) { score += Math.min(20, seo * 4); reasons.push(seo + ' SEO/technical gaps'); }
-  if (sig.hiring_signal) { score += 18; reasons.push('actively hiring: ' + sig.hiring_signal + ' (budget + capability gap we fill)'); }
-  if (sig.decisionMakerFound) { score += 6; reasons.push('decision-maker reachable'); }
+  if (seo > 0) { score += Math.min(14, seo * 4); reasons.push(seo + ' SEO/technical gaps'); }
+  if (sig.decisionMakerFound) { score += 16; reasons.push('decision-maker reachable'); }   // strongest predictor
+  if (sig.hiring_signal) { score += 8; reasons.push('actively hiring: ' + sig.hiring_signal); }
+  if (sig.adRunner) { score += 6; reasons.push('actively running ads (booster, not required)'); }
+  const plat = (sig.adPlatforms || []).length;
+  if (plat > 1) { score += Math.min(6, plat * 2); reasons.push(plat + ' ad platforms'); }
   score = Math.max(0, Math.min(100, score));
-  // FIT (Tamazia value): (regulated OR compliance) AND seo/AI gap AND ad-runner
+  // FIT is tiered. Ads are NEVER required.
   const hasGap = seo > 0 || sig.aiVisibilityGap;
-  // Buyer INTENT = running ads OR actively hiring a marketing/SEO/compliance role (both = budget + a gap we fill).
-  const intent = !!(sig.adRunner || sig.hiring_signal);
-  const fit = !!(sig.sector && (def.regulated || sig.complianceApplicable || hasGap) && hasGap && intent);
+  const dmVerified = !!(sig.decisionMakerFound && (sig.decisionMakerVerified || Number(sig.decisionMakerConfidence || 0) >= 75));
+  const established = !!(sig.established || sig.siteMature || (sig.emailCount || 0) >= 2 || sig.hasSocial);
+  const buyer = !!(sig.sector && regulated && hasGap);
+  let tier;
+  if (!buyer) tier = 3;
+  else if (established && dmVerified) tier = 1;
+  else tier = 2;
+  const fit = tier === 1;
   const band = score >= 70 ? 'hot' : score >= 45 ? 'warm' : 'cold';
-  return { fit, score, band, reasons };
+  return { fit, tier, score, band, reasons };
 }
 
 module.exports = { SECTORS, classifySector, isExcluded, inServedGeo, preFilter, scoreICP };

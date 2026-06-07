@@ -110,3 +110,65 @@ Today: deterministic slug from the lead's company/domain + `lead_id`‑bound HMA
 3. Soak: enqueue 2,000 over 24 h → queue drains, no Groq 429 storm, VM up (`pm2 status`), Neon flat once R2 is on.
 4. Mystrika dry‑run (`push-to-mystrika.js --dry`) → each `audit_url` is its OWN brand; domain↔slug passes; touch‑1 body carries the live absolute URL.
 5. Drills: stop SearXNG (DDG fallback still mints); blank `GROQ_API_KEY` (Gemini fallback); delete an R2 object (graceful serve error, lead held from push).
+
+---
+
+# Part 2 — 24/7 agency (tiered ICP + website-first decision-maker enrichment + Apify + Metabase)
+
+This layer turns the mint core into the full **scrape → enrich → tier → mint/approve → multi-prospect outreach → track** loop. All new code lives in this repo and is **default-safe** (Apify off, free-DIY primary). It only goes live when you run the workers + set the env below.
+
+## A. New moving parts (this repo)
+- `scripts/scrape-all.js` — 24/7 staggered driver for every free source (serp_top, maps, jobspy, social_ads, reddit, youtube).
+- `scripts/enrich-worker.js` — 24/7 enrichment drainer: website-first DIY waterfall → cost-governed Apify on served verticals → writes the **decision-maker (primary) email + role + confidence + secondary cc/bcc contacts**.
+- `scripts/qualify-and-queue.js` — now a **3-tier gate**: Tier-1 `quality_fit=TRUE` + `qualified` (auto-mint+send); Tier-2 `pending_approval` (mint only after approval); Tier-3 `rejected`. Ads are NOT a gate.
+- `scripts/approve-leads.js` — Tier-2 founder approval (`--approve <ids|all>` / `--reject <ids>`). Approving routes the lead into the existing enqueue→mint→push path.
+- `src/lib/apify/client.js` — cost-governed Apify client (Leads Finder + Contact Details + Email Verifier on the Starter token, capped at `APIFY_MONTHLY_CAP_USD`; website-content-crawler on the Creator token for crawl escalation).
+- `src/lib/enrich/dm-email-scoring.js` — picks THE decision-maker email + ranks secondaries.
+- `src/lib/sourcing/{sra,fca,cqc}-register.js` + `dm-registers.js` — register-named decision-makers (key/opt-in gated, graceful).
+- `metabase-queries.sql` — the dashboards (funnel by tier, pending-approval queue, per-source yield+cost, email coverage, audits/day, outreach).
+
+## B. One-time consoles
+1. **Apify Starter ($29/mo)** account → API token → `APIFY_TOKEN_STARTER`. Funds Leads Finder ($1.50/1k) + Contact Details ($1.05/1k) + Email Verifier ($0.60/1k) ≈ 13–15k verified decision-maker emails/mo. Hard-capped by `APIFY_MONTHLY_CAP_USD=29`.
+2. **Apify Creator ($1/mo, 6-mo commit → $500 credit)** *separate* account → token → `APIFY_TOKEN_CREATOR`. Funds the free `apify/website-content-crawler` for audit-crawl escalation only. (Creator credit is locked to universal/own actors — do NOT point it at the paid lead-gen actors. Multi-account is an Apify gray area; if they object, fold crawl onto Starter — no pipeline dependency.)
+3. (Optional, free) `CQC_API_KEY`, `FCA_API_EMAIL`+`FCA_API_KEY`, `SRA_REGISTER=1` to activate the register name-fetchers; `HUNTER_API_KEY`/`SNOV_*` free tiers if wanted. All optional — the pipeline runs without them.
+
+## C. `.env` additions (VM)
+```
+ICP_STRICT=1                 # tighten Tier-1 gap thresholds (optional)
+SMTP_PROBE=1                 # DIY SMTP verify (port 25 open on the VM, not on GH Actions)
+APIFY_ENABLE=1               # turn the Apify escalation ON (default OFF)
+APIFY_TOKEN_STARTER=...      # paid enrichment actors (capped)
+APIFY_TOKEN_CREATOR=...      # free crawlers on the $500 credit
+APIFY_MONTHLY_CAP_USD=29     # hard ceiling on paid Apify spend (cost_ledger enforced)
+ENRICH_CONCURRENCY=6         # enrich-worker pool (size to A1 cores)
+SCRAPE_MAX=40                # per-source per-run cap
+MYSTRIKA_MAX_PER_COMPANY=4   # cap prospects/company (deliverability)
+```
+
+## D. pm2 services (A1 VM)
+```bash
+cd ~/cowork-os && node scripts/ensure-schema.js          # provisions tier/DM-email columns + dm_email_cache
+pm2 start scripts/scrape-all.js    --name tz-scrape  --time
+pm2 start scripts/enrich-worker.js --name tz-enrich  --time
+pm2 start scripts/mint-worker.js   --name tz-mint    --time
+pm2 start scripts/qualify-and-queue.js --name tz-qualify --cron "*/10 * * * *" --no-autorestart
+pm2 start scripts/enqueue-leads.js     --name tz-enqueue --cron "*/15 * * * *" --no-autorestart
+pm2 start scripts/push-to-mystrika.js  --name tz-push    --cron "*/20 * * * *" --no-autorestart -- --max 200
+pm2 save && pm2 startup
+# Tier-2 approvals (founder, ad-hoc):  node scripts/approve-leads.js   (list)   then  --approve <ids|all>
+```
+
+## E. Metabase (free, on the VM)
+```bash
+docker run -d --restart unless-stopped --name metabase -p 3000:3000 \
+  -e MB_DB_TYPE=postgres -e MB_DB_CONNECTION_URI="$NEON_URL" metabase/metabase
+```
+Connect a **read-only** Neon role as a data source → create one Native SQL question per block in `metabase-queries.sql` → add all to a "Tamazia Agency" dashboard. n8n: post the Tier-2 pending-approval count (query #2) as a daily digest so approvals never stall.
+
+## F. Verification (this layer)
+1. `node scripts/ensure-schema.js` → 0 drift (tier + DM-email columns + dm_email_cache live).
+2. `node scripts/enrich-worker.js --once --dry` → prints a real decision-maker primary + secondaries per lead (Apify only fires on DIY-miss + under cap).
+3. `node scripts/qualify-and-queue.js 50` → mix of `tier=1 [FIT·auto]` / `tier=2 [approve]` / `tier=3 [reject]`; Tier-2 are NOT minted.
+4. `node scripts/approve-leads.js` lists Tier-2 → `--approve <id>` → that lead enqueues + mints next cycle.
+5. `node scripts/push-to-mystrika.js --dry` → each company shows 1 primary (decision-maker) + ≤3 secondary prospects, all carrying the company's own `audit_url`.
+6. Metabase funnel reconciles with the SQL; `cost_ledger` shows Apify spend < cap.

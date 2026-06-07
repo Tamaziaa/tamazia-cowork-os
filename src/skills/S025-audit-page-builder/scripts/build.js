@@ -178,6 +178,24 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
   let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
   try { scan = await scanSite({ domain, sector, env }); } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
+  // Apify crawl ESCALATION: if the DIY fetch was bot-blocked / returned no usable corpus, backfill from the free
+  // website-content-crawler (Creator $500 credit) so the audit still has real content to analyse. Default-OFF
+  // (gated on APIFY_ENABLE); never throws — the mint proceeds regardless.
+  try {
+    const _env = env || process.env;
+    const _corpusLen = ((scan.signals && scan.signals.corpus) || '').length;
+    if ((!scan.reachable || _corpusLen < 400) && /^(1|true|yes|on)$/i.test(_env.APIFY_ENABLE || '')) {
+      const _pages = await require(path.resolve(ROOT, 'src', 'lib', 'apify', 'client.js')).crawlSite({ url: domain, env: _env });
+      const _md = (_pages || []).map(p => p.markdown || p.html || '').join('\n\n').trim();
+      if (_md.length > _corpusLen) {
+        scan.signals = scan.signals || {};
+        scan.signals.corpus = _md;
+        if (!scan.signals.title && _pages[0] && _pages[0].title) scan.signals.title = _pages[0].title;
+        scan.reachable = true;
+        scan.render_class = scan.render_class || 'apify_crawl';
+      }
+    }
+  } catch (_e) {}
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
   try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: country || 'UK', signals: scan.signals }); } catch (_e) {}
