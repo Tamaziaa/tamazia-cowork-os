@@ -144,9 +144,23 @@ async function endRun({ run_id, status, records_found, records_new, records_upda
   pg(sql);
 }
 
+// Light ICP pre-gate for ALL registry sources (sec-edgar, companies-house, opencorporates, osm-overpass,
+// charity, gleif): drop obviously-out-of-ICP rows early (excluded sector / non-served geo). Name-only leads
+// are kept (domain resolved later); the full quality gate is scoreLead at the qualify step.
+let _icp = {}; try { _icp = require('../../../lib/sourcing/icp.js'); } catch (_e) {}
+function _passesIcpGate(rec) {
+  try {
+    if (_icp.isExcluded && rec.domain && _icp.isExcluded(rec.domain)) return false;
+    // Geo-gate ONLY on an explicit non-served jurisdiction (a bare .com is ambiguous — could be served US, keep it).
+    if (_icp.inServedGeo && rec.jurisdiction && _icp.inServedGeo({ country: rec.jurisdiction }) === false) return false;
+  } catch (_e) {}
+  return true;
+}
+
 async function upsertLead(rec) {
   const norm = normaliseCompany(rec.company);
   if (!norm) return { inserted: 0, updated: 0 };
+  if (!_passesIcpGate(rec)) return { inserted: 0, updated: 0, gated: 1 };
   // Check existing
   const existsRaw = pg(`SELECT id FROM leads WHERE LOWER(company)=${pgEsc(rec.company.toLowerCase())} ${rec.domain ? `OR domain=${pgEsc(rec.domain)}` : ''} LIMIT 1`);
   const existing = existsRaw && /^\d+$/.test(existsRaw) ? Number(existsRaw) : null;

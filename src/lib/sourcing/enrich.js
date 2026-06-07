@@ -200,7 +200,12 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
   for (const d of dmSerper) { const k = (d.name || '').toLowerCase(); if (d.name && !seen.has(k)) { seen.add(k); const guess = pattern ? applyPattern(pattern, d.first_name, d.last_name, domain) : null; dms.push({ name: d.name, first_name: d.first_name, last_name: d.last_name, title: d.title, email: guess || '', email_guessed: !!guess, linkedin: d.linkedin, source: 'serper' }); if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: d.name, position: d.title, type: 'personal', source: 'pattern', guessed: true }; } }
   // Companies House officers = authoritative decision-makers (£0, official register). Generate candidate emails
   // via the firm's detected pattern, else default to the most-common B2B form first.last@domain.
+  // JURISDICTION GATE: Companies House is the UK-ONLY registry. Querying it by name for a non-UK firm returns
+  // an unrelated UK officer (beta bug: the same person was guessed onto 8 different US firms). Only query when
+  // the lead is plausibly UK — by domain TLD (.uk) or firmographics country/jurisdiction.
+  const _isUK = /\.uk$/i.test(domain) || /\b(gb|uk|united kingdom|england|scotland|wales|northern ireland)\b/i.test(String(_firmo.country || '') + ' ' + String(_firmo.jurisdiction || ''));
   try {
+    if (!_isUK) throw new Error('non-UK lead — skip Companies House (avoids cross-jurisdiction false match)');
     const _ch = require('./companies-house.js');
     const _chRes = await _ch.findDecisionMakers({ company: company || domain.split('.')[0], domain });
     for (const o of (_chRes.officers || [])) {

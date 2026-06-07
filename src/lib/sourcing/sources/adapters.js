@@ -13,25 +13,27 @@ const UA = 'Mozilla/5.0 (compatible; TamaziaBot/1.0; +https://tamazia.co.uk)';
 async function timed(fn, ms){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);try{return await fn(c.signal);}finally{clearTimeout(t);}}
 async function getJSON(u,o,ms){try{const r=await timed(s=>fetch(u,{...o,signal:s}),ms||15000);if(!r.ok)return null;return await r.json();}catch(_){return null;}}
 function rootDomain(u){try{return new URL(u.startsWith('http')?u:'https://'+u).hostname.replace(/^www\./,'');}catch{return '';}}
+let _serpClient=null; try { _serpClient=require('../../scraping/serp-client.js'); } catch(_e){}
 const SECTOR_TERMS = ['law firm','solicitors','dental clinic','aesthetic clinic','private clinic','estate agents','property developer','luxury hotel','fine dining','wealth management','financial advisers','accountants','cosmetic surgery'];
 const GEOS = [['London','UK'],['Manchester','UK'],['Edinburgh','UK'],['Dubai','UAE'],['Abu Dhabi','UAE'],['New York','USA'],['Miami','USA'],['Madrid','Spain'],['Paris','France']];
 
 // ---------- SERP top-results (strengthened "top 100") · SERPER, live ----------
 const serp_top = {
   name: 'serp-top', platform: 'google-organic',
-  mode: (env) => env.SERPER_KEY ? 'api' : 'needs_key',
+  // Free-first: serp-client chains SearXNG (unlimited, SEARXNG_URL) -> Brave (BRAVE_API_KEY) -> DuckDuckGo (no key,
+  // always available) -> SERPER/SerpApi backup, with query-level Neon cache. So sourcing NEVER depends on SERPER credits.
+  mode: () => 'api',
   async candidates(opts = {}, env = process.env) {
-    const key = env.SERPER_KEY; if (!key) return [];
+    if (!_serpClient) return [];
     const out = []; const terms = opts.terms || SECTOR_TERMS; const geos = opts.geos || GEOS;
     for (const term of terms.slice(0, opts.maxTerms || 6)) {
       for (const [city, country] of geos.slice(0, opts.maxGeos || 4)) {
-        const d = await getJSON('https://google.serper.dev/search', { method:'POST', headers:{'X-API-KEY':key,'Content-Type':'application/json'}, body: JSON.stringify({ q:`${term} ${city}`, num: 20, gl: country==='UK'?'gb':country==='UAE'?'ae':'us' }) }, 15000);
-        for (const o of ((d&&d.organic)||[])) {
-          const dom = rootDomain(o.link||''); if(!dom) continue;
-          out.push({ domain:dom, company:(o.title||'').split(/[|\-–·]/)[0].trim(), country, title:o.title, snippet:o.snippet, adText:'', adRunner:false, platform:'google-organic', source:'serp-top', permalink:o.link });
+        let d = null; try { d = await _serpClient.search(`${term} ${city}`, country, 20); } catch (_e) {}
+        for (const o of ((d && d.organic) || [])) {
+          const dom = o.domain || rootDomain(o.url || o.link || ''); if (!dom) continue;
+          out.push({ domain: dom, company: (o.title || '').split(/[|\-–·]/)[0].trim(), country, title: o.title, snippet: o.snippet || '', adText: '', adRunner: false, platform: 'google-organic', source: 'serp-top', permalink: o.url || o.link || '' });
         }
-        // ad-runner signal: presence of ads block for the same query
-        for (const a of ((d&&d.ads)||[])) { const dom=rootDomain(a.link||a.domain||''); if(dom) out.push({ domain:dom, company:(a.title||'').trim(), country, title:a.title, snippet:a.snippet||'', adText:a.title||'', adRunner:true, platform:'google-ads', source:'serp-top', permalink:a.link }); }
+        for (const a of ((d && d.ads) || [])) { const dom = a.domain || rootDomain(a.url || a.link || ''); if (dom) out.push({ domain: dom, company: (a.title || '').trim(), country, title: a.title, snippet: '', adText: a.title || '', adRunner: true, platform: 'google-ads', source: 'serp-top', permalink: a.url || a.link || '' }); }
       }
     }
     return out;
