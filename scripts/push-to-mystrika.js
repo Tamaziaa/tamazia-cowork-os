@@ -61,7 +61,7 @@ const DRY = process.argv.includes('--dry');
     const pageDomain = {};
     if (pairs.length) {
       const out = pg(`SELECT slug, hash, domain FROM audit_pages WHERE (slug,hash) IN (${pairs.join(',')})`);
-      for (const ln of out.split('\n').filter(Boolean)) { const [sl,h,dom] = ln.split('|'); pageDomain[sl+'/'+h] = (dom||'').toLowerCase().trim(); }
+      for (const ln of out.split('\n').filter(Boolean)) { const [sl,h,dom] = ln.split('\t'); pageDomain[sl+'/'+h] = (dom||'').toLowerCase().trim(); }
     }
     const kept = [];
     for (let i = 0; i < prospects.length; i++) {
