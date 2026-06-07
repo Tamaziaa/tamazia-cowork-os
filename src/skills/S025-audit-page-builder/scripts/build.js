@@ -316,7 +316,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   try {
     const _gp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-probe.js'));
     const _q = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
-    if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
+    if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, competitor_consistency: _gpr.competitor_consistency ?? null, providers_used: _gpr.providers_used || null, from_cache: _gpr.from_cache || false, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
   } catch (_e) {}
   // P3.9 hallucination + sentiment (free-LLM chain)
   try {

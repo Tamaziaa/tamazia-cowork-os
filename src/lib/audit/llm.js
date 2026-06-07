@@ -38,9 +38,10 @@ async function _geminiPlain(prompt, key, temperature, maxTokens, timeout = 9000)
 }
 
 // Primary text helper with full fallback chain. Returns { text, provider }.
-async function askLLM(prompt, { temperature = 0.4, maxTokens = 400, json = false } = {}, env = process.env) {
+async function askLLM(prompt, { temperature = 0.4, maxTokens = 400, json = false, seed = null } = {}, env = process.env) {
   for (const p of _providers(env)) {
     const payload = { model: p.model, messages: [{ role: 'user', content: prompt }], temperature, max_tokens: maxTokens };
+    if (seed !== null && seed !== undefined) payload.seed = seed;
     if (json && p.name !== 'perplexity') payload.response_format = { type: 'json_object' };
     const r = await _post(p.url, p.key, payload);
     if (r.status === 200) { try { const t = JSON.parse(r.body).choices[0].message.content; if (t && t.trim()) return { text: t, provider: p.name }; } catch (_e) {} }
