@@ -14,18 +14,18 @@ run() { echo "[$(TS)] >> $1"; eval "$1" 2>&1 | tail -3; echo "[$(TS)] done: $1";
   run "node scripts/zoho-imap-poll.js"                                  # replies (skips if no IMAP pwd)
   run "node src/skills/S065-touch-scheduler/scripts/send-due.js"        # send window (gated)
   run "node scripts/run-serp-scrape.js 50"                              # wide SERP scrape (skips if no key)
+  run '[ "${SOURCING_ENABLED:-1}" = "1" ] && node src/skills/S028-sourcing-orchestrator/scripts/run.js || echo "S028 sourcing disabled"'  # S028 10-source orchestrator (CH/SEC/OC/OSM) -> fresh leads
+  run "node scripts/resolve-domains.js ${RESOLVE_BATCH:-25}"            # name-only leads -> find website via SERP (so every lead has a site to scrape)
   run "node scripts/enrich-and-queue-channels.js 8"                     # enrich 8 leads (contacts/socials)
+  run "node scripts/scrape-intel.js ${SCRAPE_BATCH:-15}"               # 10-param website scraper: emails+people+socials+SEO/compliance pointers (feeds personalisation + audit)
   run "node scripts/run-deep-research-batch.js 6"                       # S063 deep research: news + brand pointers + Touch 0
   run "node scripts/verify-contacts.js 25"                              # FREE email verify (Hunter+DIY, £0) → verify_status/contact_confidence
   run "node scripts/dedupe-leads.js"                                    # suppress duplicate-domain leads (non-destructive)
-  run "node scripts/qualify-and-queue.js 12"                            # 10-layer quality gate → auto-send queue
-  run "node scripts/refresh-pipeline.js"                                 # Phase D: decay stale scores + refresh stale rankings + re-enroll stale enrichment
-  run "node scripts/buying-signals.js 10"                                # Phase D: watch prospect sites for hiring/pricing/redesign -> auto hot re-score
-  run "node scripts/build-rank-insights.js 15"                            # Touch-0 SOUL: gated below-top-5 keyword-gap insight per lead
-  run "node scripts/render-touches.js 15"                                # S064: render the gated 4-touch cadence (Touch-0 rankings) for FIT leads BEFORE export
-  run "node scripts/verify-audits.js 6"                                   # AUDIT GUARANTEE: verify/mint each FIT lead audit live (HTTP 200) before export; hold+flag if not
-  run "node scripts/mystrika-export.js 1000"                            # B02 export FIT leads -> Mystrika CSV + social CSV
-  run "node scripts/render-social-drafts.js 20"                         # G02/G03 LinkedIn + Instagram drafts for FIT leads
+  run "node scripts/qualify-and-queue.js 12"                            # 10-layer quality gate → lifecycle_stage=qualified
+  run "node scripts/build-audit-pages.js 15"                            # S025 audit pages → leads.audit_url (Touch 1 link source)
+  run "node scripts/render-due-leads.js 10"                             # S064 render 7 touches for qualified leads (the seam: qualify -> render -> send)
+  run "node src/skills/S016-alias-health-monitor/scripts/monitor.js"    # S016 alias health: per-alias metrics + auto-pause on bounce/complaint
+  run "node src/skills/S019-engagement-tracker/scripts/track.js --scan-reengagement"  # S019 re-engagement scan over audit-page events
   run "node scripts/health-check.js"                                    # self-diagnostic: 30 adverse-scenario probes → system_health
   run "node scripts/build-crm-dashboard.js"                             # dashboard refresh
   echo "===== CYCLE END $(TS) ====="

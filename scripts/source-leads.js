@@ -65,6 +65,16 @@ async function gather(o) {
 
 async function run() {
   const o = args();
+  // A4a resilience guards — idempotent, ADDITIVE-ONLY (one statement per call: Neon HTTP /sql is single-statement).
+  if (!o.dryRun) {
+    for (const ddl of [
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversion_tier text',
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversion_score numeric',
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS hiring_signal text',
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed boolean DEFAULT false',
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed_at timestamptz',
+    ]) { try { await q(ddl); } catch (_) {} }
+  }
   const t0 = Date.now();
   const runId = 'src-' + Date.now().toString(36);
   console.log(`[source-leads] sources=${o.sources.join(',')} max=${o.max} dryRun=${o.dryRun}`);
@@ -93,18 +103,23 @@ async function run() {
     const adPlatforms = (adTech.platforms && adTech.platforms.length) ? adTech.platforms : [r.platform];
     summary.audited++;
     // 2. score
-    const icp = scoreICP({ sector: r.sector, country: r.country, adRunner, adPlatforms, seoGapCount: seoGap, aiVisibilityGap: aiGap, complianceApplicable: !!(SECTORS[r.sector] || {}).regulated, decisionMakerFound: false, hiring_signal: r.hiring_signal || null });
+    let icp = scoreICP({ sector: r.sector, country: r.country, adRunner, adPlatforms, seoGapCount: seoGap, aiVisibilityGap: aiGap, complianceApplicable: !!(SECTORS[r.sector] || {}).regulated, decisionMakerFound: false, hiring_signal: r.hiring_signal || null });
     const hot = hotScore({ adRunner, adPlatforms, adRecencyDays: adRunner ? 5 : null, seoGapSeverity: Math.min(3, Math.ceil(seoGap / 2)), aiVisibilityGap: aiGap, decisionMakerFound: false });
     // 3. enrich
     let enr = { emails: [], decisionMakers: [], counts: { emails: 0, verified: 0, decision_makers: 0 }, send_ready: false, linkedin_people: [] };
-    try { enr = await enrichCompany({ domain: r.domain, company: r.company, env: process.env }); } catch (_) {}
+    try { enr = await enrichCompany({ domain: r.domain, company: r.company, sector: r.sector, env: process.env }); } catch (_) {}
     if (enr.counts.emails) summary.enriched++;
     if (enr.send_ready) summary.send_ready++;
     if (hot.band === 'hot') summary.hot++;
     const dm = enr.decisionMakers[0] || {};
+    // Re-tier with the REAL decision-maker signals from enrichment (ads are NOT a gate).
+    const _dmFound = (enr.decisionMakers || []).length > 0;
+    const _dmVerified = (enr.decisionMakers || []).some(d => d.verified);
+    const _established = ((enr.counts || {}).emails || 0) >= 2 || (enr.decisionMakers || []).some(d => d.linkedin) || (enr.linkedin_people || []).length > 0;
+    icp = scoreICP({ sector: r.sector, country: r.country, adRunner, adPlatforms, seoGapCount: seoGap, aiVisibilityGap: aiGap, complianceApplicable: !!(SECTORS[r.sector] || {}).regulated, decisionMakerFound: _dmFound, decisionMakerVerified: _dmVerified, established: _established, emailCount: (enr.counts || {}).emails || 0, hiring_signal: r.hiring_signal || null });
     const consumerSector = ['hospitality', 'healthcare', 'real-estate', 'restaurants', 'automotive'].includes(r.sector);
     const lead = {
-      ...r, sector: r.sector, fit: icp.fit, fit_score: icp.score, hot_score: hot.hot,
+      ...r, sector: r.sector, fit: icp.fit, tier: icp.tier, fit_score: icp.score, hot_score: hot.hot,
       seoGap, emails: enr.emails, decision_makers: enr.decisionMakers,
       email: (enr.emails.find(e => e.verified) || enr.emails[0] || {}).value || '',
       contact_name: dm.name || '', contact_title: dm.title || '', contact_linkedin: dm.linkedin || '',
@@ -122,16 +137,20 @@ async function run() {
     const ins = await q(`INSERT INTO leads (company, domain, website, sector, jurisdiction, country, source, acquisition_channel, lead_type, lifecycle_stage, aggressive_source, priority_score, platform, source_permalink, scrape_stream, hot_score, fit, fit_score, email, contact_name, contact_title, contact_linkedin, emails, decision_makers, top_finding, channel_email_ready, channel_linkedin_ready, channel_instagram_ready, conversion_tier, conversion_score, hiring_signal, sourced_at, created_at)
       VALUES (${lit(lead.company)}, ${lit(lead.domain)}, ${lit('https://' + lead.domain)}, ${lit(lead.sector)}, ${lit(lead.country)}, ${lit(lead.country)}, ${lit(r.source)}, ${lit('ad_intel_' + r.platform)}, ${lit('commercial_' + lead.sector)}, 'sourced', ${boolL(adRunner)}, ${num(lead.hot_score)}, ${lit(r.platform)}, ${lit(r.permalink)}, ${lit(adRunner ? 'sponsored' : 'organic_top100')}, ${num(lead.hot_score)}, ${boolL(lead.fit)}, ${num(lead.fit_score)}, ${lit(lead.email)}, ${lit(lead.contact_name)}, ${lit(lead.contact_title)}, ${lit(lead.contact_linkedin)}, ${jb(lead.emails)}, ${jb(lead.decision_makers)}, ${lit(lead.top_finding)}, ${boolL(lead.channel_email_ready)}, ${boolL(lead.channel_linkedin_ready)}, ${boolL(lead.channel_instagram_ready)}, ${lit(lead.conversion_tier)}, ${num(lead.conversion_score)}, ${lit(r.hiring_signal || null)}, NOW(), NOW())
       RETURNING id`);
+    const leadId = ins.ok && ins.rows[0] ? ins.rows[0].id : null;
     if (ins.ok && ins.rows[0]) summary.persisted++; else if (!ins.ok) console.error('[persist] ' + lead.domain + ': ' + ins.error);
-    // 5. mint audit page tied to the lead (best-effort)
-    try {
-      const leadId = ins.ok && ins.rows[0] ? ins.rows[0].id : null;
-      const slug = ab.slugify(lead.company || lead.domain.split('.')[0]); const hash = ab.generateHash();
-      const payload = { schema_version: 'v2', domain: lead.domain, sector: lead.sector, scan: { counts: scan.counts, signals: scan.signals }, pointers: scan.pointers || [] };
-      const exp = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
-      await q(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${leadId || 'NULL'}, ${lit(slug)}, ${lit(hash)}, ${lit(lead.domain)}, ${lit(lead.sector)}, ${lit((lead.country || 'UK').toUpperCase())}, '1.0.0', ${jb(payload)}, to_timestamp(${exp}))`);
-      if (leadId) await q(`UPDATE leads SET audit_slug=${lit(slug)}, audit_hash=${lit(hash)}, audit_url=${lit('https://tamazia.co.uk/audit/' + slug + '/' + hash)} WHERE id=${leadId}`);
-    } catch (_) {}
+    // Tier routing: Tier-1 auto, Tier-2 -> pending_approval (mint only after founder approval), Tier-3 -> rejected.
+    if (leadId) { const stage = lead.tier === 1 ? 'sourced' : lead.tier === 2 ? 'pending_approval' : 'rejected'; try { await q(`UPDATE leads SET icp_tier=${num(lead.tier)}, lifecycle_stage=${lit(stage)} WHERE id=${leadId}`); } catch (_) {} }
+    // 5. mint audit page tied to the lead — ONLY Tier-1 auto-mints inline; Tier-2 mints after approval, Tier-3 never.
+    if (leadId && lead.tier === 1) {
+      try {
+        const slug = ab.slugify(lead.company || lead.domain.split('.')[0]); const hash = ab.generateHash();
+        const payload = { schema_version: 'v2', domain: lead.domain, sector: lead.sector, scan: { counts: scan.counts, signals: scan.signals }, pointers: scan.pointers || [] };
+        const exp = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
+        await q(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${leadId}, ${lit(slug)}, ${lit(hash)}, ${lit(lead.domain)}, ${lit(lead.sector)}, ${lit((lead.country || 'UK').toUpperCase())}, '1.0.0', ${jb(payload)}, to_timestamp(${exp}))`);
+        await q(`UPDATE leads SET audit_slug=${lit(slug)}, audit_hash=${lit(hash)}, audit_url=${lit('https://tamazia.co.uk/audit/' + slug + '/' + hash)} WHERE id=${leadId}`);
+      } catch (_) {}
+    }
   }
   // 6. log the run
   if (!o.dryRun) await q(`INSERT INTO sourcing_runs (source, sector, query, records_found, records_new, status, ended_at, payload_summary) VALUES (${lit(o.sources.join('+'))}, NULL, ${lit('source-leads')}, ${num(summary.qualified)}, ${num(summary.persisted)}, 'completed', NOW(), ${jb({ run_id: runId, hot: summary.hot, send_ready: summary.send_ready, audited: summary.audited })})`);
