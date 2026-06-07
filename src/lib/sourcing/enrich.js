@@ -269,7 +269,7 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
       // Optional Apify deliverability verify on still-unverified candidates (final gate).
       try {
         const unver = emails.filter(e => !e.verified).map(e => e.value);
-        if (unver.length) { const vr = await A.verifyEmails({ emails: unver, env }); for (const r of vr) { const e = emails.find(x => x.value === r.email); if (e && /^(valid|deliverable|ok|catchall|catch-all|risky|accept)/i.test(r.status)) { e.verified = !/risky|catch/i.test(r.status); e.verify_status = r.status; e.verify_provider = 'apify_verify'; } } }
+        if (unver.length) { const vr = await A.verifyEmails({ emails: unver, env }); const { isVerifiedStatus } = require('../enrich/verify-status.js'); for (const r of vr) { const e = emails.find(x => x.value === r.email); if (e && r.status) { e.verified = isVerifiedStatus(r.status); e.verify_status = r.status; e.verify_provider = 'apify_verify'; } } }
       } catch (_) {}
       for (const d of dms) if (d.email) { const e = emails.find(x => x.value === d.email); if (e) d.verified = !!e.verified; }
       try { dmsel = require('../enrich/dm-email-scoring.js').selectDecisionMaker({ emails, decisionMakers: dms }); } catch (_) {}

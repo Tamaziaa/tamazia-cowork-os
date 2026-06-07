@@ -82,7 +82,8 @@ async function scoreLead(lead) {
   // Layer 3 — DECISION-MAKER CONTACT (named email) — now the strongest conversion predictor (16 pts)
   const primaryEmail = lead.primary_email || lead.contact_email || '';
   const dmConf = Number(lead.decision_maker_confidence || lead.contact_confidence || 0);
-  const dmEmailVerified = truthy(lead.email_verified) || /^(valid|deliverable|ok|accept|role_valid)/i.test(String(lead.verify_status || ''));
+  const { isVerifiedStatus } = require('./verify-status.js');
+  const dmEmailVerified = truthy(lead.email_verified) || isVerifiedStatus(lead.verify_status);
   const hasNamed = !!(primaryEmail && /@/.test(primaryEmail)) && dmConf >= 60;
   add('3_decision_maker_contact', 16, hasNamed, primaryEmail ? `${primaryEmail} (${dmConf}%${dmEmailVerified ? ', verified' : ''})` : 'none');
 

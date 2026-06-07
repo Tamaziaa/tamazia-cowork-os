@@ -14,19 +14,30 @@ async function fcaOfficers({ company, env = process.env } = {}) {
   if (!email || !key || !company) return [];
   const H = { 'X-Auth-Email': email, 'X-Auth-Key': key, 'Accept': 'application/json' };
   try {
-    const s = await getJSON(`${BASE}/Search?q=${encodeURIComponent(company)}&type=firm`, H);
+    const s = await getJSON(`${BASE}/CommonSearch?q=${encodeURIComponent(company)}&type=firm`, H);
     const data = (s && (s.Data || s.data)) || [];
-    const firm = data.find(d => /firm/i.test(d.Type || d.type || '')) || data[0] || {};
-    const frn = firm.Reference_Number || firm.reference_number || firm.FRN;
+    const firm = data.find(d => /firm/i.test(d['Type of business or Individual'] || d.Type || '')) || data[0] || {};
+    const frn = firm['Reference Number'] || firm.Reference_Number || firm.FRN;
     if (!frn) return [];
     const ind = await getJSON(`${BASE}/Firm/${frn}/Individuals`, H);
     const rows = (ind && (ind.Data || ind.data)) || [];
     const out = [];
     for (const i of rows) {
-      const name = (i.Name || i.name || '').trim();
+      const name = normalizePersonName(i.Name || i.name || '');
       if (name && !/^the\b/i.test(name)) out.push({ name, role: (i.Status || i.role || 'Approved person').toString(), source: 'fca_register' });
     }
     return out.slice(0, 12);
   } catch (_) { return []; }
 }
-module.exports = { fcaOfficers };
+
+// Shared register-name normalization: strip honorifics, reorder "Surname, Forename" -> "Forename Surname",
+// strip trailing punctuation. Prevents garbled guessed emails like smith,.john@domain.
+function normalizePersonName(raw) {
+  let n = String(raw || '').trim();
+  if (!n) return '';
+  n = n.replace(/^\s*(mr|mrs|ms|miss|dr|prof|professor|sir|dame|lord|lady)\.?\s+/i, '');
+  if (n.includes(',')) { const [a, b] = n.split(',', 2).map(x => x.trim()); if (a && b) n = `${b} ${a}`; }
+  n = n.replace(/[.,;:\s]+$/g, '').replace(/\s{2,}/g, ' ');
+  return n;
+}
+module.exports = { fcaOfficers, normalizePersonName };

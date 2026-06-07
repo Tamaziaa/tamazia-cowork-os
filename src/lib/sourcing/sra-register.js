@@ -1,27 +1,19 @@
 'use strict';
-// SRA "Find a Solicitor" (law-firms sector). The Law Society register lists a firm's solicitors + the
-// regulatory role-holders (COLP/COFA — the compliance principals who carry the SRA liability). No official
-// API, so this is a best-effort public-page fetch with graceful []; gate with SRA_REGISTER=1 to enable.
-// Returns [{ name, role, source:'sra_register' }] or [].
-const UA = 'Mozilla/5.0 (compatible; TamaziaBot/1.0; +https://tamazia.co.uk)';
-async function getText(url, ms = 12000) {
-  const c = new AbortController(); const t = setTimeout(() => c.abort(), ms);
-  try { const r = await fetch(url, { headers: { 'user-agent': UA, accept: 'text/html' }, redirect: 'follow', signal: c.signal }); if (!r.ok) return ''; return await r.text(); }
-  catch (_) { return ''; } finally { clearTimeout(t); }
-}
+// SRA / Law Society decision-maker lookup (law-firms sector).
+// FACTS (validated 2026-06): the SRA Data Sharing Platform DOES exist as an official API, but it is
+// FIRM-ONLY — it exposes no individual solicitors and no COLP/COFA role-holders, so it cannot serve this
+// ICP (we need the named compliance principals). Individuals are only visible on the Law Society's
+// "Find a Solicitor" site (solicitors.lawsociety.org.uk), which is JS-RENDERED: a plain HTML fetch (or a
+// cheerio-type crawl, per apify/client.js crawlSite) returns a shell with no person markup, so the old
+// class="...person..." regex scrape can never match. DECISION (ship): SRA individual-scrape is OUT OF
+// SCOPE for this release — the module keeps its SRA_REGISTER=1 opt-in gate and returns [] gracefully.
+// TODO(post-ship): wire a JS-capable Apify actor (Playwright/Puppeteer-rendering) and emit
+// [{ name: normalizePersonName(...), role: 'Solicitor / COLP/COFA', source: 'sra_register' }].
+const { normalizePersonName } = require('./fca-register.js'); // shared name normalization for when scrape lands
+
 async function sraOfficers({ company, env = process.env } = {}) {
   if (!/^(1|true|yes|on)$/i.test(env.SRA_REGISTER || '') || !company) return []; // opt-in; scraping is fragile
-  try {
-    const html = await getText('https://solicitors.lawsociety.org.uk/search/results?Pro=False&Type=0&Name=' + encodeURIComponent(company));
-    if (!html) return [];
-    const out = []; const seen = new Set();
-    // Person result blocks expose a name + their role/position; extract conservatively.
-    for (const m of html.matchAll(/class="[^"]*person[^"]*"[\s\S]{0,400}?>([A-Z][A-Za-z'’.\- ]{3,40})</g)) {
-      const name = (m[1] || '').trim(); const k = name.toLowerCase();
-      if (name && /\s/.test(name) && !seen.has(k)) { seen.add(k); out.push({ name, role: 'Solicitor / COLP/COFA', source: 'sra_register' }); }
-      if (out.length >= 10) break;
-    }
-    return out;
-  } catch (_) { return []; }
+  // JS-rendered target + no JS-rendering actor available in this stack => no individuals retrievable today.
+  return [];
 }
-module.exports = { sraOfficers };
+module.exports = { sraOfficers, normalizePersonName };

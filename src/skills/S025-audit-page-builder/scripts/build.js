@@ -522,8 +522,17 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   const expSeconds = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
   const signed = signUrl({ slug, hash, lead_id, expSeconds });
 
+  // A4i — pg() (psql shim) takes no params, so every caller-influenced literal is escaped AND the free-text
+  // ones pass a mandatory charset allow-list (sector can arrive from minting_queue / detected_sector free text).
+  const sectorE  = String(sector || '').toLowerCase().replace(/[^a-z0-9 &/-]/g, '').slice(0, 40).replace(/'/g, "''");
+  const countryE = String(country || 'UK').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'UK';
+  const leadIdN  = Number(lead_id);
+  const fwE      = String(payload.framework_version || '').replace(/[^0-9A-Za-z._-]/g, '').slice(0, 24);
   const payloadJsonE = JSON.stringify(neonPayload).replace(/'/g, "''");
-  pg(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${lead_id ? lead_id : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sector}', '${(country || 'UK').toUpperCase()}', '${payload.framework_version}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}))`);
+  // A4j — RETURNING id + loud failure: pg() returns null/'' on error, and a silently-failed INSERT here means a
+  // DEAD AUDIT LINK gets emailed. Never return {slug,hash} unless the row is provably written.
+  const ins = pg(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds})) RETURNING id`);
+  if (!ins || !String(ins).trim()) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written; refusing to return a dead audit link`);
 
   return { slug, hash, signed_url: signed.url, signed_exp: signed.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };
 }

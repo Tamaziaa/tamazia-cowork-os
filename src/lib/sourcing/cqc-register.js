@@ -8,22 +8,31 @@ async function getJSON(url, headers, ms = 12000) {
   try { const r = await fetch(url, { headers, signal: c.signal }); if (!r.ok) return null; return await r.json(); }
   catch (_) { return null; } finally { clearTimeout(t); }
 }
-async function cqcOfficers({ company, env = process.env } = {}) {
+const { normalizePersonName } = require('./fca-register.js');
+async function cqcOfficers({ company, providerId, env = process.env } = {}) {
   const key = env.CQC_API_KEY;
-  if (!key || !company) return [];
+  const partnerCode = (env.CQC_PARTNER_CODE || '').trim();
+  if (!key || (!company && !providerId)) return [];
+  // The CQC API requires a registered partnerCode on every request; without one, calls are throttled to
+  // uselessness. Hard-disable rather than silently firing throttled requests. (Operator key: CQC_PARTNER_CODE)
+  if (!partnerCode) { console.log('CQC disabled: no CQC_PARTNER_CODE'); return []; }
   const H = { 'Ocp-Apim-Subscription-Key': key, 'Accept': 'application/json' };
+  const pc = `partnerCode=${encodeURIComponent(partnerCode)}`;
   try {
-    // Find a provider by name, then read its detail for the registered manager / nominated individual.
-    const search = await getJSON(`${BASE}/providers?perPage=5&page=1&partnerCode=&name=${encodeURIComponent(company)}`, H);
-    const list = (search && (search.providers || search.locations)) || [];
+    // ?name= free-text provider search is UNSUPPORTED by the CQC API: a real lookup needs a providerId.
+    // Name-only calls return [] gracefully instead of relying on an endpoint that does not exist.
+    if (!providerId) return [];
+    const detail = await getJSON(`${BASE}/providers/${encodeURIComponent(providerId)}?${pc}`, H);
+    if (!detail) return [];
     const out = [];
-    for (const p of list.slice(0, 3)) {
-      const id = p.providerId || p.locationId; if (!id) continue;
-      const detail = await getJSON(`${BASE}/providers/${id}`, H);
-      if (!detail) continue;
-      const ni = detail.nominatedIndividual || (detail.contacts || []).find(c => /nominated|registered manager/i.test((c.personRoles || []).join(' ') || c.role || ''));
-      const nm = ni && (ni.personGivenName ? `${ni.personGivenName} ${ni.personFamilyName || ''}`.trim() : (ni.name || ''));
-      if (nm) out.push({ name: nm, role: 'Nominated Individual / Registered Manager', source: 'cqc_register' });
+    // Nominated individual lives inside regulatedActivities[] (there is no "Registered Manager" field).
+    const acts = detail.regulatedActivities || [];
+    for (const a of acts) {
+      const ni = a.nominatedIndividual;
+      if (ni && (ni.personGivenName || ni.personFamilyName)) {
+        const nm = normalizePersonName(`${ni.personGivenName || ''} ${ni.personFamilyName || ''}`.trim());
+        if (nm) { out.push({ name: nm, role: 'Nominated Individual', source: 'cqc_register' }); break; }
+      }
     }
     return out.slice(0, 8);
   } catch (_) { return []; }

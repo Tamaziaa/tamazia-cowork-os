@@ -60,9 +60,10 @@ async function runActor({ actorId, input, kind = 'starter', unit = 0, env = proc
 
 // Decision-maker by title + domain → business email (Apollo-style DB; no Apollo credits).
 async function findDecisionMakerEmail({ domain, company, titles, env = process.env }) {
-  const input = { domain, company_name: company, organization_domains: domain ? [domain] : undefined, person_titles: titles && titles.length ? titles : ['owner', 'founder', 'managing partner', 'managing director', 'partner', 'principal', 'practice manager', 'general manager'], email_status: ['validated'], max_results: 10 };
+  const input = { company_domain: domain ? [domain] : undefined, contact_job_title: titles && titles.length ? titles : ['owner', 'founder', 'managing partner', 'managing director', 'partner', 'principal', 'practice manager', 'general manager'], email_status: ['validated'], fetch_count: 10 };
   const items = await runActor({ actorId: ACTORS(env).leads, input, kind: 'starter', unit: UNIT_USD.leads, env, label: 'leads-finder' });
-  return items.map(p => ({ name: [p.first_name || p.firstName, p.last_name || p.lastName].filter(Boolean).join(' ') || p.name || '', email: (p.email || p.business_email || '').toLowerCase(), title: p.title || p.headline || '', linkedin: p.linkedin_url || p.linkedin || '', source: 'apify_leads', verified: /valid/i.test(p.email_status || '') })).filter(x => x.email && /@/.test(x.email));
+  // Input filtered to email_status:['validated'] -> returned leads are verified by construction (no email_status in output).
+  return items.map(p => ({ name: p.full_name || [p.first_name || p.firstName, p.last_name || p.lastName].filter(Boolean).join(' ') || p.name || '', email: (p.email || '').toLowerCase(), title: p.job_title || p.headline || '', linkedin: p.linkedin_url || p.linkedin || '', source: 'apify_leads', verified: true })).filter(x => x.email && /@/.test(x.email));
 }
 
 // All emails/phones/socials off a company website (the primary signal — fallback when DIY scrape misses).
@@ -73,7 +74,7 @@ async function contactDetails({ domain, env = process.env }) {
   const emails = []; const socials = {};
   for (const it of items) {
     for (const e of (it.emails || [])) if (e && /@/.test(e)) emails.push({ value: String(e).toLowerCase(), source: 'apify_contact' });
-    for (const k of ['linkedIns', 'linkedins', 'instagrams', 'twitters', 'facebooks']) for (const u of (it[k] || [])) { const key = k.replace(/s$/, ''); if (!socials[key]) socials[key] = u; }
+    for (const k of ['linkedIns', 'instagrams', 'twitters', 'facebooks']) for (const u of (it[k] || [])) { const key = k.replace(/s$/, ''); if (!socials[key]) socials[key] = u; }
   }
   return { emails, socials };
 }
@@ -84,7 +85,8 @@ async function verifyEmails({ emails, env = process.env }) {
   if (!list.length) return [];
   const input = { emails: list };
   const items = await runActor({ actorId: ACTORS(env).verify, input, kind: 'starter', unit: UNIT_USD.verify, env, label: 'email-verify' });
-  return items.map(it => ({ email: String(it.email || it.address || '').toLowerCase(), status: (it.status || it.result || it.state || '').toLowerCase(), score: Number(it.score || 0) }));
+  // Verifier status values are good/risky/bad. Consumers must treat ONLY /^good$/i as verified.
+  return items.map(it => ({ email: String(it.email || '').toLowerCase(), status: String(it.status || '').toLowerCase(), score: Number(it.score || 0) }));
 }
 
 // Audit-crawl escalation — LLM-ready markdown for a site that blocked / didn't render for the DIY crawler.

@@ -65,6 +65,16 @@ async function gather(o) {
 
 async function run() {
   const o = args();
+  // A4a resilience guards — idempotent, ADDITIVE-ONLY (one statement per call: Neon HTTP /sql is single-statement).
+  if (!o.dryRun) {
+    for (const ddl of [
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversion_tier text',
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversion_score numeric',
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS hiring_signal text',
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed boolean DEFAULT false',
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed_at timestamptz',
+    ]) { try { await q(ddl); } catch (_) {} }
+  }
   const t0 = Date.now();
   const runId = 'src-' + Date.now().toString(36);
   console.log(`[source-leads] sources=${o.sources.join(',')} max=${o.max} dryRun=${o.dryRun}`);

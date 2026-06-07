@@ -19,11 +19,14 @@ const firstOf = (n)=> String(n||'').trim().split(/\s+/)[0] || '';
 // rendered bodies open with a greeting line — either "Hi Jane," / "Dear Jane," OR a bare "Jane Smith," —
 // so match an optional salutation + the leading 1-3 capitalised name words before the first comma. Anchored
 // at string start (no /m) so only the opening greeting is ever touched.
-const greet = (body, first)=> !body ? body : body.replace(/^(\s*)((?:Hi|Hello|Dear|Hey)\s+)?([A-Z][\w'’\-]*(?:\s+[A-Z][\w'’\-]*){0,2})(\s*,)/, (m,ws,sal,_n,c)=> ws + (sal||'') + (first || 'there') + c);
+const greet = (body, first)=> !body ? body : body.replace(/^([ \t]*)((?:Hi|Hello|Dear|Hey)\s+)?([A-Z][\w'’\-]*(?:[ \t]+[A-Z][\w'’\-]*){0,2})([ \t]*,)(?=[ \t]*(?:\r?\n|$))/, (m,ws,sal,_n,c)=> ws + (sal||'') + (first || 'there') + c);
 const okStatus = (s)=> /valid|risky|catchall|catch-all|role_valid|accept|deliverable|ok/i.test(String(s||''));
-(async()=>{
+module.exports = { greet, firstOf, okStatus };
+if (require.main === module) (async()=>{
   if (!M._hasKey()) { console.log('No MYSTRIKA_API_KEY.'); return; }
   if (!NEON) { console.log('No NEON_URL'); return; }
+  // A4a resilience guards — idempotent, ADDITIVE-ONLY (mirrors verify-audits.js's audit_verified guard).
+  for (const ddl of ['ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversion_tier text','ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversion_score numeric','ALTER TABLE leads ADD COLUMN IF NOT EXISTS hiring_signal text','ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed boolean DEFAULT false','ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed_at timestamptz']) { try { pg(ddl); } catch(_){} }
   const forceCampaign = arg('campaign', process.env.MYSTRIKA_CAMPAIGN_ID || '');
   // Build sector -> campaign map from the live campaigns ("Tamazia | Law Firms" etc.) for auto-routing.
   let nameToId = {};

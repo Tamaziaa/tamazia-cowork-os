@@ -26,7 +26,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function claimBatch() {
   const sql = `UPDATE minting_queue SET status='minting'
     WHERE id IN (SELECT id FROM minting_queue WHERE status='pending' ORDER BY enqueued_at LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
-    RETURNING id, domain, company, sector, country, lead_id;`;
+    RETURNING id, regexp_replace(COALESCE(domain,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(sector,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(country,''),'[\t\r\n]+',' ','g'), lead_id;`;
   const out = (pg(sql) || '').trim();
   if (!out) return [];
   return out.split('\n').map((l) => {
