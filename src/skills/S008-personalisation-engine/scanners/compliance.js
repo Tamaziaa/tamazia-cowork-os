@@ -35,6 +35,20 @@ function canonicalIndex() {
   return _CANON_IDX;
 }
 
+// B3 — recent enforcement records (populated by scripts/enforcement-sync.js) for the per-breach panel. ONE query
+// per scan, cheap, throughput-safe; returns [] gracefully if the table isn't provisioned yet (panel stays honest).
+let _enfTableOk; // cached: is compliance_enforcement provisioned? avoids a failing query (+stderr noise) every scan
+function loadEnforcement(jurisdictions) {
+  if (_enfTableOk === undefined) { const chk = pg("SELECT (to_regclass('public.compliance_enforcement') IS NOT NULL)::text;"); _enfTableOk = !!(chk && /^t/i.test(chk.trim())); }
+  if (!_enfTableOk) return [];
+  const js = [...new Set((jurisdictions || []).concat(['GLOBAL']))].filter(Boolean).map(j => `'${String(j).replace(/'/g, "''")}'`).join(',');
+  if (!js) return [];
+  const sql = `SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT matched_law_ids,jurisdiction,breach_type,entity_named,penalty,ruling_date::text AS ruling_date,one_line_summary,source_url,source_feed,classifier FROM compliance_enforcement WHERE jurisdiction IN (${js}) ORDER BY ruling_date DESC NULLS LAST LIMIT 500) t;`;
+  const raw = pg(sql);
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch (_e) { return []; }
+}
+
 function loadRules({ frameworks }) {
   if (!frameworks.length) return [];
   const inList = frameworks.map(f => `'${f.replace(/'/g, "''")}'`).join(',');
@@ -527,6 +541,23 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
         else kept.push(f);
       }
       if (_resolverDropped.length) { findings.length = 0; findings.push(...kept); misses = findings.length; }
+    }
+  } catch (_e) {}
+
+  // ── B3 PER-BREACH LIVE PANEL · [where | calibrated penalty | recent ruling | recent news | impact] ───────────
+  // Each PROVEN finding gets the founder's panel, calibrated to recent REAL fines from OFFICIAL sources (honest
+  // "none found in our monitored sources" when the feed is empty — never a fabricated case). Graceful + cheap.
+  try {
+    const { buildBreachPanel } = require('../../../lib/compliance/enforcement.js');
+    const { toCanonicalJurisdictions } = require('../../../lib/compliance/signals.js');
+    const idx2 = canonicalIndex();
+    if (idx2 && idx2.size) {
+      const records = loadEnforcement([...toCanonicalJurisdictions(allJurisdictions)]);
+      for (const f of findings) {
+        if (f.status !== 'miss') continue;
+        const law = idx2.get(f.framework) || idx2.get(f.framework_short);
+        if (law) f.breach_panel = buildBreachPanel({ law, finding: f, records });
+      }
     }
   } catch (_e) {}
 
