@@ -86,7 +86,17 @@ function gateFull() {
 }
 function isSortedRank(arr) { for (let i = 1; i < arr.length; i++) if ((arr[i - 1].severity_rank || 4) > (arr[i].severity_rank || 4)) return false; return true; }
 
-(function main() {
+// Programmatic per-mint gate for the mint-worker: returns {ok, violations} WITHOUT process.exit, so a red gate can
+// block THIS audit's audit_pages INSERT (fail-closed) while the worker keeps draining the queue.
+function checkMint(payload) {
+  const before = { pass, fail, fails: fails.slice() };
+  const ok = gateMintPayload(payload);
+  const violations = fails.slice(before.fails.length);
+  pass = before.pass; fail = before.fail; fails.length = before.fails.length; // reset module counters (pure call)
+  return { ok, violations };
+}
+
+if (require.main === module) {
   const mi = process.argv.indexOf('--mint');
   let ok;
   if (mi > 0) { const p = JSON.parse(fs.readFileSync(process.argv[mi + 1], 'utf8')); ok = gateMintPayload(p); }
@@ -94,4 +104,5 @@ function isSortedRank(arr) { for (let i = 1; i < arr.length; i++) if ((arr[i - 1
   console.log(`\n=== QA-COMPLIANCE: ${pass} PASS / ${fail} FAIL ===`);
   if (!ok) { console.log('SHIP-GATE RED — block the export/INSERT. Failures:'); fails.forEach(f => console.log('  - ' + f)); process.exit(1); }
   console.log('SHIP-GATE GREEN.');
-})();
+}
+module.exports = { checkMint, gateMintPayload, gateFull };
