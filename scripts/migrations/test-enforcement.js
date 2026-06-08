@@ -41,8 +41,10 @@ ok('C2 official subdomain allowed (www.fca.org.uk)', isAllowed('https://www.fca.
 ok('C3 random SEO blog REJECTED', isAllowed('https://best-gdpr-fines-blog.com/post') === false);
 ok('C4 lookalike host REJECTED (ico.org.uk.evil.com)', isAllowed('https://ico.org.uk.evil.com/x') === false);
 ok('C5 contentHash deterministic + 64 chars', contentHash('u', 't', '2025-01-01') === contentHash('u', 't', '2025-01-01') && contentHash('u', 't', '2025-01-01').length === 64);
-ok('C6 matchLaws matches by regulator keyword + jurisdiction', matchLaws({ jurisdiction: 'UK', breach_type: 'Information Commissioner fined', title: 'ICO action' }, [law]).includes('UK-GDPR-01'));
-ok('C7 matchLaws does NOT cross jurisdictions', matchLaws({ jurisdiction: 'USA', breach_type: 'Information Commissioner', title: 'x' }, [law]).length === 0);
+const { buildFwToId } = require(path.join(ROOT, 'scripts', 'enforcement-sync.js'));
+const fwToId = buildFwToId([{ id: 'UK-GDPR-01', neon_framework_short: 'UK_GDPR_A13,UK_DPA_2018' }, { id: 'US-FTC', neon_framework_short: 'US_FTC' }]);
+ok('C6 matchLaws resolves a feed to its canonical law ids (ICO_UK → UK-GDPR-01)', matchLaws('ICO_UK', fwToId).includes('UK-GDPR-01'));
+ok('C7 matchLaws is feed-scoped — a US feed never returns a UK law', !matchLaws('FTC_US', fwToId).includes('UK-GDPR-01') && matchLaws('FTC_US', fwToId).includes('US-FTC'));
 ok('C8 _amount parses £1.2M', _amount('£1.2M') === 1200000);
 
 console.log('\n=== penalty-parse hardening (no poisoned median, correct rounding) ===');

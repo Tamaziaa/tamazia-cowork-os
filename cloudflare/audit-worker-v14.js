@@ -182,7 +182,7 @@ const TIER_LINK = {
 };
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
-function gbp(n) { if (n == null || n === 0) return null; if (n >= 1000000) return '£' + (n / 1000000).toFixed(n >= 10000000 ? 0 : 1).replace('.0', '') + 'M'; if (n >= 1000) return '£' + Math.round(n / 1000) + 'k'; return '£' + n; }
+function gbp(n) { if (n == null || n === 0) return null; if (n >= 1000000) return '£' + (n / 1000000).toFixed(1).replace('.0', '') + 'M'; if (n >= 1000) return '£' + Math.round(n / 1000) + 'k'; return '£' + n; }
 function regulatorBadge(reg) {
   const init = String(reg || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'REG';
   const palette = ['#3D0E0E', '#1F2937', '#0F766E', '#4338CA', '#B91C1C', '#6D28D9', '#1E40AF', '#9A3412'];
@@ -666,10 +666,11 @@ function urlPath(u) {
 function evidenceLine(p) {
   if (p.evidence_quote) {
     const where = p.evidence ? urlPath(p.evidence) : '';
+    const occ = (p.occurrence_count && p.occurrence_count > 1) ? ` \u00B7 found on ${p.occurrence_count} pages of your site` : '';
     return `<blockquote style="margin:4px 0 5px;padding:6px 11px;border-left:3px solid #B91C1C;background:#fff;border-radius:0 3px 3px 0">
       <span style="font-size:0.7rem;color:#B91C1C;font-weight:700;text-transform:uppercase;letter-spacing:0.04em">Your own words</span>
       <span style="display:block;font-size:0.8rem;color:#3D0E0E;font-style:italic;line-height:1.4;margin-top:2px">\u201C${esc(p.evidence_quote)}\u201D</span>
-      ${where ? `<span style="font-size:0.66rem;color:#6b6b6b">on your ${esc(where)}</span>` : ''}
+      ${(where || occ) ? `<span style="font-size:0.66rem;color:#6b6b6b">${where ? `on your ${esc(where)}` : ''}${esc(occ)}</span>` : ''}
     </blockquote>`;
   }
   if (Array.isArray(p.checked_urls) && p.checked_urls.length) {
@@ -804,7 +805,7 @@ function renderAllFindings(merged) {
 // ===== Data-viz suite v3 (inline SVG, CSP-safe, fully labelled, accessible) =============================
 let _vizN = 0;
 const VIZ = { ink:'#3D0E0E', gold:'#C8A664', crit:'#B91C1C', high:'#D97706', ok:'#15803D', mid:'#2563EB', grid:'#e7e0d2', muted:'#6b6b6b', cream:'#F8F5EF' };
-function _money(n){ if(n>=1e6) return '£'+(n/1e6).toFixed(n>=1e7?0:1).replace('.0','')+'M'; if(n>=1e3) return '£'+Math.round(n/1e3)+'k'; return '£'+Math.round(n); }
+function _money(n){ if(n>=1e6) return '£'+(n/1e6).toFixed(1).replace('.0','')+'M'; if(n>=1e3) return '£'+Math.round(n/1e3)+'k'; return '£'+Math.round(n); }
 function _chip(color, label){ return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:0.66rem;color:#3D0E0E;margin-right:12px;margin-bottom:2px"><span style="width:11px;height:11px;border-radius:3px;background:'+color+';display:inline-block;flex-shrink:0"></span>'+esc(label)+'</span>'; }
 function vizLegend(items){ return '<div style="margin:6px 0 2px;line-height:1.7">'+items.map(i=>_chip(i[0],i[1])).join('')+'</div>'; }
 function vizFrame(opts){

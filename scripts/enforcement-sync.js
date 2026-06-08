@@ -39,33 +39,48 @@ function isAllowed(u) { const h = hostOf(u); if (!h) return false; return [...AL
 function contentHash(sourceUrl, title, date) { return crypto.createHash('sha256').update([sourceUrl, title, date].map((x) => String(x || '')).join('|')).digest('hex').slice(0, 64); }
 
 // Free-LLM classify: extract a structured enforcement record from one item, NEVER inventing fields it cannot see.
-async function classifyItem({ title, snippet, source_url, feed, jurisdiction }, laws) {
+async function classifyItem({ title, source_url, feed, jurisdiction }, fwToId) {
   let askLLM; try { ({ askLLM } = require('../src/lib/audit/llm.js')); } catch (_e) { return null; }
-  const prompt = `You are a compliance-enforcement classifier. From the regulator item below, extract ONLY facts present in the text. Output STRICT JSON with keys: entity_named (string|null), breach_type (string|null), penalty (string|null, the fine/sanction exactly as written e.g. "£450,000"), ruling_date (YYYY-MM-DD|null), one_line_summary (string), is_enforcement (boolean — true only if it describes an actual fine/sanction/ruling, not general news). Never guess a number or date that is not in the text.\n\nSOURCE: ${feed} (${jurisdiction})\nTITLE: ${title}\nTEXT: ${String(snippet || '').slice(0, 1200)}`;
-  let out; try { out = await askLLM(prompt, { temperature: 0, maxTokens: 300, json: true }); } catch (_e) { return null; }
+  const body = await fetchBody(source_url);                      // read the ACTUAL article so we can extract the fine
+  const text = (body && body.length > 200) ? body : title;
+  const prompt = `You are a compliance-enforcement classifier. From the regulator article below, extract ONLY facts present in the text. Output STRICT JSON with keys: entity_named (string|null), breach_type (string|null), penalty (string|null, the fine/sanction EXACTLY as written e.g. "£450,000" or "£1.2 million"), ruling_date (YYYY-MM-DD|null), one_line_summary (string, <=160 chars), is_enforcement (boolean — true ONLY if it describes an actual fine/sanction/ruling against a named party, not general news). Never guess a number or date not in the text.\n\nSOURCE: ${feed} (${jurisdiction})\nTITLE: ${title}\nARTICLE: ${text.slice(0, 4000)}`;
+  let out; try { out = await askLLM(prompt, { temperature: 0, maxTokens: 320, json: true }); } catch (_e) { return null; }
   let rec; try { rec = typeof out === 'string' ? JSON.parse(out) : out; } catch (_e) { return null; }
   if (!rec || rec.is_enforcement === false) return null;
   return {
     content_hash: contentHash(source_url, title, rec.ruling_date), source_feed: feed, source_url, jurisdiction,
     breach_type: rec.breach_type || null, entity_named: rec.entity_named || null, penalty: rec.penalty || null,
-    ruling_date: rec.ruling_date || null, one_line_summary: rec.one_line_summary || title, classifier: 'llm_free',
-    matched_law_ids: matchLaws({ jurisdiction, breach_type: rec.breach_type, title }, laws), confidence: 0.7,
-    sector_tags: [],
+    ruling_date: rec.ruling_date || null, one_line_summary: (rec.one_line_summary || title || '').slice(0, 200), classifier: 'llm_free',
+    matched_law_ids: matchLaws(feed, fwToId), confidence: 0.7, sector_tags: [],
   };
 }
 
-// Match a record to canonical law_ids by jurisdiction + breach/regulator keyword overlap (conservative).
-function matchLaws({ jurisdiction, breach_type, title }, laws = []) {
-  const hay = `${breach_type || ''} ${title || ''}`.toLowerCase();
-  const out = [];
-  for (const l of laws) {
-    if (!l.servable) continue;
-    if (l.jurisdiction && jurisdiction && l.jurisdiction !== jurisdiction && !(l.jurisdiction === 'GLOBAL')) continue;
-    const reg = String(l.regulator || '').toLowerCase().split(/[ (]/)[0];
-    const nm = String(l.name || '').toLowerCase();
-    if ((reg && reg.length > 3 && hay.includes(reg)) || (nm && hay.includes(nm.split(' ')[0]) && nm.length > 4)) out.push(l.id);
-  }
-  return [...new Set(out)].slice(0, 5);
+// Each official source ENFORCES a known set of frameworks — match by the source feed (reliable) rather than
+// fuzzy keyword overlap, then resolve those framework_shorts to canonical law ids via the merged repo.
+const FEED_FRAMEWORKS = {
+  ICO_UK: ['UK_GDPR_A13', 'UK_DPA_2018', 'UK_PECR', 'UK_ICO_COOKIES'],
+  FCA_UK: ['UK_FCA_CONC25', 'UK_FCA_MAR', 'UK_FCA_FINPROM'],
+  ASA_UK: ['UK_ASA_CAP'],
+  CMA_UK: ['UK_CMA', 'UK_DMCC_2024'],
+  MHRA_UK: ['UK_MHRA'],
+  CQC_UK: ['UK_CQC'],
+  EDPB_EU: ['EU_GDPR', 'EU_EPRIVACY'],
+  SEC_US: ['US_SEC_REG_FD', 'US_SEC_506C'],
+  FTC_US: ['US_FTC', 'US_FTC_ENDORSE'],
+  GDPRHUB: ['EU_GDPR'],
+};
+function buildFwToId(laws) { const m = {}; for (const l of laws) for (const t of String(l.neon_framework_short || '').split(',').map(s => s.trim()).filter(Boolean)) if (!m[t]) m[t] = l.id; return m; }
+function matchLaws(feed, fwToId) { return [...new Set((FEED_FRAMEWORKS[feed] || []).map((fw) => fwToId[fw]).filter(Boolean))].slice(0, 5); }
+
+// Fetch + strip ONE enforcement article body so the classifier can read the actual fine/date/entity (the listing
+// link text alone rarely carries the £ amount). Free, defensive, bounded.
+async function fetchBody(url) {
+  try {
+    const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; TamaziaComplianceBot/1.0; +https://tamazia.co.uk)' }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
+    if (!r.ok) return '';
+    const html = await r.text();
+    return html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&pound;/gi, '£').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 5000);
+  } catch (_e) { return ''; }
 }
 
 // Very small, defensive listing fetch (titles + links). Free; per-source try/catch; never hangs the job.
@@ -96,6 +111,7 @@ function jb(v) { return v == null ? 'NULL' : `'${JSON.stringify(v).replace(/'/g,
 
 async function main() {
   const laws = loadLaws();
+  const fwToId = buildFwToId(laws);
   console.log(`=== ENFORCEMENT SYNC (${APPLY ? 'APPLY' : 'DRY'}) — allowlist ${ALLOWLIST.length} official sources, limit ${LIMIT}/source ===`);
   const records = [];
   for (const src of ALLOWLIST) {
@@ -103,10 +119,10 @@ async function main() {
     let kept = 0;
     for (const it of items) {
       if (!isAllowed(it.source_url)) { console.log(`  REJECT (not allowlisted): ${it.source_url}`); continue; }
-      const rec = await classifyItem({ ...it, feed: src.feed, jurisdiction: src.jurisdiction }, laws);
-      if (rec) { records.push(rec); kept++; }
+      const rec = await classifyItem({ ...it, feed: src.feed, jurisdiction: src.jurisdiction }, fwToId);
+      if (rec && rec.penalty) { records.push(rec); kept++; }   // only keep records that actually carry a fine → usable for calibration
     }
-    console.log(`  ${src.feed.padEnd(14)} fetched ${items.length} → ${kept} enforcement record(s)`);
+    console.log(`  ${src.feed.padEnd(14)} fetched ${items.length} → ${kept} enforcement record(s) with a penalty`);
   }
   // dedupe by content_hash in-memory
   const uniq = []; const seen = new Set();
@@ -124,4 +140,4 @@ async function main() {
   console.log('compliance_enforcement rows now:', n);
 }
 if (require.main === module) main().catch((e) => { console.error('enforcement-sync FATAL:', e.message); process.exit(1); });
-module.exports = { isAllowed, contentHash, matchLaws, ALLOWLIST, ALLOWED_HOSTS };
+module.exports = { isAllowed, contentHash, matchLaws, buildFwToId, FEED_FRAMEWORKS, ALLOWLIST, ALLOWED_HOSTS };

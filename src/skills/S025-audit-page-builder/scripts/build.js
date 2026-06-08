@@ -308,22 +308,18 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
         evidence_quote: f.evidence_quote || null, best_practice: true,
       };
     }
-    // short penalty for the visible citation pill (calibrated median if we have official records, else statutory max)
-    const calMatch = bp && bp.penalty && bp.penalty.basis === 'calibrated_recent_fines' && /around (\S+)/.exec(bp.penalty.headline || '');
-    const penaltyShort = calMatch ? ('recent fines ~£' + calMatch[1]) : (f.fine_high_gbp ? ('up to ' + _gbp(f.fine_high_gbp)) : null);
     const occN = f.occurrence_count || (Array.isArray(f.occurrences) ? f.occurrences.length : 0);
-    const where = occN ? `found on ${occN} page${occN > 1 ? 's' : ''}` : (Array.isArray(f.checked_urls) && f.checked_urls.length ? `checked ${f.checked_urls.length} pages` : null);
     const factBase = f.description || ((f.framework || '') + ' ' + (f.code || ''));
     return {
       bucket: 'compliance', severity: f.severity || 'P2',
-      fact: where ? `${factBase} (${where}).` : factBase,
+      fact: factBase,
+      desc: factBase,
       layman_explanation: f.layman_explanation || f.description || '',
       tamazia_fix_short: f.tamazia_fix_short || 'Tamazia closes this gap as part of the engagement.',
       recommendation: f.tamazia_fix_short || '',
-      // citation pill carries framework · regulator · penalty so the CURRENT render surfaces it; grouping still
-      // keys on the first whitespace token (the framework), so ComplianceInventory is unaffected.
-      citation: [f.framework, regulator, penaltyShort].filter(Boolean).join(' · ') || f.framework,
-      framework_short: f.framework, citation_url: f.citation_url || '',
+      // citation = framework code ONLY (the renderer parses the first token as the framework and the rest as the
+      // §section, and computes the regulator + penalty itself); never embed regulator/penalty here.
+      citation: f.framework, framework_short: f.framework, citation_url: f.citation_url || '',
       evidence: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || 'multi-page corpus scan',
       evidence_url: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || null,
       evidence_quote: f.evidence_quote || null,
