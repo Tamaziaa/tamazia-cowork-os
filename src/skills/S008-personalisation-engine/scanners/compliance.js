@@ -526,13 +526,14 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // jurisdiction / free-zone / employee-threshold / exclusion fit THIS firm. Conservative by design: a finding whose
   // framework has no canonical row is KEPT (connect() already jurisdiction-gated it) so an index gap can never
   // silently swallow real findings — the overlay can only DROP a frivolous/unproven one, never invent or over-cut.
-  let _resolverDropped = [];
+  let _resolverDropped = []; let _canonJur = [];
   try {
     const { overlayDrop } = require('../../../lib/compliance/resolver.js');
     const { buildSignals } = require('../../../lib/compliance/signals.js');
     const idx = canonicalIndex();
     if (idx && idx.size) {
       const sig = buildSignals({ jurisdictions: allJurisdictions, sector: effectiveSector, corpusText, employees: (signals && (signals.employees || signals.employee_count)) });
+      _canonJur = [...sig.jurSet]; // the EXACT canonical jurisdictions applied (incl. DIFC/ADGM free zones) — recorded so the ship-gate re-checks against the same set
       const kept = [];
       for (const f of findings) {
         const law = idx.get(f.framework) || idx.get(f.framework_short);
@@ -552,7 +553,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     const { toCanonicalJurisdictions } = require('../../../lib/compliance/signals.js');
     const idx2 = canonicalIndex();
     if (idx2 && idx2.size) {
-      const records = loadEnforcement([...toCanonicalJurisdictions(allJurisdictions)]);
+      const records = loadEnforcement(_canonJur.length ? _canonJur : [...toCanonicalJurisdictions(allJurisdictions)]);
       for (const f of findings) {
         if (f.status !== 'miss') continue;
         const law = idx2.get(f.framework) || idx2.get(f.framework_short);
@@ -567,7 +568,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const payload = {
     domain, sector, country, ok: true, reachable: true,
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
-    frameworks, jurisdictions: allJurisdictions, detected_jurisdictions: detectedJurisdictions,
+    frameworks, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
     firm_profile: firmProfile, detected_sector: effectiveSector,
     rules_evaluated: rules.length, hits, misses,
     resolver_dropped: _resolverDropped,
