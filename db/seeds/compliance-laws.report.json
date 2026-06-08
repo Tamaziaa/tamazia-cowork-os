@@ -1,0 +1,1226 @@
+{
+ "matched": [
+  {
+   "neon": "SAUDI_PDPL",
+   "files10": "SA-PDPL",
+   "jur": "MENA-SA",
+   "ik": "pdpl",
+   "rules": 7
+  },
+  {
+   "neon": "UAE_DHA",
+   "files10": "AE-DHA-MED",
+   "jur": "MENA-AE",
+   "ik": "dha",
+   "rules": 4
+  },
+  {
+   "neon": "UK_SRA_TRANSPARENCY",
+   "files10": "UK-SRA-TRANS",
+   "jur": "UK",
+   "ik": "sra",
+   "rules": 3
+  },
+  {
+   "neon": "US_CANSPAM",
+   "files10": "US-CANSPAM",
+   "jur": "USA",
+   "ik": "canspam",
+   "rules": 1
+  },
+  {
+   "neon": "UAE_PDPL",
+   "files10": "AE-PDPL",
+   "jur": "MENA-AE",
+   "ik": "pdpl",
+   "rules": 6
+  },
+  {
+   "neon": "UK_EQUALITY_2010",
+   "files10": "UK-EQ-10",
+   "jur": "UK",
+   "ik": "equality",
+   "rules": 2
+  },
+  {
+   "neon": "EU_GDPR",
+   "files10": "EU-GDPR",
+   "jur": "EU",
+   "ik": "gdpr",
+   "rules": 23
+  },
+  {
+   "neon": "US_FTC",
+   "files10": "US-FTC5",
+   "jur": "USA",
+   "ik": "ftc",
+   "rules": 5
+  },
+  {
+   "neon": "UK_CRA_2015",
+   "files10": "UK-CRA-15",
+   "jur": "UK",
+   "ik": "cra",
+   "rules": 3
+  },
+  {
+   "neon": "EU_MIFID_II",
+   "files10": "EU-MIFID2",
+   "jur": "EU",
+   "ik": "mifid",
+   "rules": 2
+  },
+  {
+   "neon": "EU_SFDR",
+   "files10": "EU-TAXONOMY",
+   "jur": "EU",
+   "ik": "sfdr",
+   "rules": 2
+  },
+  {
+   "neon": "US_FTC_ENDORSE",
+   "files10": "US-FTC5",
+   "jur": "USA",
+   "ik": "ftc",
+   "rules": 3
+  },
+  {
+   "neon": "UK_GDPR_A13",
+   "files10": "UK-GDPR-01",
+   "jur": "UK",
+   "ik": "gdpr",
+   "rules": 19
+  },
+  {
+   "neon": "UK_ICAEW",
+   "files10": "UK-ICAEW",
+   "jur": "UK",
+   "ik": "icaew",
+   "rules": 5
+  },
+  {
+   "neon": "UK_OFGEM",
+   "files10": "UK-OFGEM",
+   "jur": "UK",
+   "ik": "ofgem",
+   "rules": 4
+  },
+  {
+   "neon": "UK_PECR",
+   "files10": "UK-PECR-01",
+   "jur": "UK",
+   "ik": "pecr",
+   "rules": 13
+  },
+  {
+   "neon": "UK_FCA_CONC25",
+   "files10": "UK-CONC3",
+   "jur": "UK",
+   "ik": "fca",
+   "rules": 7
+  },
+  {
+   "neon": "UK_CQC",
+   "files10": "UK-CQC-20",
+   "jur": "UK",
+   "ik": "cqc",
+   "rules": 8
+  },
+  {
+   "neon": "UK_MHRA",
+   "files10": "UK-MHRA-HMR",
+   "jur": "UK",
+   "ik": "mhra",
+   "rules": 5
+  },
+  {
+   "neon": "UK_SRA_COC",
+   "files10": "UK-SRA-TRANS",
+   "jur": "UK",
+   "ik": "sra",
+   "rules": 10
+  },
+  {
+   "neon": "UK_DMCC_2024",
+   "files10": "UK-DMCC-24",
+   "jur": "UK",
+   "ik": "dmcc",
+   "rules": 5
+  },
+  {
+   "neon": "UK_FSMA_S21",
+   "files10": "UK-FSMA-21",
+   "jur": "UK",
+   "ik": "fsma",
+   "rules": 4
+  },
+  {
+   "neon": "US_FINRA_2210",
+   "files10": "US-FINRA-2210",
+   "jur": "USA",
+   "ik": "finra",
+   "rules": 2
+  },
+  {
+   "neon": "UK_COMPANIES_ACT",
+   "files10": "UK-COMP-82",
+   "jur": "UK",
+   "ik": "companies",
+   "rules": 4
+  },
+  {
+   "neon": "EU_DSA",
+   "files10": "EU-DSA",
+   "jur": "EU",
+   "ik": "dsa",
+   "rules": 4
+  },
+  {
+   "neon": "EU_EAA_2025",
+   "files10": "EU-EAA",
+   "jur": "EU",
+   "ik": "eaa",
+   "rules": 4
+  },
+  {
+   "neon": "US_COPPA",
+   "files10": "US-COPPA",
+   "jur": "USA",
+   "ik": "coppa",
+   "rules": 3
+  },
+  {
+   "neon": "US_TCPA",
+   "files10": "US-TCPA",
+   "jur": "USA",
+   "ik": "tcpa",
+   "rules": 3
+  },
+  {
+   "neon": "US_CPRA",
+   "files10": "US-CCPA",
+   "jur": "USA",
+   "ik": "ccpa",
+   "rules": 2
+  },
+  {
+   "neon": "UK_ASA_CAP",
+   "files10": "UK-ASA-12",
+   "jur": "UK",
+   "ik": "asa",
+   "rules": 5
+  },
+  {
+   "neon": "UK_GDC",
+   "files10": "UK-GDC-STD",
+   "jur": "UK",
+   "ik": "gdc",
+   "rules": 4
+  },
+  {
+   "neon": "UK_FOOD_INFO_2014",
+   "files10": "UK-FIR-14",
+   "jur": "UK",
+   "ik": "food",
+   "rules": 3
+  },
+  {
+   "neon": "UK_BSB",
+   "files10": "UK-BSB",
+   "jur": "UK",
+   "ik": "bsb",
+   "rules": 3
+  },
+  {
+   "neon": "UK_RICS",
+   "files10": "UK-RICS",
+   "jur": "UK",
+   "ik": "rics",
+   "rules": 4
+  },
+  {
+   "neon": "US_CCPA",
+   "files10": "US-CCPA",
+   "jur": "USA",
+   "ik": "ccpa",
+   "rules": 5
+  },
+  {
+   "neon": "US_HIPAA",
+   "files10": "US-HIPAA-MKT",
+   "jur": "USA",
+   "ik": "hipaa",
+   "rules": 4
+  },
+  {
+   "neon": "US_ADA",
+   "files10": "US-ADA3",
+   "jur": "USA",
+   "ik": "ada",
+   "rules": 3
+  },
+  {
+   "neon": "UAE_RERA",
+   "files10": "AE-RERA",
+   "jur": "MENA-AE",
+   "ik": "rera",
+   "rules": 5
+  }
+ ],
+ "net_new": [
+  {
+   "neon": "DIFC_DPL",
+   "id": "NEON-DIFC-DPL",
+   "jur": "MENA-AE-DIFC",
+   "ik": "(none)",
+   "rules": 3
+  },
+  {
+   "neon": "ADGM_DPR",
+   "id": "NEON-ADGM-DPR",
+   "jur": "MENA-AE-ADGM",
+   "ik": "(none)",
+   "rules": 3
+  },
+  {
+   "neon": "QATAR_PDPPL",
+   "id": "NEON-QATAR-PDPPL",
+   "jur": "MENA-QA",
+   "ik": "pdppl",
+   "rules": 5
+  },
+  {
+   "neon": "UAE_CONSUMER",
+   "id": "NEON-UAE-CONSUMER",
+   "jur": "MENA-AE",
+   "ik": "(none)",
+   "rules": 2
+  },
+  {
+   "neon": "UAE_ECOMMERCE",
+   "id": "NEON-UAE-ECOMMERCE",
+   "jur": "MENA-AE",
+   "ik": "(none)",
+   "rules": 2
+  },
+  {
+   "neon": "US_STATE_PRIVACY",
+   "id": "NEON-US-STATE-PRIVACY",
+   "jur": "USA",
+   "ik": "(none)",
+   "rules": 5
+  },
+  {
+   "neon": "US_ATTORNEY_ADVERTISING",
+   "id": "NEON-US-ATTORNEY-ADVERTISING",
+   "jur": "USA",
+   "ik": "(none)",
+   "rules": 2
+  },
+  {
+   "neon": "US_MEDICAL_BOARD",
+   "id": "NEON-US-MEDICAL-BOARD",
+   "jur": "USA",
+   "ik": "ftc",
+   "rules": 2
+  },
+  {
+   "neon": "UK_UKGC",
+   "id": "NEON-UK-UKGC",
+   "jur": "UK",
+   "ik": "ukgc",
+   "rules": 1
+  },
+  {
+   "neon": "EU_GPSR",
+   "id": "NEON-EU-GPSR",
+   "jur": "EU",
+   "ik": "gpsr",
+   "rules": 1
+  },
+  {
+   "neon": "US_CAN_SPAM",
+   "id": "NEON-US-CAN-SPAM",
+   "jur": "USA",
+   "ik": "(none)",
+   "rules": 2
+  },
+  {
+   "neon": "UK_SMCR",
+   "id": "NEON-UK-SMCR",
+   "jur": "UK",
+   "ik": "smcr",
+   "rules": 2
+  },
+  {
+   "neon": "UK_CE_PLUS",
+   "id": "NEON-UK-CE-PLUS",
+   "jur": "UK",
+   "ik": "ce",
+   "rules": 1
+  },
+  {
+   "neon": "EU_CSRD",
+   "id": "NEON-EU-CSRD",
+   "jur": "EU",
+   "ik": "csrd",
+   "rules": 2
+  },
+  {
+   "neon": "US_SEC_506C",
+   "id": "NEON-US-SEC-506C",
+   "jur": "USA",
+   "ik": "sec",
+   "rules": 1
+  },
+  {
+   "neon": "FR_CNIL_2025",
+   "id": "NEON-FR-CNIL-2025",
+   "jur": "EU-FR",
+   "ik": "cnil",
+   "rules": 2
+  },
+  {
+   "neon": "DE_BDSG",
+   "id": "NEON-DE-BDSG",
+   "jur": "EU-DE",
+   "ik": "bdsg",
+   "rules": 1
+  },
+  {
+   "neon": "UK_ACCA",
+   "id": "NEON-UK-ACCA",
+   "jur": "UK",
+   "ik": "acca",
+   "rules": 4
+  },
+  {
+   "neon": "UK_FRC",
+   "id": "NEON-UK-FRC",
+   "jur": "UK",
+   "ik": "frc",
+   "rules": 3
+  },
+  {
+   "neon": "UK_HMRC_AML",
+   "id": "NEON-UK-HMRC-AML",
+   "jur": "UK",
+   "ik": "hmrc",
+   "rules": 2
+  },
+  {
+   "neon": "UK_ABI",
+   "id": "NEON-UK-ABI",
+   "jur": "UK",
+   "ik": "abi",
+   "rules": 3
+  },
+  {
+   "neon": "UK_HSE_ENERGY",
+   "id": "NEON-UK-HSE-ENERGY",
+   "jur": "UK",
+   "ik": "hse",
+   "rules": 0
+  },
+  {
+   "neon": "UK_CAA",
+   "id": "NEON-UK-CAA",
+   "jur": "UK",
+   "ik": "caa",
+   "rules": 4
+  },
+  {
+   "neon": "UK_ORR",
+   "id": "NEON-UK-ORR",
+   "jur": "UK",
+   "ik": "orr",
+   "rules": 2
+  },
+  {
+   "neon": "UK_ICO_COOKIES",
+   "id": "NEON-UK-ICO-COOKIES",
+   "jur": "UK",
+   "ik": "(none)",
+   "rules": 10
+  },
+  {
+   "neon": "UK_OFS",
+   "id": "NEON-UK-OFS",
+   "jur": "UK",
+   "ik": "(none)",
+   "rules": 4
+  },
+  {
+   "neon": "UK_OSA_2023",
+   "id": "NEON-UK-OSA-2023",
+   "jur": "UK",
+   "ik": "osa",
+   "rules": 3
+  },
+  {
+   "neon": "EU_EPRIVACY",
+   "id": "NEON-EU-EPRIVACY",
+   "jur": "EU",
+   "ik": "(none)",
+   "rules": 3
+  },
+  {
+   "neon": "GOOGLE_EEAT",
+   "id": "NEON-GOOGLE-EEAT",
+   "jur": "GLOBAL",
+   "ik": "eeat",
+   "rules": 4
+  },
+  {
+   "neon": "UK_DPA_2018",
+   "id": "NEON-UK-DPA-2018",
+   "jur": "UK",
+   "ik": "dpa",
+   "rules": 4
+  },
+  {
+   "neon": "UK_PRA",
+   "id": "NEON-UK-PRA",
+   "jur": "UK",
+   "ik": "pra",
+   "rules": 3
+  },
+  {
+   "neon": "UK_BRIBERY_2010",
+   "id": "NEON-UK-BRIBERY-2010",
+   "jur": "UK",
+   "ik": "bribery",
+   "rules": 1
+  },
+  {
+   "neon": "UK_MODERN_SLAVERY",
+   "id": "NEON-UK-MODERN-SLAVERY",
+   "jur": "UK",
+   "ik": "modern",
+   "rules": 2
+  },
+  {
+   "neon": "EU_DMA",
+   "id": "NEON-EU-DMA",
+   "jur": "EU",
+   "ik": "dma",
+   "rules": 1
+  },
+  {
+   "neon": "EU_NIS2",
+   "id": "NEON-EU-NIS2",
+   "jur": "EU",
+   "ik": "nis2",
+   "rules": 2
+  },
+  {
+   "neon": "EU_DORA",
+   "id": "NEON-EU-DORA",
+   "jur": "EU",
+   "ik": "dora",
+   "rules": 2
+  },
+  {
+   "neon": "EU_PSD2",
+   "id": "NEON-EU-PSD2",
+   "jur": "EU",
+   "ik": "psd2",
+   "rules": 3
+  },
+  {
+   "neon": "EU_AML6",
+   "id": "NEON-EU-AML6",
+   "jur": "EU",
+   "ik": "aml6",
+   "rules": 2
+  },
+  {
+   "neon": "EU_WHISTLEBLOWER",
+   "id": "NEON-EU-WHISTLEBLOWER",
+   "jur": "EU",
+   "ik": "(none)",
+   "rules": 2
+  },
+  {
+   "neon": "EU_MDR",
+   "id": "NEON-EU-MDR",
+   "jur": "EU",
+   "ik": "mdr",
+   "rules": 3
+  },
+  {
+   "neon": "US_BIPA",
+   "id": "NEON-US-BIPA",
+   "jur": "USA",
+   "ik": "bipa",
+   "rules": 2
+  },
+  {
+   "neon": "US_GLBA",
+   "id": "NEON-US-GLBA",
+   "jur": "USA",
+   "ik": "glba",
+   "rules": 3
+  },
+  {
+   "neon": "US_FERPA",
+   "id": "NEON-US-FERPA",
+   "jur": "USA",
+   "ik": "ferpa",
+   "rules": 1
+  },
+  {
+   "neon": "US_NYDFS_500",
+   "id": "NEON-US-NYDFS-500",
+   "jur": "USA",
+   "ik": "nydfs",
+   "rules": 2
+  },
+  {
+   "neon": "US_TDPSA",
+   "id": "NEON-US-TDPSA",
+   "jur": "USA",
+   "ik": "tdpsa",
+   "rules": 2
+  },
+  {
+   "neon": "US_VCDPA",
+   "id": "NEON-US-VCDPA",
+   "jur": "USA",
+   "ik": "vcdpa",
+   "rules": 2
+  },
+  {
+   "neon": "UK_DVSA",
+   "id": "NEON-UK-DVSA",
+   "jur": "UK",
+   "ik": "dvsa",
+   "rules": 2
+  },
+  {
+   "neon": "UK_OFCOM",
+   "id": "NEON-UK-OFCOM",
+   "jur": "UK",
+   "ik": "ofcom",
+   "rules": 4
+  },
+  {
+   "neon": "UK_IPSO",
+   "id": "NEON-UK-IPSO",
+   "jur": "UK",
+   "ik": "ipso",
+   "rules": 3
+  },
+  {
+   "neon": "UK_HSE",
+   "id": "NEON-UK-HSE",
+   "jur": "UK",
+   "ik": "hse",
+   "rules": 3
+  },
+  {
+   "neon": "UK_UKCA",
+   "id": "NEON-UK-UKCA",
+   "jur": "UK",
+   "ik": "ukca",
+   "rules": 3
+  },
+  {
+   "neon": "UK_ENV_AGENCY",
+   "id": "NEON-UK-ENV-AGENCY",
+   "jur": "UK",
+   "ik": "(none)",
+   "rules": 3
+  },
+  {
+   "neon": "UK_CITB",
+   "id": "NEON-UK-CITB",
+   "jur": "UK",
+   "ik": "citb",
+   "rules": 2
+  },
+  {
+   "neon": "UK_LICENSING_ACT",
+   "id": "NEON-UK-LICENSING-ACT",
+   "jur": "UK",
+   "ik": "licensing",
+   "rules": 3
+  },
+  {
+   "neon": "UK_NCSC_CYBER_ESSENTIALS",
+   "id": "NEON-UK-NCSC-CYBER-ESSENTIALS",
+   "jur": "UK",
+   "ik": "(none)",
+   "rules": 3
+  },
+  {
+   "neon": "UK_DSIT_NIS2",
+   "id": "NEON-UK-DSIT-NIS2",
+   "jur": "UK",
+   "ik": "nis2",
+   "rules": 2
+  },
+  {
+   "neon": "UK_PSR",
+   "id": "NEON-UK-PSR",
+   "jur": "UK",
+   "ik": "psr",
+   "rules": 3
+  },
+  {
+   "neon": "UK_FOS_FSCS",
+   "id": "NEON-UK-FOS-FSCS",
+   "jur": "UK",
+   "ik": "(none)",
+   "rules": 4
+  },
+  {
+   "neon": "UK_FCA_MAR",
+   "id": "NEON-UK-FCA-MAR",
+   "jur": "UK",
+   "ik": "fca",
+   "rules": 2
+  },
+  {
+   "neon": "UK_CMA",
+   "id": "NEON-UK-CMA",
+   "jur": "UK",
+   "ik": "cma",
+   "rules": 4
+  },
+  {
+   "neon": "UK_TRADING_STANDARDS",
+   "id": "NEON-UK-TRADING-STANDARDS",
+   "jur": "UK",
+   "ik": "(none)",
+   "rules": 4
+  },
+  {
+   "neon": "UK_GPHC",
+   "id": "NEON-UK-GPHC",
+   "jur": "UK",
+   "ik": "gphc",
+   "rules": 4
+  },
+  {
+   "neon": "UK_ABPI",
+   "id": "NEON-UK-ABPI",
+   "jur": "UK",
+   "ik": "abpi",
+   "rules": 4
+  },
+  {
+   "neon": "UK_FSA",
+   "id": "NEON-UK-FSA",
+   "jur": "UK",
+   "ik": "food",
+   "rules": 3
+  },
+  {
+   "neon": "EU_AI_ACT",
+   "id": "NEON-EU-AI-ACT",
+   "jur": "EU",
+   "ik": "(none)",
+   "rules": 7
+  },
+  {
+   "neon": "UK_ARLA",
+   "id": "NEON-UK-ARLA",
+   "jur": "UK",
+   "ik": "arla",
+   "rules": 3
+  },
+  {
+   "neon": "UK_TPO",
+   "id": "NEON-UK-TPO",
+   "jur": "UK",
+   "ik": "tpo",
+   "rules": 2
+  },
+  {
+   "neon": "UK_CHARITY_COMMISSION",
+   "id": "NEON-UK-CHARITY-COMMISSION",
+   "jur": "UK",
+   "ik": "charity",
+   "rules": 5
+  },
+  {
+   "neon": "UK_FUNDRAISING_REG",
+   "id": "NEON-UK-FUNDRAISING-REG",
+   "jur": "UK",
+   "ik": "(none)",
+   "rules": 3
+  },
+  {
+   "neon": "UK_HMRC_GIFTAID",
+   "id": "NEON-UK-HMRC-GIFTAID",
+   "jur": "UK",
+   "ik": "hmrc",
+   "rules": 2
+  },
+  {
+   "neon": "UK_OFSTED",
+   "id": "NEON-UK-OFSTED",
+   "jur": "UK",
+   "ik": "ofsted",
+   "rules": 4
+  },
+  {
+   "neon": "UK_DFE",
+   "id": "NEON-UK-DFE",
+   "jur": "UK",
+   "ik": "(none)",
+   "rules": 3
+  },
+  {
+   "neon": "US_SEC_REG_FD",
+   "id": "NEON-US-SEC-REG-FD",
+   "jur": "USA",
+   "ik": "sec",
+   "rules": 3
+  }
+ ],
+ "gap": [
+  {
+   "id": "UK-DUAA-01",
+   "jur": "UK",
+   "name": "Data (Use and Access) Act 2025"
+  },
+  {
+   "id": "UK-ECR-02",
+   "jur": "UK",
+   "name": "Electronic Commerce (EC Directive) Regulations 2002"
+  },
+  {
+   "id": "UK-CCR-13",
+   "jur": "UK",
+   "name": "Consumer Contracts (Information, Cancellation & Additional Charges) Regulations 2013"
+  },
+  {
+   "id": "UK-CPR-08",
+   "jur": "UK",
+   "name": "Consumer Protection from Unfair Trading Regulations 2008"
+  },
+  {
+   "id": "UK-PSBAR-18",
+   "jur": "UK",
+   "name": "Public Sector Bodies (Websites and Mobile Applications) Accessibility Regulations 2018"
+  },
+  {
+   "id": "US-ROSCA",
+   "jur": "USA",
+   "name": "Restore Online Shoppers' Confidence Act (+ note: FTC Click-to-Cancel VACATED)"
+  },
+  {
+   "id": "US-STATE-PRIV",
+   "jur": "USA-STATES",
+   "name": "US State Privacy Patchwork (VA, CO, CT, TX, IN, KY, RI, MD, + others)"
+  },
+  {
+   "id": "EU-EPRIV",
+   "jur": "EU",
+   "name": "ePrivacy Directive 2002/58/EC (Cookie Law)"
+  },
+  {
+   "id": "EU-AIACT-50",
+   "jur": "EU",
+   "name": "EU AI Act Article 50 — Transparency Obligations"
+  },
+  {
+   "id": "EU-OMNIBUS",
+   "jur": "EU",
+   "name": "Omnibus Directive (EU) 2019/2161"
+  },
+  {
+   "id": "EU-CRD",
+   "jur": "EU",
+   "name": "Consumer Rights Directive 2011/83/EU"
+  },
+  {
+   "id": "EU-UCPD",
+   "jur": "EU",
+   "name": "Unfair Commercial Practices Directive 2005/29/EC"
+  },
+  {
+   "id": "DE-TMG",
+   "jur": "EU-DE",
+   "name": "Germany Telemediengesetz / DDG + TTDSG — Impressum"
+  },
+  {
+   "id": "DE-UWG",
+   "jur": "EU-DE",
+   "name": "Germany Gesetz gegen den unlauteren Wettbewerb (UWG)"
+  },
+  {
+   "id": "FR-LCEN",
+   "jur": "EU-FR",
+   "name": "France LCEN — Mentions Légales"
+  },
+  {
+   "id": "ES-LSSI",
+   "jur": "EU-ES",
+   "name": "Spain LSSI + LOPDGDD"
+  },
+  {
+   "id": "IT-CDC",
+   "jur": "EU-IT",
+   "name": "Italy Codice del Consumo + D.Lgs. 70/2003"
+  },
+  {
+   "id": "AE-DIFC-DP",
+   "jur": "MENA-AE-DIFC",
+   "name": "DIFC Data Protection Law 2020"
+  },
+  {
+   "id": "AE-ADGM-DP",
+   "jur": "MENA-AE-ADGM",
+   "name": "ADGM Data Protection Regulations 2021"
+  },
+  {
+   "id": "QA-PDPL",
+   "jur": "MENA-QA",
+   "name": "Qatar Personal Data Privacy Protection Law"
+  },
+  {
+   "id": "BH-PDPL",
+   "jur": "MENA-BH",
+   "name": "Bahrain Personal Data Protection Law"
+  },
+  {
+   "id": "KW-CITRA",
+   "jur": "MENA-KW",
+   "name": "Kuwait CITRA Data Privacy Protection Regulation"
+  },
+  {
+   "id": "OM-PDPL",
+   "jur": "MENA-OM",
+   "name": "Oman Personal Data Protection Law"
+  },
+  {
+   "id": "EG-PDPL",
+   "jur": "MENA-EG",
+   "name": "Egypt Personal Data Protection Law"
+  },
+  {
+   "id": "JO-PDPL",
+   "jur": "MENA-JO",
+   "name": "Jordan Personal Data Protection Law"
+  },
+  {
+   "id": "IL-PPL",
+   "jur": "MENA-IL",
+   "name": "Israel Protection of Privacy Law + Amendment 13"
+  },
+  {
+   "id": "GEO-SCHEMA",
+   "jur": "GLOBAL",
+   "name": "Schema.org / E-E-A-T Entity Signals (AI visibility)"
+  },
+  {
+   "id": "GEO-ROBOTS",
+   "jur": "GLOBAL",
+   "name": "robots.txt / llms.txt AI Crawler Access (AI visibility)"
+  },
+  {
+   "id": "UK-SRA-CODE",
+   "jur": "UK",
+   "name": "SRA Code of Conduct for Firms 2019 (marketing)"
+  },
+  {
+   "id": "UK-LSA-07",
+   "jur": "UK",
+   "name": "Legal Services Act 2007 — Reserved Activities Authorisation"
+  },
+  {
+   "id": "US-ABA-7",
+   "jur": "USA",
+   "name": "ABA Model Rules 7.1-7.3 — Lawyer Advertising (state variations)"
+  },
+  {
+   "id": "EU-CCBE",
+   "jur": "EU",
+   "name": "CCBE Code of Conduct Rule 2.6 — Lawyer Publicity (EU)"
+  },
+  {
+   "id": "AE-DIFC-LEGAL",
+   "jur": "MENA-AE-DIFC",
+   "name": "DIFC Legal Services Rules"
+  },
+  {
+   "id": "UK-GMC-GMP",
+   "jur": "UK",
+   "name": "GMC Good Medical Practice 2024 — Advertising"
+  },
+  {
+   "id": "US-FDA-202",
+   "jur": "USA",
+   "name": "FDA 21 CFR Part 202 — Rx Drug Advertising (DTC)"
+  },
+  {
+   "id": "EU-MED-2001-83",
+   "jur": "EU",
+   "name": "EU Directive 2001/83/EC — Medicinal Product Advertising"
+  },
+  {
+   "id": "SA-SFDA-AD",
+   "jur": "MENA-SA",
+   "name": "Saudi SFDA Medical/Health Product Advertising Approval"
+  },
+  {
+   "id": "UK-CAP-1212",
+   "jur": "UK",
+   "name": "CAP Code Rule 12.12 — Cosmetic Interventions"
+  },
+  {
+   "id": "UK-MHRA-POM-BOTOX",
+   "jur": "UK",
+   "name": "Human Medicines Regs 2012 reg.286 — Botox/Injectable POM Advertising"
+  },
+  {
+   "id": "UK-GDC-SPEC",
+   "jur": "UK",
+   "name": "GDC Specialist Title Restrictions"
+  },
+  {
+   "id": "UK-PTR-18",
+   "jur": "UK",
+   "name": "Package Travel & Linked Travel Arrangements Regulations 2018"
+  },
+  {
+   "id": "AE-DTCM",
+   "jur": "MENA-AE",
+   "name": "Dubai DET/DTCM Tourism Licensing Display"
+  },
+  {
+   "id": "US-ADA-HOTEL",
+   "jur": "USA",
+   "name": "ADA Title III §36.302(e) — Hotel Reservation Accessibility"
+  },
+  {
+   "id": "UK-CPR-PROP",
+   "jur": "UK",
+   "name": "CPRs 2008 — Property Material Information (NTSELAT)"
+  },
+  {
+   "id": "UK-EAA-79",
+   "jur": "UK",
+   "name": "Estate Agents Act 1979 — CMP + Redress + Fees"
+  },
+  {
+   "id": "US-FHA",
+   "jur": "USA",
+   "name": "Fair Housing Act §804(c) — Online Property Advertising"
+  },
+  {
+   "id": "UK-COBS4",
+   "jur": "UK",
+   "name": "FCA COBS 4 — Financial Promotions Content"
+  },
+  {
+   "id": "UK-CONSUMER-DUTY",
+   "jur": "UK",
+   "name": "FCA Consumer Duty (PRIN 2A / Principle 12)"
+  },
+  {
+   "id": "UK-MCOB3",
+   "jur": "UK",
+   "name": "FCA MCOB 3A — Mortgage Financial Promotions"
+  },
+  {
+   "id": "UK-ICOBS2",
+   "jur": "UK",
+   "name": "FCA ICOBS 2.2 — Insurance Financial Promotions"
+  },
+  {
+   "id": "US-SEC-MKT",
+   "jur": "USA",
+   "name": "SEC Marketing Rule — Investment Adviser Advertising"
+  },
+  {
+   "id": "US-SEC-REGFD",
+   "jur": "USA",
+   "name": "SEC Regulation FD — Fair Disclosure"
+  },
+  {
+   "id": "AE-DFSA-COB",
+   "jur": "MENA-AE-DIFC",
+   "name": "DFSA Conduct of Business — Financial Promotions (DIFC)"
+  },
+  {
+   "id": "UK-FCA-PS236",
+   "jur": "UK",
+   "name": "FCA PS23/6 — Cryptoasset Financial Promotions"
+  },
+  {
+   "id": "EU-MICA",
+   "jur": "EU",
+   "name": "MiCA — Crypto-Asset Marketing Communications"
+  },
+  {
+   "id": "AE-VARA",
+   "jur": "MENA-AE",
+   "name": "VARA Marketing Regulations 2024 (Dubai)"
+  },
+  {
+   "id": "EU-IDD",
+   "jur": "EU",
+   "name": "EU Insurance Distribution Directive 2016/97"
+  },
+  {
+   "id": "UK-CALORIE-21",
+   "jur": "UK",
+   "name": "Calorie Labelling (Out of Home Sector) Regulations 2021"
+  },
+  {
+   "id": "UK-HFSS",
+   "jur": "UK",
+   "name": "HFSS Promotion, Placement & Advertising Restrictions"
+  },
+  {
+   "id": "UK-PORTMAN",
+   "jur": "UK",
+   "name": "Portman Group Code — Alcohol Promotion"
+  },
+  {
+   "id": "EU-FIR-1169",
+   "jur": "EU",
+   "name": "EU Food Information Regulation 1169/2011 — Online Food Sales"
+  },
+  {
+   "id": "UK-UKVI",
+   "jur": "UK",
+   "name": "UKVI Student Sponsor Website Obligations"
+  },
+  {
+   "id": "UK-CMA-HE",
+   "jur": "UK",
+   "name": "CMA Higher Education Consumer Law Guidance"
+  },
+  {
+   "id": "AE-KHDA",
+   "jur": "MENA-AE",
+   "name": "Dubai KHDA School Licensing Display"
+  },
+  {
+   "id": "UK-CMA-GREEN",
+   "jur": "UK",
+   "name": "CMA Green Claims Code"
+  },
+  {
+   "id": "EU-ECGT",
+   "jur": "EU",
+   "name": "EU Empowering Consumers for Green Transition Directive"
+  },
+  {
+   "id": "AE-ECOM-14",
+   "jur": "MENA-AE",
+   "name": "UAE E-Commerce Law (Federal Decree-Law 14/2023)"
+  },
+  {
+   "id": "SA-ECOM",
+   "jur": "MENA-SA",
+   "name": "Saudi E-Commerce Law (Royal Decree M/126)"
+  },
+  {
+   "id": "UK-CONC3-AUTO",
+   "jur": "UK",
+   "name": "FCA CONC 3 — Automotive Finance Advertising"
+  },
+  {
+   "id": "US-FTC-USEDCAR",
+   "jur": "USA",
+   "name": "FTC Used Car Rule — Buyers Guide"
+  },
+  {
+   "id": "UK-CMA-EV",
+   "jur": "UK",
+   "name": "CMA/ASA EV & Emissions Environmental Claims"
+  },
+  {
+   "id": "EU-HEALTHCLAIMS-1924",
+   "jur": "EU",
+   "name": "EU Health Claims Regulation 1924/2006"
+  },
+  {
+   "id": "US-FTC-SUBST",
+   "jur": "USA",
+   "name": "FTC Substantiation Doctrine — Health/Fitness Claims"
+  },
+  {
+   "id": "UK-ASA-15",
+   "jur": "UK",
+   "name": "ASA CAP Code Section 15 — Food, Food Supplements & Health Claims"
+  },
+  {
+   "id": "UK-FSA-NOVEL",
+   "jur": "UK",
+   "name": "FSA Novel Foods Regulations — CBD"
+  },
+  {
+   "id": "US-FDA-DSHEA",
+   "jur": "USA",
+   "name": "FDA DSHEA — Dietary Supplement Website Requirements"
+  },
+  {
+   "id": "UK-MHRA-CBD",
+   "jur": "UK",
+   "name": "MHRA Borderline Medicinal Claims — CBD"
+  },
+  {
+   "id": "UK-RCVS",
+   "jur": "UK",
+   "name": "RCVS Code of Professional Conduct — Veterinary Advertising"
+  },
+  {
+   "id": "UK-VMD",
+   "jur": "UK",
+   "name": "VMD — Veterinary Medicines POM-V Advertising"
+  },
+  {
+   "id": "UK-ARB",
+   "jur": "UK",
+   "name": "ARB Architects Code — Protected Title"
+  },
+  {
+   "id": "EU-SERVICES-DIR",
+   "jur": "EU",
+   "name": "EU Services Directive 2006/123/EC — Professional Transparency"
+  },
+  {
+   "id": "UK-ATOL",
+   "jur": "UK",
+   "name": "CAA ATOL Regulations 2012"
+  },
+  {
+   "id": "EU-PTD-2015",
+   "jur": "EU",
+   "name": "EU Package Travel Directive 2015/2302"
+  },
+  {
+   "id": "US-DOT-FARE",
+   "jur": "USA",
+   "name": "US DOT Full Fare Advertising Rule"
+  },
+  {
+   "id": "US-FTC-GREEN",
+   "jur": "USA",
+   "name": "FTC Green Guides (16 CFR Part 260)"
+  },
+  {
+   "id": "US-FTC-ENDORSE",
+   "jur": "USA",
+   "name": "FTC Endorsement Guides 2023 — Influencer Disclosure"
+  },
+  {
+   "id": "EU-DSA-26",
+   "jur": "EU",
+   "name": "EU DSA Art.26 — Commercial Communication Disclosure"
+  },
+  {
+   "id": "AE-CYBER-34",
+   "jur": "MENA-AE",
+   "name": "UAE Cybercrime Law — Online Content & Reputation"
+  }
+ ],
+ "ambiguous": []
+}

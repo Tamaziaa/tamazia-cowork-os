@@ -1,0 +1,4892 @@
+[
+ {
+  "id": "UK-GDPR-01",
+  "name": "UK GDPR + Data Protection Act 2018",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "UK GDPR Arts. 5,6,12-22,32; DPA 2018",
+  "regulator": "ICO",
+  "category": "data_protection",
+  "website_obligation": "Privacy notice (Art.13/14 disclosures), lawful basis per processing, data-subject-rights mechanism (access/erasure/portability/objection), security of processing, controller/DPO identity, ICO registration where required.",
+  "applies_when": [
+   "processes_personal_data",
+   "serves_uk_users"
+  ],
+  "excluded_when": [
+   "purely_household_activity"
+  ],
+  "where_on_site": [
+   "footer:privacy-policy",
+   "forms",
+   "account-area"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "£17.5m or 4% global annual turnover",
+  "effective_date": "2021-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "LINK",
+    "logic": "Verify /privacy-policy returns 200"
+   },
+   {
+    "method": "DOM",
+    "logic": "Parse policy for controller identity, lawful basis, retention, rights contact, intl transfer mechanism"
+   },
+   {
+    "method": "COOKIE",
+    "logic": "Flag non-essential trackers firing pre-consent"
+   }
+  ],
+  "enforcement_feed": "ICO enforcement-action page (scrape; verify RSS)",
+  "trigger_flags": [
+   "processes_personal_data"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-PECR-01",
+  "name": "Privacy and Electronic Communications Regulations 2003",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "SI 2003/2426 reg.6 (cookies), reg.22 (e-marketing)",
+  "regulator": "ICO",
+  "category": "data_protection",
+  "website_obligation": "Prior informed active consent before non-essential cookies; soft opt-in for e-mail marketing to existing customers of similar products; granular reject-all as prominent as accept-all; no cookie wall.",
+  "applies_when": [
+   "sets_cookies_or_emarkets",
+   "serves_uk_users"
+  ],
+  "excluded_when": [
+   "only_strictly_necessary_cookies"
+  ],
+  "where_on_site": [
+   "cookie-banner",
+   "footer:cookie-policy",
+   "newsletter-signup"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Historically £500k; raised toward UK GDPR levels by Data (Use and Access) Act 2025",
+  "effective_date": "2003-12-11",
+  "status": "active",
+  "detection": [
+   {
+    "method": "COOKIE",
+    "logic": "Playwright clean-load; intercept all Set-Cookie + JS cookie writes pre-interaction; classify marketing/analytics/essential"
+   },
+   {
+    "method": "DOM",
+    "logic": "Check banner for pre-ticked boxes, reject-all parity, cookie-wall"
+   }
+  ],
+  "enforcement_feed": "ICO enforcement-action page",
+  "trigger_flags": [
+   "sets_cookies_or_emarkets"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-DUAA-01",
+  "name": "Data (Use and Access) Act 2025",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "DUAA 2025 (amends UK GDPR/DPA/PECR)",
+  "regulator": "ICO",
+  "category": "data_protection",
+  "website_obligation": "Raises PECR penalty caps to UK GDPR levels; adjusts cookie consent exemptions for low-risk analytics; recognised legitimate interests. Phased June 2025–June 2026.",
+  "applies_when": [
+   "processes_personal_data",
+   "serves_uk_users"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "cookie-banner",
+   "footer:privacy-policy"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Up to £17.5m or 4% global turnover (new PECR ceiling)",
+  "effective_date": "2025-06-19",
+  "status": "active",
+  "detection": [
+   {
+    "method": "COOKIE",
+    "logic": "Re-baseline cookie consent against DUAA low-risk-analytics exemptions"
+   }
+  ],
+  "enforcement_feed": "ICO enforcement-action page",
+  "trigger_flags": [
+   "processes_personal_data"
+  ],
+  "confidence": "check"
+ },
+ {
+  "id": "UK-COMP-82",
+  "name": "Companies Act 2006 s.82 — Trading Disclosures",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "Companies Act 2006 s.82; SI 2008/495",
+  "regulator": "Companies House / Trading Standards",
+  "category": "business_disclosure",
+  "website_obligation": "Display registered company name, registered number, registered office address, place of registration on the website. LLP = LLP number. Sole trader = name + principal place of business.",
+  "applies_when": [
+   "is_uk_registered_entity"
+  ],
+  "excluded_when": [
+   "non_uk_entity_no_uk_establishment"
+  ],
+  "where_on_site": [
+   "footer",
+   "about",
+   "contact"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Fine up to £1,000 per officer; criminal offence",
+  "effective_date": "2008-10-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Regex footer for company number [0-9]{7,8}, 'Registered in', registered address"
+   },
+   {
+    "method": "API",
+    "logic": "Verify number vs Companies House API matches trading name"
+   }
+  ],
+  "enforcement_feed": "Companies House",
+  "trigger_flags": [
+   "is_uk_registered_entity"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-ECR-02",
+  "name": "Electronic Commerce (EC Directive) Regulations 2002",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "SI 2002/2013 reg.6,9",
+  "regulator": "Trading Standards / Ofcom",
+  "category": "business_disclosure",
+  "website_obligation": "Provider must display name, geographic address, email for rapid contact, VAT number if registered, trade register number if applicable, supervisory authority if regulated; clear order-process steps.",
+  "applies_when": [
+   "provides_online_service_or_sells"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "contact",
+   "about",
+   "footer"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Criminal offence; fine",
+  "effective_date": "2002-08-21",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Crawl contact/about for physical address, email, VAT number"
+   },
+   {
+    "method": "LINK",
+    "logic": "Verify contact page 200 with full details"
+   }
+  ],
+  "enforcement_feed": "Trading Standards (no central feed)",
+  "trigger_flags": [
+   "provides_online_service_or_sells"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CCR-13",
+  "name": "Consumer Contracts (Information, Cancellation & Additional Charges) Regulations 2013",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "SI 2013/3134",
+  "regulator": "Trading Standards",
+  "category": "consumer_fairness",
+  "website_obligation": "Pre-contract information before online purchase; 14-day cancellation right for most distance contracts; model cancellation form; total price incl. taxes before payment; no pre-ticked add-ons.",
+  "applies_when": [
+   "sells_to_consumers",
+   "takes_payment",
+   "serves_uk_users"
+  ],
+  "excluded_when": [
+   "b2b_only"
+  ],
+  "where_on_site": [
+   "checkout",
+   "product-page",
+   "terms"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Up to £5,000; contract may be unenforceable",
+  "effective_date": "2014-06-13",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "On checkout verify total price incl VAT before payment; check withdrawal info"
+   },
+   {
+    "method": "LINK",
+    "logic": "Verify cancellation/returns policy linked from product pages"
+   }
+  ],
+  "enforcement_feed": "Trading Standards",
+  "trigger_flags": [
+   "b2c",
+   "takes_payment"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CRA-15",
+  "name": "Consumer Rights Act 2015",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "CRA 2015 Parts 1-2 (Pt 2 = unfair terms)",
+  "regulator": "CMA / Trading Standards",
+  "category": "consumer_fairness",
+  "website_obligation": "Terms must be fair and transparent; no unfair contract terms; goods/services/digital content as described and satisfactory quality. Unfair terms unenforceable.",
+  "applies_when": [
+   "sells_to_consumers",
+   "serves_uk_users"
+  ],
+  "excluded_when": [
+   "b2b_only"
+  ],
+  "where_on_site": [
+   "terms",
+   "checkout"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Unenforceable terms; CMA action; consumer claims",
+  "effective_date": "2015-10-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Analyse T&Cs for unfair/disproportionate clauses, hidden liabilities"
+   }
+  ],
+  "enforcement_feed": "CMA enforcement page",
+  "trigger_flags": [
+   "b2c"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CPR-08",
+  "name": "Consumer Protection from Unfair Trading Regulations 2008",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "SI 2008/1277 (now read with DMCC Act 2024 for fake reviews/drip pricing)",
+  "regulator": "Trading Standards / CMA",
+  "category": "consumer_fairness",
+  "website_obligation": "No misleading actions/omissions; no false urgency; no omission of material information; no undisclosed paid endorsements.",
+  "applies_when": [
+   "sells_to_consumers",
+   "serves_uk_users"
+  ],
+  "excluded_when": [
+   "b2b_only"
+  ],
+  "where_on_site": [
+   "product-page",
+   "marketing-copy",
+   "reviews"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Unlimited fine; up to 2 years imprisonment",
+  "effective_date": "2008-05-26",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag unsubstantiated superlatives, false urgency, hidden fees, fake/undisclosed endorsements"
+   }
+  ],
+  "enforcement_feed": "CMA enforcement page",
+  "trigger_flags": [
+   "b2c"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-DMCC-24",
+  "name": "Digital Markets, Competition and Consumers Act 2024",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "DMCC Act 2024 Part 4; commenced SI 2025/272 (6 Apr 2025); subscription rules expected Spring 2026",
+  "regulator": "CMA (direct enforcement, no court)",
+  "category": "consumer_fairness",
+  "website_obligation": "Ban on fake/incentivised reviews; platforms must take reasonable steps to prevent fake reviews; total price (incl. mandatory fees) at invitation-to-purchase (anti-drip-pricing); subscription transparency + easy exit (Spring 2026, pending).",
+  "applies_when": [
+   "sells_to_consumers",
+   "serves_uk_users"
+  ],
+  "excluded_when": [
+   "b2b_only",
+   "publicly_funded"
+  ],
+  "where_on_site": [
+   "review-widget",
+   "checkout",
+   "pricing",
+   "subscription-flow"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Up to 10% global turnover or £300,000 for individuals",
+  "effective_date": "2025-04-06",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Detect review widgets; check verification disclosure; check drip pricing at add-to-cart vs checkout"
+   },
+   {
+    "method": "NLP",
+    "logic": "Flag incentivised-review language"
+   }
+  ],
+  "enforcement_feed": "CMA enforcement page + press releases",
+  "trigger_flags": [
+   "b2c",
+   "has_reviews",
+   "has_pricing"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-EQ-10",
+  "name": "Equality Act 2010 — Website Accessibility",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "Equality Act 2010 s.20,29 (reasonable adjustments); WCAG 2.1 AA accepted standard",
+  "regulator": "EHRC",
+  "category": "accessibility",
+  "website_obligation": "Reasonable adjustments so disabled users are not at substantial disadvantage; WCAG 2.1 AA is the accepted benchmark.",
+  "applies_when": [
+   "public_facing_website"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "sitewide"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Compensation claims; EHRC investigation",
+  "effective_date": "2010-10-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "A11Y",
+    "logic": "axe-core full WCAG 2.1 AA audit; report by impact + criterion"
+   },
+   {
+    "method": "DOM",
+    "logic": "Check colour contrast, alt text, form labels, heading order"
+   }
+  ],
+  "enforcement_feed": "EHRC (no central feed); BAILII for case law",
+  "trigger_flags": [
+   "public_facing_website"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-PSBAR-18",
+  "name": "Public Sector Bodies (Websites and Mobile Applications) Accessibility Regulations 2018",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "section_ref": "SI 2018/952; WCAG 2.1 AA + accessibility statement",
+  "regulator": "Cabinet Office / GDS",
+  "category": "accessibility",
+  "website_obligation": "WCAG 2.1 AA compliance + published accessibility statement in the required format.",
+  "applies_when": [
+   "is_public_sector_body"
+  ],
+  "excluded_when": [
+   "private_sector"
+  ],
+  "where_on_site": [
+   "footer:accessibility-statement",
+   "sitewide"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Monitoring by GDS; publication of non-compliance",
+  "effective_date": "2018-09-23",
+  "status": "active",
+  "detection": [
+   {
+    "method": "LINK",
+    "logic": "Verify /accessibility-statement present + correct format"
+   },
+   {
+    "method": "A11Y",
+    "logic": "axe-core WCAG 2.1 AA"
+   }
+  ],
+  "enforcement_feed": "GDS monitoring reports",
+  "trigger_flags": [
+   "is_public_sector_body"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-FTC5",
+  "name": "FTC Act Section 5 — Unfair or Deceptive Acts or Practices",
+  "jurisdiction": "USA",
+  "region": "US",
+  "section_ref": "15 U.S.C. §45",
+  "regulator": "FTC",
+  "category": "consumer_fairness",
+  "website_obligation": "No deceptive representations; clear and conspicuous disclosures; testimonials must disclose material connections; substantiation for all objective claims.",
+  "applies_when": [
+   "serves_us_users",
+   "markets_commercially"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "marketing-copy",
+   "testimonials",
+   "product-page"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Up to $51,744 per violation per day",
+  "effective_date": "1914-09-26",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag undisclosed endorsements (#ad), superlatives without evidence, atypical-results before/after"
+   }
+  ],
+  "enforcement_feed": "FTC press releases/RSS (ftc.gov/news-events)",
+  "trigger_flags": [
+   "serves_us_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-ADA3",
+  "name": "Americans with Disabilities Act Title III — Website Accessibility",
+  "jurisdiction": "USA",
+  "region": "US",
+  "section_ref": "42 U.S.C. §12181 et seq.; 28 CFR Part 36; DOJ 2022 web guidance (WCAG 2.1 AA)",
+  "regulator": "DOJ",
+  "category": "accessibility",
+  "website_obligation": "Websites of public accommodations must be accessible; DOJ references WCAG 2.1 AA.",
+  "applies_when": [
+   "serves_us_users",
+   "public_facing_website"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "sitewide"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "$75k-$150k+ per lawsuit; DOJ civil penalties",
+  "effective_date": "1990-07-26",
+  "status": "active",
+  "detection": [
+   {
+    "method": "A11Y",
+    "logic": "axe-core; prioritise alt text, labels, captions, contrast, keyboard traps, 44x44 touch targets"
+   }
+  ],
+  "enforcement_feed": "DOJ ADA.gov; CourtListener for ADA web suits",
+  "trigger_flags": [
+   "serves_us_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-CANSPAM",
+  "name": "CAN-SPAM Act 2003",
+  "jurisdiction": "USA",
+  "region": "US",
+  "section_ref": "15 U.S.C. §7701; 16 CFR Part 316",
+  "regulator": "FTC",
+  "category": "marketing",
+  "website_obligation": "Commercial email: accurate header/subject, physical postal address, working opt-out honoured within 10 business days. Opt-out (not opt-in) model.",
+  "applies_when": [
+   "sends_commercial_email",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "transactional_email_only"
+  ],
+  "where_on_site": [
+   "newsletter-signup",
+   "email-footer"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Up to $53,088 per email (2025 adjustment)",
+  "effective_date": "2004-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Inspect signup flows; test that confirmation emails carry postal address + working unsubscribe"
+   }
+  ],
+  "enforcement_feed": "FTC press releases",
+  "trigger_flags": [
+   "sends_commercial_email",
+   "serves_us_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-TCPA",
+  "name": "Telephone Consumer Protection Act",
+  "jurisdiction": "USA",
+  "region": "US",
+  "section_ref": "47 U.S.C. §227; 47 CFR 64.1200",
+  "regulator": "FCC / private right of action",
+  "category": "marketing",
+  "website_obligation": "Prior express written consent for SMS/auto-dialed marketing; clear consent capture at web forms; honour STOP. Consent standards unsettled post-2025 court decisions.",
+  "applies_when": [
+   "captures_phone_for_marketing",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "no_sms_or_call_marketing"
+  ],
+  "where_on_site": [
+   "lead-forms",
+   "sms-signup"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "$500-$1,500 per message/call",
+  "effective_date": "1991-12-20",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Check phone-capture forms for express-consent checkbox + disclosure proximate to submit"
+   }
+  ],
+  "enforcement_feed": "FCC + CourtListener",
+  "trigger_flags": [
+   "captures_phone_for_marketing",
+   "serves_us_users"
+  ],
+  "confidence": "check"
+ },
+ {
+  "id": "US-COPPA",
+  "name": "Children's Online Privacy Protection Act",
+  "jurisdiction": "USA",
+  "region": "US",
+  "section_ref": "15 U.S.C. §6501; 16 CFR Part 312",
+  "regulator": "FTC",
+  "category": "data_protection",
+  "website_obligation": "Child-directed sites (under-13) must post COPPA policy, obtain verifiable parental consent before data collection, minimise collection.",
+  "applies_when": [
+   "child_directed_content",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "not_child_directed"
+  ],
+  "where_on_site": [
+   "privacy-policy",
+   "signup",
+   "age-gate"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Up to $51,744 per violation per child",
+  "effective_date": "2000-04-21",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "If child-directed: check COPPA policy + parental-consent gate before collection"
+   },
+   {
+    "method": "COOKIE",
+    "logic": "Flag behavioural ad cookies on child-directed pages"
+   }
+  ],
+  "enforcement_feed": "FTC press releases",
+  "trigger_flags": [
+   "child_directed_content",
+   "serves_us_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-ROSCA",
+  "name": "Restore Online Shoppers' Confidence Act (+ note: FTC Click-to-Cancel VACATED)",
+  "jurisdiction": "USA",
+  "region": "US",
+  "section_ref": "15 U.S.C. §8403; FTC Negative Option Rule (pre-2024 prenotification version restored Feb 2026)",
+  "regulator": "FTC",
+  "category": "consumer_fairness",
+  "website_obligation": "Online negative-option/auto-renewal: clear disclosure of terms before billing, informed consent, simple cancellation mechanism. NOTE: the 2024 'Click-to-Cancel' four-step rule was VACATED by the 8th Circuit on 8 Jul 2025 — apply ROSCA + state ARLs, NOT click-to-cancel.",
+  "applies_when": [
+   "sells_subscription",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "no_subscription"
+  ],
+  "where_on_site": [
+   "subscription-checkout",
+   "account-cancel"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "FTC Act §5 penalties; state ARL penalties",
+  "effective_date": "2010-12-29",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Check subscription checkout for pre-billing disclosure + consent; check cancellation path exists"
+   }
+  ],
+  "enforcement_feed": "FTC press releases",
+  "trigger_flags": [
+   "sells_subscription",
+   "serves_us_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-CCPA",
+  "name": "California Consumer Privacy Act / CPRA",
+  "jurisdiction": "USA-CA",
+  "region": "US",
+  "section_ref": "Cal. Civ. Code §1798.100 et seq.; CPPA regs (cyber audit/risk/ADMT effective 1 Jan 2026); Delete Act DROP",
+  "regulator": "California Privacy Protection Agency (CPPA)",
+  "category": "data_protection",
+  "website_obligation": "Privacy policy (categories collected/purposes/sharing), 'Do Not Sell or Share My Personal Information' link, 'Limit Use of Sensitive PI' link, honour Global Privacy Control signal, consumer rights.",
+  "applies_when": [
+   "serves_california_residents",
+   "meets_ccpa_threshold"
+  ],
+  "excluded_when": [
+   "below_ccpa_threshold"
+  ],
+  "where_on_site": [
+   "footer:do-not-sell",
+   "privacy-policy"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "$2,500 unintentional / $7,500 intentional per violation",
+  "effective_date": "2020-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Check footer for Do-Not-Sell + Limit-Sensitive-PI links; test GPC signal honoured"
+   },
+   {
+    "method": "LINK",
+    "logic": "Verify policy discloses categories + rights"
+   }
+  ],
+  "enforcement_feed": "CPPA enforcement; California AG",
+  "trigger_flags": [
+   "serves_california_residents",
+   "meets_ccpa_threshold"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-STATE-PRIV",
+  "name": "US State Privacy Patchwork (VA, CO, CT, TX, IN, KY, RI, MD, + others)",
+  "jurisdiction": "USA-STATES",
+  "region": "US",
+  "section_ref": "VCDPA (VA); CPA (CO); CTDPA (CT); TDPSA (TX); IN/KY/RI live 1 Jan 2026; MODPA (MD) applies 1 Apr 2026; 20 enacted / 19 in effect 2026; OK SB546 effective 1 Jan 2027",
+  "regulator": "State Attorneys General",
+  "category": "data_protection",
+  "website_obligation": "State-specific privacy policy, universal opt-out (GPC) where required, sensitive-data consent (incl. neural/biometric/geolocation in CO/CT amendments), DPIAs, MD bans sensitive-data sale.",
+  "applies_when": [
+   "serves_us_state_residents",
+   "meets_state_threshold"
+  ],
+  "excluded_when": [
+   "below_state_thresholds"
+  ],
+  "where_on_site": [
+   "footer:privacy-choices",
+   "privacy-policy"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Typically up to $7,500 per violation",
+  "effective_date": "2023-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Check for universal opt-out link + GPC honouring; state-specific rights in policy"
+   }
+  ],
+  "enforcement_feed": "State AG offices; IAPP tracker",
+  "trigger_flags": [
+   "serves_us_state_residents"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-GDPR",
+  "name": "General Data Protection Regulation",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "section_ref": "Regulation (EU) 2016/679 Arts. 5,6,12-22,32; all 27 member states",
+  "regulator": "National DPAs (CNIL, BfDI, AEPD, Garante, AP, DPC, etc.)",
+  "category": "data_protection",
+  "website_obligation": "Privacy notice (Art.13/14), lawful basis per processing, data-subject rights, DPO contact where required, intl transfer safeguards, retention; active granular cookie consent for non-essential tracking.",
+  "applies_when": [
+   "processes_personal_data",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "purely_household_activity"
+  ],
+  "where_on_site": [
+   "footer:privacy-policy",
+   "cookie-banner",
+   "forms"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "€20m or 4% global annual turnover",
+  "effective_date": "2018-05-25",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Parse policy for Art.13/14 completeness"
+   },
+   {
+    "method": "COOKIE",
+    "logic": "Clean-load EU IP; classify cookies pre-consent"
+   },
+   {
+    "method": "LINK",
+    "logic": "Verify policy + DSAR mechanism 200"
+   }
+  ],
+  "enforcement_feed": "EDPB decisions; GDPR Enforcement Tracker (enforcementtracker.com); national DPAs via EUR-Lex",
+  "trigger_flags": [
+   "processes_personal_data",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-EPRIV",
+  "name": "ePrivacy Directive 2002/58/EC (Cookie Law)",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "section_ref": "Directive 2002/58/EC Art.5(3); national impl (DE TTDSG, FR Art.82 Loi I&L, etc.)",
+  "regulator": "National DPAs",
+  "category": "data_protection",
+  "website_obligation": "Prior consent before non-essential cookies; freely given/specific/informed/unambiguous; reject as easy as accept; no cookie wall (EDPB).",
+  "applies_when": [
+   "sets_cookies",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "only_strictly_necessary_cookies"
+  ],
+  "where_on_site": [
+   "cookie-banner",
+   "footer:cookie-policy"
+  ],
+  "severity": "Medium",
+  "severity_rank": 3,
+  "max_penalty": "National: FR CNIL €150k+/case; DE €300k+/case; GDPR-linked max",
+  "effective_date": "2002-07-31",
+  "status": "active",
+  "detection": [
+   {
+    "method": "COOKIE",
+    "logic": "Verify non-essential cookies blocked pre-consent; check reject parity + no cookie wall"
+   }
+  ],
+  "enforcement_feed": "National DPAs",
+  "trigger_flags": [
+   "sets_cookies",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-EAA",
+  "name": "European Accessibility Act (Directive (EU) 2019/882)",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "section_ref": "Directive (EU) 2019/882; standard EN 301 549 (→WCAG 2.1 AA; v4.x →WCAG 2.2 AA expected 2026); enforcement from 28 Jun 2025",
+  "regulator": "National enforcement bodies",
+  "category": "accessibility",
+  "website_obligation": "E-commerce, banking, transport ticketing, telecoms, AV media, e-books must meet EN 301 549; publish accessibility statement.",
+  "applies_when": [
+   "serves_eu_users",
+   "is_covered_eaa_service"
+  ],
+  "excluded_when": [
+   "microenterprise_service_under_10_emp_and_2m_turnover",
+   "b2b_only"
+  ],
+  "where_on_site": [
+   "footer:accessibility-statement",
+   "sitewide"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Varies: FR €75k-€300k/violation; NL up to €90k; DE €10k-€100k; IE up to €60k",
+  "effective_date": "2025-06-28",
+  "status": "active",
+  "detection": [
+   {
+    "method": "A11Y",
+    "logic": "axe-core EN 301 549/WCAG 2.1 AA; manual test required for full coverage"
+   },
+   {
+    "method": "LINK",
+    "logic": "Verify accessibility statement present + format"
+   }
+  ],
+  "enforcement_feed": "National enforcement bodies",
+  "trigger_flags": [
+   "serves_eu_users",
+   "is_covered_eaa_service"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-AIACT-50",
+  "name": "EU AI Act Article 50 — Transparency Obligations",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "section_ref": "Regulation (EU) 2024/1689 Art.50(1)-(5); applies 2 Aug 2026; Code of Practice expected Jun 2026",
+  "regulator": "AI Office + national market surveillance",
+  "category": "ai_transparency",
+  "website_obligation": "Chatbots/AI interaction must disclose AI; AI-generated content machine-readable marked; deepfakes labelled; emotion/biometric notice.",
+  "applies_when": [
+   "uses_ai_chatbot_or_genai_content",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "no_ai_systems"
+  ],
+  "where_on_site": [
+   "chatbot-widget",
+   "ai-generated-media"
+  ],
+  "severity": "Medium",
+  "severity_rank": 3,
+  "max_penalty": "Up to €15m or 3% turnover (high-risk tier); €7.5m/1.5% for incorrect info",
+  "effective_date": "2026-08-02",
+  "status": "pending",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Detect chatbot; verify AI-disclosure at first interaction"
+   },
+   {
+    "method": "NLP",
+    "logic": "Flag likely AI-generated media without label"
+   }
+  ],
+  "enforcement_feed": "EU AI Office; EUR-Lex",
+  "trigger_flags": [
+   "uses_ai_chatbot_or_genai_content",
+   "serves_eu_users"
+  ],
+  "confidence": "check"
+ },
+ {
+  "id": "EU-OMNIBUS",
+  "name": "Omnibus Directive (EU) 2019/2161",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "section_ref": "Dir (EU) 2019/2161 amending UCPD 2005/29/EC Art.7, Price Indication 98/6/EC Art.6a, CRD 2011/83/EU; applied 28 May 2022",
+  "regulator": "National consumer authorities",
+  "category": "consumer_fairness",
+  "website_obligation": "Disclose if/how reviews verified; ban fake reviews; show lowest prior 30-day price on reductions; disclose paid ranking + personalised pricing.",
+  "applies_when": [
+   "sells_to_consumers",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "b2b_only"
+  ],
+  "where_on_site": [
+   "reviews",
+   "pricing",
+   "search-ranking",
+   "product-page"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Up to 4% member-state turnover or €2m where turnover incalculable",
+  "effective_date": "2022-05-28",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Check review-verification disclosure; check 30-day prior-price on sale items; check paid-ranking labels"
+   }
+  ],
+  "enforcement_feed": "National authorities; EUR-Lex",
+  "trigger_flags": [
+   "b2c",
+   "serves_eu_users",
+   "has_reviews",
+   "has_pricing"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-CRD",
+  "name": "Consumer Rights Directive 2011/83/EU",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "section_ref": "Dir 2011/83/EU; DE §312b BGB; FR L.221-1 Code conso",
+  "regulator": "National consumer authorities",
+  "category": "consumer_fairness",
+  "website_obligation": "Pre-contract info before purchase (full price incl tax + charges, identity, address), 14-day withdrawal, model withdrawal form; total price before final step.",
+  "applies_when": [
+   "sells_to_consumers",
+   "takes_payment",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "b2b_only"
+  ],
+  "where_on_site": [
+   "checkout",
+   "product-page",
+   "terms"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "National: DE up to €50k/violation; FR up to €375k; cancellation rights",
+  "effective_date": "2014-06-13",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Verify total price incl VAT before payment; identity disclosure; withdrawal info"
+   },
+   {
+    "method": "LINK",
+    "logic": "Verify withdrawal form + returns policy"
+   }
+  ],
+  "enforcement_feed": "National authorities",
+  "trigger_flags": [
+   "b2c",
+   "takes_payment",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-UCPD",
+  "name": "Unfair Commercial Practices Directive 2005/29/EC",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "section_ref": "Dir 2005/29/EC (amended by Omnibus)",
+  "regulator": "National consumer authorities",
+  "category": "consumer_fairness",
+  "website_obligation": "No misleading/aggressive practices; no material omissions; banned practices blacklist (Annex I) incl. fake reviews post-Omnibus.",
+  "applies_when": [
+   "sells_to_consumers",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "b2b_only"
+  ],
+  "where_on_site": [
+   "marketing-copy",
+   "product-page"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "National (see Omnibus)",
+  "effective_date": "2005-06-11",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag misleading claims, false urgency, material omissions"
+   }
+  ],
+  "enforcement_feed": "National authorities",
+  "trigger_flags": [
+   "b2c",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-DSA",
+  "name": "Digital Services Act (Regulation (EU) 2022/2065)",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "section_ref": "Reg (EU) 2022/2065 Arts. 14 (T&Cs), 26 (ad transparency), 30-31 (trader traceability), 25 (no dark patterns)",
+  "regulator": "Digital Services Coordinators; Commission (VLOPs)",
+  "category": "platform",
+  "website_obligation": "Clear T&Cs; ad transparency (who paid, why shown); no dark patterns; marketplaces must verify+display trader identity; illegal-content reporting.",
+  "applies_when": [
+   "is_online_platform_or_marketplace",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "not_a_platform"
+  ],
+  "where_on_site": [
+   "terms",
+   "ads",
+   "marketplace-listings"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Up to 6% global annual turnover",
+  "effective_date": "2024-02-17",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Check trader-identity disclosure on listings; dark-pattern detection in consent/cancel flows; ad-transparency labels"
+   }
+  ],
+  "enforcement_feed": "National DSCs; Commission",
+  "trigger_flags": [
+   "is_online_platform_or_marketplace",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "DE-TMG",
+  "name": "Germany Telemediengesetz / DDG + TTDSG — Impressum",
+  "jurisdiction": "EU-DE",
+  "region": "EU",
+  "section_ref": "§5 DDG (ex-TMG); TTDSG for cookies",
+  "regulator": "State media authorities; courts (Abmahnung)",
+  "category": "business_disclosure",
+  "website_obligation": "Impressum within two clicks: full name + address, email + phone, VAT ID (DE+9 digits), commercial register (HRB/HRA), supervisory authority, professional title + applicable rules.",
+  "applies_when": [
+   "serves_german_users",
+   "is_commercial_site"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:impressum"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Competitor Abmahnung; injunction; fines up to €50,000",
+  "effective_date": "2007-03-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "LINK",
+    "logic": "Verify /impressum within two clicks"
+   },
+   {
+    "method": "DOM",
+    "logic": "Parse for name, address, phone, email, VAT ID format DE\\d{9}, HRB/HRA number"
+   }
+  ],
+  "enforcement_feed": "Court records; no central feed",
+  "trigger_flags": [
+   "serves_german_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "DE-UWG",
+  "name": "Germany Gesetz gegen den unlauteren Wettbewerb (UWG)",
+  "jurisdiction": "EU-DE",
+  "region": "EU",
+  "section_ref": "UWG §3,5,5a (misleading), §7 (unsolicited marketing)",
+  "regulator": "Competitors/associations via Abmahnung; courts",
+  "category": "consumer_fairness",
+  "website_obligation": "No misleading commercial communications; no unsolicited e-marketing without consent; comparative ads strictly limited.",
+  "applies_when": [
+   "serves_german_users",
+   "is_commercial_site"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "marketing-copy",
+   "email"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Injunctions; Abmahnung costs; damages",
+  "effective_date": "2004-07-08",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag misleading claims + non-compliant comparative advertising for DE-facing copy"
+   }
+  ],
+  "enforcement_feed": "Court records",
+  "trigger_flags": [
+   "serves_german_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "FR-LCEN",
+  "name": "France LCEN — Mentions Légales",
+  "jurisdiction": "EU-FR",
+  "region": "EU",
+  "section_ref": "Loi 2004-575 (LCEN) Art.6; Code de la consommation for e-commerce",
+  "regulator": "ARCOM; DGCCRF; CNIL",
+  "category": "business_disclosure",
+  "website_obligation": "Mentions Légales: publisher name + registered address, SIRET (14 digits), hosting provider details, publication director, VAT; professional services add body/title/PI insurance.",
+  "applies_when": [
+   "serves_french_users",
+   "is_commercial_site"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:mentions-legales"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "DGCCRF administrative fine; criminal sanctions for omissions",
+  "effective_date": "2004-06-21",
+  "status": "active",
+  "detection": [
+   {
+    "method": "LINK",
+    "logic": "Verify /mentions-legales from footer"
+   },
+   {
+    "method": "DOM",
+    "logic": "Parse for SIRET \\d{14}, address, host, publication director"
+   }
+  ],
+  "enforcement_feed": "DGCCRF",
+  "trigger_flags": [
+   "serves_french_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "ES-LSSI",
+  "name": "Spain LSSI + LOPDGDD",
+  "jurisdiction": "EU-ES",
+  "region": "EU",
+  "section_ref": "Ley 34/2002 (LSSI) Art.10; LO 3/2018 (LOPDGDD)",
+  "regulator": "AEPD; CNMC",
+  "category": "business_disclosure",
+  "website_obligation": "Legal notice: company name, NIF/CIF, registered address, commercial register, contact, professional college if applicable; IVA included in displayed prices.",
+  "applies_when": [
+   "serves_spanish_users",
+   "is_commercial_site"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:aviso-legal",
+   "checkout"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "CNMC fines up to €150,000; daily fines for persistence",
+  "effective_date": "2002-10-12",
+  "status": "active",
+  "detection": [
+   {
+    "method": "LINK",
+    "logic": "Verify aviso legal page"
+   },
+   {
+    "method": "DOM",
+    "logic": "Parse for NIF/CIF, address, register; verify IVA-inclusive prices"
+   }
+  ],
+  "enforcement_feed": "AEPD; CNMC",
+  "trigger_flags": [
+   "serves_spanish_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "IT-CDC",
+  "name": "Italy Codice del Consumo + D.Lgs. 70/2003",
+  "jurisdiction": "EU-IT",
+  "region": "EU",
+  "section_ref": "D.Lgs. 206/2005 (Codice del Consumo); D.Lgs. 70/2003 (e-commerce)",
+  "regulator": "AGCM; AGCOM; Garante",
+  "category": "business_disclosure",
+  "website_obligation": "Provider identification (Partita IVA IT+11 digits, REA number, address, email); consumer pre-contract info; price transparency.",
+  "applies_when": [
+   "serves_italian_users",
+   "is_commercial_site"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer",
+   "checkout"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "AGCM fines; suspension of activity",
+  "effective_date": "2005-09-06",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Parse footer for Partita IVA IT\\d{11}, REA, address, email"
+   }
+  ],
+  "enforcement_feed": "AGCM",
+  "trigger_flags": [
+   "serves_italian_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-PDPL",
+  "name": "UAE Federal Personal Data Protection Law",
+  "jurisdiction": "MENA-AE",
+  "region": "MENA",
+  "section_ref": "Federal Decree-Law No. 45 of 2021; Data Office (Decree-Law 44/2021)",
+  "regulator": "UAE Data Office",
+  "category": "data_protection",
+  "website_obligation": "Privacy notice (controller identity, purposes, legal basis, data-subject rights, cross-border safeguards); consent as primary basis; Arabic notice advisable. Excludes DIFC + ADGM + health/credit data.",
+  "applies_when": [
+   "processes_uae_resident_data"
+  ],
+  "excluded_when": [
+   "difc_entity",
+   "adgm_entity"
+  ],
+  "where_on_site": [
+   "footer:privacy-policy"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "AED 50,000 - AED 5,000,000",
+  "effective_date": "2022-01-02",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Parse policy for Art.9 disclosures; check Arabic availability"
+   },
+   {
+    "method": "COOKIE",
+    "logic": "Consent before analytics/marketing"
+   }
+  ],
+  "enforcement_feed": "UAE Data Office (no public feed)",
+  "trigger_flags": [
+   "processes_uae_resident_data"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-DIFC-DP",
+  "name": "DIFC Data Protection Law 2020",
+  "jurisdiction": "MENA-AE-DIFC",
+  "region": "MENA",
+  "section_ref": "DIFC Law No. 5 of 2020 (amended Jul 2025)",
+  "regulator": "DIFC Commissioner of Data Protection",
+  "category": "data_protection",
+  "website_obligation": "GDPR-equivalent: privacy notice, lawful basis, data-subject rights, DPO where required, 72-hr breach notification, DPIA.",
+  "applies_when": [
+   "is_difc_registered_entity"
+  ],
+  "excluded_when": [
+   "not_difc"
+  ],
+  "where_on_site": [
+   "footer:privacy-policy"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Up to USD 50,000 per violation (post-2025 amendment)",
+  "effective_date": "2020-07-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Policy references DIFC Law No.5/2020; DPO contact present"
+   },
+   {
+    "method": "COOKIE",
+    "logic": "GDPR-standard consent audit"
+   }
+  ],
+  "enforcement_feed": "DIFC Commissioner",
+  "trigger_flags": [
+   "is_difc_registered_entity"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-ADGM-DP",
+  "name": "ADGM Data Protection Regulations 2021",
+  "jurisdiction": "MENA-AE-ADGM",
+  "region": "MENA",
+  "section_ref": "ADGM Data Protection Regulations 2021",
+  "regulator": "ADGM Office of Data Protection / Registration Authority",
+  "category": "data_protection",
+  "website_obligation": "GDPR-equivalent: privacy notice, lawful basis, data-subject rights, DPO, breach notification, adequacy for transfers.",
+  "applies_when": [
+   "is_adgm_registered_entity"
+  ],
+  "excluded_when": [
+   "not_adgm"
+  ],
+  "where_on_site": [
+   "footer:privacy-policy"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Administrative fines (mirror GDPR proportionality)",
+  "effective_date": "2021-02-14",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Policy references ADGM DPR 2021; controller registration"
+   },
+   {
+    "method": "COOKIE",
+    "logic": "GDPR-standard consent audit"
+   }
+  ],
+  "enforcement_feed": "ADGM Office of Data Protection",
+  "trigger_flags": [
+   "is_adgm_registered_entity"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "SA-PDPL",
+  "name": "Saudi Arabia Personal Data Protection Law",
+  "jurisdiction": "MENA-SA",
+  "region": "MENA",
+  "section_ref": "Royal Decree M/148 (PDPL); Implementing Regs 2023",
+  "regulator": "SDAIA",
+  "category": "data_protection",
+  "website_obligation": "Privacy notice (controller, purposes, legal basis, rights), explicit consent for sensitive data, data-localisation for some categories, Arabic notice recommended.",
+  "applies_when": [
+   "processes_saudi_resident_data"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:privacy-policy"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Up to SAR 5,000,000 (~$1.3m); criminal penalties for sensitive-data breach",
+  "effective_date": "2023-09-14",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Arabic privacy notice; SDAIA disclosures; data rights"
+   },
+   {
+    "method": "COOKIE",
+    "logic": "Consent audit"
+   }
+  ],
+  "enforcement_feed": "SDAIA",
+  "trigger_flags": [
+   "processes_saudi_resident_data"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "QA-PDPL",
+  "name": "Qatar Personal Data Privacy Protection Law",
+  "jurisdiction": "MENA-QA",
+  "region": "MENA",
+  "section_ref": "Law No. 13 of 2016 (PDPPL)",
+  "regulator": "NCGAA / National Cyber Security Agency",
+  "category": "data_protection",
+  "website_obligation": "Consent/lawful basis, privacy notice, data-subject rights (access/correction/erasure), security measures.",
+  "applies_when": [
+   "processes_qatar_resident_data"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:privacy-policy"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Up to QAR 5,000,000 (~$1.4m)",
+  "effective_date": "2017-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Policy for Law 13 compliance; data rights mechanism"
+   }
+  ],
+  "enforcement_feed": "NCSA Qatar",
+  "trigger_flags": [
+   "processes_qatar_resident_data"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "BH-PDPL",
+  "name": "Bahrain Personal Data Protection Law",
+  "jurisdiction": "MENA-BH",
+  "region": "MENA",
+  "section_ref": "Law No. 30 of 2018 (PDPL)",
+  "regulator": "PDPA (Ministry of Justice)",
+  "category": "data_protection",
+  "website_obligation": "Consent-based processing, privacy notice, controller registration, data-subject rights, transfers only to adequate countries.",
+  "applies_when": [
+   "processes_bahrain_resident_data"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:privacy-policy"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Up to BHD 1,000,000 (~$2.7m); imprisonment possible",
+  "effective_date": "2019-08-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Policy for Bahrain PDPL; PDPA registration reference"
+   }
+  ],
+  "enforcement_feed": "PDPA Bahrain",
+  "trigger_flags": [
+   "processes_bahrain_resident_data"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "KW-CITRA",
+  "name": "Kuwait CITRA Data Privacy Protection Regulation",
+  "jurisdiction": "MENA-KW",
+  "region": "MENA",
+  "section_ref": "CITRA Decision No. 42 of 2021 (SECTORAL; no omnibus national law)",
+  "regulator": "CITRA",
+  "category": "data_protection",
+  "website_obligation": "Data security, consent for processing, privacy notice for telecom/IT sector services; cybercrime law imposes security duties.",
+  "applies_when": [
+   "processes_kuwait_data",
+   "telecom_or_it_sector"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:privacy-policy"
+  ],
+  "severity": "Medium",
+  "severity_rank": 3,
+  "max_penalty": "CITRA enforcement; cybercrime-law penalties",
+  "effective_date": "2021-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "HTTP",
+    "logic": "HTTPS + security headers for KW-facing sites"
+   },
+   {
+    "method": "DOM",
+    "logic": "Privacy notice present"
+   }
+  ],
+  "enforcement_feed": "CITRA",
+  "trigger_flags": [
+   "processes_kuwait_data"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "OM-PDPL",
+  "name": "Oman Personal Data Protection Law",
+  "jurisdiction": "MENA-OM",
+  "region": "MENA",
+  "section_ref": "Royal Decree No. 6/2022; Exec Regs Ministerial Decision 34/2024; fully enforceable 5 Feb 2026",
+  "regulator": "MTCIT",
+  "category": "data_protection",
+  "website_obligation": "Consent, privacy notice, data-subject rights, controller obligations; permit for sensitive-data processing.",
+  "applies_when": [
+   "processes_oman_resident_data"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:privacy-policy"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Fines per Exec Regs; OMR penalties",
+  "effective_date": "2026-02-05",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Policy for Oman PDPL compliance"
+   }
+  ],
+  "enforcement_feed": "MTCIT Oman",
+  "trigger_flags": [
+   "processes_oman_resident_data"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EG-PDPL",
+  "name": "Egypt Personal Data Protection Law",
+  "jurisdiction": "MENA-EG",
+  "region": "MENA",
+  "section_ref": "Law No. 151 of 2020; Exec Regs Decree 816/2025 (gazette 1 Nov 2025); full enforcement ~Nov 2026",
+  "regulator": "PDPC",
+  "category": "data_protection",
+  "website_obligation": "Privacy notice, explicit consent for sensitive data, data-subject rights, controller registration, cross-border restrictions; Arabic notice.",
+  "applies_when": [
+   "processes_egypt_resident_data"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:privacy-policy"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Up to EGP 1,000,000; criminal penalties",
+  "effective_date": "2025-11-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Arabic privacy notice; PDPC disclosures"
+   }
+  ],
+  "enforcement_feed": "PDPC Egypt",
+  "trigger_flags": [
+   "processes_egypt_resident_data"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "JO-PDPL",
+  "name": "Jordan Personal Data Protection Law",
+  "jurisdiction": "MENA-JO",
+  "region": "MENA",
+  "section_ref": "Law No. 24 of 2023 (effective 17 Mar 2024; grace ended ~Mar 2025)",
+  "regulator": "Personal Data Protection Council / MoDEE",
+  "category": "data_protection",
+  "website_obligation": "Privacy notice, consent, data-subject rights, cross-border restrictions, breach notification.",
+  "applies_when": [
+   "processes_jordan_resident_data"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:privacy-policy"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Council enforcement; fines",
+  "effective_date": "2024-03-17",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Policy for Jordan PDPL; data rights mechanism"
+   }
+  ],
+  "enforcement_feed": "MoDEE Jordan",
+  "trigger_flags": [
+   "processes_jordan_resident_data"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "IL-PPL",
+  "name": "Israel Protection of Privacy Law + Amendment 13",
+  "jurisdiction": "MENA-IL",
+  "region": "MENA",
+  "section_ref": "PPL 5741-1981; Amendment 13 (effective 14 Aug 2025)",
+  "regulator": "Privacy Protection Authority (PPA)",
+  "category": "data_protection",
+  "website_obligation": "Privacy notice, database registration where required, data-subject access/correction, direct-marketing opt-out; expanded enforcement under Amendment 13.",
+  "applies_when": [
+   "processes_israeli_resident_data"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "footer:privacy-policy",
+   "marketing"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "PPA administrative fines (expanded under Amendment 13)",
+  "effective_date": "2025-08-14",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Israeli-law privacy notice; direct-marketing opt-out present"
+   }
+  ],
+  "enforcement_feed": "PPA Israel",
+  "trigger_flags": [
+   "processes_israeli_resident_data"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "GEO-SCHEMA",
+  "name": "Schema.org / E-E-A-T Entity Signals (AI visibility)",
+  "jurisdiction": "GLOBAL",
+  "region": "GLOBAL",
+  "section_ref": "schema.org; Google Search Essentials; QRG E-E-A-T (NOT a law)",
+  "regulator": "Search/AI engines (commercial)",
+  "category": "ai_visibility",
+  "website_obligation": "Organization schema (name,url,address,telephone,sameAs→Wikidata/LinkedIn), sector schema (MedicalOrganization/LegalService/LodgingBusiness), author schema w/ credentials.",
+  "applies_when": [
+   "always"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "head:json-ld",
+   "content-pages"
+  ],
+  "severity": "Low",
+  "severity_rank": 4,
+  "max_penalty": "No legal penalty — AI/search visibility loss only",
+  "effective_date": "2011-06-02",
+  "status": "active",
+  "detection": [
+   {
+    "method": "SCHEMA",
+    "logic": "Extract JSON-LD; validate Organization + sector schema required props + sameAs"
+   },
+   {
+    "method": "AI",
+    "logic": "Query 6 LLMs x 5 sector queries; measure citation rate vs competitors"
+   }
+  ],
+  "enforcement_feed": "N/A (commercial signal)",
+  "trigger_flags": [
+   "always"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "GEO-ROBOTS",
+  "name": "robots.txt / llms.txt AI Crawler Access (AI visibility)",
+  "jurisdiction": "GLOBAL",
+  "region": "GLOBAL",
+  "section_ref": "robots.txt protocol; llms.txt (llmstxt.org); NOT a law",
+  "regulator": "AI engines (commercial)",
+  "category": "ai_visibility",
+  "website_obligation": "Do not accidentally block GPTBot/ClaudeBot/PerplexityBot/Googlebot-Extended; consider llms.txt for structured LLM consumption.",
+  "applies_when": [
+   "always"
+  ],
+  "excluded_when": [],
+  "where_on_site": [
+   "/robots.txt",
+   "/llms.txt"
+  ],
+  "severity": "Low",
+  "severity_rank": 4,
+  "max_penalty": "No legal penalty — zero AI visibility for blocked crawlers",
+  "effective_date": "1994-06-30",
+  "status": "active",
+  "detection": [
+   {
+    "method": "LINK",
+    "logic": "Fetch /robots.txt; check AI crawler Disallow rules; check /llms.txt presence"
+   }
+  ],
+  "enforcement_feed": "N/A",
+  "trigger_flags": [
+   "always"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-SRA-TRANS",
+  "name": "SRA Transparency Rules 2018",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "SRA",
+  "section_ref": "SRA Transparency Rules 2018 r.1.3-1.6, r.2, r.4",
+  "category": "sector_legal",
+  "website_obligation": "Publish price + service info for named areas (conveyancing, probate uncontested, motoring summary, employment tribunal unfair dismissal, immigration excl. asylum; business: debt recovery ≤£10k, ET defence, licensing); complaints procedure; SRA digital badge + number (ALL firms).",
+  "applies_when": [
+   "is_sra_regulated_firm"
+  ],
+  "excluded_when": [
+   "not_law_firm",
+   "publicly_funded_for_pricing_only"
+  ],
+  "where_on_site": [
+   "service-pages:pricing",
+   "footer:complaints",
+   "footer:sra-badge"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "SRA fines; 439 warnings + 31 fixed penalties issued since May 2023",
+  "effective_date": "2018-12-06",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Check named-area pages for pricing; SRA badge in footer"
+   },
+   {
+    "method": "API",
+    "logic": "Verify SRA number vs SRA register"
+   },
+   {
+    "method": "LINK",
+    "logic": "Verify complaints page 200"
+   }
+  ],
+  "enforcement_feed": "SRA enforcement decisions page",
+  "trigger_flags": [
+   "is_sra_regulated_firm"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-SRA-CODE",
+  "name": "SRA Code of Conduct for Firms 2019 (marketing)",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "SRA",
+  "section_ref": "SRA Code of Conduct for Firms 2019 paras 8.6-8.9",
+  "category": "sector_legal",
+  "website_obligation": "Accurate, not misleading marketing; no unsubstantiated outcome/success claims; no exploitation of vulnerability; disclose referral arrangements.",
+  "applies_when": [
+   "is_sra_regulated_firm"
+  ],
+  "excluded_when": [
+   "not_law_firm"
+  ],
+  "where_on_site": [
+   "marketing-copy",
+   "testimonials"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "SRA enforcement; suspension/strike-off",
+  "effective_date": "2019-11-25",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag success-rate claims, guarantees, undisclosed referral fees"
+   }
+  ],
+  "enforcement_feed": "SRA enforcement decisions",
+  "trigger_flags": [
+   "is_sra_regulated_firm"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-LSA-07",
+  "name": "Legal Services Act 2007 — Reserved Activities Authorisation",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "SRA/BSB/CLC/CILEx",
+  "category": "sector_legal",
+  "section_ref": "Legal Services Act 2007 s.14-15",
+  "category2": "sector_legal",
+  "website_obligation": "Any reserved legal activity (rights of audience, litigation, conveyancing, probate, notarial, oaths) requires authorisation displayed on site.",
+  "applies_when": [
+   "offers_reserved_legal_activity"
+  ],
+  "excluded_when": [
+   "no_reserved_activities"
+  ],
+  "where_on_site": [
+   "footer",
+   "service-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal offence; unlimited fine; up to 2 yrs imprisonment",
+  "effective_date": "2007-10-30",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Map each reserved activity to displayed authorisation"
+   },
+   {
+    "method": "API",
+    "logic": "Verify regulator registration"
+   }
+  ],
+  "enforcement_feed": "Respective regulators",
+  "trigger_flags": [
+   "offers_reserved_legal_activity"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-BSB",
+  "name": "BSB Handbook — Barrister Marketing (rC20-rC21)",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Bar Standards Board",
+  "category": "sector_legal",
+  "section_ref": "BSB Handbook rC20-rC21",
+  "website_obligation": "No misleading/inaccurate practice statements; no superiority claims without objective basis; BSB-regulated status displayed for chambers.",
+  "applies_when": [
+   "is_barrister_or_chambers"
+  ],
+  "excluded_when": [
+   "not_barrister"
+  ],
+  "where_on_site": [
+   "bios",
+   "footer"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "BSB disciplinary proceedings",
+  "effective_date": "2014-01-06",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "BSB regulated status; practising certificate"
+   },
+   {
+    "method": "NLP",
+    "logic": "Flag misleading seniority/superiority claims"
+   }
+  ],
+  "enforcement_feed": "BSB",
+  "trigger_flags": [
+   "is_barrister_or_chambers"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-ABA-7",
+  "name": "ABA Model Rules 7.1-7.3 — Lawyer Advertising (state variations)",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "State Bar Associations",
+  "category": "sector_legal",
+  "section_ref": "ABA Model Rules 7.1-7.3; state bar variations (FL 4-7 file within 20 days; CA RPC 7.1; NY Part 1200)",
+  "website_obligation": "No false/misleading communications; no guaranteed outcomes; past-results disclaimers; FL 'Advertising Material' label; specialisation only if certified.",
+  "applies_when": [
+   "is_us_law_firm",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "not_law_firm"
+  ],
+  "where_on_site": [
+   "marketing-copy",
+   "results-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "State bar disciplinary; suspension/disbarment",
+  "effective_date": "1983-08-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag superlatives, outcome guarantees, past results without disclaimer"
+   },
+   {
+    "method": "DOM",
+    "logic": "State-specific labels/certification badges"
+   }
+  ],
+  "enforcement_feed": "State bars; CourtListener",
+  "trigger_flags": [
+   "is_us_law_firm"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-CCBE",
+  "name": "CCBE Code of Conduct Rule 2.6 — Lawyer Publicity (EU)",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "National Bars",
+  "category": "sector_legal",
+  "section_ref": "CCBE Code of Conduct for European Lawyers; national bar rules (DE BRAO/BORA, FR RIN)",
+  "website_obligation": "Publicity permitted subject to national bar rules; no misleading or superiority claims without basis; cross-border = comply with both bars.",
+  "applies_when": [
+   "is_eu_law_firm",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "not_law_firm"
+  ],
+  "where_on_site": [
+   "marketing-copy",
+   "bios"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "National bar disciplinary; striking off",
+  "effective_date": "1988-10-28",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag superiority/guarantee claims"
+   },
+   {
+    "method": "DOM",
+    "logic": "Bar membership per jurisdiction"
+   }
+  ],
+  "enforcement_feed": "National bars",
+  "trigger_flags": [
+   "is_eu_law_firm"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-DIFC-LEGAL",
+  "name": "DIFC Legal Services Rules",
+  "jurisdiction": "MENA-AE-DIFC",
+  "region": "MENA",
+  "regulator": "DIFC Authority/Courts",
+  "category": "sector_legal",
+  "section_ref": "DIFC Law No. 10 of 2004 (Courts Law); Legal Services Regulations",
+  "website_obligation": "Firms practising before DIFC Courts display DIFC registration; non-misleading advertising; state DIFC/ADGM authorisation.",
+  "applies_when": [
+   "is_difc_law_firm"
+  ],
+  "excluded_when": [
+   "not_difc_law_firm"
+  ],
+  "where_on_site": [
+   "footer",
+   "about"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "DIFC Courts disciplinary; licence revocation",
+  "effective_date": "2004-09-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "DIFC registration display"
+   },
+   {
+    "method": "API",
+    "logic": "Verify vs DIFC register"
+   }
+  ],
+  "enforcement_feed": "DIFC Courts",
+  "trigger_flags": [
+   "is_difc_law_firm"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-MHRA-HMR",
+  "name": "MHRA Human Medicines Regulations 2012 — POM Advertising Prohibition",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "MHRA",
+  "category": "sector_healthcare",
+  "section_ref": "SI 2012/1916 reg.286-297",
+  "website_obligation": "No advertising of prescription-only medicines to the public; OTC ads need name+indications+side effects+'ask pharmacist'; no off-licence therapeutic claims.",
+  "applies_when": [
+   "mentions_pom_or_medicines",
+   "serves_uk_users"
+  ],
+  "excluded_when": [
+   "no_medicine_content"
+  ],
+  "where_on_site": [
+   "treatment-pages",
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal prosecution; unlimited fine; product seizure",
+  "effective_date": "2012-08-14",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag POM names (Botox, Ozempic, Wegovy, Rx drugs) in consumer promo; flag off-licence efficacy claims"
+   }
+  ],
+  "enforcement_feed": "MHRA enforcement page",
+  "trigger_flags": [
+   "mentions_pom_or_medicines"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CQC-20",
+  "name": "CQC Fundamental Standards — Provider Display",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Care Quality Commission",
+  "category": "sector_healthcare",
+  "section_ref": "SI 2014/2936; CQC reg.20 duty of candour",
+  "website_obligation": "CQC-registered providers display registration status, provider ID, current rating, link to CQC profile; 'unrated' if applicable.",
+  "applies_when": [
+   "is_cqc_registered_provider"
+  ],
+  "excluded_when": [
+   "not_cqc_registered"
+  ],
+  "where_on_site": [
+   "footer",
+   "about"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "CQC enforcement; prosecution; fines up to £50k",
+  "effective_date": "2015-04-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Find CQC mention/logo + provider ID"
+   },
+   {
+    "method": "API",
+    "logic": "Verify vs CQC API; rating displayed matches current"
+   },
+   {
+    "method": "LINK",
+    "logic": "Badge links to CQC profile"
+   }
+  ],
+  "enforcement_feed": "CQC API (api.cqc.org.uk)",
+  "trigger_flags": [
+   "is_cqc_registered_provider"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-GMC-GMP",
+  "name": "GMC Good Medical Practice 2024 — Advertising",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "General Medical Council",
+  "category": "sector_healthcare",
+  "section_ref": "GMC Good Medical Practice 2024 Domain 4",
+  "website_obligation": "Honest, not misleading; accurate qualifications/competence claims; no exploitative product endorsement; GMC number displayed.",
+  "applies_when": [
+   "doctor_led_service"
+  ],
+  "excluded_when": [
+   "no_doctor_claims"
+  ],
+  "where_on_site": [
+   "bios"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "GMC fitness to practise; suspension/erasure",
+  "effective_date": "2024-01-30",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "GMC number (7-digit) on bios"
+   },
+   {
+    "method": "API",
+    "logic": "Verify vs GMC register (web lookup; no public API)"
+   },
+   {
+    "method": "NLP",
+    "logic": "Flag unverifiable qualification claims"
+   }
+  ],
+  "enforcement_feed": "GMC",
+  "trigger_flags": [
+   "doctor_led_service"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-ASA-12",
+  "name": "ASA CAP Code Section 12 — Health, Beauty & Complementary",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "ASA",
+  "category": "sector_healthcare",
+  "section_ref": "CAP Code Section 12",
+  "website_obligation": "No misleading health claims; verifiable testimonials; weight-loss claims need substantiation; truthful before/after; accurate qualifications.",
+  "applies_when": [
+   "makes_health_claims"
+  ],
+  "excluded_when": [
+   "no_health_claims"
+  ],
+  "where_on_site": [
+   "treatment-pages",
+   "testimonials"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "ASA upheld ruling (public); Trading Standards referral",
+  "effective_date": "2010-09-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag treats/cures/proven without substantiation"
+   },
+   {
+    "method": "DOM",
+    "logic": "Before/after disclaimers"
+   }
+  ],
+  "enforcement_feed": "ASA rulings page (Wednesdays)",
+  "trigger_flags": [
+   "makes_health_claims"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-HIPAA-MKT",
+  "name": "HIPAA Marketing Rule + Tracking-Tech Guidance",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "HHS Office for Civil Rights",
+  "category": "sector_healthcare",
+  "section_ref": "45 CFR §164.508; HHS OCR guidance Dec 2022 on tracking tech",
+  "website_obligation": "No PHI for marketing without authorisation; third-party trackers (Meta Pixel, GA4) on PHI-bearing pages (booking, conditions, portal) are impermissible disclosure; NPP link required.",
+  "applies_when": [
+   "is_us_healthcare_provider",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "not_covered_entity"
+  ],
+  "where_on_site": [
+   "booking",
+   "condition-pages",
+   "patient-portal",
+   "privacy-policy"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Up to $1.9m per violation category per year",
+  "effective_date": "2003-04-14",
+  "status": "active",
+  "detection": [
+   {
+    "method": "COOKIE",
+    "logic": "Flag ALL trackers on booking/condition/portal pages"
+   },
+   {
+    "method": "DOM",
+    "logic": "Check for NPP link"
+   }
+  ],
+  "enforcement_feed": "HHS OCR breach portal",
+  "trigger_flags": [
+   "is_us_healthcare_provider"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-FDA-202",
+  "name": "FDA 21 CFR Part 202 — Rx Drug Advertising (DTC)",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "FDA",
+  "category": "sector_healthcare",
+  "section_ref": "21 CFR Part 202; FD&C Act §502(n)",
+  "website_obligation": "Rx ads: established name, fair balance of risks/benefits, approved claims only, brief summary / 'Full Prescribing Information' link; no off-label.",
+  "applies_when": [
+   "advertises_rx_drugs",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "no_rx_drug_promo"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "FDA warning letters; injunctions; criminal prosecution",
+  "effective_date": "1969-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Check fair balance; flag superiority without head-to-head; flag off-label"
+   },
+   {
+    "method": "DOM",
+    "logic": "Full Prescribing Information link present"
+   }
+  ],
+  "enforcement_feed": "FDA warning letters",
+  "trigger_flags": [
+   "advertises_rx_drugs"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-MED-2001-83",
+  "name": "EU Directive 2001/83/EC — Medicinal Product Advertising",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "National medicines agencies",
+  "category": "sector_healthcare",
+  "section_ref": "Directive 2001/83/EC Art.86-100",
+  "website_obligation": "No public advertising of prescription medicines; OTC ads must be balanced and identifiable; no misleading therapeutic claims.",
+  "applies_when": [
+   "mentions_medicines",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "no_medicine_content"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "National enforcement; product withdrawal; fines",
+  "effective_date": "2001-11-06",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag Rx medicine promo to public; off-licence claims"
+   }
+  ],
+  "enforcement_feed": "National agencies; EUR-Lex",
+  "trigger_flags": [
+   "mentions_medicines",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-DHA-MED",
+  "name": "UAE Health Advertising Rules (DHA/MOHAP/DOH)",
+  "jurisdiction": "MENA-AE",
+  "region": "MENA",
+  "regulator": "DHA / MOHAP / DOH",
+  "category": "sector_healthcare",
+  "section_ref": "MOHAP Ministerial Resolution 430/2007; Cabinet Resolution 7/2007; DHA Standard DHA/HRS/HPSD/ST-21; Electronic Media Regulation 2018",
+  "website_obligation": "Medical-advertisement licence number on health website/accounts; Medical Director approval; no before/after for cosmetic procedures; no result guarantees; no Rx promotion; no patient outcome testimonials.",
+  "applies_when": [
+   "is_uae_healthcare_facility"
+  ],
+  "excluded_when": [
+   "not_healthcare"
+  ],
+  "where_on_site": [
+   "sitewide",
+   "treatment-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Licence suspension; fines AED 100,000-200,000 (Electronic Media Reg)",
+  "effective_date": "2007-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Medical-advertisement licence number; before/after images (prohibited)"
+   },
+   {
+    "method": "NLP",
+    "logic": "Result guarantees; outcome testimonials; Rx promo"
+   },
+   {
+    "method": "API",
+    "logic": "Verify DHA licence"
+   }
+  ],
+  "enforcement_feed": "DHA/MOHAP",
+  "trigger_flags": [
+   "is_uae_healthcare_facility"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "SA-SFDA-AD",
+  "name": "Saudi SFDA Medical/Health Product Advertising Approval",
+  "jurisdiction": "MENA-SA",
+  "region": "MENA",
+  "regulator": "SFDA",
+  "category": "sector_healthcare",
+  "section_ref": "SFDA advertising regulation; Article 36 (Rx-to-public ban)",
+  "website_obligation": "SFDA prior approval for medical/health product ads (incl. influencer ads), fee SAR 14,000/ad; no prescription-medicine advertising to public.",
+  "applies_when": [
+   "advertises_health_products_saudi"
+  ],
+  "excluded_when": [
+   "no_health_product_ads"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "marketing"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "SFDA fines; ad withdrawal",
+  "effective_date": "2017-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag medical/health product ads without SFDA approval reference; Rx-to-public"
+   }
+  ],
+  "enforcement_feed": "SFDA",
+  "trigger_flags": [
+   "advertises_health_products_saudi"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CAP-1212",
+  "name": "CAP Code Rule 12.12 — Cosmetic Interventions",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "ASA",
+  "category": "sector_aesthetics",
+  "section_ref": "CAP Code rule 12.12 (effective Oct 2021)",
+  "website_obligation": "No trivialisation; before/after must not create unrealistic expectations; no implying normal appearance is inadequate; no under-18 targeting; no under-18-popular influencers.",
+  "applies_when": [
+   "offers_cosmetic_interventions"
+  ],
+  "excluded_when": [
+   "not_aesthetics"
+  ],
+  "where_on_site": [
+   "treatment-pages",
+   "before-after"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "ASA upheld ruling; Trading Standards referral; ad ban",
+  "effective_date": "2021-10-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Before/after pairs + cautionary language; age verification"
+   },
+   {
+    "method": "NLP",
+    "logic": "Flag 'fix your/imperfections/flaws'; influencer disclosure"
+   }
+  ],
+  "enforcement_feed": "ASA rulings page",
+  "trigger_flags": [
+   "offers_cosmetic_interventions"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-MHRA-POM-BOTOX",
+  "name": "Human Medicines Regs 2012 reg.286 — Botox/Injectable POM Advertising",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "MHRA/ASA",
+  "category": "sector_aesthetics",
+  "section_ref": "SI 2012/1916 reg.286 (Botox, Dysport, Bocouture, Azzalure, Xeomin = POM)",
+  "website_obligation": "Illegal to advertise botulinum toxin / Rx injectables to public; may advertise consultation service only; cannot name the POM product.",
+  "applies_when": [
+   "offers_injectables"
+  ],
+  "excluded_when": [
+   "not_aesthetics"
+  ],
+  "where_on_site": [
+   "treatment-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal prosecution; unlimited fine",
+  "effective_date": "2012-08-14",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag 'Botox/Botulinum/Dysport/Bocouture/Azzalure/Xeomin' in consumer promo; 'Botox from £X'"
+   }
+  ],
+  "enforcement_feed": "MHRA enforcement",
+  "trigger_flags": [
+   "offers_injectables"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-GDC-STD",
+  "name": "GDC Standards for the Dental Team — Advertising",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "General Dental Council",
+  "category": "sector_dental",
+  "section_ref": "GDC Standards 2013 (2.1-2.4); GDC advertising guidance",
+  "website_obligation": "Accurate, honest, not misleading; no unverifiable comparative claims; GDC registration number displayed; protected titles only by registrants.",
+  "applies_when": [
+   "is_dental_practice"
+  ],
+  "excluded_when": [
+   "not_dental"
+  ],
+  "where_on_site": [
+   "bios",
+   "footer"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "GDC fitness to practise; erasure; criminal for protected-title misuse",
+  "effective_date": "2013-09-30",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "GDC number on team bios"
+   },
+   {
+    "method": "API",
+    "logic": "Verify vs GDC register"
+   },
+   {
+    "method": "NLP",
+    "logic": "Flag 'painless guaranteed/best' without substantiation"
+   }
+  ],
+  "enforcement_feed": "GDC",
+  "trigger_flags": [
+   "is_dental_practice"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-GDC-SPEC",
+  "name": "GDC Specialist Title Restrictions",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "GDC",
+  "category": "sector_dental",
+  "section_ref": "Dentists Act 1984 s.38; GDC specialist lists",
+  "website_obligation": "Protected specialist titles (orthodontist, oral surgeon, endodontist, etc.) only by dentists on the GDC specialist list.",
+  "applies_when": [
+   "claims_dental_specialist_title"
+  ],
+  "excluded_when": [
+   "no_specialist_claims"
+  ],
+  "where_on_site": [
+   "bios",
+   "service-pages",
+   "practice-name"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal offence; unlimited fine",
+  "effective_date": "1984-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Detect specialist titles"
+   },
+   {
+    "method": "API",
+    "logic": "Verify name on GDC specialist list"
+   }
+  ],
+  "enforcement_feed": "GDC",
+  "trigger_flags": [
+   "claims_dental_specialist_title"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-PTR-18",
+  "name": "Package Travel & Linked Travel Arrangements Regulations 2018",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Trading Standards/CMA",
+  "category": "sector_hospitality",
+  "section_ref": "SI 2018/634 (implements EU 2015/2302)",
+  "website_obligation": "Pre-contract info before booking: total price, itinerary, accommodation/transport, meals, visa/health, cancellation rights, insolvency protection (ATOL if flights).",
+  "applies_when": [
+   "sells_travel_packages",
+   "serves_uk_users"
+  ],
+  "excluded_when": [
+   "accommodation_only_no_package"
+  ],
+  "where_on_site": [
+   "booking-flow",
+   "terms"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal prosecution; unlimited fine",
+  "effective_date": "2018-07-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Pre-booking disclosures before checkout; ATOL logo+number if flights"
+   },
+   {
+    "method": "LINK",
+    "logic": "Booking conditions + insolvency page"
+   }
+  ],
+  "enforcement_feed": "Trading Standards/CMA",
+  "trigger_flags": [
+   "sells_travel_packages"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-DTCM",
+  "name": "Dubai DET/DTCM Tourism Licensing Display",
+  "jurisdiction": "MENA-AE",
+  "region": "MENA",
+  "regulator": "Dubai Dept of Economy & Tourism (DET/DTCM)",
+  "category": "sector_hospitality",
+  "section_ref": "Law No. 6 of 1997 (Tourism Activities); DTCM Ordinance",
+  "website_obligation": "Hotels/apartments/guesthouses display DTCM tourism licence number; star rating must match DTCM classification.",
+  "applies_when": [
+   "is_dubai_accommodation"
+  ],
+  "excluded_when": [
+   "not_dubai_hospitality"
+  ],
+  "where_on_site": [
+   "footer",
+   "about"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "DTCM fines; licence revocation; closure",
+  "effective_date": "1997-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "DTCM licence number; star rating vs classification"
+   },
+   {
+    "method": "API",
+    "logic": "Verify via DET portal"
+   }
+  ],
+  "enforcement_feed": "DET Dubai",
+  "trigger_flags": [
+   "is_dubai_accommodation"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-ADA-HOTEL",
+  "name": "ADA Title III §36.302(e) — Hotel Reservation Accessibility",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "DOJ",
+  "category": "sector_hospitality",
+  "section_ref": "28 CFR §36.302(e)",
+  "website_obligation": "Hotel booking sites must describe accessible features in enough detail; accessible-room filter; hold accessible rooms for those needing them.",
+  "applies_when": [
+   "is_us_hotel",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "not_us_hospitality"
+  ],
+  "where_on_site": [
+   "booking-flow",
+   "room-pages"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "DOJ enforcement; settlements $25k-$100k+",
+  "effective_date": "2010-09-15",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Accessible-room feature descriptions + booking filter"
+   },
+   {
+    "method": "A11Y",
+    "logic": "Booking flow keyboard/labels"
+   }
+  ],
+  "enforcement_feed": "DOJ; CourtListener",
+  "trigger_flags": [
+   "is_us_hotel"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CPR-PROP",
+  "name": "CPRs 2008 — Property Material Information (NTSELAT)",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Trading Standards/NTSELAT",
+  "category": "sector_realestate",
+  "section_ref": "SI 2008/1277; NTSELAT Material Information Guidance 2022 (Phase A/B/C)",
+  "website_obligation": "Material info before transactional decision: Phase A (always) price, tenure, council tax band; no misleading descriptions; accurate/disclosed-staged photos.",
+  "applies_when": [
+   "is_estate_or_letting_agent"
+  ],
+  "excluded_when": [
+   "not_property"
+  ],
+  "where_on_site": [
+   "listings"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Criminal prosecution; unlimited fine",
+  "effective_date": "2008-05-26",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Each listing has Phase A info"
+   },
+   {
+    "method": "NLP",
+    "logic": "Misleading descriptions"
+   }
+  ],
+  "enforcement_feed": "NTSELAT/Trading Standards",
+  "trigger_flags": [
+   "is_estate_or_letting_agent"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-EAA-79",
+  "name": "Estate Agents Act 1979 — CMP + Redress + Fees",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Trading Standards/NTSELAT",
+  "category": "sector_realestate",
+  "section_ref": "Estate Agents Act 1979; Provision of Information Regs 1991; CMP mandatory since 1 Apr 2019",
+  "website_obligation": "Display Client Money Protection scheme membership, approved redress scheme (TPO/PRS) + number, fees transparency.",
+  "applies_when": [
+   "is_estate_or_letting_agent"
+  ],
+  "excluded_when": [
+   "not_property"
+  ],
+  "where_on_site": [
+   "footer",
+   "about",
+   "fees-page"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal offence; unlimited fine; prohibition order",
+  "effective_date": "1979-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "CMP badge + redress scheme + number + fees page"
+   },
+   {
+    "method": "API",
+    "logic": "Verify TPO/PRS membership"
+   }
+  ],
+  "enforcement_feed": "NTSELAT",
+  "trigger_flags": [
+   "is_estate_or_letting_agent"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-RERA",
+  "name": "Dubai RERA/DLD Real Estate Marketing Rules",
+  "jurisdiction": "MENA-AE",
+  "region": "MENA",
+  "regulator": "RERA/Dubai Land Department",
+  "category": "sector_realestate",
+  "section_ref": "Law No. 7 of 2007; Trakheesi permit system",
+  "website_obligation": "Display RERA broker ORN + DLD licence; off-plan = Oqood + escrow details; properties registered before marketing.",
+  "applies_when": [
+   "is_dubai_property_business"
+  ],
+  "excluded_when": [
+   "not_dubai_property"
+  ],
+  "where_on_site": [
+   "footer",
+   "listings",
+   "project-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "RERA fines; licence revocation; criminal",
+  "effective_date": "2007-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "ORN + DLD licence; Oqood/escrow for off-plan"
+   },
+   {
+    "method": "API",
+    "logic": "Verify ORN via Trakheesi"
+   }
+  ],
+  "enforcement_feed": "DLD/RERA",
+  "trigger_flags": [
+   "is_dubai_property_business"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-FHA",
+  "name": "Fair Housing Act §804(c) — Online Property Advertising",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "HUD/DOJ",
+  "category": "sector_realestate",
+  "section_ref": "42 U.S.C. §3604(c)",
+  "website_obligation": "No discriminatory advertising (race, color, national origin, religion, sex, familial status, disability); algorithmic targeting excluding protected classes also violates.",
+  "applies_when": [
+   "is_us_real_estate",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "not_property"
+  ],
+  "where_on_site": [
+   "listings",
+   "marketing"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Civil penalties up to $107,050 (subsequent); DOJ prosecution",
+  "effective_date": "1968-04-11",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag discriminatory preference language ('adults only','perfect for families')"
+   },
+   {
+    "method": "DOM",
+    "logic": "Equal Housing Opportunity logo"
+   }
+  ],
+  "enforcement_feed": "HUD; CourtListener",
+  "trigger_flags": [
+   "is_us_real_estate"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-FSMA-21",
+  "name": "FSMA 2000 s.21 — Financial Promotion Restriction",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "FCA",
+  "category": "sector_financial",
+  "section_ref": "FSMA 2000 s.21; FPO 2005 SI 2005/1529",
+  "website_obligation": "No financial promotion unless FCA-authorised or approved; FCA FRN + 'Authorised and regulated by the FCA' statement.",
+  "applies_when": [
+   "promotes_financial_products"
+  ],
+  "excluded_when": [
+   "not_financial_services"
+  ],
+  "where_on_site": [
+   "footer",
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal offence; up to 2 yrs; unlimited fine",
+  "effective_date": "2001-12-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "FCA FRN (6-digit) + regulated statement"
+   },
+   {
+    "method": "API",
+    "logic": "Verify FRN vs FCA Register; firm in good standing"
+   }
+  ],
+  "enforcement_feed": "FCA Final Notices; FCA warnings list",
+  "trigger_flags": [
+   "promotes_financial_products"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-COBS4",
+  "name": "FCA COBS 4 — Financial Promotions Content",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "FCA",
+  "category": "sector_financial",
+  "section_ref": "FCA Handbook COBS 4.2.1R; COBS 4.12A (RMMI risk warnings)",
+  "website_obligation": "Fair, clear, not misleading; past-performance disclaimers; mandatory risk warnings; no guaranteed returns; representative APR for credit.",
+  "applies_when": [
+   "promotes_financial_products"
+  ],
+  "excluded_when": [
+   "not_financial_services"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "performance-tables"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "FCA enforcement; up to £1m+ fine; criminal",
+  "effective_date": "2007-11-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Performance without disclaimer; guaranteed returns; missing risk warnings"
+   },
+   {
+    "method": "DOM",
+    "logic": "Representative APR where credit shown"
+   }
+  ],
+  "enforcement_feed": "FCA Final Notices",
+  "trigger_flags": [
+   "promotes_financial_products"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CONSUMER-DUTY",
+  "name": "FCA Consumer Duty (PRIN 2A / Principle 12)",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "FCA",
+  "category": "sector_financial",
+  "section_ref": "FCA PS22/9; PRIN 2A (in force 31 Jul 2023)",
+  "website_obligation": "Good outcomes for retail customers; consumer-understanding (plain language); no exploitation of biases; no unreasonable access barriers.",
+  "applies_when": [
+   "is_fca_regulated_retail"
+  ],
+  "excluded_when": [
+   "not_financial_services",
+   "wholesale_only"
+  ],
+  "where_on_site": [
+   "sitewide",
+   "journeys"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "FCA supervisory action; financial penalties; censure",
+  "effective_date": "2023-07-31",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Plain language; jargon; complex fees in small print"
+   },
+   {
+    "method": "DOM",
+    "logic": "Dark patterns; cancellation friction"
+   },
+   {
+    "method": "PERF",
+    "logic": "Mobile friction / load time"
+   }
+  ],
+  "enforcement_feed": "FCA Final Notices",
+  "trigger_flags": [
+   "is_fca_regulated_retail"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CONC3",
+  "name": "FCA CONC 3 — Consumer Credit Advertising",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "FCA",
+  "category": "sector_financial",
+  "section_ref": "FCA CONC 3; Consumer Credit Act 1974",
+  "website_obligation": "Representative APR if any rate/charge shown; credit provider name; repayment details; total charge for credit; total amount payable.",
+  "applies_when": [
+   "advertises_consumer_credit"
+  ],
+  "excluded_when": [
+   "no_credit_products"
+  ],
+  "where_on_site": [
+   "finance-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal offence; unlimited fine; FCA enforcement",
+  "effective_date": "2014-04-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Representative APR prominence where any rate/term shown"
+   },
+   {
+    "method": "NLP",
+    "logic": "Monthly-payment promos without APR"
+   }
+  ],
+  "enforcement_feed": "FCA Final Notices",
+  "trigger_flags": [
+   "advertises_consumer_credit"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-MCOB3",
+  "name": "FCA MCOB 3A — Mortgage Financial Promotions",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "FCA",
+  "category": "sector_financial",
+  "section_ref": "FCA MCOB 3A",
+  "website_obligation": "Mortgage promotions fair/clear/not misleading; APRC and representative example; risk statements ('your home may be repossessed').",
+  "applies_when": [
+   "advertises_mortgages"
+  ],
+  "excluded_when": [
+   "no_mortgage_products"
+  ],
+  "where_on_site": [
+   "mortgage-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "FCA enforcement; fines",
+  "effective_date": "2004-10-31",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "APRC + representative example + repossession warning"
+   }
+  ],
+  "enforcement_feed": "FCA Final Notices",
+  "trigger_flags": [
+   "advertises_mortgages"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-ICOBS2",
+  "name": "FCA ICOBS 2.2 — Insurance Financial Promotions",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "FCA",
+  "category": "sector_financial",
+  "section_ref": "FCA ICOBS 2.2",
+  "website_obligation": "Fair/clear/not misleading; no false impression of cover/exclusions/cost; renewal-price disclosure; IPID for relevant products.",
+  "applies_when": [
+   "sells_insurance"
+  ],
+  "excluded_when": [
+   "not_insurance"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "FCA enforcement; £1m+ fine; redress",
+  "effective_date": "2008-01-06",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Excess/exclusions upfront; renewal price; IPID linked"
+   },
+   {
+    "method": "NLP",
+    "logic": "Misleading 'fully comprehensive'; claim-payment guarantees"
+   }
+  ],
+  "enforcement_feed": "FCA Final Notices",
+  "trigger_flags": [
+   "sells_insurance"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-SEC-MKT",
+  "name": "SEC Marketing Rule — Investment Adviser Advertising",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "SEC",
+  "category": "sector_financial",
+  "section_ref": "17 CFR §275.206(4)-1 (amended Nov 2022)",
+  "website_obligation": "No untrue statements; testimonials need disclosures (paid/unpaid, conflicts, not representative); net+gross performance equal prominence; ratings disclosures.",
+  "applies_when": [
+   "is_us_ria",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "not_financial_services"
+  ],
+  "where_on_site": [
+   "testimonials",
+   "performance"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "SEC enforcement; up to $1m per violation; disgorgement; bar",
+  "effective_date": "2022-11-04",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Testimonial disclosures; net+gross parity; past-performance disclaimer"
+   },
+   {
+    "method": "NLP",
+    "logic": "Cherry-picked periods; hypotheticals without disclosure"
+   }
+  ],
+  "enforcement_feed": "SEC EDGAR; SEC press",
+  "trigger_flags": [
+   "is_us_ria"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-FINRA-2210",
+  "name": "FINRA Rule 2210 — Communications with the Public",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "FINRA",
+  "category": "sector_financial",
+  "section_ref": "FINRA Rule 2210; Reg Notice 22-25 (projections re-proposed Feb 2026, not yet effective)",
+  "website_obligation": "Fair/balanced/not misleading; principal approval for most retail comms; performance projections generally prohibited; past-performance disclosures; FINRA + SIPC member display.",
+  "applies_when": [
+   "is_us_broker_dealer",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "not_financial_services"
+  ],
+  "where_on_site": [
+   "footer",
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "FINRA fines up to $73k per violation; suspension; expulsion",
+  "effective_date": "2013-02-04",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "FINRA member + SIPC badge"
+   },
+   {
+    "method": "NLP",
+    "logic": "Flag performance projections; one-sided risk/benefit"
+   }
+  ],
+  "enforcement_feed": "FINRA enforcement; CourtListener",
+  "trigger_flags": [
+   "is_us_broker_dealer"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-SEC-REGFD",
+  "name": "SEC Regulation FD — Fair Disclosure",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "SEC",
+  "category": "sector_financial",
+  "section_ref": "17 CFR §243.100 (Reg FD)",
+  "website_obligation": "No selective disclosure of material non-public info; IR pages consistent; IPO quiet-period restrictions on promotional content (gun-jumping).",
+  "applies_when": [
+   "is_listed_or_pre_ipo",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "private_company_no_offering"
+  ],
+  "where_on_site": [
+   "investor-relations",
+   "blog",
+   "press"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "SEC enforcement; up to $200k entity per violation; disgorgement",
+  "effective_date": "2000-10-23",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag material non-public info in marketing; gun-jumping in IPO window"
+   },
+   {
+    "method": "DOM",
+    "logic": "IR section consistency; SEC filing links current"
+   }
+  ],
+  "enforcement_feed": "SEC EDGAR full-text",
+  "trigger_flags": [
+   "is_listed_or_pre_ipo"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-MIFID2",
+  "name": "MiFID II — Information to Clients",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "National Competent Authorities",
+  "category": "sector_financial",
+  "section_ref": "Commission Delegated Reg 2017/565 Art.44; MiFID II Dir 2014/65/EU",
+  "website_obligation": "Regulatory status, disputes body, investor compensation scheme membership; marketing identifiable as such; balanced risk/reward.",
+  "applies_when": [
+   "is_eu_investment_firm",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "not_financial_services"
+  ],
+  "where_on_site": [
+   "footer",
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "National enforcement; authorisation revocation; fines",
+  "effective_date": "2018-01-03",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Authorisation, compensation scheme, complaints body"
+   },
+   {
+    "method": "NLP",
+    "logic": "Benefits without risk on product pages"
+   }
+  ],
+  "enforcement_feed": "National CAs; ESMA; EUR-Lex",
+  "trigger_flags": [
+   "is_eu_investment_firm"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-DFSA-COB",
+  "name": "DFSA Conduct of Business — Financial Promotions (DIFC)",
+  "jurisdiction": "MENA-AE-DIFC",
+  "region": "MENA",
+  "regulator": "Dubai Financial Services Authority",
+  "category": "sector_financial",
+  "section_ref": "DFSA Rulebook COB Module",
+  "website_obligation": "Fair/clear/not misleading; identify firm + 'Regulated by DFSA'; past-performance disclaimers; restricted unsolicited promotions.",
+  "applies_when": [
+   "is_difc_financial_firm"
+  ],
+  "excluded_when": [
+   "not_financial_services"
+  ],
+  "where_on_site": [
+   "footer",
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "DFSA enforcement; fines; licence revocation; criminal",
+  "effective_date": "2004-09-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "DFSA authorisation number + statement"
+   },
+   {
+    "method": "API",
+    "logic": "Verify vs DFSA register"
+   },
+   {
+    "method": "NLP",
+    "logic": "Fair balance; performance disclaimer"
+   }
+  ],
+  "enforcement_feed": "DFSA enforcement",
+  "trigger_flags": [
+   "is_difc_financial_firm"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-FCA-PS236",
+  "name": "FCA PS23/6 — Cryptoasset Financial Promotions",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "FCA",
+  "category": "sector_crypto",
+  "section_ref": "FSMA 2000 s.21; FCA PS23/6; COBS 4.12A (in force 8 Oct 2023)",
+  "website_obligation": "Verbatim risk warning; ban on incentives; 24-hr cooling-off + personalised risk warning + appropriateness + categorisation for first-timers; FSCS non-protection statement.",
+  "applies_when": [
+   "promotes_crypto_to_uk"
+  ],
+  "excluded_when": [
+   "not_crypto"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "onboarding"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal offence (FSMA s.25); unlimited fine; up to 2 yrs",
+  "effective_date": "2023-10-08",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Verbatim FCA risk warning; cooling-off; no incentives"
+   },
+   {
+    "method": "API",
+    "logic": "Verify approver FRN"
+   }
+  ],
+  "enforcement_feed": "FCA warnings; Final Notices",
+  "trigger_flags": [
+   "promotes_crypto_to_uk"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-MICA",
+  "name": "MiCA — Crypto-Asset Marketing Communications",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "National CAs; ESMA",
+  "category": "sector_crypto",
+  "section_ref": "Regulation (EU) 2023/1114 Art.7 (effective Jun 2024)",
+  "website_obligation": "Marketing identified as such; fair/clear/not misleading; whitepaper reference; no contradiction of whitepaper; risk statement; no undisclosed public-figure endorsement; no value projections.",
+  "applies_when": [
+   "promotes_crypto_to_eu"
+  ],
+  "excluded_when": [
+   "not_crypto"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "marketing"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "National enforcement; licence revocation; publication of breach",
+  "effective_date": "2024-06-30",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Risk statement + whitepaper reference"
+   },
+   {
+    "method": "NLP",
+    "logic": "Undisclosed endorsements; value projections"
+   }
+  ],
+  "enforcement_feed": "ESMA; national CAs; EUR-Lex",
+  "trigger_flags": [
+   "promotes_crypto_to_eu"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-VARA",
+  "name": "VARA Marketing Regulations 2024 (Dubai)",
+  "jurisdiction": "MENA-AE",
+  "region": "MENA",
+  "regulator": "Virtual Assets Regulatory Authority",
+  "category": "sector_crypto",
+  "section_ref": "VARA Marketing Regulations 2024",
+  "website_obligation": "Display VARA licence; fair/clear/not misleading; no guaranteed returns; risk warnings; retail-directed additional disclosures.",
+  "applies_when": [
+   "is_dubai_vasp"
+  ],
+  "excluded_when": [
+   "not_crypto"
+  ],
+  "where_on_site": [
+   "footer",
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "VARA fines; licence suspension/revocation",
+  "effective_date": "2024-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "VARA licence number + statement"
+   },
+   {
+    "method": "API",
+    "logic": "Verify vs VARA register"
+   },
+   {
+    "method": "NLP",
+    "logic": "Guaranteed returns"
+   }
+  ],
+  "enforcement_feed": "VARA",
+  "trigger_flags": [
+   "is_dubai_vasp"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-IDD",
+  "name": "EU Insurance Distribution Directive 2016/97",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "National insurance authorities",
+  "category": "sector_insurance",
+  "section_ref": "Directive (EU) 2016/97 (IDD)",
+  "website_obligation": "IPID for non-life products before contract; key product info accessible; remuneration nature disclosed; no misleading cover claims.",
+  "applies_when": [
+   "is_eu_insurance",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "not_insurance"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "National enforcement; authorisation revocation",
+  "effective_date": "2018-10-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "IPID linked; distributor registration + authority disclosed"
+   },
+   {
+    "method": "NLP",
+    "logic": "Misleading scope-of-cover"
+   }
+  ],
+  "enforcement_feed": "National authorities; EUR-Lex",
+  "trigger_flags": [
+   "is_eu_insurance"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-FIR-14",
+  "name": "Food Information Regulations 2014 — Allergen Disclosure",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "FSA/Trading Standards",
+  "category": "sector_fb",
+  "section_ref": "SI 2014/1855 (implements EU 1169/2011)",
+  "website_obligation": "Online food sellers display all 14 allergens in writing before order, at menu display AND before checkout.",
+  "applies_when": [
+   "sells_food_online"
+  ],
+  "excluded_when": [
+   "not_food"
+  ],
+  "where_on_site": [
+   "menu",
+   "ordering-flow"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Unlimited fine; prosecution (Natasha's Law)",
+  "effective_date": "2014-12-13",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Allergen info per dish before checkout"
+   },
+   {
+    "method": "NLP",
+    "logic": "Dishes missing allergen info"
+   },
+   {
+    "method": "LINK",
+    "logic": "Allergen section linked from menu"
+   }
+  ],
+  "enforcement_feed": "FSA; local authorities",
+  "trigger_flags": [
+   "sells_food_online"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CALORIE-21",
+  "name": "Calorie Labelling (Out of Home Sector) Regulations 2021",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "FSA/local authorities",
+  "category": "sector_fb",
+  "section_ref": "SI 2021/909 (250+ employees)",
+  "website_obligation": "Businesses with 250+ employees display calories per item on online menus + 'Adults need around 2000 kcal a day' statement.",
+  "applies_when": [
+   "sells_food_online",
+   "employees_250_plus"
+  ],
+  "excluded_when": [
+   "under_250_employees",
+   "not_food"
+  ],
+  "where_on_site": [
+   "menu"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Fine; FSA/local authority notice",
+  "effective_date": "2022-04-06",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Calorie counts per dish + reference-intake statement (if 250+ emp)"
+   }
+  ],
+  "enforcement_feed": "FSA; local authorities",
+  "trigger_flags": [
+   "sells_food_online",
+   "employees_250_plus"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-HFSS",
+  "name": "HFSS Promotion, Placement & Advertising Restrictions",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "ASA/Ofcom/Trading Standards",
+  "category": "sector_fb",
+  "section_ref": "Food (Promotion and Placement) (England) Regs 2021 (50+ emp, placement Oct 2022, volume promo Oct 2025); Health & Care Act 2022 Sch.18 ad restrictions (9pm watershed + online paid ban) enforceable 5 Jan 2026",
+  "website_obligation": "Businesses with 250+ employees: no HFSS product in paid online ads / brand-site promotional content. Retailers 50+ employees + >2,000 sq ft: volume-promotion + placement limits.",
+  "applies_when": [
+   "sells_hfss_products",
+   "employees_250_plus"
+  ],
+  "excluded_when": [
+   "under_250_employees_for_ads",
+   "not_food"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "promotions"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "ASA/Trading Standards; unlimited fines",
+  "effective_date": "2026-01-05",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "HFSS products in promo context (if 250+ emp); volume deals on HFSS"
+   },
+   {
+    "method": "NLP",
+    "logic": "HFSS category + nutrient profiling score"
+   }
+  ],
+  "enforcement_feed": "ASA rulings; Ofcom",
+  "trigger_flags": [
+   "sells_hfss_products",
+   "employees_250_plus"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-PORTMAN",
+  "name": "Portman Group Code — Alcohol Promotion",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Portman Group ICP",
+  "category": "sector_fb",
+  "section_ref": "Portman Group Code of Practice 6th Edition (2022)",
+  "website_obligation": "No appeal to under-18s; no social/sexual success claims; no therapeutic claims; unit count + responsibility messaging; age verification.",
+  "applies_when": [
+   "sells_or_markets_alcohol"
+  ],
+  "excluded_when": [
+   "no_alcohol"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "age-gate"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Portman ruling; product withdrawal; Trading Standards referral",
+  "effective_date": "2022-05-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Unit count, ABV, Drinkaware link, age gate"
+   },
+   {
+    "method": "NLP",
+    "logic": "Social/sexual success or therapeutic claims"
+   }
+  ],
+  "enforcement_feed": "Portman Group rulings",
+  "trigger_flags": [
+   "sells_or_markets_alcohol"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-FIR-1169",
+  "name": "EU Food Information Regulation 1169/2011 — Online Food Sales",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "National food authorities",
+  "category": "sector_fb",
+  "section_ref": "Regulation (EU) 1169/2011 Art.14",
+  "website_obligation": "Mandatory food info before online purchase: 14 allergens, nutrition declaration, ingredients, net quantity, durability date, manufacturer, country of origin (certain foods).",
+  "applies_when": [
+   "sells_food_online",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "not_food"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "National enforcement; product withdrawal",
+  "effective_date": "2014-12-13",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "All mandatory labelling elements per product before purchase"
+   },
+   {
+    "method": "NLP",
+    "logic": "Incomplete allergen/nutrition info"
+   }
+  ],
+  "enforcement_feed": "National authorities",
+  "trigger_flags": [
+   "sells_food_online",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-UKVI",
+  "name": "UKVI Student Sponsor Website Obligations",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "UK Visas and Immigration",
+  "category": "sector_education",
+  "section_ref": "UKVI Sponsor Guidance; Immigration Rules Part 6A; BCA metrics",
+  "website_obligation": "Accurate course info (fees, duration, entry requirements); no misleading visa-eligibility claims; sponsor status displayed where international students recruited.",
+  "applies_when": [
+   "is_student_sponsor"
+  ],
+  "excluded_when": [
+   "not_education"
+  ],
+  "where_on_site": [
+   "course-pages",
+   "international-pages"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Licence revocation; visa refusals; sponsor bar",
+  "effective_date": "2009-03-31",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Course info matches UKVI data"
+   },
+   {
+    "method": "NLP",
+    "logic": "'Guaranteed visa' claims"
+   }
+  ],
+  "enforcement_feed": "UKVI",
+  "trigger_flags": [
+   "is_student_sponsor"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CMA-HE",
+  "name": "CMA Higher Education Consumer Law Guidance",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "CMA/Trading Standards",
+  "category": "sector_education",
+  "section_ref": "CMA HE guidance (2015/2023); Consumer Rights Act 2015",
+  "website_obligation": "Accurate course info before enrolment; clear info on changes; fair complaints procedure; no unfair student-contract terms.",
+  "applies_when": [
+   "is_he_provider"
+  ],
+  "excluded_when": [
+   "not_education"
+  ],
+  "where_on_site": [
+   "course-pages",
+   "terms"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "CMA enforcement; fee refunds; adverse publicity",
+  "effective_date": "2015-03-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Course info accuracy; generic 'subject to change' without disclosure"
+   },
+   {
+    "method": "LINK",
+    "logic": "Complaints procedure"
+   }
+  ],
+  "enforcement_feed": "CMA",
+  "trigger_flags": [
+   "is_he_provider"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-KHDA",
+  "name": "Dubai KHDA School Licensing Display",
+  "jurisdiction": "MENA-AE",
+  "region": "MENA",
+  "regulator": "Knowledge and Human Development Authority",
+  "category": "sector_education",
+  "section_ref": "KHDA Law No. 12 of 2005",
+  "website_obligation": "Dubai schools display KHDA licence + current inspection rating; no unapproved curriculum claims; accurate ratings.",
+  "applies_when": [
+   "is_dubai_school"
+  ],
+  "excluded_when": [
+   "not_education"
+  ],
+  "where_on_site": [
+   "about",
+   "footer"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "KHDA licence suspension; fines; closure",
+  "effective_date": "2005-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "KHDA licence + current rating"
+   },
+   {
+    "method": "NLP",
+    "logic": "Unapproved curriculum; outdated rating as current"
+   },
+   {
+    "method": "API",
+    "logic": "Verify via KHDA portal"
+   }
+  ],
+  "enforcement_feed": "KHDA",
+  "trigger_flags": [
+   "is_dubai_school"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CMA-GREEN",
+  "name": "CMA Green Claims Code",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "CMA",
+  "category": "sector_ecommerce",
+  "section_ref": "CMA Green Claims Code 2021; Competition Act 1998; CPRs 2008",
+  "website_obligation": "Green claims truthful, clear, substantiated, full-lifecycle, fair comparisons; 'eco/sustainable/carbon neutral/net zero' need evidence near claim.",
+  "applies_when": [
+   "makes_green_claims"
+  ],
+  "excluded_when": [
+   "no_green_claims"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "brand-copy"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "CMA order; up to 10% global turnover; corrective ads",
+  "effective_date": "2021-09-20",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag green claims; check substantiation proximity"
+   },
+   {
+    "method": "DOM",
+    "logic": "Certification badges link to valid cert"
+   }
+  ],
+  "enforcement_feed": "CMA",
+  "trigger_flags": [
+   "makes_green_claims"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-ECGT",
+  "name": "EU Empowering Consumers for Green Transition Directive",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "National consumer authorities",
+  "category": "sector_ecommerce",
+  "section_ref": "Directive (EU) 2024/825 (transposition due 27 Mar 2026)",
+  "website_obligation": "Ban generic green claims without proof; ban offset-based 'carbon neutral'; only approved-scheme sustainability labels; substantiate specific claims.",
+  "applies_when": [
+   "makes_green_claims",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "no_green_claims"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "brand-copy"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "National enforcement; fines; product withdrawal",
+  "effective_date": "2026-03-27",
+  "status": "pending",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag generic 'eco-friendly/sustainable'; flag offset-based carbon-neutral"
+   },
+   {
+    "method": "DOM",
+    "logic": "Label scheme legitimacy"
+   }
+  ],
+  "enforcement_feed": "National authorities; EUR-Lex",
+  "trigger_flags": [
+   "makes_green_claims",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-ECOM-14",
+  "name": "UAE E-Commerce Law (Federal Decree-Law 14/2023)",
+  "jurisdiction": "MENA-AE",
+  "region": "MENA",
+  "regulator": "Ministry of Economy",
+  "category": "sector_ecommerce",
+  "section_ref": "Federal Decree-Law No. 14 of 2023",
+  "website_obligation": "Display commercial registration; Arabic product info; AED pricing; T&Cs; returns policy; secure payment; data protection notice.",
+  "applies_when": [
+   "is_uae_ecommerce"
+  ],
+  "excluded_when": [
+   "not_ecommerce"
+  ],
+  "where_on_site": [
+   "footer",
+   "product-pages",
+   "terms"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "MoE fines; trade licence suspension",
+  "effective_date": "2023-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Commercial licence; Arabic info; AED pricing"
+   },
+   {
+    "method": "LINK",
+    "logic": "Returns policy before purchase"
+   }
+  ],
+  "enforcement_feed": "UAE MoE",
+  "trigger_flags": [
+   "is_uae_ecommerce"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "SA-ECOM",
+  "name": "Saudi E-Commerce Law (Royal Decree M/126)",
+  "jurisdiction": "MENA-SA",
+  "region": "MENA",
+  "regulator": "Ministry of Commerce",
+  "category": "sector_ecommerce",
+  "section_ref": "Royal Decree M/126 of 2019; Implementing Regs 2020",
+  "website_obligation": "Display commercial registration; complete product info; total price before order; Arabic T&Cs + returns; order confirmation within 24h; no false info.",
+  "applies_when": [
+   "is_saudi_ecommerce"
+  ],
+  "excluded_when": [
+   "not_ecommerce"
+  ],
+  "where_on_site": [
+   "footer",
+   "product-pages",
+   "terms"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "MCI fines up to SAR 1m; criminal for repeat",
+  "effective_date": "2019-10-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Commercial registration; Arabic T&Cs + returns; total price before order"
+   }
+  ],
+  "enforcement_feed": "Saudi MCI",
+  "trigger_flags": [
+   "is_saudi_ecommerce"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CONC3-AUTO",
+  "name": "FCA CONC 3 — Automotive Finance Advertising",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "FCA/Trading Standards",
+  "category": "sector_automotive",
+  "section_ref": "FCA CONC 3; Consumer Credit Act 1974; FCA PS26/3 (motor-finance commission redress)",
+  "website_obligation": "Representative APR if any rate/charge shown; credit provider; repayment details; total charge; commission-arrangement transparency.",
+  "applies_when": [
+   "advertises_car_finance"
+  ],
+  "excluded_when": [
+   "no_finance"
+  ],
+  "where_on_site": [
+   "finance-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal offence; unlimited fine; FCA enforcement",
+  "effective_date": "2014-04-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Representative APR prominence; FRN near offers"
+   },
+   {
+    "method": "API",
+    "logic": "Verify broker/lender FRN"
+   }
+  ],
+  "enforcement_feed": "FCA Final Notices",
+  "trigger_flags": [
+   "advertises_car_finance"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-FTC-USEDCAR",
+  "name": "FTC Used Car Rule — Buyers Guide",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "FTC",
+  "category": "sector_automotive",
+  "section_ref": "16 CFR Part 455",
+  "website_obligation": "Display Buyers Guide info on used-vehicle listings (warranty/as-is); no misleading history claims; mileage + VIN displayed.",
+  "applies_when": [
+   "is_us_used_car_dealer",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "not_automotive"
+  ],
+  "where_on_site": [
+   "listings"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "FTC up to $51,744 per violation per vehicle",
+  "effective_date": "1985-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Buyers Guide info; mileage + VIN"
+   },
+   {
+    "method": "NLP",
+    "logic": "'Accident-free/one owner' without backing"
+   }
+  ],
+  "enforcement_feed": "FTC press",
+  "trigger_flags": [
+   "is_us_used_car_dealer"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-CMA-EV",
+  "name": "CMA/ASA EV & Emissions Environmental Claims",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "CMA/ASA/DVLA",
+  "category": "sector_automotive",
+  "section_ref": "CMA Green Claims Code; ASA CAP 11; Road Vehicles (Construction & Use) Regs 1986",
+  "website_obligation": "EV range claims based on WLTP; no unqualified '0 emissions'; no overstated fuel economy.",
+  "applies_when": [
+   "sells_vehicles",
+   "makes_emissions_claims"
+  ],
+  "excluded_when": [
+   "no_vehicle_emissions_claims"
+  ],
+  "where_on_site": [
+   "vehicle-pages"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "CMA order; ASA ruling; up to 10% turnover",
+  "effective_date": "2021-09-20",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Range claims without WLTP; unqualified '0 emissions'"
+   }
+  ],
+  "enforcement_feed": "CMA; ASA rulings",
+  "trigger_flags": [
+   "sells_vehicles"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-HEALTHCLAIMS-1924",
+  "name": "EU Health Claims Regulation 1924/2006",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "EFSA/national food authorities",
+  "category": "sector_wellness",
+  "section_ref": "Regulation (EC) 1924/2006; EFSA authorised-claims register",
+  "website_obligation": "Only EFSA-authorised health/nutrition claims; no 'boosts immunity/anti-ageing' unless authorised; 'probiotic' not approved as a claim in EU.",
+  "applies_when": [
+   "makes_nutrition_health_claims",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "no_health_claims"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "National enforcement; product withdrawal",
+  "effective_date": "2007-07-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Cross-ref claims vs EFSA register; flag 'probiotic/boosts immunity' unauthorised"
+   }
+  ],
+  "enforcement_feed": "National authorities; EUR-Lex",
+  "trigger_flags": [
+   "makes_nutrition_health_claims",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-FTC-SUBST",
+  "name": "FTC Substantiation Doctrine — Health/Fitness Claims",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "FTC",
+  "category": "sector_wellness",
+  "section_ref": "FTC Policy Statement on Advertising Substantiation 1984; 15 U.S.C. §45; Health Products Compliance Guidance 2022",
+  "website_obligation": "Reasonable basis (competent reliable scientific evidence) for all objective health/fitness claims; atypical-results disclosure on testimonials.",
+  "applies_when": [
+   "makes_fitness_health_claims",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "no_health_claims"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "testimonials"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "FTC up to $51,744 per violation; corrective ads; disgorgement",
+  "effective_date": "1984-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Flag 'clinically proven' without citation; comparative without head-to-head"
+   },
+   {
+    "method": "DOM",
+    "logic": "'Results not typical' disclosure on testimonials"
+   }
+  ],
+  "enforcement_feed": "FTC press",
+  "trigger_flags": [
+   "makes_fitness_health_claims"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-ASA-15",
+  "name": "ASA CAP Code Section 15 — Food, Food Supplements & Health Claims",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "ASA",
+  "category": "sector_wellness",
+  "section_ref": "CAP Code Section 15; Nutrition and Health Claims (England) Regs 2007 (GB-retained register)",
+  "website_obligation": "Only GB-register-authorised claims; no disease prevention/treatment/cure claims on food/supplements; exact register wording required.",
+  "applies_when": [
+   "makes_nutrition_health_claims"
+  ],
+  "excluded_when": [
+   "no_health_claims"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "ASA upheld ruling; Trading Standards referral; product withdrawal",
+  "effective_date": "2007-07-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Cross-ref vs GB-retained register; flag disease claims; approximate wording"
+   }
+  ],
+  "enforcement_feed": "ASA rulings page",
+  "trigger_flags": [
+   "makes_nutrition_health_claims"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-FSA-NOVEL",
+  "name": "FSA Novel Foods Regulations — CBD",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Food Standards Agency",
+  "category": "sector_cbd",
+  "section_ref": "EU Novel Foods Reg 2015/2283 (retained UK); FSA Novel Foods authorisation list",
+  "website_obligation": "CBD food products need FSA Novel Foods authorisation or validated waiting-list status; no medicinal claims; accurate CBD content per dose.",
+  "applies_when": [
+   "sells_cbd_food"
+  ],
+  "excluded_when": [
+   "no_cbd"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "MHRA/FSA enforcement; product withdrawal; prosecution",
+  "effective_date": "2021-03-31",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "FSA Novel Foods status statement"
+   },
+   {
+    "method": "NLP",
+    "logic": "Medicinal claims ('treats anxiety') making it a medicine"
+   }
+  ],
+  "enforcement_feed": "FSA; MHRA",
+  "trigger_flags": [
+   "sells_cbd_food"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-FDA-DSHEA",
+  "name": "FDA DSHEA — Dietary Supplement Website Requirements",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "FDA",
+  "category": "sector_cbd",
+  "section_ref": "DSHEA 1994; 21 CFR Part 101.93",
+  "website_obligation": "Mandatory disclaimer near structure/function claims ('This statement has not been evaluated by the FDA. This product is not intended to diagnose, treat, cure, or prevent any disease.'); no disease claims; FDA facility registration.",
+  "applies_when": [
+   "sells_supplements",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "no_supplements"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "FDA warning letter; injunction; criminal; recall",
+  "effective_date": "1994-10-25",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Verbatim FDA disclaimer near claims; Supplement Facts panel"
+   },
+   {
+    "method": "NLP",
+    "logic": "Disease claims (treats/prevents/cures)"
+   }
+  ],
+  "enforcement_feed": "FDA warning letters",
+  "trigger_flags": [
+   "sells_supplements"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-MHRA-CBD",
+  "name": "MHRA Borderline Medicinal Claims — CBD",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "MHRA",
+  "category": "sector_cbd",
+  "section_ref": "Human Medicines Regs 2012; MHRA borderline products guidance; Medicines Act 1968",
+  "website_obligation": "CBD with medicinal claims = medicine requiring MHRA authorisation; no claims it treats anxiety/depression/pain/epilepsy/any condition.",
+  "applies_when": [
+   "sells_cbd"
+  ],
+  "excluded_when": [
+   "no_cbd"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "branding"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal prosecution; enforcement notice; seizure; unlimited fine",
+  "effective_date": "2012-08-14",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Condition-specific claims (anxiety/pain/epilepsy/insomnia) in therapeutic context"
+   },
+   {
+    "method": "DOM",
+    "logic": "Product names implying medicinal use ('CBD Pain Cream')"
+   }
+  ],
+  "enforcement_feed": "MHRA",
+  "trigger_flags": [
+   "sells_cbd"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-RCVS",
+  "name": "RCVS Code of Professional Conduct — Veterinary Advertising",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Royal College of Veterinary Surgeons",
+  "category": "sector_veterinary",
+  "section_ref": "RCVS Code of Professional Conduct; advertising guidance",
+  "website_obligation": "No misleading/inaccurate statements; no unsubstantiated superiority; RCVS registration displayed; protected titles only by registrants.",
+  "applies_when": [
+   "is_veterinary_practice"
+  ],
+  "excluded_when": [
+   "not_veterinary"
+  ],
+  "where_on_site": [
+   "bios",
+   "footer"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "RCVS disciplinary; suspension/removal",
+  "effective_date": "2012-04-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "RCVS practice standards + registration"
+   },
+   {
+    "method": "API",
+    "logic": "Verify named vets vs RCVS register"
+   },
+   {
+    "method": "NLP",
+    "logic": "Superiority/guarantee claims"
+   }
+  ],
+  "enforcement_feed": "RCVS",
+  "trigger_flags": [
+   "is_veterinary_practice"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-VMD",
+  "name": "VMD — Veterinary Medicines POM-V Advertising",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Veterinary Medicines Directorate",
+  "category": "sector_veterinary",
+  "section_ref": "Veterinary Medicines Regulations 2013 SI 2013/2033",
+  "website_obligation": "POM-V cannot be advertised to public; only to vets/pharmacists; OTC vet products must follow authorised info.",
+  "applies_when": [
+   "sells_vet_medicines"
+  ],
+  "excluded_when": [
+   "no_vet_medicines"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "VMD enforcement; criminal; unlimited fine",
+  "effective_date": "2013-10-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "POM-V product names in consumer promo"
+   },
+   {
+    "method": "DOM",
+    "logic": "OTC vet products include authorisation info"
+   }
+  ],
+  "enforcement_feed": "VMD",
+  "trigger_flags": [
+   "sells_vet_medicines"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-ICAEW",
+  "name": "ICAEW Code of Ethics — Advertising",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "ICAEW",
+  "category": "sector_b2b",
+  "section_ref": "ICAEW Code of Ethics 2020 (IESBA-based)",
+  "website_obligation": "No misleading qualification/service claims; 'ICAEW Chartered Accountants' only if qualified; audit firms display Companies House audit registration.",
+  "applies_when": [
+   "is_accountancy_firm"
+  ],
+  "excluded_when": [
+   "not_accountancy"
+  ],
+  "where_on_site": [
+   "footer",
+   "about"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "ICAEW disciplinary; loss of membership",
+  "effective_date": "2020-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "ICAEW logo + firm registration"
+   },
+   {
+    "method": "API",
+    "logic": "Verify vs ICAEW firm finder"
+   },
+   {
+    "method": "NLP",
+    "logic": "Misleading qualification/superiority claims"
+   }
+  ],
+  "enforcement_feed": "ICAEW",
+  "trigger_flags": [
+   "is_accountancy_firm"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-RICS",
+  "name": "RICS Rules of Conduct — Advertising",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "RICS",
+  "category": "sector_b2b",
+  "section_ref": "RICS Rules of Conduct 2021 (effective 2 Feb 2022)",
+  "website_obligation": "Display RICS firm registration; no misleading claims; CMP scheme for property-holding firms.",
+  "applies_when": [
+   "is_rics_firm"
+  ],
+  "excluded_when": [
+   "not_surveying"
+  ],
+  "where_on_site": [
+   "footer",
+   "about"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "RICS disciplinary; expulsion; Trading Standards referral",
+  "effective_date": "2022-02-02",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "RICS firm registration logo + ID; CMP badge"
+   },
+   {
+    "method": "API",
+    "logic": "Verify vs RICS firm register"
+   }
+  ],
+  "enforcement_feed": "RICS",
+  "trigger_flags": [
+   "is_rics_firm"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-ARB",
+  "name": "ARB Architects Code — Protected Title",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Architects Registration Board",
+  "category": "sector_b2b",
+  "section_ref": "Architects Act 1997; ARB Code of Conduct 2017",
+  "website_obligation": "'Architect' title only by ARB-registered persons; ARB registration accessible; no misleading qualification claims.",
+  "applies_when": [
+   "uses_architect_title"
+  ],
+  "excluded_when": [
+   "not_architecture"
+  ],
+  "where_on_site": [
+   "bios",
+   "about"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal offence (Architects Act 1997); unlimited fine",
+  "effective_date": "1997-01-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "'Architect' title usage; ARB registration number"
+   },
+   {
+    "method": "API",
+    "logic": "Verify vs ARB register"
+   }
+  ],
+  "enforcement_feed": "ARB",
+  "trigger_flags": [
+   "uses_architect_title"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-SERVICES-DIR",
+  "name": "EU Services Directive 2006/123/EC — Professional Transparency",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "National service authorities",
+  "category": "sector_b2b",
+  "section_ref": "Directive 2006/123/EC Art.22",
+  "website_obligation": "Service providers display: name, legal status, address, contact, VAT, professional body + rules, PI insurance where required.",
+  "applies_when": [
+   "is_eu_professional_service",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "not_professional_service"
+  ],
+  "where_on_site": [
+   "footer",
+   "about"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "National enforcement; fines",
+  "effective_date": "2009-12-28",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Name, address, VAT, professional body, rules reference"
+   },
+   {
+    "method": "LINK",
+    "logic": "PI insurance disclosure where required"
+   }
+  ],
+  "enforcement_feed": "National authorities",
+  "trigger_flags": [
+   "is_eu_professional_service"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-ATOL",
+  "name": "CAA ATOL Regulations 2012",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Civil Aviation Authority",
+  "category": "sector_travel",
+  "section_ref": "ATOL Regulations 2012 SI 2012/1017",
+  "website_obligation": "Selling packages with flights requires ATOL licence; display ATOL logo + number; ATOL certificate at booking; no implied protection without licence.",
+  "applies_when": [
+   "sells_flight_packages"
+  ],
+  "excluded_when": [
+   "no_flight_packages"
+  ],
+  "where_on_site": [
+   "booking-flow",
+   "footer"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Criminal prosecution; unlimited fine; consumer claims",
+  "effective_date": "2012-04-30",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "ATOL logo + number on package + booking pages"
+   },
+   {
+    "method": "API",
+    "logic": "Verify vs CAA ATOL register"
+   }
+  ],
+  "enforcement_feed": "CAA",
+  "trigger_flags": [
+   "sells_flight_packages"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-PTD-2015",
+  "name": "EU Package Travel Directive 2015/2302",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "National enforcement bodies",
+  "category": "sector_travel",
+  "section_ref": "Directive (EU) 2015/2302",
+  "website_obligation": "Pre-contract info before booking: total price, organiser identity, accommodation/transport, meals, visa/health, cancellation penalties, insolvency protection, traveller-rights summary; durable medium.",
+  "applies_when": [
+   "sells_travel_packages",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "no_packages"
+  ],
+  "where_on_site": [
+   "booking-flow"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "National enforcement; contract cancellable",
+  "effective_date": "2018-07-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Pre-booking disclosures before checkout"
+   },
+   {
+    "method": "LINK",
+    "logic": "Insolvency protection certificate; Standard Information Form"
+   }
+  ],
+  "enforcement_feed": "National authorities",
+  "trigger_flags": [
+   "sells_travel_packages",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-DOT-FARE",
+  "name": "US DOT Full Fare Advertising Rule",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "Department of Transportation",
+  "category": "sector_travel",
+  "section_ref": "14 CFR §399.84",
+  "website_obligation": "Total price incl. taxes/fees must be most prominent; no base-fare-only advertising; all mandatory fees in advertised price.",
+  "applies_when": [
+   "sells_air_travel",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "no_air_travel"
+  ],
+  "where_on_site": [
+   "booking-flow",
+   "fare-pages"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "DOT civil penalties up to $37,377 per violation",
+  "effective_date": "2012-01-26",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Total price most prominent before checkout"
+   },
+   {
+    "method": "NLP",
+    "logic": "'From' prices excluding mandatory taxes/fees"
+   }
+  ],
+  "enforcement_feed": "DOT",
+  "trigger_flags": [
+   "sells_air_travel"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-FTC-GREEN",
+  "name": "FTC Green Guides (16 CFR Part 260)",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "FTC",
+  "category": "sector_energy",
+  "section_ref": "16 CFR Part 260 (review pending)",
+  "website_obligation": "Environmental claims truthful, substantiated, specific, qualified; 'recyclable' needs substantial-majority access; 'carbon offset' transparent on project/standards/timing.",
+  "applies_when": [
+   "makes_green_claims",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "no_green_claims"
+  ],
+  "where_on_site": [
+   "product-pages",
+   "brand-copy"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "FTC up to $51,744 per violation per day; corrective ads",
+  "effective_date": "2012-10-11",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Vague 'eco-friendly' without qualification; carbon-neutral methodology"
+   },
+   {
+    "method": "DOM",
+    "logic": "Certification logos link to valid cert"
+   }
+  ],
+  "enforcement_feed": "FTC press",
+  "trigger_flags": [
+   "makes_green_claims"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "UK-OFGEM",
+  "name": "Ofgem Standards of Conduct — Energy Supplier",
+  "jurisdiction": "UK",
+  "region": "UK",
+  "regulator": "Ofgem",
+  "category": "sector_energy",
+  "section_ref": "Ofgem Standards of Conduct; Supply Licence Conditions",
+  "website_obligation": "Transparent tariff terms (standing charge, unit rates, exit fees); no misleading green-tariff claims (REGO-backed); key info accessible.",
+  "applies_when": [
+   "is_energy_supplier"
+  ],
+  "excluded_when": [
+   "not_energy_supplier"
+  ],
+  "where_on_site": [
+   "tariff-pages",
+   "sign-up"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "Ofgem enforcement; licence breach; fines; compensatory payments",
+  "effective_date": "2013-08-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Complete tariff info before sign-up"
+   },
+   {
+    "method": "NLP",
+    "logic": "Green-tariff claims vs REGO backing"
+   }
+  ],
+  "enforcement_feed": "Ofgem",
+  "trigger_flags": [
+   "is_energy_supplier"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-TAXONOMY",
+  "name": "EU Taxonomy + SFDR — Sustainable Finance Disclosure",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "ESMA/National CAs",
+  "category": "sector_energy",
+  "section_ref": "Regulation (EU) 2020/852 (Taxonomy); Regulation (EU) 2019/2088 (SFDR)",
+  "website_obligation": "'Green/sustainable/ESG' financial products disclose Taxonomy alignment; SFDR pre-contractual sustainability disclosures; no greenwashing.",
+  "applies_when": [
+   "makes_esg_finance_claims",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "no_esg_finance_claims"
+  ],
+  "where_on_site": [
+   "product-pages"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "National CA enforcement; fines",
+  "effective_date": "2021-03-10",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "ESG claims without Taxonomy/SFDR disclosure"
+   },
+   {
+    "method": "DOM",
+    "logic": "SFDR documents accessible"
+   }
+  ],
+  "enforcement_feed": "ESMA; national CAs; EUR-Lex",
+  "trigger_flags": [
+   "makes_esg_finance_claims",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "US-FTC-ENDORSE",
+  "name": "FTC Endorsement Guides 2023 — Influencer Disclosure",
+  "jurisdiction": "USA",
+  "region": "US",
+  "regulator": "FTC",
+  "category": "sector_personal",
+  "section_ref": "16 CFR Part 255 (revised Oct 2023)",
+  "website_obligation": "Clear/conspicuous disclosure of material connections (paid, gifted, equity); near the claim, not buried; applies to personal-brand sites + linked social.",
+  "applies_when": [
+   "has_endorsements_or_affiliates",
+   "serves_us_users"
+  ],
+  "excluded_when": [
+   "no_endorsements"
+  ],
+  "where_on_site": [
+   "recommendations",
+   "affiliate-links"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "FTC up to $51,744 per undisclosed endorsement",
+  "effective_date": "2023-10-01",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Disclosure near recommendations + affiliate links (AD/Paid/gifted)"
+   },
+   {
+    "method": "NLP",
+    "logic": "Affiliate recs lacking proximate disclosure"
+   }
+  ],
+  "enforcement_feed": "FTC press",
+  "trigger_flags": [
+   "has_endorsements_or_affiliates"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "EU-DSA-26",
+  "name": "EU DSA Art.26 — Commercial Communication Disclosure",
+  "jurisdiction": "EU",
+  "region": "EU",
+  "regulator": "Digital Services Coordinators",
+  "category": "sector_personal",
+  "section_ref": "Regulation (EU) 2022/2065 Art.26",
+  "website_obligation": "Commercial content clearly identified; no dark patterns; 'published by X on behalf of Y' for commercial content.",
+  "applies_when": [
+   "has_commercial_content",
+   "serves_eu_users"
+  ],
+  "excluded_when": [
+   "no_commercial_content"
+  ],
+  "where_on_site": [
+   "sponsored-content",
+   "affiliate"
+  ],
+  "severity": "High",
+  "severity_rank": 2,
+  "max_penalty": "DSC enforcement; platform removal; up to 6% turnover (platforms)",
+  "effective_date": "2024-02-17",
+  "status": "active",
+  "detection": [
+   {
+    "method": "DOM",
+    "logic": "Commercial-content labelling + 'on behalf of' disclosure"
+   },
+   {
+    "method": "NLP",
+    "logic": "Unlabelled commercially-motivated content"
+   }
+  ],
+  "enforcement_feed": "National DSCs",
+  "trigger_flags": [
+   "has_commercial_content",
+   "serves_eu_users"
+  ],
+  "confidence": "verified"
+ },
+ {
+  "id": "AE-CYBER-34",
+  "name": "UAE Cybercrime Law — Online Content & Reputation",
+  "jurisdiction": "MENA-AE",
+  "region": "MENA",
+  "regulator": "UAE Attorney General/TRA",
+  "category": "sector_personal",
+  "section_ref": "Federal Decree-Law No. 34 of 2021",
+  "website_obligation": "No content harming others' reputation/honour; no false news; no publishing third-party financial/personal data without consent.",
+  "applies_when": [
+   "publishes_content_uae"
+  ],
+  "excluded_when": [
+   "no_uae_content"
+  ],
+  "where_on_site": [
+   "content",
+   "reputation-mgmt"
+  ],
+  "severity": "Critical",
+  "severity_rank": 1,
+  "max_penalty": "Imprisonment up to 2 yrs; fines up to AED 500k",
+  "effective_date": "2022-01-02",
+  "status": "active",
+  "detection": [
+   {
+    "method": "NLP",
+    "logic": "Reputation-damaging content without factual basis; fake reviews; false commercial info on competitors"
+   },
+   {
+    "method": "DOM",
+    "logic": "Third-party personal/financial data without consent"
+   }
+  ],
+  "enforcement_feed": "UAE AG/TRA",
+  "trigger_flags": [
+   "publishes_content_uae"
+  ],
+  "confidence": "verified"
+ }
+]
