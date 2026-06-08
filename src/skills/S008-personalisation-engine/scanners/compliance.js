@@ -5,6 +5,7 @@
 // Every finding carries: rule_id, framework_short, severity, citation_url, evidence URL + snippet.
 
 const path = require('path');
+const fs = require('fs');
 const { execFileSync } = require('child_process');
 const _crypto = require('crypto');
 const { fetchWithRetry, getCached, writeCache } = require('../lib/http.js');
@@ -17,6 +18,20 @@ function pg(sql) {
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
   if (!url) return null;
   try { return execFileSync(pgPath(), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; }
+}
+
+// B1 — the merged canonical law repo (committed seed), indexed framework_short → law. Lazy + cached in-process so
+// the resolver overlay adds no per-mint DB round-trip (throughput-safe). null if the seed is missing (overlay no-ops).
+let _CANON_IDX;
+function canonicalIndex() {
+  if (_CANON_IDX !== undefined) return _CANON_IDX;
+  try {
+    const laws = JSON.parse(fs.readFileSync(path.join(ROOT, 'db', 'seeds', 'compliance-laws.json'), 'utf8'));
+    const m = new Map();
+    for (const l of laws) for (const t of String(l.neon_framework_short || '').split(',').map(s => s.trim()).filter(Boolean)) if (!m.has(t)) m.set(t, l);
+    _CANON_IDX = m;
+  } catch (_e) { _CANON_IDX = null; }
+  return _CANON_IDX;
 }
 
 function loadRules({ frameworks }) {
@@ -474,6 +489,29 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       if (_cpd.finding) { misses++; findings.push(_cpd.finding); }
     }
   } catch (_e) {}
+  // ── B1 RESOLVER OVERLAY · verified-only + negative guardrails (the structural anti-frivolous gate) ──────────
+  // Every finding that reaches a client must (a) come from a SERVABLE/proven law and (b) have its
+  // jurisdiction / free-zone / employee-threshold / exclusion fit THIS firm. Conservative by design: a finding whose
+  // framework has no canonical row is KEPT (connect() already jurisdiction-gated it) so an index gap can never
+  // silently swallow real findings — the overlay can only DROP a frivolous/unproven one, never invent or over-cut.
+  let _resolverDropped = [];
+  try {
+    const { overlayDrop } = require('../../../lib/compliance/resolver.js');
+    const { buildSignals } = require('../../../lib/compliance/signals.js');
+    const idx = canonicalIndex();
+    if (idx && idx.size) {
+      const sig = buildSignals({ jurisdictions: allJurisdictions, sector: effectiveSector, corpusText, employees: (signals && (signals.employees || signals.employee_count)) });
+      const kept = [];
+      for (const f of findings) {
+        const law = idx.get(f.framework) || idx.get(f.framework_short);
+        const reason = overlayDrop(law, sig);
+        if (reason) _resolverDropped.push({ framework: f.framework || f.framework_short, code: f.code, reason });
+        else kept.push(f);
+      }
+      if (_resolverDropped.length) { findings.length = 0; findings.push(...kept); misses = findings.length; }
+    }
+  } catch (_e) {}
+
   // Most severe first
   findings.sort((a, b) => sevRank(a.severity) - sevRank(b.severity));
 
@@ -483,6 +521,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     frameworks, jurisdictions: allJurisdictions, detected_jurisdictions: detectedJurisdictions,
     firm_profile: firmProfile, detected_sector: effectiveSector,
     rules_evaluated: rules.length, hits, misses,
+    resolver_dropped: _resolverDropped,
     p0_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P0').length,
     p1_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P1').length,
     p2_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P2').length,

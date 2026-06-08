@@ -49,5 +49,28 @@ ok('D1 250+ law drops for a <10 café', thresholdOk(hfss, '<10') === false);
 ok('D2 250+ law attaches for a 250+ firm', thresholdOk(hfss, '250+') === true);
 ok('D3 unknown band → review (null), not a false breach', thresholdOk(hfss, 'unknown') === null);
 
+// ── Scenario 5: LIVE OVERLAY (overlayDrop) on the real seed index — the exact path compliance.js runs ──
+console.log('\n=== live overlay (overlayDrop) on real framework_short index ===');
+const { overlayDrop } = require(path.join(ROOT, 'src', 'lib', 'compliance', 'resolver.js'));
+const { buildSignals } = require(path.join(ROOT, 'src', 'lib', 'compliance', 'signals.js'));
+const idx = new Map();
+for (const l of laws) for (const t of String(l.neon_framework_short || '').split(',').map((s) => s.trim()).filter(Boolean)) if (!idx.has(t)) idx.set(t, l);
+const dropFor = (fw, sig) => overlayDrop(idx.get(fw), sig);
+// AE firm (Al Tamimi) — corpus names DIFC + ADGM
+const aeSig = buildSignals({ jurisdictions: ['AE'], sector: 'legal', corpusText: 'Al Tamimi & Company offices across the DIFC, ADGM and the UAE', baseline });
+ok('E1 US framework (US_HIPAA) DROPPED on AE firm', dropFor('US_HIPAA', aeSig) === 'out_of_jurisdiction', dropFor('US_HIPAA', aeSig));
+ok('E2 UK framework (UK_GDPR_A13) DROPPED on AE firm', dropFor('UK_GDPR_A13', aeSig) === 'out_of_jurisdiction', dropFor('UK_GDPR_A13', aeSig));
+ok('E3 UAE_PDPL KEPT on AE firm', dropFor('UAE_PDPL', aeSig) === null, dropFor('UAE_PDPL', aeSig));
+ok('E4 DIFC_DPL KEPT on AE firm whose corpus names DIFC', dropFor('DIFC_DPL', aeSig) === null, dropFor('DIFC_DPL', aeSig));
+ok('E5 GOOGLE_EEAT (net-new, now servable) KEPT (no coverage regression)', dropFor('GOOGLE_EEAT', aeSig) === null, dropFor('GOOGLE_EEAT', aeSig));
+// onshore AE café — corpus never mentions DIFC/ADGM
+const cafeSig = buildSignals({ jurisdictions: ['AE'], sector: 'fb', corpusText: 'Best shawarma in Dubai Marina, open daily', baseline });
+ok('E6 DIFC_DPL DROPPED on onshore AE café (no DIFC in corpus)', dropFor('DIFC_DPL', cafeSig) != null && dropFor('DIFC_DPL', cafeSig) !== 'unverified_held', 'reason=' + dropFor('DIFC_DPL', cafeSig));
+// UK firm
+const ukSig = buildSignals({ jurisdictions: ['UK'], sector: 'legal', corpusText: 'London solicitors regulated by the SRA', baseline });
+ok('E7 UK_GDPR_A13 KEPT on UK firm', dropFor('UK_GDPR_A13', ukSig) === null, dropFor('UK_GDPR_A13', ukSig));
+ok('E8 US_HIPAA DROPPED on UK firm', dropFor('US_HIPAA', ukSig) === 'out_of_jurisdiction', dropFor('US_HIPAA', ukSig));
+ok('E9 unknown framework KEPT (index gap never over-suppresses)', dropFor('SOME_UNKNOWN_FW', ukSig) === null);
+
 console.log(`\n=== RESOLVER TEST: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail ? 1 : 0);

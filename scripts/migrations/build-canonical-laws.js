@@ -178,6 +178,13 @@ function maxPenaltyFromRules(rules) { const { lo, hi } = fineRange(rules); retur
   for (const [id, c] of canonical) { if (c.source === 'files10' && c.detection_rules.length === 0) report.gap.push({ id, jur: c.jurisdiction, name: c.name }); }
 
   const laws = [...canonical.values()];
+  // 6b. SERVABLE = has proven, backtested detection (merged OR net-new) — the real shipping gate. `confidence` stays
+  // PROVENANCE only (verified = cross-referenced with files-10; unverified = net-new sector regulator OR gap law).
+  // DECOUPLED on purpose: the 96 net-new frameworks have shipped + been backtested on 22 firms for months, so they
+  // keep shipping (no coverage regression — the founder's "don't be so strong it kills all our compliance issues"),
+  // while GAP laws (no detection) stay HELD. Frivolous-law prevention is the resolver's JURISDICTION guardrail, not
+  // this provenance flag. A law a client sees is therefore: detectable (servable) AND jurisdiction-fit (resolver).
+  for (const l of laws) l.servable = Array.isArray(l.detection_rules) && l.detection_rules.length > 0;
   // 7. Report
   console.log('=== CANONICAL LAW MERGE — reconciliation ===');
   console.log(`files-10 base laws: ${f10.length} | Neon frameworks: ${frameworks.length} | Neon rules: ${rules.length}`);
@@ -185,8 +192,10 @@ function maxPenaltyFromRules(rules) { const { lo, hi } = fineRange(rules); retur
   console.log(`NET-NEW (Neon-only canonical laws): ${report.net_new.length}`);
   console.log(`GAP (files-10-only, no Neon rules yet): ${report.gap.length}`);
   console.log(`TOTAL canonical laws: ${laws.length}`);
-  const shippable = laws.filter(l => l.confidence === 'verified').length;
-  console.log(`Shippable now (confidence=verified): ${shippable} | held (unverified, never shown): ${laws.length - shippable}`);
+  const shippable = laws.filter(l => l.servable).length;
+  const verifiedProv = laws.filter(l => l.confidence === 'verified').length;
+  console.log(`Servable now (has proven detection): ${shippable} | held (no detection): ${laws.length - shippable}`);
+  console.log(`Provenance: verified(cross-referenced) ${verifiedProv} | unverified(net-new/gap) ${laws.length - verifiedProv}`);
   console.log('\n-- matched sample --'); report.matched.slice(0, 12).forEach(m => console.log(`   ${m.neon.padEnd(22)} → ${m.files10.padEnd(16)} (${m.rules} rules)`));
   console.log('-- net-new sample --'); report.net_new.slice(0, 12).forEach(m => console.log(`   ${m.neon.padEnd(22)} → ${m.id} (${m.rules} rules)`));
   console.log('-- gap sample (need detection authoring; held unverified) --'); report.gap.slice(0, 12).forEach(m => console.log(`   ${m.id.padEnd(18)} ${m.name.slice(0, 50)}`));

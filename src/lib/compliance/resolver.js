@@ -81,6 +81,22 @@ function resolveLaws({ laws, lawsById, mapping, jurisdictions = [], sector, acti
   return { attached, review, dropped };
 }
 
+// Conservative LIVE-ENGINE guardrail for a single already-detected finding's law. Applies ONLY the guardrails that
+// CANNOT over-suppress a legitimate verified finding (no applies_when positive-trigger gate here — the rule-level
+// trigger_then_check already handles trigger presence; the mapping-driven resolveLaws() is the full attach path).
+// Returns a drop-reason string, or null to KEEP. An unknown law (framework with no canonical row) is KEPT
+// (connect() already jurisdiction-gated it) so an index gap can never silently swallow real findings.
+function overlayDrop(law, { jurSet, employeeBand = 'unknown', trig } = {}) {
+  if (!law) return null;
+  if (!law.servable) return 'unverified_held';                              // proven-only reaches a client
+  if (law.status === 'vacated') return 'vacated';
+  if (!jurCovered(law.jurisdiction, jurSet)) return 'out_of_jurisdiction';  // the structural Al Tamimi gate
+  if (carveDropped(law, jurSet)) return 'freezone_carveout';
+  if (trig && (law.excluded_when || []).some((f) => trig.has(f))) return 'excluded';
+  if (thresholdOk(law, employeeBand) === false) return 'below_employee_threshold';
+  return null;
+}
+
 function selfTest(attached, jurSet, sector) {
   for (const l of attached) {
     if (!l.servable) return 'unverified_attached:' + l.id;
@@ -91,4 +107,4 @@ function selfTest(attached, jurSet, sector) {
   return null;
 }
 
-module.exports = { resolveLaws, jurCovered, carveDropped, thresholdOk, selfTest };
+module.exports = { resolveLaws, overlayDrop, jurCovered, carveDropped, thresholdOk, selfTest };

@@ -64,14 +64,18 @@ const neon = laws.filter(l => l.source === 'neon');
 const files10 = laws.filter(l => l.source === 'files10');
 check('C1 merged laws are verified + have rules + provenance', merged.every(l => l.confidence === 'verified' && (l.detection_rules || []).length > 0 && l.neon_framework_short && l.files10_law_id), `${merged.length} merged`);
 check('C2 net-new (neon) laws are unverified + have provenance', neon.every(l => l.confidence === 'unverified' && l.neon_framework_short), `${neon.length} net-new`);
-check('C3 gap (files10) laws have files10_law_id + 0 rules', files10.every(l => l.files10_law_id && (l.detection_rules || []).length === 0), `${files10.length} gap`);
+check('C3 gap (files10) laws have files10_law_id + 0 rules + NOT servable (held)', files10.every(l => l.files10_law_id && (l.detection_rules || []).length === 0 && !l.servable), `${files10.length} gap`);
 const shippable = laws.filter(l => l.confidence === 'verified');
 check('C4 some shippable (verified) laws exist', shippable.length > 0, `${shippable.length} verified`);
 check('C5 NO net-new law is verified (held until proven)', !neon.some(l => l.confidence === 'verified'));
 // A VERIFIED law must have SOME detection method (Neon rules OR files-10 detection[]); else it could attach but never produce a finding.
 const verifiedNoDetect = shippable.filter(l => (l.detection_rules || []).length === 0 && (!Array.isArray(l.detection) || l.detection.length === 0));
 check('C6 every verified law has a detection method', verifiedNoDetect.length === 0, `${verifiedNoDetect.length} verified-but-undetectable e.g. ${verifiedNoDetect.slice(0, 5).map(l => l.id).join(', ')}`);
-check('C7 servable <=> verified (unverified is NEVER servable)', laws.every(l => !!l.servable === (l.confidence === 'verified')), laws.filter(l => !!l.servable !== (l.confidence === 'verified')).slice(0, 4).map(l => l.id).join(','));
+// SERVABLE is decoupled from provenance: it means "has proven, backtested detection" (the shipping gate). A law with
+// detection rules is servable (merged OR net-new — both ship); a no-detection GAP law is never servable (held).
+check('C7 servable <=> has proven detection (no-detection law is NEVER servable)', laws.every(l => !!l.servable === ((l.detection_rules || []).length > 0)), laws.filter(l => !!l.servable !== ((l.detection_rules || []).length > 0)).slice(0, 4).map(l => l.id).join(','));
+// Provenance integrity: net-new (neon-only) laws remain unverified-provenance even though they ship (servable).
+check('C7b net-new laws are servable but unverified-provenance', neon.every(l => l.servable === true && l.confidence === 'unverified'), neon.filter(l => !(l.servable === true && l.confidence === 'unverified')).slice(0, 4).map(l => l.id).join(','));
 const badF10 = laws.filter(l => l.files10_law_id && f10ids.size && !f10ids.has(l.files10_law_id));
 check('C8 every files10_law_id exists in master library', badF10.length === 0, badF10.slice(0, 4).map(l => l.id + '->' + l.files10_law_id).join(','));
 const f10used = laws.map(l => l.files10_law_id).filter(Boolean);
