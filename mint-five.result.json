@@ -5,8 +5,11 @@
     "country": "UK",
     "company": "Irwin Mitchell",
     "size": "BIG",
-    "ok": false,
-    "error": "audit_pages INSERT failed for irwinmitchell.com (irwin-mitchell/x5QZDzc2) — no row written; refusing to return a dead audit link"
+    "ok": true,
+    "url": "https://tamazia.co.uk/audit/irwin-mitchell/tY4JGaqQ?l=0&x=1796474174&sig=c5df66756f5943d75705561543d08714",
+    "reachable": true,
+    "pointers": 53,
+    "ms": 129928
   },
   {
     "domain": "foxtons.co.uk",
@@ -14,8 +17,11 @@
     "country": "UK",
     "company": "Foxtons",
     "size": "BIG",
-    "ok": false,
-    "error": "audit_pages INSERT failed for foxtons.co.uk (foxtons/RpcPZFG4) — no row written; refusing to return a dead audit link"
+    "ok": true,
+    "url": "https://tamazia.co.uk/audit/foxtons/TSMhJBQG?l=0&x=1796474332&sig=abcebb6f63c431742bfb588163924a2d",
+    "reachable": true,
+    "pointers": 42,
+    "ms": 157861
   },
   {
     "domain": "azets.co.uk",
@@ -23,8 +29,11 @@
     "country": "UK",
     "company": "Azets",
     "size": "BIG",
-    "ok": false,
-    "error": "audit_pages INSERT failed for azets.co.uk (azets/wFt5qCCZ) — no row written; refusing to return a dead audit link"
+    "ok": true,
+    "url": "https://tamazia.co.uk/audit/azets/dioGq8NH?l=0&x=1796474469&sig=73a1d615878ecd33bdbad1efcacec757",
+    "reachable": true,
+    "pointers": 59,
+    "ms": 136697
   },
   {
     "domain": "harleystreetdentalclinic.co.uk",
@@ -32,8 +41,11 @@
     "country": "UK",
     "company": "Harley Street Dental Clinic",
     "size": "SMALL",
-    "ok": false,
-    "error": "audit_pages INSERT failed for harleystreetdentalclinic.co.uk (harley-street-dental-clinic/6RWU1Wea) — no row written; refusing to return a dead audit link"
+    "ok": true,
+    "url": "https://tamazia.co.uk/audit/harley-street-dental-clinic/x3hxYwnl?l=0&x=1796474613&sig=92738f030c328f8beaa94f6c6b3585d8",
+    "reachable": true,
+    "pointers": 76,
+    "ms": 143898
   },
   {
     "domain": "firmdalehotels.com",
@@ -41,7 +53,10 @@
     "country": "UK",
     "company": "Firmdale Hotels",
     "size": "SMALL",
-    "ok": false,
-    "error": "audit_pages INSERT failed for firmdalehotels.com (firmdale-hotels/5sfshGfi) — no row written; refusing to return a dead audit link"
+    "ok": true,
+    "url": "https://tamazia.co.uk/audit/firmdale-hotels/Ra49GYIp?l=0&x=1796474742&sig=423b8aac3947a2da1c6eadaf11c3d3c8",
+    "reachable": true,
+    "pointers": 70,
+    "ms": 129715
   }
 ]
