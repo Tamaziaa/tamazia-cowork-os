@@ -45,5 +45,21 @@ ok('C6 matchLaws matches by regulator keyword + jurisdiction', matchLaws({ juris
 ok('C7 matchLaws does NOT cross jurisdictions', matchLaws({ jurisdiction: 'USA', breach_type: 'Information Commissioner', title: 'x' }, [law]).length === 0);
 ok('C8 _amount parses £1.2M', _amount('£1.2M') === 1200000);
 
+console.log('\n=== penalty-parse hardening (no poisoned median, correct rounding) ===');
+const { _fmt } = require(path.join(ROOT, 'src', 'lib', 'compliance', 'enforcement.js'));
+ok('D1 _amount rejects turnover-% ("10% of global turnover")', _amount('10% of global turnover') === null);
+ok('D2 _amount rejects per-violation ("£1,000 per violation")', _amount('£1,000 per violation') === null);
+ok('D3 _amount rejects a bare number with no currency ("2,500")', _amount('2,500') === null);
+ok('D4 _amount still parses real fines (USD 100,000 / EUR 20M)', _amount('USD 100,000') === 100000 && _amount('EUR 20M') === 20000000);
+ok('D5 _fmt keeps the decimal at >=£10M (17.5M not 18M)', _fmt(17500000) === '17.5M' && _fmt(20000000) === '20M');
+// median is NOT poisoned by a % or per-violation record mixed in
+const mixed = [
+  { matched_law_ids: ['UK-GDPR-01'], jurisdiction: 'UK', penalty: '£500,000', ruling_date: '2025-02-01', source_url: 'https://ico.org.uk/a' },
+  { matched_law_ids: ['UK-GDPR-01'], jurisdiction: 'UK', penalty: '4% of annual turnover', ruling_date: '2025-04-01', source_url: 'https://ico.org.uk/b' },
+  { matched_law_ids: ['UK-GDPR-01'], jurisdiction: 'UK', penalty: '£1,000 per violation', ruling_date: '2025-05-01', source_url: 'https://ico.org.uk/c' },
+];
+const cpMixed = calibratePenalty({ law, records: mixed });
+ok('D6 median uses ONLY the real fine (1 case), not the % / per-violation noise', cpMixed.calibrated_from === 1 && /500k|500,000/.test(cpMixed.headline), `from=${cpMixed.calibrated_from} headline=${cpMixed.headline}`);
+
 console.log(`\n=== ENFORCEMENT TEST: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail ? 1 : 0);

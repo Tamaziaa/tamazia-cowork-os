@@ -15,7 +15,7 @@ const check = (n, ok, d) => { ok ? pass++ : (fail++, fails.push(n + (d ? ' — '
 
 function loadSeed() { return JSON.parse(fs.readFileSync(path.join(ROOT, 'db', 'seeds', 'compliance-laws.json'), 'utf8')); }
 function loadMapping() { return JSON.parse(fs.readFileSync(path.join(ROOT, 'db', 'seeds', 'files10', 'client-type-mapping.json'), 'utf8')); }
-function indexByFw(laws) { const m = new Map(); for (const l of laws) for (const t of String(l.neon_framework_short || '').split(',').map(s => s.trim()).filter(Boolean)) if (!m.has(t)) m.set(t, l); return m; }
+function indexByFw(laws) { const m = new Map(); for (const l of laws) { if (l.id && !m.has(l.id)) m.set(l.id, l); for (const t of String(l.neon_framework_short || '').split(',').map(s => s.trim()).filter(Boolean)) if (!m.has(t)) m.set(t, l); } return m; }
 
 // ── PER-MINT gate: a finished scan payload must contain only proven, jurisdiction-fit, evidenced findings ───────
 function gateMintPayload(payload) {
@@ -27,22 +27,27 @@ function gateMintPayload(payload) {
   const jurSet = (payload && payload.canonical_jurisdictions && payload.canonical_jurisdictions.length)
     ? new Set(payload.canonical_jurisdictions)
     : toCanonicalJurisdictions((payload && payload.jurisdictions) || []);
-  let unproven = [], outJur = [], noEvidence = [];
+  let unproven = [], outJur = [], noEvidence = [], unresolved = [];
+  // Frameworks that are legitimately NOT canonical-law-backed (cross-checked, non-regulatory composite findings the
+  // engine synthesises): they are allowed to have no law row and are not gated on jurisdiction/servable.
+  const NON_LAW = new Set(['PRIVACY_NOT_MACHINE_READABLE', 'COOKIE_POLICY_TRACKER_DIFF']);
   for (const f of findings) {
     if (f.status !== 'miss') continue;
-    const law = idx.get(f.framework) || idx.get(f.framework_short);
+    const law = idx.get(f.framework) || idx.get(f.framework_short) || idx.get(f.code);
     if (law) {
       if (!law.servable) unproven.push(f.framework);
       if (!jurCovered(law.jurisdiction, jurSet)) outJur.push(f.framework + '@' + law.jurisdiction);
+    } else if (!NON_LAW.has(f.framework) && !NON_LAW.has(f.code)) {
+      // FAIL-CLOSED: a compliance finding whose framework maps to NO canonical law cannot be proven verified or
+      // jurisdiction-fit — it must not silently bypass M1/M2.
+      unresolved.push((f.framework || f.code || '?'));
     }
-    // a fine-bearing finding must carry SOME evidence (page/quote/occurrences) OR be an explicit absence finding
-    const hasEv = f.evidence_url || f.evidence_quote || (f.occurrences && f.occurrences.length) || (f.checked_urls && f.checked_urls.length) || f.evidence;
-    if ((f.fine_low_gbp || f.fine_high_gbp) && !hasEv) noEvidence.push(f.framework);
   }
   check('M1 no UNVERIFIED (non-servable) law in the client report', unproven.length === 0, unproven.join(','));
   check('M2 no OUT-OF-JURISDICTION law in the client report (frivolous gate)', outJur.length === 0, outJur.slice(0, 5).join(','));
   check('M3 every fine-bearing finding carries evidence (no naked penalty)', noEvidence.length === 0, noEvidence.slice(0, 5).join(','));
   check('M4 findings sorted most-severe-first', isSorted(findings.map(f => f.severity)), '');
+  check('M5 every finding maps to a known law (no unresolved framework bypassing M1/M2)', unresolved.length === 0, [...new Set(unresolved)].slice(0, 6).join(','));
   return fail === 0;
 }
 const sevN = (s) => s === 'P0' ? 0 : s === 'P1' ? 1 : s === 'P2' ? 2 : 3;

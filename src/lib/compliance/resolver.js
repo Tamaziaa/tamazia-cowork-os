@@ -8,12 +8,17 @@
 //   4. a guardrail self-test asserts the output is clean (no out-of-jurisdiction / vacated / below-threshold)
 // Pure + deterministic + free. The detection of breaches per resolved law happens downstream (B2).
 
-// DIFC/ADGM ⟷ onshore-UAE carve-outs (free-zones have their own data law).
+// Free-zone carve-out: a DIFC/ADGM-SPECIFIC data law attaches ONLY to a firm that identifies with that zone (its
+// corpus names DIFC/ADGM → signals adds the zone code). A non-DIFC firm never gets the DIFC law, and vice versa.
+// The federal onshore AE-PDPL (jurisdiction MENA-AE) is intentionally KEPT for every UAE firm: we cannot prove
+// DIFC-EXCLUSIVE registration from a website, and most free-zone firms also operate onshore (Al Tamimi spans
+// DIFC+ADGM+onshore), so carving out the federal baseline would drop a law that genuinely applies. (An earlier
+// onshore→freezone branch was dead code — its `!jurSet.has('MENA-AE')` guard could never be true because the
+// jurisdiction map always co-adds MENA-AE with a zone — and activating it would have wrongly dropped UAE_PDPL.)
 function carveDropped(law, jurSet) {
   const j = law.jurisdiction;
-  if (j === 'MENA-AE' && (jurSet.has('MENA-AE-DIFC') || jurSet.has('MENA-AE-ADGM')) && !jurSet.has('MENA-AE')) return true;
-  if ((j === 'MENA-AE-DIFC') && !jurSet.has('MENA-AE-DIFC')) return true;
-  if ((j === 'MENA-AE-ADGM') && !jurSet.has('MENA-AE-ADGM')) return true;
+  if (j === 'MENA-AE-DIFC' && !jurSet.has('MENA-AE-DIFC')) return true;
+  if (j === 'MENA-AE-ADGM' && !jurSet.has('MENA-AE-ADGM')) return true;
   return false;
 }
 // A law's jurisdiction must be covered by the firm's home + served markets. USA covers USA-CA/USA-STATES; GLOBAL always.

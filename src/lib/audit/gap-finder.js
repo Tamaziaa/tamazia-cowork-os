@@ -13,8 +13,8 @@ const BASE = ['processes_personal_data', 'sets_cookies', 'public_facing_website'
 // representative jurisdictions per region so we exercise the guardrails the way real firms hit them
 const JUR_PROBES = [['UK'], ['USA'], ['EU'], ['MENA-AE'], ['MENA-SA'], ['UK', 'EU'], ['USA', 'UK']];
 
-function findGaps() {
-  const laws = loadSeed(); const mapping = loadMapping();
+function findGaps(opts = {}) {
+  const laws = opts.laws || loadSeed(); const mapping = opts.mapping || loadMapping();
   const byId = Object.fromEntries(laws.map(l => [l.id, l]));
   const lawIds = new Set(laws.map(l => l.id).concat(laws.map(l => l.files10_law_id).filter(Boolean)));
   const sectors = Object.keys(mapping.sectors || {});
@@ -30,16 +30,32 @@ function findGaps() {
   }
   add('frivolous_leak', leaks.length, leaks, 'a resolved law fell outside the firm jurisdiction');
 
-  // D2 over_suppression — a sector with a non-empty candidate pool that resolves to ZERO laws on its home market
+  // D2 over_suppression — TRUE suppression: a sector that resolves to ZERO laws across EVERY probed market (the gate
+  // is so strong the firm gets nothing — not even universal GDPR/cookies). This is the real "gate too strong" guard;
+  // it fires the moment a change suppresses a sector entirely (proven by the fault-injection self-test). A sector
+  // getting only universal laws is NOT over-suppression — that is baseline coverage; held sector-specific gap laws
+  // are tracked separately (INFO below) and grow into the pool as their detection is authored (proven-only).
   const supp = [];
   for (const sector of sectors) {
-    const pool = (mapping.sectors[sector] || {}).law_pool || [];
-    if (!pool.length) continue;
     let any = false;
-    for (const jurs of [['UK'], ['USA'], ['EU'], ['MENA-AE']]) { const r = resolveLaws({ lawsById: byId, mapping, jurisdictions: jurs, sector, activeTriggers: BASE, employeeBand: '50-249' }); if (r.attached.length + r.review.length) { any = true; break; } }
-    if (!any) supp.push(`${sector} (pool ${pool.length}) → 0 laws on every probed market`);
+    for (const jurs of [['UK'], ['USA'], ['EU'], ['MENA-AE'], ['MENA-SA']]) {
+      const r = resolveLaws({ lawsById: byId, mapping, jurisdictions: jurs, sector, activeTriggers: BASE, employeeBand: '50-249' });
+      if (r.attached.length + r.review.length) { any = true; break; }
+    }
+    if (!any) supp.push(`${sector} → 0 laws on every probed market (gate fully suppresses the sector)`);
   }
-  add('over_suppression', supp.length, supp, 'sector pool resolves to nothing (gate too strong)');
+  add('over_suppression', supp.length, supp, 'a sector resolves to nothing on any market (gate too strong)');
+  // INFO (not a gate-failing gap): sectors whose OWN files-10 pool currently adds no servable law — the known
+  // held-gap-law backlog; the live engine still covers them via the net-new Neon sector frameworks.
+  let heldPools = 0;
+  for (const sector of sectors) {
+    const pool = (mapping.sectors[sector] || {}).law_pool || []; if (!pool.length) continue;
+    const poolOnly = { universal_by_jurisdiction: {}, always: [], sectors: { [sector]: mapping.sectors[sector] } };
+    let any = false;
+    for (const jurs of [['UK'], ['USA'], ['EU'], ['MENA-AE'], ['MENA-SA']]) { const r = resolveLaws({ lawsById: byId, mapping: poolOnly, jurisdictions: jurs, sector, activeTriggers: BASE, employeeBand: '50-249' }); if (r.attached.length + r.review.length) { any = true; break; } }
+    if (!any) heldPools++;
+  }
+  add('sector_pool_held_only', false, heldPools ? [`${heldPools}/${sectors.length} sector pools are held gap laws (detection authoring backlog; live engine covers via net-new frameworks)`] : [], 'INFO: held sector-specific detection backlog');
 
   // D3 unproven_metric — servable must ⇔ has-detection; a servable law with no detection could assert a breach it can't prove
   const bad = laws.filter(l => !!l.servable !== ((l.detection_rules || []).length > 0)).map(l => l.id);

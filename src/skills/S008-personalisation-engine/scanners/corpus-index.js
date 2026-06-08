@@ -11,7 +11,8 @@
 // can never silently drift).
 
 const RS = '␞'; // record separator between pages — included in the sentence-boundary set below
-const JOIN_CAP = 600000; // same ceiling scan() uses for corpusText, so the index never blows memory at 2-3k/day
+const PER_PAGE_CAP = 80000;  // per-page budget: one huge page can't crowd later pages out of the index
+const JOIN_CAP = 2000000;    // absolute memory ceiling (≈2MB) — 30 pages × 80KB fits, so EVERY page is indexed
 
 // ── verbatim from scanners/compliance.js (kept in sync by test-corpus-index.js) ──────────────────────────────
 function _stripText(html) {
@@ -44,16 +45,20 @@ function splitSentences(text) {
 // Build the per-site word index ONCE (right after the corpus is gathered).
 function buildCorpusIndex(corpus) {
   const segments = []; const parts = []; let gLen = 0; let capped = false;
-  for (let p = 0; p < (corpus || []).length && !capped; p++) {
+  // Outer loop stops ONLY at the absolute memory ceiling — never on a single page — so EVERY page contributes lines
+  // to the index (the every-page guarantee). A per-page budget bounds any one huge page from crowding the rest out.
+  for (let p = 0; p < (corpus || []).length && gLen < JOIN_CAP; p++) {
     const url = corpus[p].url;
     const lines = splitSentences(_stripText(corpus[p].body || ''));
+    let pageLen = 0;
     for (let li = 0; li < lines.length; li++) {
+      if (pageLen >= PER_PAGE_CAP) break;          // per-page budget (don't let one page dominate the index)
       const line = lines[li];
       const gStart = gLen;
       const piece = line + ' ';
-      parts.push(piece); gLen += piece.length;
+      parts.push(piece); gLen += piece.length; pageLen += piece.length;
       segments.push({ pageIdx: p, url, lineIdx: li, gStart, gEnd: gLen, text: line, prose: _isProse(line) });
-      if (gLen >= JOIN_CAP) { capped = true; break; }
+      if (gLen >= JOIN_CAP) { capped = true; break; } // absolute ceiling only
     }
     parts.push(RS); gLen += RS.length; // page boundary so no quote crosses pages
   }
@@ -76,7 +81,8 @@ function locateSegment(segments, offset) {
 // `proseOnly` keeps only genuine sentences (drops nav/footer boilerplate) for client-facing evidence.
 function scanRuleGlobal(re, index, { max = 500, proseOnly = false } = {}) {
   let rx;
-  try { rx = new RegExp(re.source, re.flags && re.flags.includes('g') ? re.flags : (re.flags || '') + 'g'); } catch (_e) { return []; }
+  // force a clean GLOBAL flag set — drop any sticky('y') or duplicate 'g' so lastIndex stepping can't anchor/mis-scan
+  try { rx = new RegExp(re.source, 'g' + String(re.flags || '').replace(/[gy]/g, '')); } catch (_e) { return []; }
   rx.lastIndex = 0; const out = []; let m; let guard = 0;
   while ((m = rx.exec(index.joined)) && guard++ < 200000) {
     if (m.index === rx.lastIndex) rx.lastIndex++; // zero-width-match guard

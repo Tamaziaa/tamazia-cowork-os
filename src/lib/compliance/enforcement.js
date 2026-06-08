@@ -7,10 +7,14 @@
 // consumes compliance_enforcement rows (populated by scripts/enforcement-sync.js) + the factual statutory MAP.
 const { enforcementFor } = require('../audit/enforcement-map.js');
 
-// Parse a penalty string like "£450,000" / "EUR 1.2M" / "USD 100,000" → a number in its own currency (best-effort).
+// Parse a penalty string like "£450,000" / "EUR 1.2M" / "USD 100,000" → a COMPARABLE money total. Returns null for
+// strings that are NOT a single money figure — turnover-percentage caps ("4% of global turnover") and per-unit
+// penalties ("£1,000 per violation") are not comparable to a flat fine and must NEVER enter the calibrated median.
 function _amount(str) {
-  const s = String(str || '').replace(/,/g, '');
-  const m = s.match(/(?:£|EUR|USD|\$|€|GBP|AED|SAR|QAR)?\s*([\d.]+)\s*(m|million|k|thousand|bn|billion)?/i);
+  const s = String(str || '');
+  if (/%|\bper\s+(violation|breach|record|day|infringement|item|offence|offense)\b|turnover/i.test(s)) return null;
+  if (!/[£$€]|\b(EUR|USD|GBP|AED|SAR|QAR)\b/i.test(s)) return null;       // must carry a currency token
+  const m = s.replace(/,/g, '').match(/(?:£|€|\$|EUR|USD|GBP|AED|SAR|QAR)\s*([\d.]+)\s*(m|million|k|thousand|bn|billion)?/i);
   if (!m) return null;
   let n = parseFloat(m[1]); if (!Number.isFinite(n)) return null;
   const u = (m[2] || '').toLowerCase();
@@ -19,7 +23,7 @@ function _amount(str) {
 }
 function _fmt(n) {
   if (n == null) return null;
-  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';   // one decimal across the whole M range (17.5M stays 17.5M)
   if (n >= 1e3) return Math.round(n / 1e3) + 'k';
   return String(Math.round(n));
 }

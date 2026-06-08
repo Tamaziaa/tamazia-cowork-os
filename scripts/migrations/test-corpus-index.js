@@ -64,5 +64,19 @@ ok('F4 evidence_quote is a verbatim offending line', /cure for all chronic disea
 const rcClean = ruleCheck(prohibitRule, [{ url: 'https://z.com/', body: '<p>We offer relaxing massage and yoga classes for our community members.</p>' }], 'wellness', buildCorpusIndex([{ url: 'https://z.com/', body: '<p>We offer relaxing massage and yoga classes for our community members.</p>' }]));
 ok('F5 clean site → no_prohibited_pattern (no false positive)', rcClean.status === 'no_prohibited_pattern', rcClean.status);
 
+// ── G. cap behaviour: every page still contributes (the 600KB-cap-drops-pages bug) ──
+console.log('\n=== cap behaviour: every page indexed (no silent page drop) ===');
+const bigFiller = '<p>' + ('ordinary marketing sentence about our team and services here today. ').repeat(900) + '</p>'; // ~55KB stripped/page
+const manyPages = [];
+manyPages.push({ url: 'https://big.com/huge', body: '<p>' + ('filler word here and there for bulk content padding indeed. ').repeat(6000) + '</p>' }); // one ~350KB page → per-page-capped
+for (let i = 1; i < 25; i++) manyPages.push({ url: 'https://big.com/p' + i, body: bigFiller });
+manyPages.push({ url: 'https://big.com/blog/last', body: '<article><p>Here we make a strictly prohibited unique miracle claim phrase on the very last page.</p></article>' });
+const bigIndex = buildCorpusIndex(manyPages);
+const lastPageIndexed = bigIndex.segments.some(s => s.url === 'https://big.com/blog/last');
+ok('G1 the LAST page is still indexed despite a huge early page + filler (no whole-loop stop)', lastPageIndexed, 'segments cover ' + new Set(bigIndex.segments.map(s => s.url)).size + ' pages');
+const lastHit = scanRuleGlobal(/prohibited unique miracle claim phrase/i, bigIndex, { proseOnly: true });
+ok('G2 a prohibited phrase on the LAST page is flagged (every-page guarantee holds under load)', lastHit.some(o => o.url === 'https://big.com/blog/last'), JSON.stringify(lastHit.map(o => o.url)));
+ok('G3 the huge page is per-page-capped but does not block the rest', new Set(bigIndex.segments.map(s => s.url)).size >= 25);
+
 console.log(`\n=== CORPUS-INDEX TEST: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail ? 1 : 0);

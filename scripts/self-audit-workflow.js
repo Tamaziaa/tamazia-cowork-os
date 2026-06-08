@@ -27,6 +27,7 @@ const steps = [
   ['resolver+overlay test', [path.join(ROOT, 'scripts', 'migrations', 'test-resolver.js')]],
   ['corpus-index test', [path.join(ROOT, 'scripts', 'migrations', 'test-corpus-index.js')]],
   ['enforcement test', [path.join(ROOT, 'scripts', 'migrations', 'test-enforcement.js')]],
+  ['gap-finder fault-injection', [path.join(ROOT, 'scripts', 'migrations', 'test-gap-finder.js')]],
   ['engine adversarial regression', [path.join(ROOT, 'scripts', 'adversarial-test.js')]],
 ];
 const results = steps.map(([l, a]) => run(l, a));
