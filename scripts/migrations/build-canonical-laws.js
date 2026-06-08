@@ -47,19 +47,39 @@ function instrumentKey(name, id) {
 // acronym (FCA/SEC/CAA/FSA). 'NET_NEW' forces a stand-alone canonical law; an id force-remaps to the correct
 // files-10 law. Audited from the 45-merge report; keeps each instrument distinct (zero wrong merge).
 const OVERRIDE = {
+  // de-merges (generic regulator acronym was over-merging distinct instruments)
   US_MEDICAL_BOARD: 'NET_NEW',   // state medical-board advertising ≠ FTC §5
   US_SEC_506C: 'NET_NEW',        // Reg D 506(c) ≠ SEC Marketing Rule
-  US_SEC_REG_FD: 'NET_NEW',      // Reg FD ≠ SEC Marketing Rule
-  UK_FCA_CONC25: 'UK-CONC3',     // Consumer Credit (CONC) — its own files-10 law, not COBS
   UK_FCA_MAR: 'NET_NEW',         // Market Abuse Regulation ≠ COBS
   UK_CAA: 'NET_NEW',             // Civil Aviation Authority (broad) ≠ ATOL
   UK_FSA: 'NET_NEW',             // Food Standards Agency (broad) ≠ Food Information Regs
   UK_CMA: 'NET_NEW',             // CMA (broad) ≠ a single CMA sector law
+  // re-points (auto-matcher hit the WRONG files-10 law in a key collision)
+  UK_FCA_CONC25: 'UK-CONC3',     // Consumer Credit (CONC) — its own files-10 law, not COBS
+  US_FTC_ENDORSE: 'US-FTC-ENDORSE', // Endorsement Guides (16 CFR 255) ≠ FTC Act §5
+  UK_SRA_COC: 'UK-SRA-CODE',     // SRA Code of Conduct ≠ SRA Transparency Rules
+  // missed de-dups (these ARE a files-10 law; matcher's acronym/jurisdiction key didn't align)
+  DIFC_DPL: 'AE-DIFC-DP',
+  ADGM_DPR: 'AE-ADGM-DP',
+  QATAR_PDPPL: 'QA-PDPL',
+  US_SEC_REG_FD: 'US-SEC-REGFD',
+  US_ATTORNEY_ADVERTISING: 'US-ABA-7',
+  US_CAN_SPAM: 'US-CANSPAM',
+  US_STATE_PRIVACY: 'US-STATE-PRIV',
+  EU_EPRIVACY: 'EU-EPRIV',
 };
+// Canonical region from a normalised jurisdiction code (keeps the region enum internally consistent: US→USA).
+function regionOf(jur) {
+  const j = String(jur || ''); if (j.startsWith('MENA')) return 'MENA'; if (j.startsWith('EU')) return 'EU';
+  if (j === 'UK') return 'UK'; if (j === 'USA' || j.startsWith('USA')) return 'USA'; if (j === 'GLOBAL') return 'GLOBAL'; return j.split('-')[0];
+}
+const STOPW = new Set(['the', 'of', 'and', 'for', 'code', 'act', 'law', 'regulation', 'regulations', 'directive', 'rules', 'rule', 'data', 'protection', 'no']);
+const tokens = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter((t) => t.length > 3 && !STOPW.has(t) && !/^\d+$/.test(t));
 
 // ---- map a Neon rule → a detection-child record ----
 function ruleToDetection(r) {
   return {
+    framework_short: r.framework_short, // keep provenance so zero-loss can be proven by identity, not count
     rule_id: r.rule_id, rule_type: r.rule_type, severity: r.severity,
     regex_pattern: r.regex_pattern, url_check: r.url_check, trigger_pattern: r.trigger_pattern,
     sector_relevance: r.sector_relevance || [], description: r.description,
@@ -71,7 +91,8 @@ function ruleToDetection(r) {
 }
 const SEV_RANK = { Critical: 1, High: 2, Medium: 3, Low: 4, P0: 1, P1: 2, P2: 3, P3: 4 };
 function sevFromRules(rules) { let best = 4; for (const r of rules) best = Math.min(best, SEV_RANK[r.severity] || 4); return best; }
-function maxPenaltyFromRules(rules) { let lo = null, hi = null; for (const r of rules) { if (r.fine_low_gbp != null) lo = Math.max(lo || 0, 0) === 0 ? r.fine_low_gbp : Math.min(lo, r.fine_low_gbp); if (r.fine_high_gbp != null) hi = Math.max(hi || 0, r.fine_high_gbp); } return hi ? `Up to £${hi.toLocaleString()}` + (lo ? ` (from £${lo.toLocaleString()})` : '') : null; }
+function fineRange(rules) { let lo = null, hi = null; for (const r of rules) { if (r.fine_low_gbp != null) lo = (lo == null) ? r.fine_low_gbp : Math.min(lo, r.fine_low_gbp); if (r.fine_high_gbp != null) hi = (hi == null) ? r.fine_high_gbp : Math.max(hi, r.fine_high_gbp); } return { lo, hi }; }
+function maxPenaltyFromRules(rules) { const { lo, hi } = fineRange(rules); return hi != null ? `Up to £${hi.toLocaleString()}` + (lo != null ? ` (from £${lo.toLocaleString()})` : '') : null; }
 
 (async () => {
   if (!NEON) { console.error('no NEON_URL'); process.exit(1); }
@@ -91,9 +112,11 @@ function maxPenaltyFromRules(rules) { let lo = null, hi = null; for (const r of 
 
   // 4. Seed canonical from files-10 (the base)
   for (const law of f10) {
+    const conf = law.confidence === 'verified' ? 'verified' : 'unverified'; // files-10 'check' → unverified (never shown)
     canonical.set(law.id, {
       ...law,
-      confidence: law.confidence === 'verified' ? 'verified' : 'unverified', // files-10 'check' → unverified (never shown)
+      region: regionOf(law.jurisdiction), // normalise region enum (US→USA etc.)
+      confidence: conf, servable: conf === 'verified', // servable ⇔ verified — the hard "held until proven" gate the resolver filters on
       source: 'files10', neon_framework_short: null, files10_law_id: law.id,
       detection_rules: [],
       fine_low_gbp: null, fine_high_gbp: null,
@@ -110,31 +133,39 @@ function maxPenaltyFromRules(rules) { let lo = null, hi = null; for (const r of 
     if (ov === 'NET_NEW') { target = null; }
     else if (ov) { target = canonical.get(ov) || null; } // explicit remap; if the id is absent → net-new (never auto-match)
     else if (ik) {
-      // exact jurisdiction+instrument
-      for (const law of (f10byKey[jur + '|' + ik] || [])) { target = law; break; }
-      // compatible jurisdiction (USA→USA-CA/STATES)
-      if (!target) for (const law of f10) { if (jurCompatible(jur, law.jurisdiction) && instrumentKey(law.name, law.id) === ik) { target = law; break; } }
+      let cands = (f10byKey[jur + '|' + ik] || []).slice();
+      if (!cands.length) for (const law of f10) { if (jurCompatible(jur, law.jurisdiction) && instrumentKey(law.name, law.id) === ik) cands.push(law); }
+      if (cands.length === 1) target = cands[0];
+      else if (cands.length > 1) { // key collision → pick the files-10 law whose NAME best overlaps (not file order)
+        const ftoks = new Set(tokens(fw.framework_name));
+        target = cands.map(law => ({ law, score: tokens(law.name).filter(t => ftoks.has(t)).length })).sort((a, b) => b.score - a.score)[0].law;
+      }
     }
     if (target) {
       const c = canonical.get(target.id);
       c.detection_rules.push(...fwRules);
-      c.confidence = 'verified'; // files-10 law corroborated by our curated rules → shippable
+      c.confidence = 'verified'; c.servable = true; // files-10 law corroborated by our curated rules → shippable
       c.neon_framework_short = c.neon_framework_short ? c.neon_framework_short + ',' + fw.framework_short : fw.framework_short;
       c.source = 'merged';
-      const hi = Math.max(0, ...fwRules.map(r => r.fine_high_gbp || 0)); if (hi) c.fine_high_gbp = Math.max(c.fine_high_gbp || 0, hi);
-      const los = fwRules.map(r => r.fine_low_gbp).filter(x => x != null); if (los.length) c.fine_low_gbp = c.fine_low_gbp != null ? Math.min(c.fine_low_gbp, ...los) : Math.min(...los);
+      const fr = fineRange(fwRules);
+      if (fr.hi != null) c.fine_high_gbp = c.fine_high_gbp != null ? Math.max(c.fine_high_gbp, fr.hi) : fr.hi;
+      if (fr.lo != null) c.fine_low_gbp = c.fine_low_gbp != null ? Math.min(c.fine_low_gbp, fr.lo) : fr.lo;
       report.matched.push({ neon: fw.framework_short, files10: target.id, jur, ik, rules: fwRules.length });
+    } else if (fwRules.length === 0) {
+      // a catalogued framework with NO detection rules → don't materialise a stand-alone artifact law; log it.
+      report.ambiguous.push({ neon: fw.framework_short, reason: 'zero rules — needs detection authoring or remap' });
     } else {
-      // NET-NEW canonical law (our sector regulator beyond files-10). Backfill; held unverified.
+      // NET-NEW canonical law (our sector regulator beyond files-10). Backfill; held unverified + NOT servable.
       const id = 'NEON-' + fw.framework_short.replace(/_/g, '-');
+      const fr = fineRange(fwRules); const sr = sevFromRules(fwRules);
       canonical.set(id, {
-        id, name: fw.framework_name || fw.framework_short, jurisdiction: jur, region: jur.split('-')[0],
+        id, name: fw.framework_name || fw.framework_short, jurisdiction: jur, region: regionOf(jur),
         section_ref: '', regulator: (fw.framework_name || '').split('(')[0].trim() || fw.framework_short,
         category: 'sector_specific', website_obligation: '',
         applies_when: [], excluded_when: [], where_on_site: [...new Set(fwRules.map(r => r.url_check).filter(Boolean))],
-        severity: ({ 1: 'Critical', 2: 'High', 3: 'Medium', 4: 'Low' })[sevFromRules(fwRules)] || 'Medium', severity_rank: sevFromRules(fwRules),
-        max_penalty: maxPenaltyFromRules(fwRules), fine_low_gbp: null, fine_high_gbp: Math.max(0, ...fwRules.map(r => r.fine_high_gbp || 0)) || null,
-        effective_date: '', status: 'active', confidence: 'unverified', // NEVER shown until verified
+        severity: ({ 1: 'Critical', 2: 'High', 3: 'Medium', 4: 'Low' })[sr] || 'Medium', severity_rank: sr,
+        max_penalty: maxPenaltyFromRules(fwRules), fine_low_gbp: fr.lo, fine_high_gbp: fr.hi,
+        effective_date: '', status: 'active', confidence: 'unverified', servable: false, // NEVER served until verified
         detection: [], enforcement_feed: '', trigger_flags: [],
         source: 'neon', neon_framework_short: fw.framework_short, files10_law_id: null,
         detection_rules: fwRules,

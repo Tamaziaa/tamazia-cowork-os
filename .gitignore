@@ -17,3 +17,4 @@ confirmations/
 exports/
 reports/
 .mint-*.sql .remint-*.sql
+db/seeds/*.upsert.sql

@@ -1,6 +1,20 @@
 {
  "matched": [
   {
+   "neon": "DIFC_DPL",
+   "files10": "AE-DIFC-DP",
+   "jur": "MENA-AE-DIFC",
+   "ik": null,
+   "rules": 3
+  },
+  {
+   "neon": "ADGM_DPR",
+   "files10": "AE-ADGM-DP",
+   "jur": "MENA-AE-ADGM",
+   "ik": null,
+   "rules": 3
+  },
+  {
    "neon": "SAUDI_PDPL",
    "files10": "SA-PDPL",
    "jur": "MENA-SA",
@@ -8,11 +22,32 @@
    "rules": 7
   },
   {
+   "neon": "QATAR_PDPPL",
+   "files10": "QA-PDPL",
+   "jur": "MENA-QA",
+   "ik": "pdppl",
+   "rules": 5
+  },
+  {
    "neon": "UAE_DHA",
    "files10": "AE-DHA-MED",
    "jur": "MENA-AE",
    "ik": "dha",
    "rules": 4
+  },
+  {
+   "neon": "US_STATE_PRIVACY",
+   "files10": "US-STATE-PRIV",
+   "jur": "USA",
+   "ik": null,
+   "rules": 5
+  },
+  {
+   "neon": "US_ATTORNEY_ADVERTISING",
+   "files10": "US-ABA-7",
+   "jur": "USA",
+   "ik": null,
+   "rules": 2
   },
   {
    "neon": "UK_SRA_TRANSPARENCY",
@@ -27,6 +62,13 @@
    "jur": "USA",
    "ik": "canspam",
    "rules": 1
+  },
+  {
+   "neon": "US_CAN_SPAM",
+   "files10": "US-CANSPAM",
+   "jur": "USA",
+   "ik": null,
+   "rules": 2
   },
   {
    "neon": "UAE_PDPL",
@@ -79,7 +121,7 @@
   },
   {
    "neon": "US_FTC_ENDORSE",
-   "files10": "US-FTC5",
+   "files10": "US-FTC-ENDORSE",
    "jur": "USA",
    "ik": "ftc",
    "rules": 3
@@ -135,7 +177,7 @@
   },
   {
    "neon": "UK_SRA_COC",
-   "files10": "UK-SRA-TRANS",
+   "files10": "UK-SRA-CODE",
    "jur": "UK",
    "ik": "sra",
    "rules": 10
@@ -153,6 +195,13 @@
    "jur": "UK",
    "ik": "fsma",
    "rules": 4
+  },
+  {
+   "neon": "EU_EPRIVACY",
+   "files10": "EU-EPRIV",
+   "jur": "EU",
+   "ik": null,
+   "rules": 3
   },
   {
    "neon": "US_FINRA_2210",
@@ -253,6 +302,13 @@
    "rules": 4
   },
   {
+   "neon": "US_SEC_REG_FD",
+   "files10": "US-SEC-REGFD",
+   "jur": "USA",
+   "ik": "sec",
+   "rules": 3
+  },
+  {
    "neon": "US_ADA",
    "files10": "US-ADA3",
    "jur": "USA",
@@ -269,27 +325,6 @@
  ],
  "net_new": [
   {
-   "neon": "DIFC_DPL",
-   "id": "NEON-DIFC-DPL",
-   "jur": "MENA-AE-DIFC",
-   "ik": "(none)",
-   "rules": 3
-  },
-  {
-   "neon": "ADGM_DPR",
-   "id": "NEON-ADGM-DPR",
-   "jur": "MENA-AE-ADGM",
-   "ik": "(none)",
-   "rules": 3
-  },
-  {
-   "neon": "QATAR_PDPPL",
-   "id": "NEON-QATAR-PDPPL",
-   "jur": "MENA-QA",
-   "ik": "pdppl",
-   "rules": 5
-  },
-  {
    "neon": "UAE_CONSUMER",
    "id": "NEON-UAE-CONSUMER",
    "jur": "MENA-AE",
@@ -300,20 +335,6 @@
    "neon": "UAE_ECOMMERCE",
    "id": "NEON-UAE-ECOMMERCE",
    "jur": "MENA-AE",
-   "ik": "(none)",
-   "rules": 2
-  },
-  {
-   "neon": "US_STATE_PRIVACY",
-   "id": "NEON-US-STATE-PRIVACY",
-   "jur": "USA",
-   "ik": "(none)",
-   "rules": 5
-  },
-  {
-   "neon": "US_ATTORNEY_ADVERTISING",
-   "id": "NEON-US-ATTORNEY-ADVERTISING",
-   "jur": "USA",
    "ik": "(none)",
    "rules": 2
   },
@@ -337,13 +358,6 @@
    "jur": "EU",
    "ik": "gpsr",
    "rules": 1
-  },
-  {
-   "neon": "US_CAN_SPAM",
-   "id": "NEON-US-CAN-SPAM",
-   "jur": "USA",
-   "ik": "(none)",
-   "rules": 2
   },
   {
    "neon": "UK_SMCR",
@@ -416,13 +430,6 @@
    "rules": 3
   },
   {
-   "neon": "UK_HSE_ENERGY",
-   "id": "NEON-UK-HSE-ENERGY",
-   "jur": "UK",
-   "ik": "hse",
-   "rules": 0
-  },
-  {
    "neon": "UK_CAA",
    "id": "NEON-UK-CAA",
    "jur": "UK",
@@ -455,13 +462,6 @@
    "id": "NEON-UK-OSA-2023",
    "jur": "UK",
    "ik": "osa",
-   "rules": 3
-  },
-  {
-   "neon": "EU_EPRIVACY",
-   "id": "NEON-EU-EPRIVACY",
-   "jur": "EU",
-   "ik": "(none)",
    "rules": 3
   },
   {
@@ -771,13 +771,6 @@
    "jur": "UK",
    "ik": "(none)",
    "rules": 3
-  },
-  {
-   "neon": "US_SEC_REG_FD",
-   "id": "NEON-US-SEC-REG-FD",
-   "jur": "USA",
-   "ik": "sec",
-   "rules": 3
   }
  ],
  "gap": [
@@ -810,16 +803,6 @@
    "id": "US-ROSCA",
    "jur": "USA",
    "name": "Restore Online Shoppers' Confidence Act (+ note: FTC Click-to-Cancel VACATED)"
-  },
-  {
-   "id": "US-STATE-PRIV",
-   "jur": "USA-STATES",
-   "name": "US State Privacy Patchwork (VA, CO, CT, TX, IN, KY, RI, MD, + others)"
-  },
-  {
-   "id": "EU-EPRIV",
-   "jur": "EU",
-   "name": "ePrivacy Directive 2002/58/EC (Cookie Law)"
   },
   {
    "id": "EU-AIACT-50",
@@ -867,21 +850,6 @@
    "name": "Italy Codice del Consumo + D.Lgs. 70/2003"
   },
   {
-   "id": "AE-DIFC-DP",
-   "jur": "MENA-AE-DIFC",
-   "name": "DIFC Data Protection Law 2020"
-  },
-  {
-   "id": "AE-ADGM-DP",
-   "jur": "MENA-AE-ADGM",
-   "name": "ADGM Data Protection Regulations 2021"
-  },
-  {
-   "id": "QA-PDPL",
-   "jur": "MENA-QA",
-   "name": "Qatar Personal Data Privacy Protection Law"
-  },
-  {
    "id": "BH-PDPL",
    "jur": "MENA-BH",
    "name": "Bahrain Personal Data Protection Law"
@@ -922,19 +890,9 @@
    "name": "robots.txt / llms.txt AI Crawler Access (AI visibility)"
   },
   {
-   "id": "UK-SRA-CODE",
-   "jur": "UK",
-   "name": "SRA Code of Conduct for Firms 2019 (marketing)"
-  },
-  {
    "id": "UK-LSA-07",
    "jur": "UK",
    "name": "Legal Services Act 2007 — Reserved Activities Authorisation"
-  },
-  {
-   "id": "US-ABA-7",
-   "jur": "USA",
-   "name": "ABA Model Rules 7.1-7.3 — Lawyer Advertising (state variations)"
   },
   {
    "id": "EU-CCBE",
@@ -1035,11 +993,6 @@
    "id": "US-SEC-MKT",
    "jur": "USA",
    "name": "SEC Marketing Rule — Investment Adviser Advertising"
-  },
-  {
-   "id": "US-SEC-REGFD",
-   "jur": "USA",
-   "name": "SEC Regulation FD — Fair Disclosure"
   },
   {
    "id": "AE-DFSA-COB",
@@ -1207,11 +1160,6 @@
    "name": "FTC Green Guides (16 CFR Part 260)"
   },
   {
-   "id": "US-FTC-ENDORSE",
-   "jur": "USA",
-   "name": "FTC Endorsement Guides 2023 — Influencer Disclosure"
-  },
-  {
    "id": "EU-DSA-26",
    "jur": "EU",
    "name": "EU DSA Art.26 — Commercial Communication Disclosure"
@@ -1222,5 +1170,10 @@
    "name": "UAE Cybercrime Law — Online Content & Reputation"
   }
  ],
- "ambiguous": []
+ "ambiguous": [
+  {
+   "neon": "UK_HSE_ENERGY",
+   "reason": "zero rules — needs detection authoring or remap"
+  }
+ ]
 }
