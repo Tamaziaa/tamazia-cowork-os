@@ -446,7 +446,17 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // set (mergedJur = registered country + two-signal-corroborated markets) and do NOT union in the raw markets.js
   // `codes` (which carry that keyword noise). The registered country is always inside mergedJur, so it can never
   // be lost; we fall back to the raw codes only if the LLM profiler failed entirely.
-  const allJurisdictions = (mergedJur && mergedJur.length) ? Array.from(new Set(mergedJur)) : Array.from(codes);
+  let allJurisdictions = (mergedJur && mergedJur.length) ? Array.from(new Set(mergedJur)) : Array.from(codes);
+  // POST-BREXIT EU GATE (anti-frivolous): a non-EU-registered firm is EU-regulated only with a CONCRETE EU market
+  // signal — EUR pricing, a named EU country served, or an EU-registered entity — NOT a mere "GDPR"/"Europe"
+  // mention (which appears in every UK privacy policy and was attaching EU GDPR/ePrivacy to UK-only SMEs). Applied
+  // to the FINAL set so it catches both the LLM-merged and the raw-codes paths.
+  const _regIsEU = /^(FR|DE|ES|IT|IE|NL|BE|PT|AT|PL|SE|DK|FI|GR|RO|HU|CZ|SK|BG|HR|SI|LT|LV|EE|LU|CY|MT)$/i.test(String(country || ''));
+  // Use STRONG markets (two-signal-verified) — the SAME bar the engine already uses for non-EU foreign markets —
+  // not raw operating_countries, which carries stray-mention noise (e.g. a single "France"/"Italy" word).
+  const _euStrong = (mk.strong_markets || []).some(c => /France|Germany|Spain|Italy|Ireland|Netherlands|Belgium|Portugal|Austria|Poland|Sweden|Denmark|Finland|Greece|Romania|Hungary|Czech|Slovak|Bulgaria|Croatia|Sloven|Lithuan|Latvia|Estonia|Luxembourg|Cyprus|Malta/i.test(c));
+  const _concreteEU = _regIsEU || _euStrong || /€|\bEUR\b/.test(corpusText);
+  if (allJurisdictions.includes('EU') && !_concreteEU) allJurisdictions = allJurisdictions.filter(j => j !== 'EU');
   // client-facing detected names, derived from the SAME gated code set — never the raw markets.js keyword noise.
   const _C2N = { UK: 'United Kingdom', US: 'United States', AE: 'United Arab Emirates', SA: 'Saudi Arabia', QA: 'Qatar', EU: 'European Union', FR: 'France', DE: 'Germany', IE: 'Ireland', SG: 'Singapore', IN: 'India', CA: 'Canada', AU: 'Australia', NL: 'Netherlands', ES: 'Spain', IT: 'Italy' };
   const detectedJurisdictions = Array.from(new Set(allJurisdictions.map((c) => _C2N[c] || _regName || c)));

@@ -1,0 +1,69 @@
+---
+// RegulatoryBreaches.astro · the per-breach panel the engine produces (B3): for each PROVEN regulatory breach,
+// show [where on the site + verbatim line] · [calibrated penalty] · [most-recent similar ruling, source-linked] ·
+// [recent enforcement news] · [impact] · [the Tamazia fix]. Renders ONLY real-law compliance pointers (best-practice
+// GEO signals are re-bucketed upstream, so nothing fake shows a fine here).
+import type { Pointer } from '../types/AuditPayload';
+interface Props { pointers: Pointer[]; }
+const { pointers } = Astro.props;
+const breaches = (pointers || []).filter(p => p.bucket === 'compliance');
+---
+{breaches.length > 0 && (
+  <section id="regulatory-breaches" class="reg-breaches">
+    <div class="container">
+      <h2>Regulatory breaches — live detail</h2>
+      <p class="lede">Each breach below was found on your live site. Penalties are calibrated to recent real enforcement for that regulator (not the statutory ceiling), and every ruling links to an official source.</p>
+      <ul class="cards">
+        {breaches.map(p => (
+          <li class={`card sev-${(p.severity || 'P2').toLowerCase()}`}>
+            <div class="head">
+              <span class={`sev sev-${(p.severity || 'P2').toLowerCase()}`}>{p.severity}</span>
+              <span class="law">{p.citation}</span>
+              {p.regulator && <span class="reg">{p.regulator}</span>}
+            </div>
+            <p class="fact">{p.fact}</p>
+            {p.evidence_quote && <blockquote class="quote">“{p.evidence_quote}”</blockquote>}
+            <dl class="panel">
+              {p.penalty && (<><dt>Penalty</dt><dd>{p.penalty}{p.penalty_basis === 'statutory_only' && <span class="tag">statutory maximum</span>}{p.penalty_basis === 'calibrated_recent_fines' && <span class="tag cal">calibrated to recent fines</span>}</dd></>)}
+              {p.recent_ruling && p.recent_ruling.summary && (
+                <><dt>Recent ruling</dt><dd>{p.recent_ruling.summary}{p.recent_ruling.source_url && <> · <a href={p.recent_ruling.source_url} target="_blank" rel="noopener">source ↗</a></>}</dd></>
+              )}
+              {p.recent_news && p.recent_news.summary && p.recent_news.source_url && (
+                <><dt>Recent news</dt><dd>{p.recent_news.summary} · <a href={p.recent_news.source_url} target="_blank" rel="noopener">source ↗</a></dd></>
+              )}
+              {p.impact && (<><dt>Impact</dt><dd>{p.impact}</dd></>)}
+              {typeof p.occurrence_count === 'number' && p.occurrence_count > 0 && (
+                <><dt>Where</dt><dd>Found on {p.occurrence_count} page{p.occurrence_count > 1 ? 's' : ''}{p.evidence_url && <> · <a href={p.evidence_url} target="_blank" rel="noopener">evidence ↗</a></>}</dd></>
+              )}
+            </dl>
+            <p class="fix"><strong>Tamazia fix:</strong> {p.recommendation}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+)}
+<style>
+  .reg-breaches { padding: 96px 24px; background: var(--tamazia-surface, #faf7f2); }
+  .container { max-width: 1140px; margin: 0 auto; }
+  h2 { font-family: "Editorial New", serif; font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 12px; color: var(--tamazia-burgundy, #3d0e0e); }
+  .lede { font-size: 1.05rem; color: var(--tamazia-body, #1f2937); margin: 0 0 28px; max-width: 70ch; }
+  .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; }
+  .card { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-left: 4px solid var(--tamazia-gold, #b8860b); border-radius: 8px; padding: 22px 24px; }
+  .card.sev-p0 { border-left-color: #B91C1C; }
+  .head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .sev { font-family: "Inter", sans-serif; font-weight: 700; font-size: 0.78rem; padding: 2px 8px; border-radius: 4px; background: rgba(0,0,0,0.06); }
+  .sev-p0 { background: #B91C1C; color: #fff; }
+  .law { font-family: "Inter", monospace; font-weight: 600; color: var(--tamazia-burgundy, #3d0e0e); }
+  .reg { font-size: 0.85rem; color: rgba(31,41,55,0.7); }
+  .fact { font-size: 1.05rem; margin: 6px 0 10px; color: var(--tamazia-body, #1f2937); }
+  .quote { margin: 0 0 12px; padding: 8px 14px; border-left: 3px solid rgba(0,0,0,0.12); font-style: italic; color: rgba(31,41,55,0.85); background: rgba(0,0,0,0.02); }
+  .panel { margin: 0 0 12px; display: grid; grid-template-columns: 140px 1fr; gap: 6px 16px; font-size: 0.95rem; }
+  .panel dt { font-weight: 600; color: var(--tamazia-burgundy, #3d0e0e); }
+  .panel dd { margin: 0; color: var(--tamazia-body, #1f2937); }
+  .tag { font-size: 0.72rem; margin-left: 8px; padding: 1px 7px; border-radius: 10px; background: rgba(0,0,0,0.08); color: rgba(31,41,55,0.7); }
+  .tag.cal { background: rgba(16,122,87,0.12); color: #0f7a57; }
+  .fix { font-size: 0.95rem; margin: 4px 0 0; color: var(--tamazia-body, #1f2937); }
+  a { color: var(--tamazia-burgundy, #3d0e0e); }
+  @media (max-width: 640px) { .panel { grid-template-columns: 1fr; gap: 2px 0; } .panel dt { margin-top: 8px; } }
+</style>

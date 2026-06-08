@@ -27,6 +27,17 @@ export interface Pointer {
   citation?: string;
   quality?: number;
   tamazia?: TamaziaLinkBlock;
+  // B3 per-breach panel (compliance pointers only) — backend→frontend sync
+  regulator?: string | null;
+  penalty?: string | null;
+  penalty_basis?: 'calibrated_recent_fines' | 'statutory_only' | null;
+  recent_ruling?: { summary?: string; entity?: string | null; date?: string | null; source_url?: string | null } | null;
+  recent_news?: { summary?: string; date?: string | null; source_url?: string | null } | null;
+  impact?: string | null;
+  occurrence_count?: number | null;
+  occurrences?: Array<{ url: string; line?: string }> | null;
+  evidence_quote?: string | null;
+  best_practice?: boolean;
 }
 
 export interface BucketSummary { n: number; mean_score: number; }

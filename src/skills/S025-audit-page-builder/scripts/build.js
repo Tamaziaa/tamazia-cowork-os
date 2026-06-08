@@ -259,21 +259,62 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   const frameworks = (comp.frameworks && comp.frameworks.length)
     ? comp.frameworks
     : (router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector, signals: scan.signals }) : router.routeJurisdictions({ country, sector }));
-  const compPointers = (comp.findings || []).filter(f => f.status === 'miss').map(f => ({
-    bucket: 'compliance', severity: f.severity || 'P2',
-    fact: f.description || ((f.framework || '') + ' ' + (f.code || '')),
-    layman_explanation: f.layman_explanation || f.description || '',
-    tamazia_fix_short: f.tamazia_fix_short || 'Tamazia closes this gap as part of the engagement.',
-    recommendation: f.tamazia_fix_short || '',
-    citation: f.framework, framework_short: f.framework, citation_url: f.citation_url || '',
-    evidence: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || 'multi-page corpus scan',
-    evidence_quote: f.evidence_quote || null,
-    checked_urls: Array.isArray(f.checked_urls) ? f.checked_urls.slice(0, 6) : null,
-    rule_type: f.rule_type || null,
-    fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
-    verify_context: f.verify_context || null,
-    enforcement_example: f.enforcement_example || null,
-  }));
+  const _gbp = (n) => n == null ? null : (n >= 1e6 ? '£' + (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1e3 ? '£' + Math.round(n / 1e3) + 'k' : '£' + Math.round(n));
+  // Best-practice / GEO signals (Google E-E-A-T, schema, robots for AI engines) are NOT regulatory laws — they
+  // carry no statutory penalty and must NEVER appear in the regulatory section with a fine. Re-bucket them to
+  // content/SEO and strip any (spurious) penalty so the compliance section shows ONLY real laws with real penalties.
+  const _nonReg = (fw, reg) => /^(GOOGLE_EEAT|GEO-SCHEMA|GEO-ROBOTS|GEO-LLMS|SCHEMA_ORG|WCAG)/i.test(fw || '') || /\b(google|ai engines|quality rater|e-?e-?a-?t|search\/ai engines)\b/i.test(reg || '');
+  const compPointers = (comp.findings || []).filter(f => f.status === 'miss').map(f => {
+    const bp = f.breach_panel || null;
+    const regulator = (bp && bp.regulator) || null;
+    const nonReg = _nonReg(f.framework, regulator);
+    if (nonReg) {
+      // a best-practice content/trust gap — no regulator, no fine; rendered under SEO/content, not regulatory.
+      return {
+        bucket: 'content_depth', severity: f.severity || 'P2',
+        fact: f.description || ((f.framework || '') + ' ' + (f.code || '')),
+        recommendation: f.tamazia_fix_short || 'Tamazia closes this gap as part of the engagement.',
+        citation: f.framework, framework_short: f.framework, citation_url: f.citation_url || '',
+        evidence: f.evidence_url || 'multi-page corpus scan', evidence_url: f.evidence_url || null,
+        evidence_quote: f.evidence_quote || null, best_practice: true,
+      };
+    }
+    // short penalty for the visible citation pill (calibrated median if we have official records, else statutory max)
+    const calMatch = bp && bp.penalty && bp.penalty.basis === 'calibrated_recent_fines' && /around (\S+)/.exec(bp.penalty.headline || '');
+    const penaltyShort = calMatch ? ('recent fines ~£' + calMatch[1]) : (f.fine_high_gbp ? ('up to ' + _gbp(f.fine_high_gbp)) : null);
+    const occN = f.occurrence_count || (Array.isArray(f.occurrences) ? f.occurrences.length : 0);
+    const where = occN ? `found on ${occN} page${occN > 1 ? 's' : ''}` : (Array.isArray(f.checked_urls) && f.checked_urls.length ? `checked ${f.checked_urls.length} pages` : null);
+    const factBase = f.description || ((f.framework || '') + ' ' + (f.code || ''));
+    return {
+      bucket: 'compliance', severity: f.severity || 'P2',
+      fact: where ? `${factBase} (${where}).` : factBase,
+      layman_explanation: f.layman_explanation || f.description || '',
+      tamazia_fix_short: f.tamazia_fix_short || 'Tamazia closes this gap as part of the engagement.',
+      recommendation: f.tamazia_fix_short || '',
+      // citation pill carries framework · regulator · penalty so the CURRENT render surfaces it; grouping still
+      // keys on the first whitespace token (the framework), so ComplianceInventory is unaffected.
+      citation: [f.framework, regulator, penaltyShort].filter(Boolean).join(' · ') || f.framework,
+      framework_short: f.framework, citation_url: f.citation_url || '',
+      evidence: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || 'multi-page corpus scan',
+      evidence_url: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || null,
+      evidence_quote: f.evidence_quote || null,
+      checked_urls: Array.isArray(f.checked_urls) ? f.checked_urls.slice(0, 6) : null,
+      rule_type: f.rule_type || null,
+      fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
+      verify_context: f.verify_context || null,
+      enforcement_example: f.enforcement_example || null,
+      // ── B2/B3 backend→frontend sync: the per-breach panel + every-word locations (for the rich render) ──
+      regulator,
+      penalty: bp && bp.penalty ? bp.penalty.headline : (f.enforcement_example || null),
+      penalty_basis: bp && bp.penalty ? bp.penalty.basis : null,
+      recent_ruling: bp ? bp.recent_ruling : null,
+      recent_news: bp ? bp.recent_news : null,
+      impact: bp ? bp.impact : null,
+      occurrence_count: occN || null,
+      occurrences: Array.isArray(f.occurrences) ? f.occurrences.slice(0, 5).map(o => ({ url: o.url, line: o.line })) : null,
+      breach_panel: bp,
+    };
+  });
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';
   const lr = pg(`SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'`) || new Date().toISOString().slice(0, 10);
   const rulesList = frameworks.map(f => `'${f}'`).join(',');
@@ -511,11 +552,12 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   }
   const payload = await buildPayload({ domain, sector, country: country || 'UK', lead_id, env: env || process.env });
 
-  // R2 storage offload (AUDIT_PAYLOAD_STORE: 'neon' | 'both' | 'r2'; default 'neon' keeps current behaviour)
-  const { putAudit } = require('../../../lib/r2');
+  // R2 storage offload (AUDIT_PAYLOAD_STORE: 'neon' | 'both' | 'r2'; default 'neon' keeps current behaviour).
+  // Lazy-require r2.js (pulls @aws-sdk) ONLY when R2 storage is actually used, so a neon-mode mint never depends
+  // on the AWS SDK being installed.
   const mode = process.env.AUDIT_PAYLOAD_STORE || 'neon';
   if (mode === 'both' || mode === 'r2') {
-    try { await putAudit(slug, hash, payload); } catch (e) { if (mode === 'r2') throw e; }
+    try { const { putAudit } = require('../../../lib/r2'); await putAudit(slug, hash, payload); } catch (e) { if (mode === 'r2') throw e; }
   }
   const neonPayload = (mode === 'r2') ? { r2: true, framework_version: payload.framework_version } : payload;
 
@@ -531,7 +573,11 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   const payloadJsonE = JSON.stringify(neonPayload).replace(/'/g, "''");
   // A4j — RETURNING id + loud failure: pg() returns null/'' on error, and a silently-failed INSERT here means a
   // DEAD AUDIT LINK gets emailed. Never return {slug,hash} unless the row is provably written.
-  const ins = pg(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds})) RETURNING id`);
+  let ins = pg(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds})) RETURNING id`);
+  // A >100KB payload is routed by pg() through the psql -f path, which EXECUTES the INSERT but returns no RETURNING
+  // output — so confirm the row with a small SELECT before declaring failure (else a successful large-payload mint
+  // is wrongly rejected as a dead link).
+  if (!ins || !String(ins).trim()) ins = pg(`SELECT id FROM audit_pages WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
   if (!ins || !String(ins).trim()) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written; refusing to return a dead audit link`);
 
   return { slug, hash, signed_url: signed.url, signed_exp: signed.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };

@@ -1,0 +1,47 @@
+[
+  {
+    "domain": "irwinmitchell.com",
+    "sector": "legal",
+    "country": "UK",
+    "company": "Irwin Mitchell",
+    "size": "BIG",
+    "ok": false,
+    "error": "audit_pages INSERT failed for irwinmitchell.com (irwin-mitchell/x5QZDzc2) — no row written; refusing to return a dead audit link"
+  },
+  {
+    "domain": "foxtons.co.uk",
+    "sector": "realestate",
+    "country": "UK",
+    "company": "Foxtons",
+    "size": "BIG",
+    "ok": false,
+    "error": "audit_pages INSERT failed for foxtons.co.uk (foxtons/RpcPZFG4) — no row written; refusing to return a dead audit link"
+  },
+  {
+    "domain": "azets.co.uk",
+    "sector": "financial",
+    "country": "UK",
+    "company": "Azets",
+    "size": "BIG",
+    "ok": false,
+    "error": "audit_pages INSERT failed for azets.co.uk (azets/wFt5qCCZ) — no row written; refusing to return a dead audit link"
+  },
+  {
+    "domain": "harleystreetdentalclinic.co.uk",
+    "sector": "dental",
+    "country": "UK",
+    "company": "Harley Street Dental Clinic",
+    "size": "SMALL",
+    "ok": false,
+    "error": "audit_pages INSERT failed for harleystreetdentalclinic.co.uk (harley-street-dental-clinic/6RWU1Wea) — no row written; refusing to return a dead audit link"
+  },
+  {
+    "domain": "firmdalehotels.com",
+    "sector": "hospitality",
+    "country": "UK",
+    "company": "Firmdale Hotels",
+    "size": "SMALL",
+    "ok": false,
+    "error": "audit_pages INSERT failed for firmdalehotels.com (firmdale-hotels/5sfshGfi) — no row written; refusing to return a dead audit link"
+  }
+]

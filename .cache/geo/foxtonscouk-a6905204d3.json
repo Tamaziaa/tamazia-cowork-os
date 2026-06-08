@@ -1,0 +1,1 @@
+{"_cached_at":1780920929763,"ok":true,"provider":"groq","providers_used":["groq","nvidia-nim"],"samples":2,"firm_appears":2,"share_of_voice":100,"repeatability":2,"competitor_consistency":100,"top_competitors":[{"name":"Knight Frank","in_runs":2,"of":2},{"name":"Savills","in_runs":2,"of":2},{"name":"Hamptons","in_runs":2,"of":2}],"grounded":null,"finding":null}
