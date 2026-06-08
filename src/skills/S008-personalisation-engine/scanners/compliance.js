@@ -10,6 +10,7 @@ const { execFileSync } = require('child_process');
 const _crypto = require('crypto');
 const { fetchWithRetry, getCached, writeCache } = require('../lib/http.js');
 const { routeJurisdictions } = require('../../../lib/compliance/jurisdiction-router.js');
+const { buildCorpusIndex, scanRuleGlobal } = require('./corpus-index.js'); // B2 — every-page/every-word matcher
 const SCANNER = 'compliance';
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
@@ -150,7 +151,7 @@ async function _archiveSnapshot(url) {
   } catch (_e) { return null; }
 }
 
-async function gatherCorpus({ domain, maxPages = 22 }) {
+async function gatherCorpus({ domain, maxPages = 30 }) {
   const base = 'https://' + domain;
   const corpus = []; const seenBody = new Set(); const used = new Set();
   // 1) homepage first (and a source of internal links)
@@ -161,12 +162,18 @@ async function gatherCorpus({ domain, maxPages = 22 }) {
   let smap = []; try { smap = await _discoverSitemap(domain); } catch (_e) {}
   const _TIER1 = /privacy|cookie|terms|legal|gdpr|data[- ]protection|accessibility|complaint|modern[- ]slavery|disclaimer|imprint|impressum|disclosure|safeguard|regulat|compliance/i;
   const _TIER2 = /about|contact|service|pricing|fees|returns|refund|shipping|delivery|sector|team|locations|offices/i;
+  // B2 — blog/editorial tier: marketing & compliance claims (medical, financial, prohibited terms) live in blog
+  // posts, news, insights & case studies. Reserve priority slots so they are crawled and every word scanned — a
+  // breach in a 2019 article is flagged, not crowded out by the page cap.
+  const _BLOG = /\/blog|\/news|\/insights|\/press|\/article|\/resources|\/stories|\/updates|\/knowledge|\/20\d\d\//i;
   const t1Links = links.filter(u => _TIER1.test(u)); const t1Smap = smap.filter(u => _TIER1.test(u));
   const t2Links = links.filter(u => _TIER2.test(u) && !_TIER1.test(u)); const t2Smap = smap.filter(u => _TIER2.test(u) && !_TIER1.test(u));
+  const blogLinks = links.filter(u => _BLOG.test(u) && !_TIER1.test(u) && !_TIER2.test(u));
+  const blogSmap = smap.filter(u => _BLOG.test(u) && !_TIER1.test(u) && !_TIER2.test(u));
   // 3) guessed policy paths as a backstop (privacy/cookie/terms first inside POLICY_PATHS)
   const guessed = POLICY_PATHS.map(pp => base + pp);
-  // priority: homepage, legal pages (links+sitemap+guessed), commercial pages, then any remaining internal pages
-  for (const u of [...t1Links, ...t1Smap, ...guessed, ...t2Links, ...t2Smap, ...links, ...smap]) candidates.push(u);
+  // priority: homepage, legal pages (links+sitemap+guessed), commercial pages, BLOG/editorial, then any remaining
+  for (const u of [...t1Links, ...t1Smap, ...guessed, ...t2Links, ...t2Smap, ...blogLinks, ...blogSmap, ...links, ...smap]) candidates.push(u);
   // de-dup by normalised URL, cap
   const fetchList = [];
   for (const u of candidates) {
@@ -296,7 +303,7 @@ function _extractQuote(html, re) {
   return { matched, quote: sentence };
 }
 
-function ruleCheck(rule, corpus, sector) {
+function ruleCheck(rule, corpus, sector, corpusIndex) {
   // Sector relevance gate: if the rule has a sector list and our sector isn't in it, skip.
   if (rule.sectors && rule.sectors.length > 0 && sector && !rule.sectors.includes(sector)) {
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'not_applicable_to_sector' };
@@ -326,8 +333,16 @@ function ruleCheck(rule, corpus, sector) {
     // Trigger present but disclosure missing → real breach.
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: triggerEvidence?.url, evidence_quote: triggerEvidence?.quote, trigger_evidence: triggerEvidence };
   }
-  // prohibit: breach if pattern IS present (e.g. "no GLP-1 on consumer pages")
+  // prohibit: breach if pattern IS present anywhere on the site (e.g. "no GLP-1 on consumer pages").
   if (rule.rule_type === 'prohibit') {
+    // EVERY-WORD scan: collect EVERY offending line across EVERY crawled page (blog posts, FAQs, testimonials,
+    // footers included) — so a prohibited claim in a 2019 article is flagged, not just the first homepage hit.
+    const occ = (corpusIndex && corpusIndex.segments && corpusIndex.segments.length) ? scanRuleGlobal(re, corpusIndex, { proseOnly: true, max: 50 }) : [];
+    if (occ.length) {
+      const first = occ[0];
+      return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: first.url, evidence_snippet: first.matched, evidence_quote: first.line, occurrence_count: occ.length, occurrences: occ };
+    }
+    // Fallback: the pattern hit raw markup (not visible prose) — keep the legacy first-page behaviour so status never regresses.
     for (const c of corpus) {
       const m = c.body.match(re);
       if (m) { const q = _extractQuote(c.body, re); return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: c.url, evidence_snippet: (q && q.matched) || m[0].slice(0, 80), evidence_quote: q && q.quote }; }
@@ -457,8 +472,11 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const findings = [];
   let hits = 0, misses = 0, suppressedPrivacy = 0;
   const normSector = String(sector || '').toLowerCase();
+  // B2 — build the every-page/every-word index ONCE (strip each page once, not per rule×page) so prohibit rules can
+  // flag every offending line across the whole site (blogs included) and evidence stays verbatim + located.
+  const corpusIndex = buildCorpusIndex(corpus);
   for (const r of rules) {
-    const out = ruleCheck(r, corpus, normSector);
+    const out = ruleCheck(r, corpus, normSector, corpusIndex);
     if (out.status === 'hit' || out.status === 'hit_after_trigger') { hits++; }
     else if (out.status === 'miss') {
       // Suppress unverifiable privacy-disclosure misses when the policy is JS-rendered/embedded (false-positive guard).
@@ -541,4 +559,4 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { scan };
+module.exports = { scan, ruleCheck, gatherCorpus };
