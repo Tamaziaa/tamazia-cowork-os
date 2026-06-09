@@ -40,19 +40,19 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
   for (const lead of leads) {
     let q;
     try { q = await scoreLead(lead); } catch (e) { console.log(`  ${lead.domain} score err: ${e.message}`); continue; }
-    // PROMOTION GATE (organic-first, Apify only where it pays): a strong-buyer lead blocked ONLY by an unverified
-    // DM email gets that ONE email authoritatively checked (NeverBounce free -> Apify email-verifier, cost-governed).
-    // A 'good'/'valid' result flips email_verified TRUE and re-scores -> Tier-1 (auto). Keeps paid verifies tiny.
+    // TIER-1 SAFETY NET (Apify email-verify, paid Starter, cost-governed): the deterministic 5-filter gate already
+    // proved the DM email deliverable-shaped, so Tier-1 is earned WITHOUT a verify. We spend ONE paid check only on
+    // the small Tier-1 set as a last line of defence — and it can ONLY DEMOTE: a 'bad'/'invalid' SMTP verdict pulls
+    // the lead to Tier-2 (don't auto-send a confirmed-dead mailbox); 'risky'/'unknown'/'good' all stay Tier-1.
     try {
-      const VE = require(path.join(ROOT, 'src', 'lib', 'enrich', 'verify-email.js'));
-      if (VE.isVerifyWorthIt(q, lead)) {
+      if (q.tier === 1) {
+        const VE = require(path.join(ROOT, 'src', 'lib', 'enrich', 'verify-email.js'));
         const dm = lead.primary_email || lead.contact_email;
         const vr = await VE.verifyEmailBest(dm, process.env, { allowApify: true });
-        if (vr.verified) {
-          lead.email_verified = true; lead.verify_status = vr.status;
-          pg(`UPDATE leads SET email_verified=TRUE, verify_status=${esc(vr.status)}, primary_email_verified_by=${esc(vr.provider)} WHERE id=${lead.id}`);
-          const q2 = await scoreLead(lead); if (q2 && q2.tier) q = q2;
-          console.log(`  ↑ ${lead.domain} DM verified via ${vr.provider} (${vr.status}) -> tier ${q.tier}`);
+        pg(`UPDATE leads SET verify_status=${esc(vr.status)}, primary_email_verified_by=${esc(vr.provider)}, email_verified=${vr.verified ? 'TRUE' : 'email_verified'} WHERE id=${lead.id}`);
+        if (/^(bad|invalid|undeliverable|no_mx|disposable)$/i.test(String(vr.status || ''))) {
+          q = Object.assign({}, q, { tier: 2, tier_reason: 'apify_confirmed_bad_email' });
+          console.log(`  ↓ ${lead.domain} DM confirmed-bad via ${vr.provider} (${vr.status}) -> demoted to Tier-2`);
         }
       }
     } catch (_e) {}

@@ -39,6 +39,35 @@ const truthy = (v) => v === true || /^(1|t|true|yes|y|on)$/i.test(String(v == nu
 const asArr = (v) => { if (Array.isArray(v)) return v; try { const p = v ? JSON.parse(v) : []; return Array.isArray(p) ? p : []; } catch (_e) { return []; } };
 const asObj = (v) => { if (v && typeof v === 'object' && !Array.isArray(v)) return v; try { const p = v ? JSON.parse(v) : {}; return (p && typeof p === 'object') ? p : {}; } catch (_e) { return {}; } };
 
+const _dns = require('dns').promises;
+const _mxCache = {};
+async function _hasMX(domain) {
+  if (domain in _mxCache) return _mxCache[domain];
+  let ok = false; try { const r = await _dns.resolveMx(domain); ok = Array.isArray(r) && r.length > 0; } catch (_e) { ok = false; }
+  return (_mxCache[domain] = ok);
+}
+const _DISPOSABLE = new Set(['mailinator.com','guerrillamail.com','10minutemail.com','tempmail.com','yopmail.com','trashmail.com','sharklasers.com','guerrillamailblock.com','temp-mail.org','dispostable.com','getnada.com','maildrop.cc']);
+const _FREE = new Set(['gmail.com','googlemail.com','yahoo.com','yahoo.co.uk','hotmail.com','hotmail.co.uk','outlook.com','aol.com','icloud.com','me.com','live.com','live.co.uk','msn.com','protonmail.com','proton.me','gmx.com','mail.com','yandex.com','ymail.com','btinternet.com']);
+const _ROLE = new Set(['info','contact','hello','admin','sales','support','enquiries','enquiry','office','mail','team','reception','hi','help','noreply','no-reply','accounts','billing','careers','jobs','hr','marketing','press','media','general','mailbox','post']);
+const _EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// THE 4-5 PURE FILTERS — deterministic, free, high-precision at DISCARDING only clearly-bad / bounce-prone /
+// off-ICP emails. Returns { clean, role, reason }. clean=true => deliverable-shaped on the firm's OWN domain.
+// SMTP is intentionally NOT used here (it falsely flags the many domains that block probes); it's an optional
+// downstream safety-net that only ever REMOVES a confirmed-'bad', never blocks a 'risky'.
+async function emailGate(email, leadDomain) {
+  const out = { clean: false, role: false, reason: '' };
+  email = String(email || '').toLowerCase().trim();
+  if (!_EMAIL_RE.test(email)) { out.reason = 'bad_syntax'; return out; }                 // filter 1: valid syntax
+  const [lp, dom] = email.split('@');
+  if (_DISPOSABLE.has(dom)) { out.reason = 'disposable'; return out; }                    // filter 2: not throwaway
+  if (_FREE.has(dom)) { out.reason = 'free_provider'; return out; }                       // filter 3: on a brand domain, not personal gmail/yahoo
+  const ld = String(leadDomain || '').toLowerCase().replace(/^www\./, '');
+  if (ld && !(dom === ld || dom.endsWith('.' + ld) || ld.endsWith('.' + dom))) { out.reason = 'domain_mismatch'; return out; } // filter 4: the firm's OWN domain
+  if (!(await _hasMX(dom))) { out.reason = 'no_mx'; return out; }                          // filter 5: domain can actually receive mail
+  out.role = _ROLE.has(lp) || _ROLE.has(lp.replace(/[._\-+].*$/, ''));                    // deliverable but generic (info@) -> Tier-2 signal, not a discard
+  out.clean = true; return out;
+}
+
 async function fetchSite(domain) {
   for (const p of ['', '/']) {
     try { const r = await fetchWithRetry(`https://${domain}${p}`, { headers: H, timeout: 9000, retries: 0 }); if (r.ok && r.body) return r.body; } catch (_e) {}
@@ -139,20 +168,30 @@ async function scoreLead(lead) {
   const seriousGaps = auditCritical >= 1 || complianceGapCount >= COMPLIANCE_MIN;
   const established = pageRefs >= 15 || emailCount >= 2 || hasSocial;       // affordable, real — not a startup one-pager
   const dmAny = !!(primaryEmail && /@/.test(primaryEmail));                 // any plausible decision-maker email
-  const dmVerified = dmAny && dmConf >= DM_CONF_MIN && dmEmailVerified;     // verified named decision-maker (Tier-1)
-  const reachable = hasNamed || dmAny || hasSocial;
 
-  const buyerFloor = servedSector && (seriousGaps || visibilityGap);       // any served vertical with a real, fixable gap
+  // ---- CLEAN-EMAIL GATE (the 4-5 pure filters) — replaces the brittle SMTP "verified" requirement ----
+  // A Tier-1 DM email must pass syntax + not-disposable + not-free-provider + own-brand-domain + MX-exists.
+  // That is deliverable-shaped with negligible bounce risk, WITHOUT needing an SMTP probe (which most corporate
+  // domains block). Role inboxes (info@) are deliverable but impersonal -> they hold a lead at Tier-2, not Tier-1.
+  let dmGate = { clean: false, role: false, reason: 'none' };
+  try { if (dmAny) dmGate = await emailGate(primaryEmail, domain); } catch (_e) {}
+  const cleanNamedDM = dmGate.clean && !dmGate.role;                       // real person @ own domain, MX live -> SENDABLE
+  const cleanRoleDM = dmGate.clean && dmGate.role;                        // info@owndomain, MX live -> Tier-2
+  // Confirmed-bad safety net (only ever DEMOTES): enrichment/Apify said the address is definitively undeliverable.
+  const confirmedBad = /^(invalid|bad|undeliverable|no_mx|disposable|invalid_syntax|nxdomain)$/i.test(String(lead.verify_status || ''));
+  const reachable = cleanNamedDM || cleanRoleDM || hasSocial;
+
+  const icpFit = servedSector && (seriousGaps || visibilityGap);          // a served vertical with a real, fixable gap
   const strongBuyer = regulated && established && seriousGaps && visibilityGap; // strictly-regulated core buyer
 
-  let tier;
-  if (!buyerFloor) tier = 3;                                               // reject: not a served vertical, or no fixable gap
-  else if (strongBuyer && dmVerified) tier = 1;                           // CORE regulated buyer: auto-mint + auto-send
-  else tier = 2;                                                           // STRETCH (served-not-regulated / unverified DM): approval
+  let tier, tier_reason;
+  if (!icpFit) { tier = 3; tier_reason = servedSector ? 'no_fixable_gap' : 'not_served_sector'; }      // reject
+  else if (strongBuyer && cleanNamedDM && !confirmedBad) { tier = 1; tier_reason = 'regulated_buyer_clean_named_dm'; } // auto-send
+  else { tier = 2; tier_reason = !cleanNamedDM ? (cleanRoleDM ? 'role_email_only' : (dmAny ? ('dm_email_' + dmGate.reason) : 'no_dm_email')) : (!regulated ? 'served_not_regulated' : 'not_established'); } // approval
 
-  const fit = tier === 1;                                                  // drives existing auto-mint/auto-send path
-  const pass = tier <= 2 && genuine && reachable;                          // qualified into the pipeline
-  return { score, pass, fit, tier, reachable, layers, compliance_gaps: complianceGaps, seo_gaps: seoGaps, serious_gaps: seriousGaps, visibility_gap: visibilityGap, dm_verified: dmVerified };
+  const fit = tier === 1;
+  const pass = tier <= 2 && genuine;
+  return { score, pass, fit, tier, tier_reason, reachable, layers, compliance_gaps: complianceGaps, seo_gaps: seoGaps, serious_gaps: seriousGaps, visibility_gap: visibilityGap, dm_clean: cleanNamedDM, dm_role: cleanRoleDM, dm_reason: dmGate.reason, dm_verified: cleanNamedDM };
 }
 
 module.exports = { scoreLead, PASS, REGULATED };

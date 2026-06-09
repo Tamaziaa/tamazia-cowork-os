@@ -118,9 +118,8 @@ const social_ads = {
 // ---------- JobSpy hiring-signal · firms hiring SEO/marketing/compliance roles = budget + a gap we fill ----------
 const jobspy = {
   name: 'jobspy', platform: 'indeed',
-  mode: (env) => env.SERPER_KEY ? 'api' : 'needs_key', // SERPER resolves company -> real website domain
+  mode: () => 'api', // domain resolution now via serp-client (Google proxy/DDG); the job scrape itself needs scrapers/run_jobspy.py
   async candidates(opts = {}, env = process.env) {
-    const key = env.SERPER_KEY; if (!key) return [];
     let rows = [];
     try {
       const script = _NP.resolve(__dirname, '..', '..', '..', '..', 'scrapers', 'run_jobspy.py');
@@ -135,8 +134,8 @@ const jobspy = {
       const gl = country === 'UK' ? 'gb' : country === 'UAE' ? 'ae' : country === 'EU' ? 'ie' : 'us';
       for (let attempt = 0; attempt < 2; attempt++) {
         const qq = attempt === 0 ? (company + ' official website') : ('"' + company + '" website');
-        const d = await getJSON('https://google.serper.dev/search', { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ q: qq, num: 6, gl }) }, 12000);
-        for (const o of ((d && d.organic) || [])) { const dd = rootDomain(o.link || ''); if (validDom(dd) && !BAD.test(dd)) return { dom: dd, otitle: o.title || '', osnip: o.snippet || '' }; }
+        let d = null; try { d = _serpClient ? await _serpClient.search(qq, country, 6) : null; } catch (_e) {}
+        for (const o of ((d && d.organic) || [])) { const dd = o.domain || rootDomain(o.url || o.link || ''); if (validDom(dd) && !BAD.test(dd)) return { dom: dd, otitle: o.title || '', osnip: o.snippet || '' }; }
         if (attempt === 0) await new Promise(r => setTimeout(r, 350));
       }
       return null;
@@ -154,17 +153,20 @@ const jobspy = {
 // ---------- Google Maps places · SERPER /places (free-keyed, no Go binary) — local service-firm ICP sourcing ----------
 const maps = {
   name: 'maps', platform: 'google-maps',
-  mode: (env) => env.SERPER_KEY ? 'api' : 'needs_key',
+  // Free-first local sourcing: serp-client (Apify Google SERP proxy -> SearXNG -> Brave -> DDG) on a local-intent
+  // query. No SERPER dependency. Structured place data (rating/address) is sacrificed for the domain, which is all
+  // the funnel needs; OSM-overpass (S028) still provides address-rich local records in parallel.
+  mode: () => 'api',
   async candidates(opts = {}, env = process.env) {
-    const key = env.SERPER_KEY; if (!key) return [];
+    if (!_serpClient) return [];
     const out = []; const seen = new Set();
     const terms = opts.terms || SECTOR_TERMS; const geos = opts.geos || GEOS;
     for (const term of terms.slice(0, opts.maxTerms || 6)) {
       for (const [city, country] of geos.slice(0, opts.maxGeos || 4)) {
-        const d = await getJSON('https://google.serper.dev/places', { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ q: term + ' ' + city, gl: country === 'UK' ? 'gb' : country === 'UAE' ? 'ae' : 'us' }) }, 12000);
-        for (const pl of ((d && d.places) || [])) {
-          const dom = rootDomain(pl.website || ''); if (!dom || seen.has(dom)) continue; if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(dom) || dom.length > 60) continue; seen.add(dom);
-          out.push({ domain: dom, company: (pl.title || '').trim(), country, title: pl.title || '', snippet: term + (pl.rating ? ' · rating ' + pl.rating + (pl.ratingCount ? ' (' + pl.ratingCount + ' reviews)' : '') : '') + (pl.address ? ' · ' + pl.address : ''), adText: '', adRunner: false, platform: 'google-maps', source: 'maps', permalink: pl.website || '' });
+        let d = null; try { d = await _serpClient.search(`${term} in ${city}`, country, 15); } catch (_e) {}
+        for (const o of ((d && d.organic) || [])) {
+          const dom = o.domain || rootDomain(o.url || ''); if (!dom || seen.has(dom)) continue; if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(dom) || dom.length > 60) continue; seen.add(dom);
+          out.push({ domain: dom, company: (o.title || '').split(/[|\-–·]/)[0].trim(), country, title: o.title || '', snippet: term + ' · ' + city, adText: '', adRunner: false, platform: 'google-maps', source: 'maps', permalink: o.url || '' });
         }
       }
     }
