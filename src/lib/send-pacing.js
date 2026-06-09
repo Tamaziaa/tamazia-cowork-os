@@ -15,7 +15,7 @@ function perInboxCap(warmupDay) {
   return 40; // steady-state per warmed inbox
 }
 // Total daily budget = warmed inboxes × per-inbox cap.
-function dailyCap({ inboxes = 0, warmupDay = 0, hardMax = 500 } = {}) {
+function dailyCap({ inboxes = 0, warmupDay = 0, hardMax = Number(process.env.SEND_DAILY_HARD_MAX || 500) } = {}) {
   return Math.min(hardMax, Math.max(0, Math.floor(inboxes) * perInboxCap(warmupDay)));
 }
 
