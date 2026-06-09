@@ -181,12 +181,15 @@ async function scoreLead(lead) {
   const confirmedBad = /^(invalid|bad|undeliverable|no_mx|disposable|invalid_syntax|nxdomain)$/i.test(String(lead.verify_status || ''));
   const reachable = cleanNamedDM || cleanRoleDM || hasSocial;
 
-  const icpFit = servedSector && (seriousGaps || visibilityGap);          // a served vertical with a real, fixable gap
-  const strongBuyer = regulated && established && seriousGaps && visibilityGap; // strictly-regulated core buyer
+  // A fixable gap = ANY real problem the audit can hook on: a missing compliance doc, OR a missing SEO element,
+  // OR not being cited by AI search. (seriousGaps/visibilityGap above stay as PRIORITY signals, not gates.)
+  const hasFixableGap = complianceGapCount >= 1 || seoGapCount >= 1 || aiVisibilityGap;
+  const icpFit = servedSector && hasFixableGap;                           // a served vertical with something to sell
+  const strongBuyer = regulated && established && hasFixableGap;          // regulated core buyer with a hook
 
   let tier, tier_reason;
   if (!icpFit) { tier = 3; tier_reason = servedSector ? 'no_fixable_gap' : 'not_served_sector'; }      // reject
-  else if (strongBuyer && cleanNamedDM && !confirmedBad) { tier = 1; tier_reason = 'regulated_buyer_clean_named_dm'; } // auto-send
+  else if (strongBuyer && cleanNamedDM && !confirmedBad) { tier = 1; tier_reason = 'regulated_buyer_clean_named_dm' + (seriousGaps && visibilityGap ? '_priority' : ''); } // auto-send
   else { tier = 2; tier_reason = !cleanNamedDM ? (cleanRoleDM ? 'role_email_only' : (dmAny ? ('dm_email_' + dmGate.reason) : 'no_dm_email')) : (!regulated ? 'served_not_regulated' : 'not_established'); } // approval
 
   const fit = tier === 1;
