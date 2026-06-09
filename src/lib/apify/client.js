@@ -68,15 +68,9 @@ async function findDecisionMakerEmail({ domain, company, titles, env = process.e
 
 // All emails/phones/socials off a company website (the primary signal — fallback when DIY scrape misses).
 async function contactDetails({ domain, env = process.env }) {
-  if (!domain) return { emails: [], socials: {} };
-  const input = { startUrls: [{ url: 'https://' + domain }], maxDepth: 1, maxRequests: 6 };
-  const items = await runActor({ actorId: ACTORS(env).contact, input, kind: 'starter', unit: UNIT_USD.contact, env, label: 'contact-details' });
-  const emails = []; const socials = {};
-  for (const it of items) {
-    for (const e of (it.emails || [])) if (e && /@/.test(e)) emails.push({ value: String(e).toLowerCase(), source: 'apify_contact' });
-    for (const k of ['linkedIns', 'instagrams', 'twitters', 'facebooks']) for (const u of (it[k] || [])) { const key = k.replace(/s$/, ''); if (!socials[key]) socials[key] = u; }
-  }
-  return { emails, socials };
+  // DISABLED BY POLICY: we never source phone numbers or social profiles from Apify — our own scrapers own that.
+  // (Email/contact sourcing comes from the free organic waterfall + the creator-account Google SERP proxy.)
+  return { emails: [], socials: {} };
 }
 
 // Deliverability verification for a batch of emails (final gate before send).

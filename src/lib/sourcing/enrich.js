@@ -15,7 +15,14 @@ try { _canonicalEnrich = require(require('path').resolve(__dirname, '..', 'enric
 
 async function timed(fn, ms) { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); try { return await fn(c.signal); } finally { clearTimeout(t); } }
 async function getJSON(url, opts, ms) { try { const r = await timed(s => fetch(url, { ...opts, signal: s }), ms || 15000); if (!r.ok) return null; return await r.json(); } catch (_) { return null; } }
-async function getText(url, ms) { try { const r = await timed(s => fetch(url, { redirect: 'follow', headers: { 'user-agent': UA }, signal: s }), ms || 15000); if (!r.ok) return ''; return await r.text(); } catch (_) { return ''; } }
+let _resGet = null; try { _resGet = require('../scraping/residential-fetch.js').residentialGet; } catch (_e) {}
+async function getText(url, ms) {
+  try { const r = await timed(s => fetch(url, { redirect: 'follow', headers: { 'user-agent': UA }, signal: s }), ms || 15000); if (r.ok) { const t = await r.text(); if (t) return t; } } catch (_) {}
+  // Residential fallback (creator account, gated): the direct datacenter fetch came back blocked/empty — retry
+  // through a residential IP so our own scraper still reads the page (more emails/contacts). Fires only on a miss.
+  if (_resGet) { try { const rr = await _resGet(url, { timeout: ms || 15000 }); if (rr && rr.ok && rr.body) return rr.body; } catch (_) {} }
+  return '';
+}
 async function sql(query) { const u = NEON(); if (!u) return { ok: false, rows: [] }; try { const host = u.replace(/.*@([^/]+)\/.*/, '$1'); const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': u, 'Content-Type': 'application/json' }, body: JSON.stringify({ query, params: [] }) }); if (!r.ok) return { ok: false, rows: [] }; const d = await r.json(); return { ok: true, rows: d.rows || d.results || [] }; } catch (_) { return { ok: false, rows: [] }; } }
 const esc = s => String(s).replace(/'/g, "''");
 
@@ -262,24 +269,17 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
   if (apify && !dmsel.primary) {
     try {
       const A = require('../apify/client.js');
-      const [leadsFound, cd] = await Promise.all([
-        A.findDecisionMakerEmail({ domain, company, env }).catch(() => []),
-        A.contactDetails({ domain, env }).catch(() => ({ emails: [], socials: {} })),
-      ]);
+      // DM-EMAIL fallback only (leads-finder). NO phones/socials from Apify (own scrapers own those). NO blanket
+      // verify here — authoritative email verification happens once, targeted, at the qualify promotion gate on
+      // the PAID Starter account (the only thing Starter does). Free MX verify is fine to apply locally.
+      const leadsFound = await A.findDecisionMakerEmail({ domain, company, env }).catch(() => []);
       for (const p of leadsFound) {
         if (!p.email) continue; const v = p.email.toLowerCase();
         if (!byEmail[v]) byEmail[v] = { value: v, name: p.name || '', position: p.title || '', type: 'personal', source: 'apify_leads' };
         const k = (p.name || '').toLowerCase(); if (p.name && !seen.has(k)) { seen.add(k); dms.push({ name: p.name, title: p.title || '', email: v, linkedin: p.linkedin || '', source: 'apify_leads', verified: !!p.verified }); }
       }
-      for (const e of (cd.emails || [])) { const v = (e.value || '').toLowerCase(); if (v && !byEmail[v]) byEmail[v] = { value: v, type: v.split('@')[0].length <= 4 ? 'generic' : 'personal', source: 'apify_contact' }; }
-      for (const [k, u] of Object.entries(cd.socials || {})) { if (u && !(_social.socials || {})[k]) { _social.socials = _social.socials || {}; _social.socials[k] = { url: u }; } }
       emails = Object.values(byEmail);
       if (verify) { for (const e of emails.filter(x => x.verified == null).slice(0, _VCAP)) { const v = await verifyFree(e.value, env); e.verified = v.verified; e.verify_status = v.status; e.verify_provider = v.provider; e.role = v.role; } }
-      // Optional Apify deliverability verify on still-unverified candidates (final gate).
-      try {
-        const unver = emails.filter(e => !e.verified).map(e => e.value);
-        if (unver.length) { const vr = await A.verifyEmails({ emails: unver, env }); const { isVerifiedStatus } = require('../enrich/verify-status.js'); for (const r of vr) { const e = emails.find(x => x.value === r.email); if (e && r.status) { e.verified = isVerifiedStatus(r.status); e.verify_status = r.status; e.verify_provider = 'apify_verify'; } } }
-      } catch (_) {}
       for (const d of dms) if (d.email) { const e = emails.find(x => x.value === d.email); if (e) d.verified = !!e.verified; }
       try { dmsel = require('../enrich/dm-email-scoring.js').selectDecisionMaker({ emails, decisionMakers: dms }); } catch (_) {}
     } catch (_) {}
