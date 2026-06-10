@@ -11,6 +11,7 @@ run() { echo "[$(TS)] >> $1"; eval "$1" 2>&1 | tail -3; echo "[$(TS)] done: $1";
   echo "===== ENGINE CYCLE $(TS) ====="
   set -a; source .env 2>/dev/null; set +a
   run "node scripts/ensure-schema.js"                                   # SELF-HEALING SCHEMA: auto-provision missing tables/columns (additive, fail-open) BEFORE any DB work
+  run "node scripts/cc2-provision.js"                                  # CC-2: icp_catalog seeds + v_admin_leads view (idempotent; columns/tables also in the spec)
   run "node scripts/zoho-imap-poll.js"                                  # replies (skips if no IMAP pwd)
   run "node src/skills/S065-touch-scheduler/scripts/send-due.js"        # send window (gated)
   run "node scripts/run-serp-scrape.js 50"                              # wide SERP scrape (skips if no key)
