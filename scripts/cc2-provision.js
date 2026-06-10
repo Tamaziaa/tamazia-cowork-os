@@ -101,6 +101,12 @@ const VIEW_SQL = `CREATE OR REPLACE VIEW v_admin_leads AS
   // audit_pages is an audit-engine table (do-not-touch) — the cockpit History tab derives
   // a mint's source by joining audit_pages.slug -> minting_queue.slug, no audit-table change.
   plan.push(`ALTER TABLE minting_queue ADD COLUMN IF NOT EXISTS source text DEFAULT 'auto'`);
+  // CC-5 manual VIP injection: PECR/GDPR lawful-basis tag + who added it (additive on shared leads).
+  plan.push(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS lawful_basis text`);
+  plan.push(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS manual_added_by text`);
+  // CC-4 reconcile gate columns (verify-audits writes these at runtime; make them first-class).
+  plan.push(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS audit_verified boolean DEFAULT false`);
+  plan.push(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS audit_verified_at timestamptz`);
   plan.push(VIEW_SQL);
 
   if (CHECK) { console.log(`[cc2 --check] would run ${plan.length} idempotent statements:`); plan.forEach((q) => console.log('  ·', q.split('\n')[0].slice(0, 110))); process.exit(0); }
