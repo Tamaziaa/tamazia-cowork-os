@@ -25,13 +25,13 @@ function _isSelf(d, me) {
 //   llmPeers    : names from geo_probe.top_competitors / ai_citation (peer firms named by the LLM) — string[] or {name}/{domain}[]
 //   firmText    : the firm's own description (title+meta / corpus) for the optional HF relevance filter
 //   want        : how many peers to return (default 9)
-async function organicCompetitors({ keyword_map = {}, domain, llmPeers = [], firmText = '', country = 'UK', env = process.env, want = 9 } = {}) {
+async function organicCompetitors({ keyword_map = {}, domain, llmPeers = [], firmText = '', country = 'UK', sector = '', env = process.env, want = 9 } = {}) {
   const me = _clean(domain);
   const kws = ((keyword_map && keyword_map.keywords) || []).map(k => k && k.keyword).filter(Boolean);
   const freq = new Map();   // domain -> { count:Set(keywords), title }
   const bump = (d, kw, title) => {
     d = _clean(d);
-    if (!d || _isSelf(d, me) || isAggregator(d)) return;
+    if (!d || _isSelf(d, me) || isAggregator(d, sector, country)) return;   // per-sector blocklist: drop directories/news, keep only real operating rivals
     if (!freq.has(d)) freq.set(d, { kws: new Set(), title: title || '' });
     const e = freq.get(d); e.kws.add(kw); if (!e.title && title) e.title = title;
   };
@@ -53,7 +53,7 @@ async function organicCompetitors({ keyword_map = {}, domain, llmPeers = [], fir
     const nm = String(p.name || '').trim(); if (!nm || nm.length < 3) continue;
     let r = null; try { r = await serp.search(nm, country, 5); } catch (_e) {}
     const organic = (r && r.organic) || [];
-    const hit = organic.find(o => { const d = _clean(o.domain); return d && !_isSelf(d, me) && !isAggregator(d); });
+    const hit = organic.find(o => { const d = _clean(o.domain); return d && !_isSelf(d, me) && !isAggregator(d, sector, country); });
     if (hit) bump(hit.domain, '__llm_peer__', hit.title || nm);
   }
 

@@ -32,6 +32,19 @@ function pg(sql) {
   } catch (_e) { return null; }
 }
 
+// Cached canonical law index (framework_short → law) for the per-mint fail-closed guard. Built once per process.
+let _MGIDX;
+function _mintGateIndex() {
+  if (_MGIDX !== undefined) return _MGIDX;
+  try {
+    const laws = JSON.parse(require('fs').readFileSync(path.resolve(ROOT, 'db', 'seeds', 'compliance-laws.json'), 'utf8'));
+    const m = new Map();
+    for (const l of laws) for (const t of String(l.neon_framework_short || '').split(',').map(s => s.trim()).filter(Boolean)) if (!m.has(t)) m.set(t, l);
+    _MGIDX = m;
+  } catch (_e) { _MGIDX = null; }
+  return _MGIDX;
+}
+
 // 5.1.2 · 8-char hash generator. Random + collision-free check.
 function generateHash() {
   return crypto.randomBytes(6).toString('base64url').replace(/[^A-Za-z0-9]/g, 'x').slice(0, 8);
@@ -181,7 +194,24 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   try { scan = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'crawl-escalation.js')).maybeEscalateCrawl(scan, { domain, env: env || process.env }); } catch (_e) {} // Apify crawl fallback (default-OFF, self-contained)
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
-  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: country || 'UK', signals: scan.signals }); } catch (_e) {}
+  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: country || 'UK', signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) {}
+  // PER-MINT FAIL-CLOSED GUARD (last line of defence before this audit is assembled): drop any compliance finding
+  // whose law is not servable (proven) or not jurisdiction-covered, so a wrong/unproven law can NEVER reach a
+  // client even if an upstream gate regressed. The engine overlay already enforces this — this drops nothing in the
+  // normal path. Index is cached module-side, so the cost at 2-3k/day is negligible.
+  try {
+    const { overlayDrop } = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'resolver.js'));
+    const { toCanonicalJurisdictions } = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'signals.js'));
+    const idx = _mintGateIndex();
+    if (idx && idx.size && Array.isArray(comp.findings) && comp.findings.length) {
+      const jurSet = new Set((comp.canonical_jurisdictions && comp.canonical_jurisdictions.length) ? comp.canonical_jurisdictions : [...toCanonicalJurisdictions(comp.jurisdictions || [])]);
+      const _sect = (comp.detected_sector || sector || '').toString().toLowerCase();  // 30-slug vocab — matches the sector gate
+      const sig = { jurSet, employeeBand: 'unknown', sector: _sect };
+      const before = comp.findings.length;
+      comp.findings = comp.findings.filter(f => { if (f.status !== 'miss') return true; const law = idx.get(f.framework) || idx.get(f.framework_short); return law ? !overlayDrop(law, Object.assign({}, sig, { framework: f.framework || f.framework_short })) : true; });
+      if (comp.findings.length !== before) console.error(`[mint-gate] dropped ${before - comp.findings.length} non-compliant finding(s) for ${domain} (fail-closed)`);
+    }
+  } catch (_e) {}
   // Propagate the LLM firm-profiler's detected sector (corrects a mis-tagged row — e.g. a gym tagged
   // "hospitality") to EVERY downstream engine (keywords, competitors, content-gap, local-pack) and the
   // payload label, so the whole audit speaks the firm's REAL sector, not the row's stale guess. (F-profile)
@@ -243,7 +273,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     try {
       const _air = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'ai-readiness.js'));
       const _airRes = await _air.aiReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], env });
-      if (_airRes && _airRes.ok) { _aiReadyFindings = _airRes.findings || []; payload_ai_readiness = { score: _airRes.score, blocked_ai_bots: _airRes.blocked_ai_bots, has_llms_txt: _airRes.has_llms_txt, has_org_schema: _airRes.has_org_schema, has_same_as: _airRes.has_same_as, in_wikidata: _airRes.in_wikidata }; }
+      if (_airRes && _airRes.ok) { _aiReadyFindings = _airRes.findings || []; payload_ai_readiness = { score: _airRes.score, blocked_ai_bots: _airRes.blocked_ai_bots, has_llms_txt: _airRes.has_llms_txt, has_org_schema: _airRes.has_org_schema, has_same_as: _airRes.has_same_as, in_wikidata: _airRes.in_wikidata, schema_types: _airRes.schema_types || [], has_localbusiness: !!_airRes.has_localbusiness, has_service: !!_airRes.has_service, has_faq: !!_airRes.has_faq }; }
     } catch (_e) {}
     })(),
     // P2.15 local-pack / GBP readiness (OSM presence + LocalBusiness schema + NAP) — gated on city + local sector.
@@ -259,21 +289,59 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   const frameworks = (comp.frameworks && comp.frameworks.length)
     ? comp.frameworks
     : (router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector, signals: scan.signals }) : router.routeJurisdictions({ country, sector }));
-  const compPointers = (comp.findings || []).filter(f => f.status === 'miss').map(f => ({
-    bucket: 'compliance', severity: f.severity || 'P2',
-    fact: f.description || ((f.framework || '') + ' ' + (f.code || '')),
-    layman_explanation: f.layman_explanation || f.description || '',
-    tamazia_fix_short: f.tamazia_fix_short || 'Tamazia closes this gap as part of the engagement.',
-    recommendation: f.tamazia_fix_short || '',
-    citation: f.framework, framework_short: f.framework, citation_url: f.citation_url || '',
-    evidence: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || 'multi-page corpus scan',
-    evidence_quote: f.evidence_quote || null,
-    checked_urls: Array.isArray(f.checked_urls) ? f.checked_urls.slice(0, 6) : null,
-    rule_type: f.rule_type || null,
-    fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
-    verify_context: f.verify_context || null,
-    enforcement_example: f.enforcement_example || null,
-  }));
+  const _gbp = (n) => n == null ? null : (n >= 1e6 ? '£' + (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1e3 ? '£' + Math.round(n / 1e3) + 'k' : '£' + Math.round(n));
+  // Best-practice / GEO signals (Google E-E-A-T, schema, robots for AI engines) are NOT regulatory laws — they
+  // carry no statutory penalty and must NEVER appear in the regulatory section with a fine. Re-bucket them to
+  // content/SEO and strip any (spurious) penalty so the compliance section shows ONLY real laws with real penalties.
+  const _nonReg = (fw, reg) => /^(GOOGLE_EEAT|GEO-SCHEMA|GEO-ROBOTS|GEO-LLMS|SCHEMA_ORG|WCAG)/i.test(fw || '') || /\b(google|ai engines|quality rater|e-?e-?a-?t|search\/ai engines)\b/i.test(reg || '');
+  const compPointers = (comp.findings || []).filter(f => f.status === 'miss').map(f => {
+    const bp = f.breach_panel || null;
+    const regulator = (bp && bp.regulator) || null;
+    const nonReg = _nonReg(f.framework, regulator);
+    if (nonReg) {
+      // a best-practice content/trust gap — no regulator, no fine; rendered under SEO/content, not regulatory.
+      return {
+        bucket: 'content_depth', severity: f.severity || 'P2',
+        fact: f.description || ((f.framework || '') + ' ' + (f.code || '')),
+        recommendation: f.tamazia_fix_short || 'Tamazia closes this gap as part of the engagement.',
+        citation: f.framework, framework_short: f.framework, citation_url: f.citation_url || '',
+        evidence: f.evidence_url || 'multi-page corpus scan', evidence_url: f.evidence_url || null,
+        evidence_quote: f.evidence_quote || null, best_practice: true,
+      };
+    }
+    const occN = f.occurrence_count || (Array.isArray(f.occurrences) ? f.occurrences.length : 0);
+    const factBase = f.description || ((f.framework || '') + ' ' + (f.code || ''));
+    return {
+      bucket: 'compliance', severity: f.severity || 'P2',
+      fact: factBase,
+      desc: factBase,
+      layman_explanation: f.layman_explanation || f.description || '',
+      tamazia_fix_short: f.tamazia_fix_short || 'Tamazia closes this gap as part of the engagement.',
+      recommendation: f.tamazia_fix_short || '',
+      // citation = framework code ONLY (the renderer parses the first token as the framework and the rest as the
+      // §section, and computes the regulator + penalty itself); never embed regulator/penalty here.
+      citation: f.framework, framework_short: f.framework, citation_url: f.citation_url || '',
+      evidence: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || 'multi-page corpus scan',
+      evidence_url: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || null,
+      evidence_quote: f.evidence_quote || null,
+      checked_urls: Array.isArray(f.checked_urls) ? f.checked_urls.slice(0, 6) : null,
+      absence_evidence: f.absence_evidence || null,   // A3 — real nearest-miss context (page + what's there vs missing)
+      rule_type: f.rule_type || null,
+      fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
+      verify_context: f.verify_context || null,
+      enforcement_example: f.enforcement_example || null,
+      // ── B2/B3 backend→frontend sync: the per-breach panel + every-word locations (for the rich render) ──
+      regulator,
+      penalty: bp && bp.penalty ? bp.penalty.headline : (f.enforcement_example || null),
+      penalty_basis: bp && bp.penalty ? bp.penalty.basis : null,
+      recent_ruling: bp ? bp.recent_ruling : null,
+      recent_news: bp ? bp.recent_news : null,
+      impact: bp ? bp.impact : null,
+      occurrence_count: occN || null,
+      occurrences: Array.isArray(f.occurrences) ? f.occurrences.slice(0, 5).map(o => ({ url: o.url, line: o.line })) : null,
+      breach_panel: bp,
+    };
+  });
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';
   const lr = pg(`SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'`) || new Date().toISOString().slice(0, 10);
   const rulesList = frameworks.map(f => `'${f}'`).join(',');
@@ -318,7 +386,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
       const _co = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'competitor-overlap.js'));
       const _llmPeers = ((ai_citation && ai_citation.competitors) || []).map(c => (c && (c.domain || c.name))).filter(Boolean);
       const _firmText = (scan.signals && (scan.signals.corpus || scan.signals.title)) || '';
-      _organicComps = await _co.organicCompetitors({ keyword_map, domain, llmPeers: _llmPeers, firmText: _firmText, country: country || 'UK', env, want: 9 }) || [];
+      _organicComps = await _co.organicCompetitors({ keyword_map, domain, llmPeers: _llmPeers, firmText: _firmText, country: country || 'UK', sector, env, want: 9 }) || [];
     } catch (_e) {}
     })(),
     // P3.1/3.3/3.4/3.5 multi-sample GEO probe (repeatability + share-of-voice + entrenched leaders). Rate-limit-graceful.
@@ -511,11 +579,12 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   }
   const payload = await buildPayload({ domain, sector, country: country || 'UK', lead_id, env: env || process.env });
 
-  // R2 storage offload (AUDIT_PAYLOAD_STORE: 'neon' | 'both' | 'r2'; default 'neon' keeps current behaviour)
-  const { putAudit } = require('../../../lib/r2');
+  // R2 storage offload (AUDIT_PAYLOAD_STORE: 'neon' | 'both' | 'r2'; default 'neon' keeps current behaviour).
+  // Lazy-require r2.js (pulls @aws-sdk) ONLY when R2 storage is actually used, so a neon-mode mint never depends
+  // on the AWS SDK being installed.
   const mode = process.env.AUDIT_PAYLOAD_STORE || 'neon';
   if (mode === 'both' || mode === 'r2') {
-    try { await putAudit(slug, hash, payload); } catch (e) { if (mode === 'r2') throw e; }
+    try { const { putAudit } = require('../../../lib/r2'); await putAudit(slug, hash, payload); } catch (e) { if (mode === 'r2') throw e; }
   }
   const neonPayload = (mode === 'r2') ? { r2: true, framework_version: payload.framework_version } : payload;
 
@@ -531,7 +600,11 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   const payloadJsonE = JSON.stringify(neonPayload).replace(/'/g, "''");
   // A4j — RETURNING id + loud failure: pg() returns null/'' on error, and a silently-failed INSERT here means a
   // DEAD AUDIT LINK gets emailed. Never return {slug,hash} unless the row is provably written.
-  const ins = pg(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds})) RETURNING id`);
+  let ins = pg(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds})) RETURNING id`);
+  // A >100KB payload is routed by pg() through the psql -f path, which EXECUTES the INSERT but returns no RETURNING
+  // output — so confirm the row with a small SELECT before declaring failure (else a successful large-payload mint
+  // is wrongly rejected as a dead link).
+  if (!ins || !String(ins).trim()) ins = pg(`SELECT id FROM audit_pages WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
   if (!ins || !String(ins).trim()) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written; refusing to return a dead audit link`);
 
   return { slug, hash, signed_url: signed.url, signed_exp: signed.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };

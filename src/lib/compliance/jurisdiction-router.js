@@ -51,7 +51,7 @@ const SECTOR_MAP = {
   'construction':         ['UK_HSE', 'UK_CITB', 'UK_MODERN_SLAVERY'],
 
   // Hospitality & food
-  'hospitality':          ['UK_FSA', 'UK_LICENSING_ACT', 'UK_HSE', 'UK_DMCC_2024'],
+  'hospitality':          ['UK_FSA', 'UK_FOOD_INFO_2014', 'UK_LICENSING_ACT', 'UK_HSE', 'UK_DMCC_2024'],
   'food':                 ['UK_FSA', 'UK_FOOD_INFO_2014'],
 
   // Fitness / leisure (membership auto-renewal + pricing = DMCC/CMA; accessibility = Equality; equipment = HSE).
