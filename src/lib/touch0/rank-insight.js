@@ -137,10 +137,22 @@ async function buildRankInsight({ domain, company, sector, city, serviceNoun, ht
   };
 }
 
+// Map a firm's country → a Google geo (gl) so autocomplete returns IN-MARKET suggestions, never the UK default.
+// (Root cause of a UAE firm getting "law firms wembley / canary wharf": gl was hardcoded to 'uk'.)
+function _glFor(country) {
+  const c = String(country || '').toUpperCase().trim();
+  return ({ UK: 'uk', GB: 'uk', 'UNITED KINGDOM': 'uk', 'GREAT BRITAIN': 'uk', ENGLAND: 'uk',
+    US: 'us', USA: 'us', 'UNITED STATES': 'us', CA: 'ca', CANADA: 'ca', AU: 'au', AUSTRALIA: 'au',
+    AE: 'ae', UAE: 'ae', 'UNITED ARAB EMIRATES': 'ae', SA: 'sa', KSA: 'sa', 'SAUDI ARABIA': 'sa',
+    QA: 'qa', QATAR: 'qa', BH: 'bh', KW: 'kw', OM: 'om', IN: 'in', INDIA: 'in',
+    FR: 'fr', FRANCE: 'fr', DE: 'de', GERMANY: 'de', ES: 'es', IT: 'it', NL: 'nl',
+    SG: 'sg', SINGAPORE: 'sg', HK: 'hk', IE: 'ie', IRELAND: 'ie', GLOBAL: 'us' })[c] || 'us';
+}
 // --- Audit keyword map: ungated full picture (where they rank now vs the top-3 target) + free autocomplete expansion ---
-async function autocomplete(seed) {
+async function autocomplete(seed, country) {
+  const gl = _glFor(country);
   try {
-    const r = await fetch('https://google.com/complete/search?output=toolbar&gl=uk&hl=en&q=' + encodeURIComponent(seed), { signal: AbortSignal.timeout(6000), headers: { 'user-agent': 'Mozilla/5.0' } });
+    const r = await fetch('https://google.com/complete/search?output=toolbar&gl=' + gl + '&hl=en&q=' + encodeURIComponent(seed), { signal: AbortSignal.timeout(6000), headers: { 'user-agent': 'Mozilla/5.0' } });
     if (!r.ok) return [];
     const t = await r.text();
     return [...t.matchAll(/data="([^"]+)"/g)].map(m => m[1]).filter(Boolean).slice(0, 8);
@@ -277,12 +289,12 @@ async function buildKeywordMap({ domain, company, sector, city, html, corpus, co
   let seeds;
   if (seedCity) {
     seeds = keywordsFor(sector, seedCity, noun);
-    try { const ac = await autocomplete(noun + ' ' + seedCity); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
+    try { const ac = await autocomplete(noun + ' ' + seedCity, country); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
   } else {
     // National brand or no city (global / ecommerce): category-level + vertical buyer queries so the ranking
     // ladder still populates from brand-relevant terms, never city-localised ones.
     seeds = [noun, 'best ' + noun, 'top ' + noun, (noun + ' ' + ctyLabel).trim()];
-    try { const ac = await autocomplete(noun); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
+    try { const ac = await autocomplete(noun, country); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
   }
   // B1: seed the firm's own brand + specific-service long-tail (terms it plausibly ranks for) ahead of the
   // generic head terms, so the map shows a credible MIX of real positions + honest gaps — never "Not ranking"

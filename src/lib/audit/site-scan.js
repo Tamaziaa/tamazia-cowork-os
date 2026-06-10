@@ -115,49 +115,196 @@ function extractSignals({ body, headers }) {
   };
 }
 
-// --- Optional PageSpeed (Core Web Vitals) — only if a free key is configured ---
-function _parsePsi(d) {
-  try {
-    const lr = d.lighthouseResult || {};
-    const cats = lr.categories || {};
-    const a = lr.audits || {};
-    const num = (id) => (a[id] && a[id].numericValue) || null;
-    return {
-      perf: cats.performance ? cats.performance.score : null,
-      seo: cats.seo ? cats.seo.score : null,
-      lcp_ms: num('largest-contentful-paint'),
-      cls: num('cumulative-layout-shift'),
-      tbt_ms: num('total-blocking-time'),
-      fcp_ms: num('first-contentful-paint'),
-      audits: Object.values(a).filter(x => x && x.score !== null && x.score < 0.9 && ['binary','numeric','metricSavings'].includes(x.scoreDisplayMode))
-        .map(x => { const _it = Array.isArray(x.details && x.details.items) ? x.details.items : []; const _n = _it.map(q => q && q.node).filter(Boolean)[0] || null; return { id: x.id, title: x.title || '', description: String(x.description || '').replace(/\s*\[[^\]]*\]\([^)]*\)/g, '').trim(), score: x.score, displayValue: x.displayValue || '', items: _it.length || 0, node_snippet: (_n && _n.snippet) ? String(_n.snippet) : '', node_selector: (_n && _n.selector) ? String(_n.selector) : '', node_count: _it.filter(q => q && q.node).length }; }),
-    };
-  } catch (_e) { return null; }
+// --- Optional PageSpeed (full Lighthouse, mobile + desktop) — only if a free key is configured ---
+// Google PSI fetches the site ITSELF (real Chrome), so it returns real metrics even when our own scraper is
+// bot-challenged. We call BOTH strategies and extract the COMPLETE Lighthouse result per strategy so the render
+// can always populate desktop AND mobile metric boxes for performance / CWV / SEO / accessibility / best-practices.
+
+// Brand-tone, urgent, one-line fix synthesised from a Lighthouse audit (e.g. "Defer 3 render-blocking scripts —
+// 1.8s off first paint"). Uses the audit's own savings (ms/bytes) + element count so each line is specific + real.
+function _psiFixLine(au) {
+  const id = au.id || '';
+  const ms = (au.savings_ms != null && au.savings_ms >= 50) ? Math.round(au.savings_ms) : null;
+  const kb = (au.savings_bytes != null && au.savings_bytes >= 1024) ? Math.round(au.savings_bytes / 1024) : null;
+  const n = au.node_count || au.items || 0;
+  const saved = ms ? `— ${(ms / 1000).toFixed(ms >= 1000 ? 1 : 2)}s faster` : (kb ? `— ${kb} KB lighter` : '');
+  const T = {
+    'render-blocking-resources': `Defer ${n || ''} render-blocking resource${n === 1 ? '' : 's'}`.replace('  ', ' '),
+    'render-blocking-insight': 'Strip render-blocking requests from first paint',
+    'unused-javascript': `Cut unused JavaScript${n ? ` across ${n} file${n === 1 ? '' : 's'}` : ''}`,
+    'unused-css-rules': 'Remove unused CSS from the critical path',
+    'unminified-javascript': 'Minify JavaScript bundles',
+    'unminified-css': 'Minify CSS',
+    'modern-image-formats': 'Serve images as WebP/AVIF',
+    'uses-optimized-images': 'Compress oversized images',
+    'uses-responsive-images': 'Ship correctly-sized responsive images',
+    'efficient-animated-content': 'Replace heavy GIFs with video',
+    'offscreen-images': 'Lazy-load offscreen images',
+    'total-byte-weight': 'Trim total page weight',
+    'uses-text-compression': 'Enable Brotli/gzip text compression',
+    'server-response-time': 'Cut server response time (TTFB)',
+    'redirects': 'Remove redirect chains before first byte',
+    'uses-long-cache-ttl': 'Set long cache lifetimes on static assets',
+    'cache-insight': 'Cache static assets aggressively',
+    'largest-contentful-paint': 'Pull LCP under 2.5s',
+    'first-contentful-paint': 'Speed first paint',
+    'cumulative-layout-shift': 'Lock layout to kill CLS',
+    'total-blocking-time': 'Split JS to cut main-thread blocking',
+    'interactive': 'Reach interactive sooner',
+    'speed-index': 'Speed visual completion',
+    'mainthread-work-breakdown': 'Reduce main-thread work',
+    'bootup-time': 'Cut JavaScript execution time',
+    'unsized-images': `Set width/height on ${n || ''} image${n === 1 ? '' : 's'} to stop shift`.replace('  ', ' '),
+    'image-alt': `Add alt text to ${n || ''} image${n === 1 ? '' : 's'}`.replace('  ', ' '),
+    'color-contrast': `Fix contrast on ${n || ''} element${n === 1 ? '' : 's'} (WCAG AA)`.replace('  ', ' '),
+    'label': `Label ${n || ''} form control${n === 1 ? '' : 's'} for screen readers`.replace('  ', ' '),
+    'link-name': `Give ${n || ''} link${n === 1 ? '' : 's'} an accessible name`.replace('  ', ' '),
+    'heading-order': 'Fix the heading hierarchy',
+    'html-has-lang': 'Set the page language attribute',
+    'meta-description': 'Add a compelling meta description',
+    'document-title': 'Write a unique, keyword-led title',
+    'is-crawlable': 'Unblock indexing so Google can rank you',
+    'structured-data': 'Ship Schema.org so search + AI parse you',
+    'tap-targets': 'Size mobile tap targets so users can act',
+    'font-size': 'Fix illegible mobile font sizes',
+    'errors-in-console': 'Clear the JavaScript console errors',
+    'deprecations': 'Remove deprecated browser APIs',
+  };
+  const base = T[id] || (au.title ? String(au.title).replace(/\s+/g, ' ').trim() : 'Resolve this Lighthouse issue');
+  return saved ? `${base} ${saved}` : base;
 }
-async function pageSpeed(domain, key) {
-  // Dev cache: if PSI_CACHE_DIR/<domain>.json exists, use it (lets full mints run under the shell time cap).
+
+// Extract ONE audit (failing / opportunity / diagnostic) into the render shape, with savings + element pinpoint.
+function _psiAudit(x) {
+  const _it = Array.isArray(x.details && x.details.items) ? x.details.items : [];
+  const _n = _it.map(q => q && q.node).filter(Boolean)[0] || null;
+  const _ov = (x.details && typeof x.details.overallSavingsMs === 'number') ? x.details.overallSavingsMs : null;
+  const _ob = (x.details && typeof x.details.overallSavingsBytes === 'number') ? x.details.overallSavingsBytes : null;
+  const _ms = (x.metricSavings && (x.metricSavings.LCP || x.metricSavings.FCP || x.metricSavings.TBT)) || null;
+  const a = {
+    id: x.id,
+    title: x.title || '',
+    description: String(x.description || '').replace(/\s*\[[^\]]*\]\([^)]*\)/g, '').trim(),
+    score: x.score,
+    scoreDisplayMode: x.scoreDisplayMode || '',
+    displayValue: x.displayValue || '',
+    numericValue: (typeof x.numericValue === 'number') ? x.numericValue : null,
+    savings_ms: (_ov != null ? _ov : _ms),
+    savings_bytes: _ob,
+    items: _it.length || 0,
+    node_snippet: (_n && _n.snippet) ? String(_n.snippet) : '',
+    node_selector: (_n && _n.selector) ? String(_n.selector) : '',
+    node_count: _it.filter(q => q && q.node).length,
+  };
+  a.fix = _psiFixLine(a);
+  return a;
+}
+
+// Parse ONE strategy's raw PSI JSON into { scores, cwv, audits[] } + the legacy flat fields the current render reads.
+function _parsePsiStrategy(d) {
+  const lr = (d && d.lighthouseResult) || {};
+  const cats = lr.categories || {};
+  const a = lr.audits || {};
+  const le = (d && d.loadingExperience && d.loadingExperience.metrics) || {};
+  const num = (id) => (a[id] && typeof a[id].numericValue === 'number') ? a[id].numericValue : null;
+  const cat = (k) => (cats[k] && typeof cats[k].score === 'number') ? cats[k].score : null;
+  const field = (k) => (le[k] && typeof le[k].percentile === 'number') ? le[k].percentile : null;
+  const scores = {
+    performance: cat('performance'),
+    accessibility: cat('accessibility'),
+    'best-practices': cat('best-practices'),
+    seo: cat('seo'),
+    pwa: cat('pwa'),
+  };
+  // CWV: prefer real-user FIELD data (loadingExperience) where available, else Lighthouse LAB. Flag the source.
+  const f_lcp = field('LARGEST_CONTENTFUL_PAINT_MS'), f_cls = field('CUMULATIVE_LAYOUT_SHIFT_SCORE'),
+        f_fcp = field('FIRST_CONTENTFUL_PAINT_MS'), f_inp = field('INTERACTION_TO_NEXT_PAINT'),
+        f_ttfb = field('EXPERIMENTAL_TIME_TO_FIRST_BYTE');
+  const cwv = {
+    lcp_ms: f_lcp != null ? f_lcp : num('largest-contentful-paint'),
+    cls: f_cls != null ? (f_cls / 100) : num('cumulative-layout-shift'),   // CrUX CLS percentile is x100
+    fcp_ms: f_fcp != null ? f_fcp : num('first-contentful-paint'),
+    tbt_ms: num('total-blocking-time'),
+    si_ms: num('speed-index'),
+    tti_ms: num('interactive'),
+    inp_ms: f_inp != null ? f_inp : num('interaction-to-next-paint'),
+    ttfb_ms: f_ttfb != null ? f_ttfb : num('server-response-time'),
+    source: (f_lcp != null || f_cls != null) ? 'field+lab' : 'lab',
+  };
+  // ALL failing / opportunity / diagnostic audits (score present and < 0.9), richest-first by savings.
+  const audits = Object.values(a)
+    .filter(x => x && x.score !== null && x.score < 0.9 && ['binary', 'numeric', 'metricSavings'].includes(x.scoreDisplayMode))
+    .map(_psiAudit)
+    .sort((p, q) => (q.savings_ms || 0) - (p.savings_ms || 0) || (q.savings_bytes || 0) - (p.savings_bytes || 0));
+  return { scores, cwv, audits };
+}
+
+// Back-compat: the current site render reads scan.psi.{perf,seo,cls,lcp_ms,tbt_ms,fcp_ms,audits}. Project a parsed
+// strategy onto those flat fields so an unchanged renderer keeps working (we default these from MOBILE downstream).
+function _flatFromStrategy(s) {
+  if (!s) return null;
+  return {
+    perf: s.scores.performance,
+    seo: s.scores.seo,
+    lcp_ms: s.cwv.lcp_ms,
+    cls: s.cwv.cls,
+    tbt_ms: s.cwv.tbt_ms,
+    fcp_ms: s.cwv.fcp_ms,
+    audits: s.audits,
+  };
+}
+
+// Legacy single-arg parser kept for back-compat (and the dev cache path / exported API).
+function _parsePsi(d) {
+  try { return _flatFromStrategy(_parsePsiStrategy(d)); } catch (_e) { return null; }
+}
+
+// Resilient single-strategy fetch → RAW PSI JSON. >=3 attempts w/ backoff (PSI intermittently 429s / returns an
+// empty run); validates lighthouseResult is present; per-strategy write-through dev cache. Returns null on failure.
+async function _fetchPsiRaw(domain, key, strategy) {
+  const tag = strategy === 'desktop' ? '.desktop' : '';   // mobile cache file keeps the legacy <domain>.json name
   try {
     const dir = process.env.PSI_CACHE_DIR;
-    if (dir) { const fs = require('fs'); const f = dir + '/' + domain + '.json'; if (fs.existsSync(f)) return _parsePsi(JSON.parse(fs.readFileSync(f, 'utf8'))); }
+    if (dir) { const fs = require('fs'); const f = dir + '/' + domain + tag + '.json'; if (fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, 'utf8')); }
   } catch (_e) {}
   if (!key) return null;
-  const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=mobile&category=performance&category=seo&category=accessibility&key=${key}`;
-  // Strongest-possible: 3 attempts with backoff (PSI/Lighthouse intermittently 429s or returns an empty run),
-  // validate the lighthouseResult is present, and write-through to the cache so re-mints never silently drop SEO.
+  const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=${strategy}` +
+    `&category=performance&category=seo&category=accessibility&category=best-practices&key=${key}`;
   for (let i = 0; i < 3; i++) {
     try {
-      const r = await timed((signal) => fetch(u, { signal }), 40000);
+      // Per-attempt cap 45s: PSI runs a full Lighthouse pass on the live site, and our audit targets are SLOW
+      // sites — exactly the ones whose run exceeds a tight cap and times out to a false "not assessed". 45s clears
+      // the slow-site tail; the retry+backoff loop and write-through cache still bound total wait + recover fail-soft.
+      const r = await timed((signal) => fetch(u, { signal }), 45000);
       if (r.ok) {
         const j = await r.json();
         if (j && j.lighthouseResult && j.lighthouseResult.audits) {
-          try { const dir = process.env.PSI_CACHE_DIR; if (dir) { const fs = require('fs'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(dir + '/' + domain + '.json', JSON.stringify(j)); } } catch (_e) {}
-          return _parsePsi(j);
+          try { const dir = process.env.PSI_CACHE_DIR; if (dir) { const fs = require('fs'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(dir + '/' + domain + tag + '.json', JSON.stringify(j)); } } catch (_e) {}
+          return j;
         }
       }
     } catch (_e) { /* transient: retry */ }
     if (i < 2) await new Promise(res => setTimeout(res, 1500 * (i + 1)));
   }
   return null;
+}
+
+// Top-level PSI: fetch BOTH strategies in parallel, attach scan.psi.mobile + scan.psi.desktop (each {scores,cwv,
+// audits[]}), and keep the legacy flat fields populated from MOBILE (falling back to desktop) so the existing
+// render is unchanged. Robust: if one strategy fails we still return the other; null only when BOTH fail
+// (URL genuinely unreachable to Google's own crawler).
+async function pageSpeed(domain, key) {
+  const [rawM, rawD] = await Promise.all([
+    _fetchPsiRaw(domain, key, 'mobile'),
+    _fetchPsiRaw(domain, key, 'desktop'),
+  ]);
+  if (!rawM && !rawD) return null;
+  let mobile = null, desktop = null;
+  try { mobile = rawM ? _parsePsiStrategy(rawM) : null; } catch (_e) {}
+  try { desktop = rawD ? _parsePsiStrategy(rawD) : null; } catch (_e) {}
+  // Legacy flat fields default from mobile (Google's ranking strategy), else desktop.
+  const flat = _flatFromStrategy(mobile) || _flatFromStrategy(desktop) || {};
+  return Object.assign({}, flat, { mobile, desktop });
 }
 
 function P(bucket, severity, citation, fact, layman, fix, evidence) {

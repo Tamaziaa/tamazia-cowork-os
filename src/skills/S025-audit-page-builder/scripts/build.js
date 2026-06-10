@@ -113,32 +113,35 @@ async function verifyTopFindings(classified, env, cap = 4) {
     .filter(f => f.state === 'CONFIRMED' && f.kind === 'presence' && (f.evidence_quote || f.evidence_snippet) && (f.fine_high_gbp || f.fine_low_gbp))
     .sort((a, b) => (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0))
     .slice(0, cap);
-  for (const f of targets) {
+  // Parallelized: each finding object is distinct, so concurrent mutation is safe in single-threaded JS.
+  // Per-call timeout 12s (was 20s); fail-open per finding preserved.
+  await Promise.all(targets.map(async f => {
     try {
       const quote = String(f.evidence_quote || f.evidence_snippet).slice(0, 400);
       const rule = String(f.fact || f.description || '').slice(0, 300);
       const prompt = 'You verify website-audit findings. Judge ONLY the quoted text; assume nothing beyond it.\nFinding: "' + rule + '"\nText quoted verbatim from the website: "' + quote + '"\nDoes the quoted text clearly support the finding? Reply with YES or NO on the first line, then a six-word reason.';
-      const r = await fetch(base, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 24, temperature: 0 }), signal: AbortSignal.timeout(20000) });
-      if (!r.ok) continue;
+      const r = await fetch(base, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 24, temperature: 0 }), signal: AbortSignal.timeout(12000) });
+      if (!r.ok) return;
       const j = await r.json();
       const _raw = ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
       const _first = _raw.split(/\n|[.,]/)[0].toUpperCase();
       if (/^\s*NO\b/.test(_first)) { f.state = 'NEEDS_REVIEW'; f.fine_low_gbp = null; f.fine_high_gbp = null; f.fine_withheld = true; f.signals = (f.signals || []).concat('nim_not_entailed'); }
       else if (/^\s*YES\b/.test(_first)) { f.signals = (f.signals || []).concat('nim_entailed'); }
     } catch (_e) { /* fail-open */ }
-  }
+  }));
   // P1.5a immaculate fines: LLM-verify the top fine-bearing ABSENCE findings against the real page text.
   const absTargets = classified
     .filter(f => f.state === 'CONFIRMED' && f.kind === 'absence' && (f.fine_high_gbp || f.fine_low_gbp) && f.verify_context)
     .sort((a, b) => (b.fine_high_gbp || 0) - (a.fine_high_gbp || 0))
-    .slice(0, 8);
-  for (const f of absTargets) {
+    .slice(0, 6);
+  // Parallelized (distinct finding objects → safe). Per-call timeout 12s (was 20s); fail-open per finding.
+  await Promise.all(absTargets.map(async f => {
     try {
       const req = String(f.description || f.fact || '').slice(0, 280);
       const ctx = String(f.verify_context || '').slice(0, 2600);
       const prompt = 'You are a compliance auditor. Judge ONLY the provided website text; assume nothing outside it.\nRequirement the page must satisfy: "' + req + '"\nWebsite text (verbatim excerpt):\n"""' + ctx + '"""\nDoes the text above already satisfy the requirement? Answer SATISFIED or MISSING on the first line. If SATISFIED, on the next line quote the exact words from the text that satisfy it.';
-      const r = await fetch(base, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 60, temperature: 0 }), signal: AbortSignal.timeout(20000) });
-      if (!r.ok) continue;
+      const r = await fetch(base, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 60, temperature: 0 }), signal: AbortSignal.timeout(12000) });
+      if (!r.ok) return;
       const j = await r.json();
       const raw = ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
       const firstLine = (raw.split('\n')[0] || '').toUpperCase();
@@ -151,7 +154,7 @@ async function verifyTopFindings(classified, env, cap = 4) {
         f.signals = (f.signals || []).concat('nim_gap_confirmed');
       }
     } catch (_e) { /* fail-open */ }
-  }
+  }));
   for (const f of classified) { if (f.verify_context) delete f.verify_context; }
   return classified;
 }
@@ -174,13 +177,22 @@ function buildCompetitiveBenchmark(aic, km) {
 }
 
 async function buildPayload({ domain, sector, country, lead_id, env }) {
+  // Env-gated timing harness (MINT_PROFILE=1). Off in prod by default; plain Date.now() is fine here (engine code).
+  const _PROF = !!process.env.MINT_PROFILE;
+  const _profMarks = [];
+  const _prof = async (label, fn) => {
+    if (!_PROF) return fn();
+    const _t0 = Date.now();
+    try { return await fn(); }
+    finally { _profMarks.push([label, Date.now() - _t0]); }
+  };
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
   let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
-  try { scan = await scanSite({ domain, sector, env }); } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
+  try { scan = await _prof('scanSite', () => scanSite({ domain, sector, env })); } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
-  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: country || 'UK', signals: scan.signals }); } catch (_e) {}
+  try { comp = await _prof('compliance.scan', () => require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: country || 'UK', signals: scan.signals })); } catch (_e) {}
   // Propagate the LLM firm-profiler's detected sector (corrects a mis-tagged row — e.g. a gym tagged
   // "hospitality") to EVERY downstream engine (keywords, competitors, content-gap, local-pack) and the
   // payload label, so the whole audit speaks the firm's REAL sector, not the row's stale guess. (F-profile)
@@ -193,7 +205,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   let _aiReadyFindings = [];
   let payload_ai_readiness = null;
   let _localFindings = [];
-  await Promise.all([
+  await _prof('Tier1', () => Promise.all([
     // KEYWORD MAP (cog 5): where they rank now vs the top-3 target, real SERP via SERPER + free autocomplete. Fail-open.
     (async () => {
     try {
@@ -254,7 +266,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
       if (_lpRes && _lpRes.finding) _localFindings = [_lpRes.finding];
     } catch (_e) {}
     })(),
-  ]);
+  ]));
   const frameworks = (comp.frameworks && comp.frameworks.length)
     ? comp.frameworks
     : (router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector, signals: scan.signals }) : router.routeJurisdictions({ country, sector }));
@@ -296,7 +308,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   let payload_content_gap = null;
   let _organicComps = [];
   let _geoFindings = [];
-  await Promise.all([
+  await _prof('Tier2', () => Promise.all([
     // P2.16 content-gap (INTERNAL content-planning data only — NOT a client finding: generic-autocomplete gaps carry
     // location/intent noise that would breach the zero-false-positive bar on the client render). For Tamazia's team.
     (async () => {
@@ -339,12 +351,12 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     (async () => {
     try { _seoFindings = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'seo-deep.js')).seoDeepFindings({ keyword_map }); } catch (_e) {}
     })(),
-  ]);
+  ]));
 
   // ── TIER 3 ──
   // Step A (parallel): authority gap (needs _organicComps) ∥ Bing-volume + HF-intent keyword enrichment (need only keyword_map).
   let _authFindings = [];
-  await Promise.all([
+  await _prof('Tier3.StepA', () => Promise.all([
     // P2.17 backlink/authority gap (OpenPageRank) — over the REAL overlap set (falls back to keyword leaders).
     (async () => {
     try {
@@ -366,31 +378,45 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
       if (_hf.enabled(env)) { const _labels = ['commercial', 'transactional', 'informational', 'navigational']; await Promise.all(_kws.slice(0, 8).map(async k => { const z = await _hf.zeroShot(k.keyword, _labels, { env }); if (z && z.labels && z.labels.length) k.intent = z.labels[0]; })); }
     } catch (_e) {}
     })(),
-  ]);
+  ]));
   // ── §2 Common Crawl footprint (firm + top-3 competitors): real indexed-page depth + on-site topics, keyless ──
   // Step B (serial): needs payload_authority.ranked from Step A. CC's inner 3-competitor loop is parallelized.
   // Fail-open: CC's public CDX front-end is periodically overloaded (504s) → returns null and the engine continues.
+  // Hard outer budget: CC is non-essential enrichment, so the whole block races a 7s cap that resolves null —
+  // a slow/hung CDX front-end can never add more than ~7s of wait to a mint.
+  // Hard outer budget: CC is non-essential enrichment, so the whole block races a 7s cap that resolves null —
+  // a slow/hung CDX front-end (it 504s periodically) can never add more than ~7s of wait to a mint. Fail-open.
+  await _prof('CommonCrawl.StepB', async () => {
   try {
     const _cc = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'cc-index.js'));
-    const _meFoot = await _cc.ccFootprint({ domain });
+    const _ccCap = (ms) => new Promise(res => setTimeout(() => res(null), ms));
+    const _meFoot = await Promise.race([_cc.ccFootprint({ domain }), _ccCap(7000)]);
     if (_meFoot && _meFoot.indexed_pages != null) {
       payload_authority = payload_authority || {};
       payload_authority.cc_indexed_pages = _meFoot.indexed_pages;                    // content-depth signal (real)
       if (payload_content_gap && _meFoot.topics && _meFoot.topics.length) payload_content_gap.cc_topics = _meFoot.topics;
-      if (payload_authority.ranked) await Promise.all(payload_authority.ranked.slice(0, 3).map(async r => {
+      if (payload_authority.ranked) await Promise.race([Promise.all(payload_authority.ranked.slice(0, 3).map(async r => {
         const f = await _cc.ccFootprint({ domain: r.domain }); if (f && f.indexed_pages != null) r.cc_indexed_pages = f.indexed_pages;
-      }));
+      })), _ccCap(7000)]);
     }
   } catch (_e) {}
+  });
   // P3.9 hallucination + sentiment (free-LLM chain)
   // Step C (serial): MUST stay after geoProbe — it augments the payload_geo_probe geoProbe set (ai_knows / ai_sentiment),
-  // so running it concurrently would race and drop those fields.
+  // so running it concurrently would race and drop those fields. Outer 15s budget (fails open to null) so the
+  // serial LLM knowledge+sentiment chain can never stall the mint past its useful window.
+  // Outer 15s budget (fails open to null): the serial LLM knowledge+sentiment chain can never stall the mint
+  // past its useful window. hallucinationCheck is already per-call bounded (askLLM 9s/provider); this caps the pair.
+  await _prof('hallucination.StepC', async () => {
   try {
-    const _hr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'hallucination.js')).hallucinationCheck({ company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env });
+    const _hc = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'hallucination.js')).hallucinationCheck({ company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env });
+    const _hr = await Promise.race([_hc, new Promise(res => setTimeout(() => res(null), 15000))]);
     if (_hr && _hr.ok) { payload_geo_probe = payload_geo_probe || {}; payload_geo_probe.ai_knows = _hr.ai_knows; payload_geo_probe.ai_sentiment = _hr.sentiment; if (_hr.finding) _geoFindings.push(_hr.finding); }
   } catch (_e) {}
+  });
   // P3.V1-3 GEO visuals + P3.8 screenshots, built from the live GEO data
   // Step D (serial): reads payload_ai_readiness (Tier 1) + payload_geo_probe (now fully populated by geoProbe + hallucination).
+  await _prof('geoVisuals.StepD', async () => {
   try {
     const _v = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-visuals.js'));
     const _sc = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'screenshot.js'));
@@ -409,6 +435,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     payload_geo_visuals = { ai_engine_grid: _v.aiEngineGrid(engines), ai_radar: _v.aiRadar(radarAxes), entity_web_map: _v.entityWebMap({ you: (domain || '').replace(/^www\./, '').split('.')[0], nodes }) };
     payload_screenshots = _sc.screenshotUrls({ domain, query: (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '') });
   } catch (_e) {}
+  });
   try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: country, company: (domain || '').replace(/^www\./, '').split('.')[0] }); } catch (_e) {}
   let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings, ..._aiReadyFindings, ..._geoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // ── REACHABILITY RECONCILIATION (anti-fabrication red line) ──────────────────────────────────
@@ -431,31 +458,42 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   const _ft = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'finding-trust.js'));
   const _corpusAdequate = _assessable && !(comp && comp.challenge);
   let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class, jurisdictions: (comp && comp.jurisdictions) || [], sector });
-  try { _classified = await verifyTopFindings(_classified, env || process.env); } catch (_e) {}
+  try { _classified = await _prof('verifyTopFindings', () => verifyTopFindings(_classified, env || process.env)); } catch (_e) {}
   const _confirmed = _ft.confirmed(_classified);
   const _needsReview = _ft.needsReview(_classified);
-  // UNIQUE Tamazia-fix language — rewrite each confirmed finding's fix so no two repeat (founder: never
-  // repeat lines). Transform-only, fail-open per item. Runs on the confirmed set before quota/render. (F-uniquefix)
-  try { await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'fix-writer.js')).uniqueFixes(_confirmed, { company: (comp && comp.firm_profile && comp.firm_profile.hq_country ? domain : domain), env: env || process.env }); } catch (_e) {}
+  // UNIQUE Tamazia-fix language (mutates each finding's tamazia_fix_short) and the LLM exec_summary (READS facts
+  // only) both operate on _confirmed and are independent → run concurrently. No write conflict: uniqueFixes touches
+  // tamazia_fix_short, exec_summary reads severity/fact/fine_high_gbp. Each stays fully fail-open.
+  let exec_summary = '';
+  // uniqueFixes (mutates each finding's tamazia_fix_short) and the LLM exec_summary (READS severity/fact/fine only)
+  // both operate on _confirmed and are independent → run concurrently. No write conflict; each stays fail-open.
+  // Both are LLM-bound (each can independently spike toward its timeout), so overlapping them is the highest-leverage
+  // end-stage win: the pair costs ~max(uniqueFixes, exec_summary) instead of their sum.
+  const _uniqueFixesJob = async () => {
+    try { await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'fix-writer.js')).uniqueFixes(_confirmed, { company: (comp && comp.firm_profile && comp.firm_profile.hq_country ? domain : domain), env: env || process.env }); } catch (_e) {}
+  };
+  // LLM executive summary (NIM, free) — a 2-sentence synthesis of the REAL findings only. Fallback-safe.
+  const _execSummaryJob = async () => {
+    try {
+      const _key = process.env.NIM_API_KEY || process.env.GROQ_API_KEY;
+      if (_key && _confirmed.length) {
+        const _top = _confirmed.slice(0, 8).map(f => '- ' + (f.severity || '') + ' ' + String(f.fact || '').slice(0, 90)).join('\n');
+        const _expo = _confirmed.reduce((a, f) => a + (f.fine_high_gbp || 0), 0);
+        const _base = process.env.NIM_API_KEY ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
+        const _model = process.env.NIM_API_KEY ? (process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct') : 'llama-3.3-70b-versatile';
+        const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nMax fine exposure across findings: GBP ' + _expo + '.\nWrite exactly two sentences: (1) the single most serious regulatory or commercial risk and why it matters, (2) the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.';
+        const _r = await fetch(_base, { method: 'POST', headers: { authorization: 'Bearer ' + _key, 'content-type': 'application/json' }, body: JSON.stringify({ model: _model, messages: [{ role: 'user', content: _prompt }], max_tokens: 170, temperature: 0.3 }), signal: AbortSignal.timeout(25000) });
+        if (_r.ok) { const _j = await _r.json(); const _t = (_j.choices && _j.choices[0] && _j.choices[0].message && _j.choices[0].message.content || '').trim(); if (_t && _t.length > 40) exec_summary = _t.slice(0, 600); }
+      }
+    } catch (_e) {}
+  };
+  await _prof('uniqueFixes+exec_summary', () => Promise.all([_uniqueFixesJob(), _execSummaryJob()]));
   // P1.8 BINGO voice: attach the 'Right now / Tamazia' lines to every confirmed finding so the v15 render speaks one voice.
   try { const _ds = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'design-system.js')); for (const f of _confirmed) f.bingo = _ds.bingoLine(f); } catch (_e) {}
   const threeFindings = _confirmed.slice(0, 3);
-  // LLM executive summary (NIM, free) — a 2-sentence synthesis of the REAL findings only. Fallback-safe.
-  let exec_summary = '';
-  try {
-    const _key = process.env.NIM_API_KEY || process.env.GROQ_API_KEY;
-    if (_key && _confirmed.length) {
-      const _top = _confirmed.slice(0, 8).map(f => '- ' + (f.severity || '') + ' ' + String(f.fact || '').slice(0, 90)).join('\n');
-      const _expo = _confirmed.reduce((a, f) => a + (f.fine_high_gbp || 0), 0);
-      const _base = process.env.NIM_API_KEY ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
-      const _model = process.env.NIM_API_KEY ? (process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct') : 'llama-3.3-70b-versatile';
-      const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nMax fine exposure across findings: GBP ' + _expo + '.\nWrite exactly two sentences: (1) the single most serious regulatory or commercial risk and why it matters, (2) the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.';
-      const _r = await fetch(_base, { method: 'POST', headers: { authorization: 'Bearer ' + _key, 'content-type': 'application/json' }, body: JSON.stringify({ model: _model, messages: [{ role: 'user', content: _prompt }], max_tokens: 170, temperature: 0.3 }), signal: AbortSignal.timeout(25000) });
-      if (_r.ok) { const _j = await _r.json(); const _t = (_j.choices && _j.choices[0] && _j.choices[0].message && _j.choices[0].message.content || '').trim(); if (_t && _t.length > 40) exec_summary = _t.slice(0, 600); }
-    }
-  } catch (_e) {}
 
-  return {
+  const _asmT0 = _PROF ? Date.now() : 0;
+  const _result = {
     schema_version: 'v2',
     domain,
     sector,
@@ -496,6 +534,14 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     jurisdiction_statement,
     glossary: (() => { try { const _g = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'glossary.js')); const _txt = (_confirmed || []).map(f => (f.fact || '') + ' ' + (f.citation || '') + ' ' + (f.layman_explanation || '')).join(' '); return { terms: _g.GLOSSARY, used: _g.termsUsed(_txt) }; } catch (_e) { return null; } })(),
   };
+  if (_PROF) {
+    _profMarks.push(['final_assembly', Date.now() - _asmT0]);
+    const _total = _profMarks.reduce((a, m) => a + m[1], 0);
+    const _sorted = _profMarks.slice().sort((a, b) => b[1] - a[1]);
+    for (const [label, ms] of _sorted) process.stderr.write('[profile] ' + label + ' ' + ms + 'ms\n');
+    process.stderr.write('[profile] TOTAL ' + _total + 'ms\n');
+  }
+  return _result;
 }
 
 async function build({ lead_id, domain, sector, country, company, env }) {
