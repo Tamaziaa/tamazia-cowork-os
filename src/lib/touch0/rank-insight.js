@@ -10,6 +10,20 @@ const SECTOR_NOUN = {
   'law-firms': 'law firm', 'healthcare': 'clinic', 'dental': 'dental clinic', 'real-estate': 'estate agent',
   'hospitality': 'hotel', 'financial': 'financial adviser', 'finance': 'financial adviser', 'education': 'school',
   'automotive': 'car dealer', 'professional': 'consultancy', 'restaurants': 'restaurant',
+  // fintech/banking: the bare sector word ("fintech") is not a buyer query — a buyer searches "bank", "current
+  // account", "money app". Monzo/Starling/Revolut are banks/neobanks, so the fallback noun must be banking, never
+  // "fintech news". The SUBSECTOR.fintech matcher below sharpens this from the firm's own copy. (founder: Monzo → bank)
+  'fintech': 'digital bank', 'banking': 'bank', 'bank': 'bank', 'neobank': 'digital bank', 'payments': 'payments provider',
+  'insurance': 'insurance company', 'insurtech': 'insurance company', 'accounting': 'accountant',
+  'ecommerce': 'online store', 'e-commerce': 'online store', 'retail': 'store', 'food': 'restaurant',
+  'technology': 'software company', 'software': 'software company', 'saas': 'software platform',
+  // 20-sector coverage (E3): clean, unambiguous category nouns so a national brand's keyword ladder + competitor
+  // probe never collapse to a directory/platform term.
+  'aesthetics': 'aesthetic clinic', 'crypto': 'crypto exchange', 'web3': 'crypto exchange', 'wellness': 'gym',
+  'fitness': 'gym', 'veterinary': 'veterinary clinic', 'vet': 'veterinary clinic', 'travel': 'tour operator',
+  'tourism': 'tour operator', 'cbd': 'CBD brand', 'supplements': 'supplement brand', 'energy': 'renewable energy company',
+  'cleantech': 'renewable energy company', 'personal': 'consultant', 'b2b': 'consultancy', 'crypto-exchange': 'crypto exchange',
+  'legal': 'law firm', 'realestate': 'estate agent', 'fb': 'restaurant',
 };
 // Sub-sector detection from the firm's name/site → a precise, relevant service noun (dental vs aesthetic vs GP).
 const SUBSECTOR = {
@@ -17,7 +31,8 @@ const SUBSECTOR = {
   'law-firms': [[/personal injury|accident/i,'personal injury solicitor'],[/family|divorce/i,'family law solicitor'],[/employment/i,'employment solicitor'],[/conveyanc|property law/i,'conveyancing solicitor'],[/immigration/i,'immigration solicitor'],[/criminal/i,'criminal defence solicitor'],[/commercial|corporate/i,'commercial solicitor']],
   'real-estate': [[/letting|rental/i,'letting agent'],[/commercial property/i,'commercial estate agent'],[/develop/i,'property developer'],[/luxury|prime|prestige/i,'luxury estate agent']],
   hospitality: [[/spa|wellness/i,'spa'],[/restaurant|dining|brasserie/i,'restaurant'],[/boutique/i,'boutique hotel']],
-  financial: [[/wealth/i,'wealth manager'],[/mortgage/i,'mortgage adviser'],[/account/i,'accountant'],[/tax/i,'tax adviser'],[/pension/i,'pension adviser']],
+  financial: [[/neobank|challenger bank|digital bank|current account|banking app|bank account|debit card/i,'digital bank'],[/payment|checkout|acquir|merchant services/i,'payments provider'],[/\blend|loan|credit|bnpl|buy now pay later/i,'lending provider'],[/invest|wealth|trading|brokerage|stocks|isa/i,'wealth manager'],[/crypto|bitcoin|blockchain|web3/i,'crypto platform'],[/mortgage/i,'mortgage adviser'],[/tax/i,'tax adviser'],[/pension/i,'pension adviser'],[/account|bookkeep|invoicing/i,'accountant']],
+  fintech: [[/neobank|challenger bank|digital bank|current account|banking app|bank account|debit card|e-money|emoney/i,'digital bank'],[/payment|checkout|acquir|merchant services|card processing/i,'payments provider'],[/\blend|loan|credit|bnpl|buy now pay later/i,'lending provider'],[/invest|wealth|trading|brokerage|stocks|isa/i,'investment app'],[/crypto|bitcoin|blockchain|web3/i,'crypto platform'],[/insurance|insurtech/i,'insurance provider'],[/account|bookkeep|invoicing/i,'accounting software']],
 };
 function deriveServiceNoun(company, sector, html) {
   const hay = ((company || '') + ' ' + (html || '')).toLowerCase();
@@ -52,15 +67,68 @@ const AGGREGATORS = new Set(['legal500.com','chambers.com','chambersandpartners.
 // magazine is almost never a real competitor firm — it co-ranks because it AGGREGATES the firms. We drop those
 // even when not enumerated above. Tuned to avoid eating real firm names (must be a STANDALONE token, not a substring
 // of e.g. 'bestcaredental' → 'best'+'care' is fine, but 'best-dentists-london' is a listicle).
-const _AGG_TOKEN = /(?:^|[.-])(?:best|top\d*|top-?\d+|review(?:s|ed)?|rated|directory|listings?|compare|comparison|guide|magazine|insider|nearme|near-me|ranking|rankings|bestof|find(?:a|my)?|vs|versus|cheapest|deals|voucher|coupon|discount)(?:[.-]|$)/i;
-function isAggregator(d){
+const _AGG_TOKEN = /(?:^|[.-])(?:best|top\d*|top-?\d+|review(?:s|ed)?|rated|directory|listings?|compare|comparison|guide|magazine|insider|nearme|near-me|ranking|rankings|bestof|find(?:a|my)?|vs|versus|cheapest|deals|voucher|coupon|discount|news|wiki|forum|quotes?|aggregat\w*|marketplace|tracker|explorer)(?:[.-]|$)/i;
+// Per-sector × per-jurisdiction directory/news/listicle blocklist (curated). Unioned with the global AGGREGATORS so
+// sector-specific co-rankers that the flat list misses (finextra/crunchbase for fintech, rightmove for real-estate,
+// booking for hospitality) are caught and never shown as a real competitor or AI-cited peer.
+let _AGG_BY_SECTOR;
+function _aggBySector() {
+  if (_AGG_BY_SECTOR !== undefined) return _AGG_BY_SECTOR;
+  try { _AGG_BY_SECTOR = (require('../sector-intel/aggregators-by-sector.json').sectors) || {}; } catch (_e) { _AGG_BY_SECTOR = {}; }
+  return _AGG_BY_SECTOR;
+}
+// Normalise any sector slug (engine 30-slug vocab OR the 20-sector intelligence vocab) to ONE canonical
+// blocklist key, so a firm tagged either way ('legal' vs 'law-firms', 'realestate' vs 'real-estate', 'fb' vs
+// 'food', 'financial'/'fintech' vs 'fintech', 'web3' vs 'crypto', 'fitness' vs 'wellness', 'vet' vs 'veterinary',
+// 'professional' vs 'b2b', 'supplements' vs 'cbd') always hits the right per-sector branch. (E1)
+const _SECTOR_CANON = {
+  'legal': 'law-firms', 'law': 'law-firms', 'law-firm': 'law-firms', 'law firms': 'law-firms', 'solicitors': 'law-firms', 'solicitor': 'law-firms', 'barristers': 'law-firms',
+  'realestate': 'real-estate', 'real estate': 'real-estate', 'property': 'real-estate', 'estate-agents': 'real-estate', 'estate agents': 'real-estate', 'proptech': 'real-estate',
+  'financial': 'fintech', 'finance': 'finance', 'fintech': 'fintech', 'banking': 'fintech', 'bank': 'fintech', 'neobank': 'fintech', 'wealth': 'finance', 'investment': 'finance', 'payments': 'fintech',
+  'fb': 'food', 'f&b': 'food', 'restaurants': 'food', 'restaurant': 'food', 'food-beverage': 'food', 'cafe': 'food', 'bar': 'food', 'bars': 'food',
+  'health': 'healthcare', 'medical': 'healthcare', 'clinic': 'healthcare', 'gp': 'healthcare', 'pharma': 'healthcare', 'pharmacy': 'healthcare',
+  'aesthetic': 'aesthetics', 'aesthetics': 'aesthetics', 'cosmetic': 'aesthetics', 'dermatology': 'aesthetics', 'beauty': 'aesthetics',
+  'web3': 'crypto', 'crypto': 'crypto', 'blockchain': 'crypto', 'defi': 'crypto', 'nft': 'crypto', 'digital-assets': 'crypto',
+  'edtech': 'education', 'school': 'education', 'university': 'education', 'college': 'education', 'tutoring': 'education', 'training': 'education',
+  'cleantech': 'energy', 'renewable': 'energy', 'solar': 'energy', 'sustainability': 'energy', 'energy': 'energy',
+  'professional': 'b2b', 'b2b': 'b2b', 'consulting': 'b2b', 'consultancy': 'b2b', 'agency': 'b2b', 'recruitment': 'b2b',
+  'supplements': 'cbd', 'nutraceuticals': 'cbd', 'cbd': 'cbd', 'vitamins': 'cbd', 'nutrition': 'cbd',
+  'vet': 'veterinary', 'veterinary': 'veterinary', 'pet': 'veterinary', 'pet-care': 'veterinary', 'animal': 'veterinary',
+  'fitness': 'wellness', 'gym': 'wellness', 'wellness': 'wellness', 'spa': 'wellness', 'yoga': 'wellness', 'pilates': 'wellness',
+  'tourism': 'travel', 'travel': 'travel', 'tours': 'travel', 'tour-operator': 'travel', 'experiences': 'travel',
+  'automotive': 'automotive', 'auto': 'automotive', 'car': 'automotive', 'cars': 'automotive', 'dealership': 'automotive', 'garage': 'automotive', 'ev': 'automotive',
+  'personal': 'personal', 'personal-brand': 'personal', 'executive': 'personal', 'founder': 'personal', 'influencer': 'personal',
+  'insurance': 'insurance', 'insurtech': 'insurance', 'accounting': 'accounting', 'accountant': 'accounting', 'accountancy': 'accounting', 'tax': 'accounting', 'bookkeeping': 'accounting',
+  'ecommerce': 'ecommerce', 'e-commerce': 'ecommerce', 'retail': 'retail', 'shop': 'retail', 'store': 'retail', 'dtc': 'ecommerce',
+  'hospitality': 'hospitality', 'hotel': 'hospitality', 'hotels': 'hospitality', 'dental': 'dental', 'dentist': 'dental', 'dentistry': 'dental', 'orthodontics': 'dental',
+};
+function _canonSector(sector){ const s = String(sector||'').toLowerCase().trim(); return _SECTOR_CANON[s] || s; }
+function isAggregator(d, sector, jurisdiction){
   d = String(d||'').replace(/^https?:\/\//,'').replace(/\/.*$/,'').replace(/^www\./,'').toLowerCase();
   if (!d) return true;
   if (AGGREGATORS.has(d)) return true;
   if (/(^|\.)(wikipedia\.org|facebook\.com|linkedin\.com|youtube\.com|gov\.uk|nhs\.uk|gov\.ae|gov\.sa)$/.test(d) || /(^|\.)google\./.test(d)) return true;
+  // per-sector × per-jurisdiction list (ALL + the firm's jurisdiction). Matches the host or any subdomain of it.
+  // Sector is canonicalised (E1) so any vocab hits the right branch; fintech also unions the finance branch.
+  if (sector) {
+    const canon = _canonSector(sector);
+    const keys = canon === 'fintech' ? ['fintech', 'finance'] : (canon === 'finance' ? ['finance', 'fintech'] : [canon]);
+    const jur = String(jurisdiction || 'UK').toUpperCase().replace('GB', 'UK');
+    const _by = _aggBySector();
+    for (const key of keys) {
+      const S = _by[key]; if (!S) continue;
+      const lists = [S.ALL, S[jur]].filter(Array.isArray);
+      for (const arr of lists) for (const a of arr) { if (d === a || d.endsWith('.' + a)) return true; }
+    }
+  }
   // heuristic: directory/listicle/review/guide pattern in the registrable host label
   const label = d.replace(/\.(co|com|org|net|gov|ac|me)?\.[a-z]{2,}$/,'').replace(/\.[a-z]{2,}$/,'');
   if (_AGG_TOKEN.test(d) || _AGG_TOKEN.test(label)) return true;
+  // strong directory/comparison SUBSTRING signals in the registrable label (catches comparebanks,
+  // moneyfactscompare, agentseeker, estateagentfinder, whatclinic, etc. that the token form misses because the
+  // signal isn't a separated token). These words almost never appear in a real operating firm's brand. (founder blocklist)
+  const _lbl = label.replace(/[^a-z0-9]/g, '');
+  if (/compare|comparison|finder|seeker|directory|listings?|whatclinic|bestbanks?|whichbank|ratemy|news|magazine|gazette|herald|tribune|coindesk|cointelegraph/.test(_lbl)) return true;
   return false;
 }
 
@@ -78,16 +146,16 @@ function keywordsFor(sector, city, serviceNoun) {
   return Array.from(new Set(kws.map(k => k.replace(/\s+/g, ' ').trim())));
 }
 
-async function checkKeyword(keyword, domain, country) {
+async function checkKeyword(keyword, domain, country, sector) {
   const r = await serp.search(keyword, country, 100); // full depth → real live position
   if (!r || r.error || !((r.organic || []).length)) return null; // GATE: unverified → drop
   // `organic` excludes ads (the SERP client returns ads separately), and is rank-ordered, so walking it past
   // self + aggregators yields the REAL first-place operating business — never a directory, aggregator or ad.
   const ranked = r.organic.map(o => ({ pos: o.rank, domain: o.domain })).filter(x => x.domain);
   const mine = ranked.find(x => x.domain === domain);
-  // Name only REAL competitors — exclude the lead itself and directories/aggregators/social/gov. top3[0] is the
-  // first genuine competitor by SERP rank (the "who actually outranks you"), with aggregators/ads walked past.
-  const top3 = ranked.filter(x => x.domain !== domain && !isAggregator(x.domain)).slice(0, 3);
+  // Name only REAL competitors — exclude the lead itself and directories/aggregators/social/gov/sector-news. top3[0]
+  // is the first genuine competitor by SERP rank (the "who actually outranks you"), aggregators/news/ads walked past.
+  const top3 = ranked.filter(x => x.domain !== domain && !isAggregator(x.domain, sector, country)).slice(0, 3);
   // Evidence must let the fact-check gate verify the named competitors AND the lead's own position.
   const top6 = ranked.slice(0, 6);
   const evMap = new Map();
@@ -106,7 +174,7 @@ async function buildRankInsight({ domain, company, sector, city, serviceNoun, ht
   const weakSet = []; const strong = []; let checked = 0;
   for (const k of candidates) {
     if (weakSet.length >= max || checked >= 8) break; // SERP-quota guard
-    const r = await checkKeyword(k, domain, country); checked++;
+    const r = await checkKeyword(k, domain, country, sector); checked++;
     if (!r) continue;                                   // unverified → drop
     if (r.my_position === null || r.my_position > 5) weakSet.push(r); // GATE: only below-top-5 (a real gap)
     else strong.push({ keyword: r.keyword, position: r.my_position }); // already top-5 → never shown (no urgency)
@@ -180,7 +248,7 @@ function sanitiseNoun(raw, city) {
 // a national bank; "hotel London" misrepresents a UAE hotel group). We seed CATEGORY-level terms for such firms
 // and city+category for genuinely-local ones. Signals: an inherently-national/global sector, OR a multi-market
 // footprint (3+ jurisdictions / 2+ offices) from the firm profile. A single-site clinic/gym/agent stays local.
-const _NATIONAL_SECTOR_RX = /\b(bank|banking|fintech|finance|financial|insurance|insurtech|software|saas|platform|technology|telecom|airline|aviation|group|chain|retail|ecommerce|e-commerce|marketplace|enterprise|logistics|manufacturing|pharma)\b/i;
+const _NATIONAL_SECTOR_RX = /\b(bank|banking|fintech|finance|financial|insurance|insurtech|software|saas|platform|technology|telecom|airline|aviation|group|chain|retail|ecommerce|e-commerce|marketplace|enterprise|logistics|manufacturing|pharma|crypto|web3|blockchain|exchange|education|edtech|university|automotive|travel|tourism|energy|cleantech|renewable)\b/i;
 function isBigBrandSeed({ sector, jurisdictions, firmProfile } = {}) {
   const sec = String(sector || '').toLowerCase();
   const profSecs = (firmProfile && Array.isArray(firmProfile.sectors) ? firmProfile.sectors.join(' ') : '').toLowerCase();
@@ -189,7 +257,7 @@ function isBigBrandSeed({ sector, jurisdictions, firmProfile } = {}) {
   return _NATIONAL_SECTOR_RX.test(sec) || _NATIONAL_SECTOR_RX.test(profSecs) || jurs >= 3 || offices >= 2;
 }
 // Recruitment / careers / informational queries are not buyer intent and must never be seeded or shown.
-const _KW_NOISE_RX = /\b(work experience|training contract|vacation scheme|graduate scheme|internship|apprenticeship|jobs?|vacancies|vacancy|careers?|salary|salaries|recruitment|hiring|interview|wikipedia|meaning|definition|how to|what is)\b/i;
+const _KW_NOISE_RX = /\b(work experience|training contract|vacation scheme|graduate scheme|internship|apprenticeship|jobs?|vacancies|vacancy|careers?|salary|salaries|recruitment|hiring|interview|wikipedia|meaning|definition|how to|what is|news|magazine|opinion|analysis|blog|guides?|directory|directories|listings?|ranking|rankings|trends?|insights?|statistics|stats|report|podcast|newsletter|events?|conference|awards?|forum|examples?|\blist\b|tutorial|explained|banksy|bank holidays?|food bank|blood bank|piggy bank|world bank|river bank|sperm bank|bank robbery|bank heist|bank of england)\b/i;
 // Local-intent pattern a national brand never competes on (kept separate from the email/touch-0 path).
 const LOCAL_RX_SEED = /\bnear(\s?(me|you|by))?\b|\bnearby\b|\blocal\b|\bin my area\b/i;
 // Position bands. The "almost winning" band (the one-push-away hook the audit sells) is roughly SERP 20-50:
@@ -280,9 +348,13 @@ async function buildKeywordMap({ domain, company, sector, city, html, corpus, co
     try { const ac = await autocomplete(noun + ' ' + seedCity); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
   } else {
     // National brand or no city (global / ecommerce): category-level + vertical buyer queries so the ranking
-    // ladder still populates from brand-relevant terms, never city-localised ones.
-    seeds = [noun, 'best ' + noun, 'top ' + noun, (noun + ' ' + ctyLabel).trim()];
-    try { const ac = await autocomplete(noun); seeds = Array.from(new Set([...seeds, ...ac])); } catch (_e) {}
+    // ladder still populates from brand-relevant terms, never city-localised ones. Include BOTH the leading-
+    // jurisdiction form ("uk bank") and trailing form ("bank uk") since buyers type both. (founder: Monzo → "uk bank")
+    // We deliberately DO NOT call Google autocomplete for a national brand: on a generic category noun ("online
+    // bank services") autocomplete pulls foreign-market + informational noise ("...in india", "...hdfc",
+    // "...examples", "...list") that misrepresents a UK national brand. The clean category + jurisdiction forms
+    // are the spine; relevance-scoring + skip-until-real gate the rest. (kw-scale)
+    seeds = [noun, 'best ' + noun, (ctyLabel ? (ctyLabel + ' ' + noun) : ('top ' + noun)).trim(), (noun + ' ' + ctyLabel).trim()];
   }
   // B1: seed the firm's own brand + specific-service long-tail (terms it plausibly ranks for) ahead of the
   // generic head terms, so the map shows a credible MIX of real positions + honest gaps — never "Not ranking"
@@ -300,7 +372,10 @@ async function buildKeywordMap({ domain, company, sector, city, html, corpus, co
     ? [ ...(_area ? [(_specific+' '+_area).trim(), (noun+' '+_area).trim()] : []),
         ..._procs.map(p => (p+' '+(_area||seedCity)).trim()),
         (_specific+' '+seedCity).trim(), (noun+' near me').trim() ]
-    : [ _specific, ..._procs ];                  // brand/vertical service terms, no superlatives or city
+    : [ ..._procs ];                  // national brand: procedure long-tail only. We DROP _specific here because
+                                      // deriveServiceNoun (title-only) can mis-fire to a generic sector noun for a
+                                      // fintech/bank ("financial adviser") and contaminate the spine. The LLM
+                                      // category noun + jurisdiction seeds above are the clean spine. (kw-scale)
   seeds = Array.from(new Set([..._longtail.filter(Boolean), ...seeds]));
   // #17 SPINE CLEAN: collapse duplicate words ("near near me"), reject any seed that ends on a bare stopword,
   // and drop seeds that smuggle in a DIFFERENT city than the firm's (so a London dentist never gets a "Reading"
@@ -335,8 +410,12 @@ async function buildKeywordMap({ domain, company, sector, city, html, corpus, co
   seeds = seeds.slice(0, max);
   const out = [];
   for (const kw of seeds) {
-    let r = null; try { r = await checkKeyword(kw, dom, country); } catch (_e) {}
+    let r = null; try { r = await checkKeyword(kw, dom, country, sector); } catch (_e) {}
     if (!r) continue;
+    // SKIP-UNTIL-REAL: a keyword whose SERP top-3 are ALL aggregators/news/directories (no real operating competitor
+    // survives the per-sector blocklist) AND where the firm itself does not rank carries no real signal, so drop it,
+    // never render a row whose "who ranks" is a news site or directory. (founder: skip these until the right ones sync.)
+    if (!r.top3.length && !r.my_position) continue;
     const leader = r.top3[0] || {};
     // POSITION-AWARE: record the band so the render can lead with the "one push away" terms (SERP 20-50)
     // and de-emphasise both the top-10 the firm already owns and the invisible 100+ terms. (Gate 2)
@@ -355,7 +434,7 @@ async function buildKeywordMap({ domain, company, sector, city, html, corpus, co
 // among them? AI answer engines (ChatGPT, Perplexity, Google AI, Gemini) synthesise answers from the top-ranked,
 // entity-recognised sources, so the live category SERP + entity presence is a real, verifiable proxy for AI
 // citation. We name the exact competitor firms that own that surface today. No key beyond the wired SERPER.
-const _PROBE_ALIAS = { legal: 'solicitors', law: 'solicitors', 'law-firm': 'solicitors', 'law-firms': 'law firm', solicitor: 'solicitors', healthcare: 'clinic', dental: 'dentist', 'real-estate': 'estate agents', realestate: 'estate agents', property: 'estate agents', financial: 'financial advisers', finance: 'financial advisers', wellness: 'wellness clinic', automotive: 'car dealer', education: 'school', hospitality: 'hotel', professional: 'consultants', ecommerce: 'online store' };
+const _PROBE_ALIAS = { legal: 'solicitors', law: 'solicitors', 'law-firm': 'solicitors', 'law-firms': 'law firm', solicitor: 'solicitors', healthcare: 'clinic', dental: 'dentist', 'real-estate': 'estate agents', realestate: 'estate agents', property: 'estate agents', financial: 'financial advisers', finance: 'financial advisers', fintech: 'bank', banking: 'bank', bank: 'bank', neobank: 'bank', payments: 'payments provider', insurance: 'insurance company', insurtech: 'insurance company', accounting: 'accountant', wellness: 'gym', fitness: 'gym', automotive: 'car dealer', education: 'school', hospitality: 'hotel', professional: 'consultants', b2b: 'consultants', ecommerce: 'online store', retail: 'store', food: 'restaurant', fb: 'restaurant', aesthetics: 'aesthetic clinic', crypto: 'crypto exchange', web3: 'crypto exchange', veterinary: 'veterinary clinic', vet: 'veterinary clinic', travel: 'tour operator', tourism: 'tour operator', cbd: 'CBD brand', supplements: 'supplement brand', energy: 'renewable energy company', cleantech: 'renewable energy company', personal: 'consultant' };
 function _probeNoun(company, sector, html) {
   let noun = deriveServiceNoun(company, sector, html);
   const sec = String(sector || '').toLowerCase();
@@ -405,8 +484,9 @@ async function aiCitationProbe({ domain, company, sector, city, html, corpus, co
   const mine = ranked.find(x => x.domain === domain || x.domain.endsWith('.' + domain) || domain.endsWith('.' + x.domain));
   const competitors = []; const seen = new Set();
   for (const x of ranked) {
-    if (!x.domain || x.domain === domain) continue;
-    if (isAggregator(x.domain)) continue;
+    // skip the firm itself AND any subdomain of it (uk.gymshark.com for gymshark.com) — never name yourself as a rival
+    if (!x.domain || x.domain === domain || x.domain.endsWith('.' + domain) || domain.endsWith('.' + x.domain)) continue;
+    if (isAggregator(x.domain, sector, country)) continue;   // per-sector blocklist: never name a news site/directory as an AI-cited peer
     if (seen.has(x.domain)) continue;
     seen.add(x.domain); competitors.push({ domain: x.domain, pos: x.pos });
     if (competitors.length >= 5) break;

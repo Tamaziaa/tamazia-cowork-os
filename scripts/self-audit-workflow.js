@@ -25,6 +25,7 @@ const steps = [
   ['qa-compliance ship-gate', [path.join(ROOT, 'scripts', 'qa-compliance.js')]],
   ['qa-validate-library (29)', [path.join(ROOT, 'scripts', 'migrations', 'qa-validate-library.js')]],
   ['resolver+overlay test', [path.join(ROOT, 'scripts', 'migrations', 'test-resolver.js')]],
+  ['sector-accuracy (no wrong law, any sector)', [path.join(ROOT, 'scripts', 'migrations', 'test-sector-accuracy.js')]],
   ['corpus-index test', [path.join(ROOT, 'scripts', 'migrations', 'test-corpus-index.js')]],
   ['enforcement test', [path.join(ROOT, 'scripts', 'migrations', 'test-enforcement.js')]],
   ['gap-finder fault-injection', [path.join(ROOT, 'scripts', 'migrations', 'test-gap-finder.js')]],

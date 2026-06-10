@@ -194,7 +194,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   try { scan = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'crawl-escalation.js')).maybeEscalateCrawl(scan, { domain, env: env || process.env }); } catch (_e) {} // Apify crawl fallback (default-OFF, self-contained)
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
-  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: country || 'UK', signals: scan.signals }); } catch (_e) {}
+  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: country || 'UK', signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) {}
   // PER-MINT FAIL-CLOSED GUARD (last line of defence before this audit is assembled): drop any compliance finding
   // whose law is not servable (proven) or not jurisdiction-covered, so a wrong/unproven law can NEVER reach a
   // client even if an upstream gate regressed. The engine overlay already enforces this — this drops nothing in the
@@ -205,9 +205,10 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     const idx = _mintGateIndex();
     if (idx && idx.size && Array.isArray(comp.findings) && comp.findings.length) {
       const jurSet = new Set((comp.canonical_jurisdictions && comp.canonical_jurisdictions.length) ? comp.canonical_jurisdictions : [...toCanonicalJurisdictions(comp.jurisdictions || [])]);
-      const sig = { jurSet, employeeBand: 'unknown' };
+      const _sect = (comp.detected_sector || sector || '').toString().toLowerCase();  // 30-slug vocab — matches the sector gate
+      const sig = { jurSet, employeeBand: 'unknown', sector: _sect };
       const before = comp.findings.length;
-      comp.findings = comp.findings.filter(f => { if (f.status !== 'miss') return true; const law = idx.get(f.framework) || idx.get(f.framework_short); return law ? !overlayDrop(law, sig) : true; });
+      comp.findings = comp.findings.filter(f => { if (f.status !== 'miss') return true; const law = idx.get(f.framework) || idx.get(f.framework_short); return law ? !overlayDrop(law, Object.assign({}, sig, { framework: f.framework || f.framework_short })) : true; });
       if (comp.findings.length !== before) console.error(`[mint-gate] dropped ${before - comp.findings.length} non-compliant finding(s) for ${domain} (fail-closed)`);
     }
   } catch (_e) {}
@@ -272,7 +273,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     try {
       const _air = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'ai-readiness.js'));
       const _airRes = await _air.aiReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], env });
-      if (_airRes && _airRes.ok) { _aiReadyFindings = _airRes.findings || []; payload_ai_readiness = { score: _airRes.score, blocked_ai_bots: _airRes.blocked_ai_bots, has_llms_txt: _airRes.has_llms_txt, has_org_schema: _airRes.has_org_schema, has_same_as: _airRes.has_same_as, in_wikidata: _airRes.in_wikidata }; }
+      if (_airRes && _airRes.ok) { _aiReadyFindings = _airRes.findings || []; payload_ai_readiness = { score: _airRes.score, blocked_ai_bots: _airRes.blocked_ai_bots, has_llms_txt: _airRes.has_llms_txt, has_org_schema: _airRes.has_org_schema, has_same_as: _airRes.has_same_as, in_wikidata: _airRes.in_wikidata, schema_types: _airRes.schema_types || [], has_localbusiness: !!_airRes.has_localbusiness, has_service: !!_airRes.has_service, has_faq: !!_airRes.has_faq }; }
     } catch (_e) {}
     })(),
     // P2.15 local-pack / GBP readiness (OSM presence + LocalBusiness schema + NAP) — gated on city + local sector.
@@ -324,6 +325,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
       evidence_url: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || null,
       evidence_quote: f.evidence_quote || null,
       checked_urls: Array.isArray(f.checked_urls) ? f.checked_urls.slice(0, 6) : null,
+      absence_evidence: f.absence_evidence || null,   // A3 — real nearest-miss context (page + what's there vs missing)
       rule_type: f.rule_type || null,
       fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
       verify_context: f.verify_context || null,
@@ -384,7 +386,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
       const _co = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'competitor-overlap.js'));
       const _llmPeers = ((ai_citation && ai_citation.competitors) || []).map(c => (c && (c.domain || c.name))).filter(Boolean);
       const _firmText = (scan.signals && (scan.signals.corpus || scan.signals.title)) || '';
-      _organicComps = await _co.organicCompetitors({ keyword_map, domain, llmPeers: _llmPeers, firmText: _firmText, country: country || 'UK', env, want: 9 }) || [];
+      _organicComps = await _co.organicCompetitors({ keyword_map, domain, llmPeers: _llmPeers, firmText: _firmText, country: country || 'UK', sector, env, want: 9 }) || [];
     } catch (_e) {}
     })(),
     // P3.1/3.3/3.4/3.5 multi-sample GEO probe (repeatability + share-of-voice + entrenched leaders). Rate-limit-graceful.

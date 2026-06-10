@@ -86,17 +86,42 @@ function resolveLaws({ laws, lawsById, mapping, jurisdictions = [], sector, acti
   return { attached, review, dropped };
 }
 
+// Sector-applicability backstop (A2 — the "no wrong law for any firm in any sector" guarantee, made structural).
+// Single-sources the gating authority from connect.js (UNIVERSAL_FW + reverse SECTOR_MAP) so it can NEVER drift
+// from the framework router. A finding is dropped ONLY when we positively KNOW its framework is sector-specific
+// AND none of its frameworks is universal AND none covers the firm's sector. Unknown framework / unknown sector →
+// KEEP (conservative: this gate can only remove a provably-out-of-sector finding, never invent or over-cut).
+let _SECTOR_AUTH = null;
+function _sectorAuthority() {
+  if (_SECTOR_AUTH) return _SECTOR_AUTH;
+  _SECTOR_AUTH = { uni: new Set(), rev: {} };
+  try { const c = require('./connect.js'); _SECTOR_AUTH.uni = c.UNIVERSAL_FW || new Set(); _SECTOR_AUTH.rev = c.fwToSectors() || {}; } catch (_e) {}
+  return _SECTOR_AUTH;
+}
+function sectorExcluded(law, framework, sector) {
+  if (!sector) return false;                       // unknown sector → never over-filter
+  const { uni, rev } = _sectorAuthority();
+  const fws = [];
+  if (framework) fws.push(framework);
+  if (law && law.neon_framework_short) for (const t of String(law.neon_framework_short).split(',').map((s) => s.trim()).filter(Boolean)) fws.push(t);
+  if (!fws.length) return false;                   // unknown framework → KEEP
+  for (const fw of fws) { if (uni.has(fw)) return false; const m = rev[fw]; if (m && m.has(sector)) return false; } // any universal/covering fw → KEEP
+  const known = fws.some((fw) => rev[fw] && rev[fw].size); // only DROP when the framework's sectors are actually known
+  return known;                                    // sector-specific framework whose sector set excludes this firm
+}
+
 // Conservative LIVE-ENGINE guardrail for a single already-detected finding's law. Applies ONLY the guardrails that
 // CANNOT over-suppress a legitimate verified finding (no applies_when positive-trigger gate here — the rule-level
 // trigger_then_check already handles trigger presence; the mapping-driven resolveLaws() is the full attach path).
 // Returns a drop-reason string, or null to KEEP. An unknown law (framework with no canonical row) is KEPT
 // (connect() already jurisdiction-gated it) so an index gap can never silently swallow real findings.
-function overlayDrop(law, { jurSet, employeeBand = 'unknown', trig } = {}) {
+function overlayDrop(law, { jurSet, employeeBand = 'unknown', trig, sector, framework } = {}) {
   if (!law) return null;
   if (!law.servable) return 'unverified_held';                              // proven-only reaches a client
   if (law.status === 'vacated') return 'vacated';
   if (!jurCovered(law.jurisdiction, jurSet)) return 'out_of_jurisdiction';  // the structural Al Tamimi gate
   if (carveDropped(law, jurSet)) return 'freezone_carveout';
+  if (sectorExcluded(law, framework, sector)) return 'out_of_sector';       // the structural sector gate (no wrong law for any sector)
   if (trig && (law.excluded_when || []).some((f) => trig.has(f))) return 'excluded';
   if (thresholdOk(law, employeeBand) === false) return 'below_employee_threshold';
   return null;
@@ -112,4 +137,4 @@ function selfTest(attached, jurSet, sector) {
   return null;
 }
 
-module.exports = { resolveLaws, overlayDrop, jurCovered, carveDropped, thresholdOk, selfTest };
+module.exports = { resolveLaws, overlayDrop, jurCovered, carveDropped, thresholdOk, selfTest, sectorExcluded };

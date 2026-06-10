@@ -1,0 +1,47 @@
+[
+  {
+    "domain": "shoosmiths.com",
+    "sector": "legal",
+    "country": "UK",
+    "company": "Shoosmiths",
+    "url": "https://tamazia.co.uk/audit/shoosmiths/JEwNxofZ?l=0&x=1796479458&sig=7a8fd839c99edf88d62d109e1479d773",
+    "ok": true,
+    "pointers": 72
+  },
+  {
+    "domain": "arnoldclark.com",
+    "sector": "automotive",
+    "country": "UK",
+    "company": "Arnold Clark",
+    "url": "https://tamazia.co.uk/audit/arnold-clark/Xy2fP2Mo?l=0&x=1796479571&sig=1c4c6774a4ab0990b8698be937cdb100",
+    "ok": true,
+    "pointers": 44
+  },
+  {
+    "domain": "gymshark.com",
+    "sector": "ecommerce",
+    "country": "UK",
+    "company": "Gymshark",
+    "url": "https://tamazia.co.uk/audit/gymshark/zW3WAuke?l=0&x=1796479785&sig=4ec167626759a1a5cd93c02383363f8a",
+    "ok": true,
+    "pointers": 30
+  },
+  {
+    "domain": "pizzaexpress.com",
+    "sector": "hospitality",
+    "country": "UK",
+    "company": "PizzaExpress",
+    "url": "https://tamazia.co.uk/audit/pizzaexpress/ohAULLeq?l=0&x=1796479900&sig=58dbe9ddcc0afe5c4098604d1e986068",
+    "ok": true,
+    "pointers": 31
+  },
+  {
+    "domain": "mydentist.co.uk",
+    "sector": "dental",
+    "country": "UK",
+    "company": "mydentist",
+    "url": "https://tamazia.co.uk/audit/mydentist/v1KFv7hH?l=0&x=1796480049&sig=f89df0fdbca2fbde211dc47608ab2538",
+    "ok": true,
+    "pointers": 49
+  }
+]

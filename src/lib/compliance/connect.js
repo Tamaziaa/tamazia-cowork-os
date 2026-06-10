@@ -117,4 +117,4 @@ function loadCatalogue() {
   return _cat;
 }
 
-module.exports = { connect, loadCatalogue, expandJurisdictions, normJuris, EU_ISO };
+module.exports = { connect, loadCatalogue, expandJurisdictions, normJuris, EU_ISO, UNIVERSAL_FW, fwToSectors };
