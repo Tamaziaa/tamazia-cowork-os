@@ -97,6 +97,10 @@ const VIEW_SQL = `CREATE OR REPLACE VIEW v_admin_leads AS
       VALUES ('${c.s}', '${c.n.replace(/'/g, "''")}', '${c.reg.replace(/'/g, "''")}', 'UK', ${c.t}, ${c.r}, ${c.r <= 10}, '${QT(c.s, c.n.toLowerCase()).replace(/'/g, "''")}'::jsonb)
       ON CONFLICT (sector) DO NOTHING`);
   }
+  // manual-mint tagging on the AGENCY queue only ('auto' engine vs 'manual' cockpit box).
+  // audit_pages is an audit-engine table (do-not-touch) — the cockpit History tab derives
+  // a mint's source by joining audit_pages.slug -> minting_queue.slug, no audit-table change.
+  plan.push(`ALTER TABLE minting_queue ADD COLUMN IF NOT EXISTS source text DEFAULT 'auto'`);
   plan.push(VIEW_SQL);
 
   if (CHECK) { console.log(`[cc2 --check] would run ${plan.length} idempotent statements:`); plan.forEach((q) => console.log('  ·', q.split('\n')[0].slice(0, 110))); process.exit(0); }

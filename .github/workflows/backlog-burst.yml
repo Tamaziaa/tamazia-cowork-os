@@ -8,24 +8,24 @@ name: Backlog burst (no-send pipeline advance)
 on:
   workflow_dispatch:
     inputs:
-      resolve:
-        description: 'resolve-domains batch'
-        default: '100'
+      requalify:
+        description: 're-score EXISTING leads through current Tier-1 criteria (pending/tier2/3/rejected)'
+        default: '500'
       enrich:
-        description: 'enrich batch'
+        description: 'enrich batch (website+emails+socials)'
         default: '60'
-      scrape:
-        description: 'scrape-intel batch'
-        default: '60'
+      research:
+        description: 'deep-research / site-scrape batch'
+        default: '40'
       verify:
         description: 'verify-contacts batch'
         default: '150'
       qualify:
-        description: 'qualify-and-queue batch'
+        description: 'qualify-and-queue batch (fresh unscored leads)'
         default: '300'
       mint:
-        description: 'build-audit-pages batch'
-        default: '25'
+        description: 'enqueue + mint batch (build audit_pages, set audit_url)'
+        default: '200'
 
 concurrency:
   group: engine-db-work
@@ -52,16 +52,20 @@ jobs:
           set -a; source .env; set +a
           node scripts/ensure-schema.js
           node scripts/cc2-provision.js
+      - name: Re-qualify the existing pile (current Tier-1 criteria)
+        run: |
+          set -a; source .env; set +a
+          node scripts/requalify-all-leads.js ${{ inputs.requalify }}   || true
       - name: Advance the backlog (no-send)
         run: |
           set -a; source .env; set +a
-          node scripts/resolve-domains.js ${{ inputs.resolve }}        || true
           node scripts/enrich-and-queue-channels.js ${{ inputs.enrich }} || true
-          node scripts/scrape-intel.js ${{ inputs.scrape }}            || true
+          node scripts/run-deep-research-batch.js ${{ inputs.research }} || true
           node scripts/verify-contacts.js ${{ inputs.verify }}         || true
           node scripts/dedupe-leads.js                                  || true
           node scripts/qualify-and-queue.js ${{ inputs.qualify }}       || true
-          node scripts/build-audit-pages.js ${{ inputs.mint }}          || true
+          node scripts/enqueue-leads.js ${{ inputs.mint }}             || true
+          node scripts/mint-worker.js --once                            || true
       - name: Funnel summary
         run: |
           set -a; source .env; set +a
