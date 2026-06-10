@@ -18,3 +18,7 @@ exports/
 reports/
 .mint-*.sql .remint-*.sql
 db/seeds/*.upsert.sql
+
+# runtime caches + local symlinks — never commit
+.cache/
+node_modules
