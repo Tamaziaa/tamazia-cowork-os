@@ -1,0 +1,53 @@
+#!/usr/bin/env node
+'use strict';
+// CC-4 RECONCILE (nightly). Makes Neon agree with the external tools so nothing drifts:
+//   1. Mystrika reply truth   -> runs sync-mystrika-replies.js (replied/engaged + mystrika_status).
+//   2. Audit truth            -> runs verify-audits.js (audit_url is a real, live, signed page;
+//                                 re-mints broken ones; sets audit_verified — the send gate).
+//   3. cal.com booking truth  -> any lead with a real cal_bookings row becomes lifecycle_stage='booked'.
+//   4. Mint truth             -> a lead whose audit_url points to NO audit_pages row is flagged
+//                                (audit_url cleared so verify-audits re-mints it next pass).
+// Idempotent, fail-open per step. Usage: node scripts/reconcile.js
+const { execFileSync, execSync } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+const ROOT = path.resolve(__dirname, '..');
+(() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
+const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
+function pg(sql) { try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [NEON, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (e) { return ''; } }
+function runScript(rel) {
+  try { execSync(`node ${path.join(ROOT, rel)}`, { stdio: 'inherit', env: process.env, timeout: 10 * 60 * 1000 }); return true; }
+  catch (e) { console.error(`  ${rel} non-fatal:`, String(e.message || e).slice(0, 100)); return false; }
+}
+
+(async () => {
+  if (!NEON) { console.error('no NEON_URL'); process.exit(1); }
+
+  // 1. Mystrika reply truth
+  console.log('[reconcile] 1/4 mystrika reply-sync …');
+  runScript('scripts/sync-mystrika-replies.js');
+
+  // 2. Audit truth (verify + re-mint broken links; sets audit_verified)
+  console.log('[reconcile] 2/4 audit-link verify …');
+  runScript('scripts/verify-audits.js');
+
+  // 3. cal.com bookings -> lifecycle_stage='booked' (only forward; never demote a won/lost)
+  const booked = pg(`UPDATE leads SET lifecycle_stage='booked', updated_at=NOW()
+    WHERE id IN (SELECT DISTINCT lead_id FROM cal_bookings WHERE lead_id IS NOT NULL
+                 AND lower(COALESCE(status,'')) NOT IN ('cancelled','canceled','rejected'))
+      AND COALESCE(lifecycle_stage,'') NOT IN ('booked','won','lost')
+    RETURNING 1`);
+  const bookedN = (booked.match(/\n/g) || []).length + (booked ? 1 : 0);
+
+  // 4. Mint truth: a lead claiming an audit_url that has NO audit_pages row -> clear it so verify-audits
+  //    re-mints next pass (prevents a dead link ever reaching the send path).
+  const orphan = pg(`UPDATE leads SET audit_url=NULL, audit_verified=FALSE, updated_at=NOW()
+    WHERE COALESCE(audit_url,'') <> '' AND audit_slug IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM audit_pages ap WHERE ap.slug = leads.audit_slug)
+    RETURNING 1`);
+  const orphanN = (orphan.match(/\n/g) || []).length + (orphan ? 1 : 0);
+
+  // snapshot for the log
+  const ready = pg(`SELECT COUNT(*)::int FROM leads WHERE lifecycle_stage='qualified' AND COALESCE(audit_url,'')<>'' AND COALESCE(audit_verified,FALSE)=TRUE`);
+  console.log(`[reconcile] booked-from-cal +${bookedN} · orphan-audit cleared ${orphanN} · email-ready(verified) ${ready}`);
+})().catch(e => { console.error('[reconcile] error (non-fatal):', e.message); process.exit(0); });
