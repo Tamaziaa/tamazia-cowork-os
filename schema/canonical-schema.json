@@ -879,69 +879,334 @@
   },
   "compliance_laws": {
     "columns": {
-      "id": { "type": "varchar(64)", "default": null, "notnull": true, "identity": false },
-      "name": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "jurisdiction": { "type": "varchar(16)", "default": null, "notnull": false, "identity": false },
-      "region": { "type": "varchar(16)", "default": null, "notnull": false, "identity": false },
-      "regulator": { "type": "varchar(160)", "default": null, "notnull": false, "identity": false },
-      "category": { "type": "varchar(48)", "default": null, "notnull": false, "identity": false },
-      "section_ref": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "website_obligation": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "applies_when": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "excluded_when": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "where_on_site": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "trigger_flags": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "severity": { "type": "varchar(16)", "default": null, "notnull": false, "identity": false },
-      "severity_rank": { "type": "smallint", "default": null, "notnull": false, "identity": false },
-      "max_penalty": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "fine_low_gbp": { "type": "integer", "default": null, "notnull": false, "identity": false },
-      "fine_high_gbp": { "type": "integer", "default": null, "notnull": false, "identity": false },
-      "effective_date": { "type": "varchar(16)", "default": null, "notnull": false, "identity": false },
-      "status": { "type": "varchar(16)", "default": "'active'::character varying", "notnull": false, "identity": false },
-      "confidence": { "type": "varchar(16)", "default": "'unverified'::character varying", "notnull": false, "identity": false },
-      "servable": { "type": "boolean", "default": "false", "notnull": false, "identity": false },
-      "detection": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "enforcement_feed": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "source": { "type": "varchar(16)", "default": null, "notnull": false, "identity": false },
-      "neon_framework_short": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "files10_law_id": { "type": "varchar(64)", "default": null, "notnull": false, "identity": false },
-      "detection_rules": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "updated_at": { "type": "timestamptz", "default": "now()", "notnull": false, "identity": false }
+      "id": {
+        "type": "varchar(64)",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "name": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "jurisdiction": {
+        "type": "varchar(16)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "region": {
+        "type": "varchar(16)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "regulator": {
+        "type": "varchar(160)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "category": {
+        "type": "varchar(48)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "section_ref": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "website_obligation": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "applies_when": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "excluded_when": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "where_on_site": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "trigger_flags": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "severity": {
+        "type": "varchar(16)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "severity_rank": {
+        "type": "smallint",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "max_penalty": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "fine_low_gbp": {
+        "type": "integer",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "fine_high_gbp": {
+        "type": "integer",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "effective_date": {
+        "type": "varchar(16)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "status": {
+        "type": "varchar(16)",
+        "default": "'active'::character varying",
+        "notnull": false,
+        "identity": false
+      },
+      "confidence": {
+        "type": "varchar(16)",
+        "default": "'unverified'::character varying",
+        "notnull": false,
+        "identity": false
+      },
+      "servable": {
+        "type": "boolean",
+        "default": "false",
+        "notnull": false,
+        "identity": false
+      },
+      "detection": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "enforcement_feed": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "source": {
+        "type": "varchar(16)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "neon_framework_short": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "files10_law_id": {
+        "type": "varchar(64)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "detection_rules": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "updated_at": {
+        "type": "timestamptz",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      }
     },
     "create": "CREATE TABLE IF NOT EXISTS compliance_laws (\n  id varchar(64) NOT NULL,\n  name text,\n  jurisdiction varchar(16),\n  region varchar(16),\n  regulator varchar(160),\n  category varchar(48),\n  section_ref text,\n  website_obligation text,\n  applies_when jsonb,\n  excluded_when jsonb,\n  where_on_site jsonb,\n  trigger_flags jsonb,\n  severity varchar(16),\n  severity_rank smallint,\n  max_penalty text,\n  fine_low_gbp integer,\n  fine_high_gbp integer,\n  effective_date varchar(16),\n  status varchar(16) DEFAULT 'active',\n  confidence varchar(16) DEFAULT 'unverified',\n  servable boolean DEFAULT false,\n  detection jsonb,\n  enforcement_feed text,\n  source varchar(16),\n  neon_framework_short text,\n  files10_law_id varchar(64),\n  detection_rules jsonb,\n  updated_at timestamptz DEFAULT now(),\n  PRIMARY KEY (id)\n)"
   },
   "compliance_client_types": {
     "columns": {
-      "id": { "type": "varchar(120)", "default": null, "notnull": true, "identity": false },
-      "sector": { "type": "varchar(48)", "default": null, "notnull": false, "identity": false },
-      "sub_sector": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "name": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "tier": { "type": "varchar(24)", "default": null, "notnull": false, "identity": false },
-      "jurisdictions": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "triggers": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "attributes": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "law_pool": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "updated_at": { "type": "timestamptz", "default": "now()", "notnull": false, "identity": false }
+      "id": {
+        "type": "varchar(120)",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "sector": {
+        "type": "varchar(48)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "sub_sector": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "name": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "tier": {
+        "type": "varchar(24)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "jurisdictions": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "triggers": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "attributes": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "law_pool": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "updated_at": {
+        "type": "timestamptz",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      }
     },
     "create": "CREATE TABLE IF NOT EXISTS compliance_client_types (\n  id varchar(120) NOT NULL,\n  sector varchar(48),\n  sub_sector text,\n  name text,\n  tier varchar(24),\n  jurisdictions jsonb,\n  triggers jsonb,\n  attributes jsonb,\n  law_pool jsonb,\n  updated_at timestamptz DEFAULT now(),\n  PRIMARY KEY (id)\n)"
   },
   "compliance_enforcement": {
     "columns": {
-      "id": { "type": "bigint", "default": "nextval('compliance_enforcement_id_seq'::regclass)", "notnull": true, "identity": true },
-      "content_hash": { "type": "varchar(64)", "default": null, "notnull": true, "identity": false },
-      "source_feed": { "type": "varchar(48)", "default": null, "notnull": false, "identity": false },
-      "source_url": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "ingested_at": { "type": "timestamptz", "default": "now()", "notnull": false, "identity": false },
-      "matched_law_ids": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "jurisdiction": { "type": "varchar(16)", "default": null, "notnull": false, "identity": false },
-      "sector_tags": { "type": "jsonb", "default": null, "notnull": false, "identity": false },
-      "breach_type": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "entity_named": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "penalty": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "ruling_date": { "type": "date", "default": null, "notnull": false, "identity": false },
-      "confidence": { "type": "numeric", "default": null, "notnull": false, "identity": false },
-      "one_line_summary": { "type": "text", "default": null, "notnull": false, "identity": false },
-      "classifier": { "type": "varchar(40)", "default": null, "notnull": false, "identity": false }
+      "id": {
+        "type": "bigint",
+        "default": "nextval('compliance_enforcement_id_seq'::regclass)",
+        "notnull": true,
+        "identity": true
+      },
+      "content_hash": {
+        "type": "varchar(64)",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "source_feed": {
+        "type": "varchar(48)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "source_url": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "ingested_at": {
+        "type": "timestamptz",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      },
+      "matched_law_ids": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "jurisdiction": {
+        "type": "varchar(16)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "sector_tags": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "breach_type": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "entity_named": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "penalty": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "ruling_date": {
+        "type": "date",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "confidence": {
+        "type": "numeric",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "one_line_summary": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "classifier": {
+        "type": "varchar(40)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      }
     },
     "create": "CREATE TABLE IF NOT EXISTS compliance_enforcement (\n  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,\n  content_hash varchar(64) NOT NULL,\n  source_feed varchar(48),\n  source_url text,\n  ingested_at timestamptz DEFAULT now(),\n  matched_law_ids jsonb,\n  jurisdiction varchar(16),\n  sector_tags jsonb,\n  breach_type text,\n  entity_named text,\n  penalty text,\n  ruling_date date,\n  confidence numeric,\n  one_line_summary text,\n  classifier varchar(40),\n  PRIMARY KEY (id),\n  UNIQUE (content_hash)\n)"
   },
@@ -4074,6 +4339,30 @@
         "identity": false
       },
       "primary_email_verified_by": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "priority_source": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "recycle_after": {
+        "type": "timestamp with time zone",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "manual_rank": {
+        "type": "timestamp with time zone",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "icp_guess": {
         "type": "text",
         "default": null,
         "notnull": false,
@@ -7551,5 +7840,73 @@
       "id"
     ],
     "create": "CREATE TABLE IF NOT EXISTS gate_events (\n  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,\n  action text, entity text, pass boolean, checks jsonb, reasons text,\n  occurred_at timestamptz DEFAULT now(),\n  PRIMARY KEY (id)\n)"
+  },
+  "icp_catalog": {
+    "columns": {
+      "sector": {
+        "type": "text",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "icp_name": {
+        "type": "text",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "regulator": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "jurisdiction": {
+        "type": "text",
+        "default": "'UK'::text",
+        "notnull": false,
+        "identity": false
+      },
+      "tier_hint": {
+        "type": "smallint",
+        "default": "1",
+        "notnull": false,
+        "identity": false
+      },
+      "priority_rank": {
+        "type": "smallint",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "enabled": {
+        "type": "boolean",
+        "default": "true",
+        "notnull": false,
+        "identity": false
+      },
+      "query_templates": {
+        "type": "jsonb",
+        "default": "'[]'::jsonb",
+        "notnull": false,
+        "identity": false
+      },
+      "created_at": {
+        "type": "timestamp with time zone",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      },
+      "updated_at": {
+        "type": "timestamp with time zone",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      }
+    },
+    "pk": [
+      "sector"
+    ],
+    "create": "CREATE TABLE IF NOT EXISTS icp_catalog (sector text PRIMARY KEY, icp_name text NOT NULL, regulator text, jurisdiction text DEFAULT 'UK', tier_hint smallint DEFAULT 1, priority_rank smallint, enabled boolean DEFAULT true, query_templates jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())"
   }
 }
