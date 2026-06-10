@@ -17,7 +17,9 @@ const _footCache = new Map(); // domain -> { indexed_pages, topics } | null
 let _ccDown = false;
 function _getJson(path, timeoutMs) {
   return new Promise((resolve) => {
-    const req = https.get({ host: _HOST, path, headers: { 'User-Agent': 'tamazia-audit/1.0 (+https://tamazia.co.uk)' }, timeout: timeoutMs || 8000 }, (res) => {
+    // Bounded ≤6s per call (was 8s): CC is non-essential enrichment and its public CDX front-end periodically
+    // hangs/504s; a tight per-call budget keeps a CC outage from adding dead wait to the mint. Fail-open to null.
+    const req = https.get({ host: _HOST, path, headers: { 'User-Agent': 'tamazia-audit/1.0 (+https://tamazia.co.uk)' }, timeout: timeoutMs || 6000 }, (res) => {
       if (res.statusCode !== 200) { res.resume(); return resolve(null); }
       const ct = String(res.headers['content-type'] || '');
       if (/text\/html/.test(ct)) { res.resume(); return resolve(null); }   // 504/error pages come back as HTML, not JSON
