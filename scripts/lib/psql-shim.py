@@ -126,7 +126,10 @@ def main():
                 statements.append(tail)
 
             for st in statements:
-                conn.run(st)
+                rows = conn.run(st)
+                if rows:
+                    for row in rows:
+                        print("\t".join(_fmt(v) for v in row))
             return
         if sql is None:
             raise SystemExit("Either -c or -f required")

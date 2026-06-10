@@ -8,6 +8,7 @@ import TopFindings from '../../../components/TopFindings.astro';
 import FindingsList from '../../../components/FindingsList.astro';
 import CurrentVsAfter from '../../../components/CurrentVsAfter.astro';
 import ComplianceInventory from '../../../components/ComplianceInventory.astro';
+import RegulatoryBreaches from '../../../components/RegulatoryBreaches.astro';
 import SEOOpportunity from '../../../components/SEOOpportunity.astro';
 import InterventionTimeline from '../../../components/InterventionTimeline.astro';
 import InvestmentTiers from '../../../components/InvestmentTiers.astro';
@@ -59,6 +60,7 @@ const pageTitle = `${companyName} · Regulatory Signal Scan`;
     { id: 'findings', label: 'All findings' },
     { id: 'before-after', label: 'Before / after' },
     { id: 'compliance', label: 'Compliance' },
+    { id: 'regulatory-breaches', label: 'Breach detail' },
     { id: 'seo', label: 'SEO opportunity' },
     { id: 'timeline', label: 'Timeline' },
     { id: 'investment', label: 'Investment' },
@@ -70,6 +72,7 @@ const pageTitle = `${companyName} · Regulatory Signal Scan`;
   <FindingsList groups={byBucket} />
   <CurrentVsAfter buckets={meta.buckets} />
   <ComplianceInventory pointers={byBucket.compliance} frameworksRouted={meta.frameworks_routed} />
+  <RegulatoryBreaches pointers={byBucket.compliance} />
   <SEOOpportunity pointers={seoBundle} />
   <InterventionTimeline pointers={pointers} />
   <InvestmentTiers pointers={pointers} />

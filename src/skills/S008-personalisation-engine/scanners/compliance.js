@@ -5,10 +5,12 @@
 // Every finding carries: rule_id, framework_short, severity, citation_url, evidence URL + snippet.
 
 const path = require('path');
+const fs = require('fs');
 const { execFileSync } = require('child_process');
 const _crypto = require('crypto');
 const { fetchWithRetry, getCached, writeCache } = require('../lib/http.js');
 const { routeJurisdictions } = require('../../../lib/compliance/jurisdiction-router.js');
+const { buildCorpusIndex, scanRuleGlobal } = require('./corpus-index.js'); // B2 — every-page/every-word matcher
 const SCANNER = 'compliance';
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
@@ -17,6 +19,34 @@ function pg(sql) {
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
   if (!url) return null;
   try { return execFileSync(pgPath(), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; }
+}
+
+// B1 — the merged canonical law repo (committed seed), indexed framework_short → law. Lazy + cached in-process so
+// the resolver overlay adds no per-mint DB round-trip (throughput-safe). null if the seed is missing (overlay no-ops).
+let _CANON_IDX;
+function canonicalIndex() {
+  if (_CANON_IDX !== undefined) return _CANON_IDX;
+  try {
+    const laws = JSON.parse(fs.readFileSync(path.join(ROOT, 'db', 'seeds', 'compliance-laws.json'), 'utf8'));
+    const m = new Map();
+    for (const l of laws) for (const t of String(l.neon_framework_short || '').split(',').map(s => s.trim()).filter(Boolean)) if (!m.has(t)) m.set(t, l);
+    _CANON_IDX = m;
+  } catch (_e) { _CANON_IDX = null; }
+  return _CANON_IDX;
+}
+
+// B3 — recent enforcement records (populated by scripts/enforcement-sync.js) for the per-breach panel. ONE query
+// per scan, cheap, throughput-safe; returns [] gracefully if the table isn't provisioned yet (panel stays honest).
+let _enfTableOk; // cached: is compliance_enforcement provisioned? avoids a failing query (+stderr noise) every scan
+function loadEnforcement(jurisdictions) {
+  if (_enfTableOk === undefined) { const chk = pg("SELECT (to_regclass('public.compliance_enforcement') IS NOT NULL)::text;"); _enfTableOk = !!(chk && /^t/i.test(chk.trim())); }
+  if (!_enfTableOk) return [];
+  const js = [...new Set((jurisdictions || []).concat(['GLOBAL']))].filter(Boolean).map(j => `'${String(j).replace(/'/g, "''")}'`).join(',');
+  if (!js) return [];
+  const sql = `SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT matched_law_ids,jurisdiction,breach_type,entity_named,penalty,ruling_date::text AS ruling_date,one_line_summary,source_url,source_feed,classifier FROM compliance_enforcement WHERE jurisdiction IN (${js}) ORDER BY ruling_date DESC NULLS LAST LIMIT 500) t;`;
+  const raw = pg(sql);
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch (_e) { return []; }
 }
 
 function loadRules({ frameworks }) {
@@ -73,29 +103,71 @@ const POLICY_PATHS = [
 function _sameHost(u, domain) {
   try { const h = new URL(u).hostname.replace(/^www\./, ''); return h === domain.replace(/^www\./, ''); } catch (_e) { return false; }
 }
-function _discoverLinks(html, domain) {
-  const out = []; const base = 'https://' + domain;
+// A1 — registrable-domain (eTLD+1) so SUBDOMAINS (blog./help./property./uk.) and the www variant all count as the
+// SAME SITE and get crawled. Covers the common multi-part public suffixes; defaults to last-two-labels otherwise.
+const _MULTI_TLD = new Set(['co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk', 'ltd.uk', 'plc.uk', 'net.uk', 'sch.uk', 'nhs.uk', 'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'co.nz', 'org.nz', 'govt.nz', 'co.za', 'org.za', 'com.sg', 'edu.sg', 'gov.sg', 'com.br', 'com.mx', 'co.in', 'net.in', 'org.in', 'co.jp', 'or.jp', 'com.hk', 'com.cn', 'co.ae', 'gov.ae', 'com.tr', 'co.il', 'com.sa']);
+function _registrable(host) {
+  host = String(host || '').toLowerCase().replace(/^www\./, '').replace(/:.*$/, '');
+  const p = host.split('.');
+  if (p.length <= 2) return host;
+  return _MULTI_TLD.has(p.slice(-2).join('.')) ? p.slice(-3).join('.') : p.slice(-2).join('.');
+}
+// Same registrable site (input domain ∪ any extra accepted hosts, e.g. a detected canonical alternate domain).
+function _sameSite(u, accepted) {
+  try { return accepted.has(_registrable(new URL(u).hostname)); } catch (_e) { return false; }
+}
+// The firm's CANONICAL host when the crawled domain is just an alias/landing shell that 404s its own sub-paths
+// (e.g. taylorrose.co.uk → taylor-rose.co.uk). Read <link rel=canonical>/og:url, else the host the homepage's nav
+// links point at most. Returns a host string of a DIFFERENT registrable domain, or null.
+function _canonicalAltHost(html, domain) {
+  const inReg = _registrable(domain);
+  const tryUrls = [];
+  let m = /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)/i.exec(html) || /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i.exec(html);
+  if (m) tryUrls.push(m[1]);
+  let og = /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)/i.exec(html);
+  if (og) tryUrls.push(og[1]);
+  for (const u of tryUrls) { try { const h = new URL(u).hostname.replace(/^www\./, ''); if (_registrable(h) !== inReg) return h; } catch (_e) {} }
+  // dominant nav host: count same-scheme http(s) link hosts; if one OTHER registrable dominates (≥8 links, ≥60%), use it
+  const counts = {}; const re = /href\s*=\s*["']([^"'#?]+)/gi; let mm; let total = 0;
+  while ((mm = re.exec(html))) { try { const h = new URL(mm[1], 'https://' + domain).hostname.replace(/^www\./, ''); const reg = _registrable(h); counts[reg] = (counts[reg] || 0) + 1; total++; } catch (_e) {} }
+  let bestReg = null, bestN = 0; for (const [reg, n] of Object.entries(counts)) { if (reg !== inReg && n > bestN) { bestN = n; bestReg = reg; } }
+  if (bestReg && bestN >= 8 && bestN / Math.max(total, 1) >= 0.6) return bestReg;
+  return null;
+}
+// Bounded-concurrency map: run `fn` over `items` with at most `limit` in flight (politeness + 120-page budget without
+// opening 120 sockets at once), with an overall wall-clock DEADLINE so a few slow pages never stall the whole mint.
+async function _pool(items, limit, deadlineMs, fn) {
+  const out = new Array(items.length); let idx = 0; const start = Date.now();
+  async function worker() { for (;;) { const i = idx++; if (i >= items.length) return; if (Date.now() - start > deadlineMs) { out[i] = null; continue; } try { out[i] = await fn(items[i], i); } catch (_e) { out[i] = null; } } }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+function _discoverLinks(html, base, accepted) {
+  const out = [];
   const re = /href\s*=\s*["']([^"'#?]+)/gi; let m;
-  while ((m = re.exec(html)) && out.length < 400) {
+  while ((m = re.exec(html)) && out.length < 600) {
     let href = m[1].trim(); if (!href || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) continue;
     let abs; try { abs = new URL(href, base).toString(); } catch (_e) { continue; }
-    if (_sameHost(abs, domain)) out.push(abs.split('#')[0]);
+    if (_sameSite(abs, accepted)) out.push(abs.split('#')[0]);   // same registrable site → includes subdomains + www
   }
   return out;
 }
-async function _discoverSitemap(domain) {
+async function _discoverSitemap(domain, accepted) {
   const urls = [];
-  const roots = ['https://' + domain + '/sitemap.xml', 'https://' + domain + '/sitemap_index.xml', 'https://' + domain + '/sitemap-index.xml'];
+  // robots.txt Sitemap: directives first (authoritative), then the common roots.
+  const roots = [];
+  try { const rob = await fetchWithRetry('https://' + domain + '/robots.txt', { timeout: 6000, retries: 0 }); if (rob && rob.ok && rob.body) for (const sm of (rob.body.match(/sitemap:\s*(\S+)/gi) || [])) roots.push(sm.replace(/sitemap:\s*/i, '').trim()); } catch (_e) {}
+  roots.push('https://' + domain + '/sitemap.xml', 'https://' + domain + '/sitemap_index.xml', 'https://' + domain + '/sitemap-index.xml');
   for (const root of roots) {
     let r; try { r = await fetchWithRetry(root, { timeout: 8000, retries: 0 }); } catch (_e) { continue; }
     if (!r || !r.ok || !r.body) continue;
     const locs = (r.body.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || []).map(x => x.replace(/<\/?loc>/gi, '').trim());
-    const childSitemaps = locs.filter(u => /sitemap.*\.xml/i.test(u)).slice(0, 4);
+    const childSitemaps = locs.filter(u => /sitemap.*\.xml/i.test(u)).slice(0, 8);     // follow more child sitemaps for big sites
     const pageUrls = locs.filter(u => !/\.xml/i.test(u));
-    for (const u of pageUrls) if (_sameHost(u, domain)) urls.push(u);
+    for (const u of pageUrls) if (_sameSite(u, accepted)) urls.push(u);
     for (const cs of childSitemaps) {
       try { const cr = await fetchWithRetry(cs, { timeout: 8000, retries: 0 }); if (cr && cr.ok && cr.body) {
-        (cr.body.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || []).map(x => x.replace(/<\/?loc>/gi, '').trim()).forEach(u => { if (_sameHost(u, domain)) urls.push(u); });
+        (cr.body.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || []).map(x => x.replace(/<\/?loc>/gi, '').trim()).forEach(u => { if (_sameSite(u, accepted)) urls.push(u); });
       } } catch (_e) {}
     }
     if (urls.length) break;
@@ -116,6 +188,27 @@ async function _renderViaReader(url) {
     return (txt && txt.length > 80) ? txt : '';
   } catch (_e) { clearTimeout(t); return ''; }
 }
+// A1 — headless render with the strongest available path: a configured crawl4ai/Playwright microservice
+// (CRAWL_RENDER_URL → GET ?url=…, returns {text|markdown|html} or raw HTML) for guaranteed JS-SPA coverage, else the
+// free public Jina reader. Fully graceful — any failure returns '' and the crawl continues; the service is optional
+// infra the founder can stand up on the existing free VM to push coverage of pure-JS sites to 100%.
+async function _renderPage(url) {
+  const svc = process.env.CRAWL_RENDER_URL;
+  if (svc) {
+    try {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 25000);
+      const u = svc + (svc.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url);
+      const r = await fetch(u, { headers: { accept: 'application/json, text/plain' }, signal: ctl.signal });
+      clearTimeout(t);
+      if (r.ok) {
+        const ct = r.headers.get('content-type') || '';
+        if (/json/i.test(ct)) { const j = await r.json(); const txt = j && (j.text || j.markdown || j.content || (j.html ? _stripText(j.html) : '')); if (txt && txt.length > 80) return txt; }
+        else { const b = await r.text(); const txt = /<html/i.test(b) ? _stripText(b) : b; if (txt && txt.length > 80) return txt; }
+      }
+    } catch (_e) {}
+  }
+  return _renderViaReader(url);   // free fallback
+}
 
 // Public-archive fallback (free, compliant): when a site is behind an anti-bot challenge that blocks live
 // fetch AND the JS reader, read the most recent PUBLIC Wayback Machine snapshot. This reads archive.org (a
@@ -135,32 +228,56 @@ async function _archiveSnapshot(url) {
   } catch (_e) { return null; }
 }
 
-async function gatherCorpus({ domain, maxPages = 22 }) {
+async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concurrency = 12 }) {
   const base = 'https://' + domain;
   const corpus = []; const seenBody = new Set(); const used = new Set();
   // 1) homepage first (and a source of internal links)
   const home = await fetchWithRetry(base + '/', { timeout: 10000, retries: 1 });
   const candidates = [base + '/'];
-  // 2) discovered real pages: homepage links (relevant first) + sitemap (relevant first)
-  const links = (home && home.ok && home.body) ? _discoverLinks(home.body, domain) : [];
-  let smap = []; try { smap = await _discoverSitemap(domain); } catch (_e) {}
+  // The set of registrable domains we treat as THIS site: the input + any canonical alternate the homepage declares
+  // (alias/landing shell that 404s its own sub-paths, e.g. taylorrose.co.uk → taylor-rose.co.uk). Subdomains of any
+  // accepted registrable (blog./help./property./uk.) are included by _sameSite.
+  const accepted = new Set([_registrable(domain)]);
+  let altHome = null, altBase = null;
+  if (home && home.ok && home.body) {
+    const alt = _canonicalAltHost(home.body, domain);
+    if (alt && !accepted.has(_registrable(alt))) {
+      accepted.add(_registrable(alt));
+      altBase = 'https://' + alt;
+      try { altHome = await fetchWithRetry(altBase + '/', { timeout: 10000, retries: 1 }); if (altHome && altHome.ok) candidates.push(altBase + '/'); } catch (_e) {}
+    }
+  }
+  // 2) discovered real pages: homepage links (relevant first) + sitemap (relevant first), across accepted hosts
+  let links = (home && home.ok && home.body) ? _discoverLinks(home.body, base, accepted) : [];
+  if (altHome && altHome.ok && altHome.body) links = links.concat(_discoverLinks(altHome.body, altBase, accepted));
+  let smap = [];
+  try { smap = await _discoverSitemap(domain, accepted); } catch (_e) {}
+  if (altBase && altHome && altHome.ok) { try { const altReg = _registrable(altBase.replace('https://', '')); const sm2 = await _discoverSitemap(altBase.replace('https://', ''), new Set([altReg])); smap = smap.concat(sm2); } catch (_e) {} }
   const _TIER1 = /privacy|cookie|terms|legal|gdpr|data[- ]protection|accessibility|complaint|modern[- ]slavery|disclaimer|imprint|impressum|disclosure|safeguard|regulat|compliance/i;
   const _TIER2 = /about|contact|service|pricing|fees|returns|refund|shipping|delivery|sector|team|locations|offices/i;
+  // B2 — blog/editorial tier: marketing & compliance claims (medical, financial, prohibited terms) live in blog
+  // posts, news, insights & case studies. Reserve priority slots so they are crawled and every word scanned — a
+  // breach in a 2019 article is flagged, not crowded out by the page cap.
+  const _BLOG = /\/blog|\/news|\/insights|\/press|\/article|\/resources|\/stories|\/updates|\/knowledge|\/20\d\d\//i;
   const t1Links = links.filter(u => _TIER1.test(u)); const t1Smap = smap.filter(u => _TIER1.test(u));
   const t2Links = links.filter(u => _TIER2.test(u) && !_TIER1.test(u)); const t2Smap = smap.filter(u => _TIER2.test(u) && !_TIER1.test(u));
-  // 3) guessed policy paths as a backstop (privacy/cookie/terms first inside POLICY_PATHS)
-  const guessed = POLICY_PATHS.map(pp => base + pp);
-  // priority: homepage, legal pages (links+sitemap+guessed), commercial pages, then any remaining internal pages
-  for (const u of [...t1Links, ...t1Smap, ...guessed, ...t2Links, ...t2Smap, ...links, ...smap]) candidates.push(u);
+  const blogLinks = links.filter(u => _BLOG.test(u) && !_TIER1.test(u) && !_TIER2.test(u));
+  const blogSmap = smap.filter(u => _BLOG.test(u) && !_TIER1.test(u) && !_TIER2.test(u));
+  // 3) guessed policy paths as a backstop (privacy/cookie/terms first inside POLICY_PATHS) — on every accepted host
+  const guessed = [...accepted].flatMap(reg => POLICY_PATHS.map(pp => 'https://' + reg + pp));
+  // priority: homepage, legal pages (links+sitemap+guessed), commercial pages, BLOG/editorial, then any remaining
+  for (const u of [...t1Links, ...t1Smap, ...guessed, ...t2Links, ...t2Smap, ...blogLinks, ...blogSmap, ...links, ...smap]) candidates.push(u);
   // de-dup by normalised URL, cap
   const fetchList = [];
   for (const u of candidates) {
     const norm = u.split('#')[0].replace(/\/$/, '').toLowerCase();
-    if (used.has(norm)) continue; if (!_sameHost(u, domain)) continue;
+    if (used.has(norm)) continue; if (!_sameSite(u, accepted)) continue;
     used.add(norm); fetchList.push(u); if (fetchList.length >= maxPages) break;
   }
-  // fetch (homepage reuse)
-  const results = await Promise.all(fetchList.map((u, i) => (i === 0 && home) ? Promise.resolve(home) : fetchWithRetry(u, { timeout: 10000, retries: 1 })));
+  // fetch — BOUNDED concurrency pool + wall-clock DEADLINE (every page, in seconds, without 120 simultaneous sockets
+  // or a slow tail stalling the mint). Homepage(s) reused from above.
+  const _homeFor = (u) => (u === base + '/' && home) ? home : (altBase && u === altBase + '/' && altHome) ? altHome : null;
+  const results = await _pool(fetchList, concurrency, deadlineMs, (u) => { const h = _homeFor(u); return h ? Promise.resolve(h) : fetchWithRetry(u, { timeout: 10000, retries: 1 }); });
   for (let i = 0; i < fetchList.length; i++) {
     const r = results[i]; const url = fetchList[i];
     if (r && r.ok && r.body && r.body.length > 400) {
@@ -170,6 +287,18 @@ async function gatherCorpus({ domain, maxPages = 22 }) {
       corpus.push({ url, body: r.body, status: r.status, fetch_ms: r.fetch_ms, bytes: Buffer.byteLength(r.body) });
     }
   }
+  // A1 — per-page JS-render rescue: a real page that came back as a near-empty SPA shell (200 but <500 chars of text)
+  // is re-fetched through the headless render service so its words ARE captured (100% coverage incl. client-rendered
+  // routes). Uses CRAWL_RENDER_URL (crawl4ai/Playwright microservice) when configured, else the free Jina reader.
+  try {
+    const shells = [];
+    for (let i = 0; i < fetchList.length; i++) { const r = results[i]; const u = fetchList[i]; if (r && (r.status === 200 || r.ok) && r.body && r.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, '').length < 500 && !r.challenge) shells.push(u); }
+    const toRender = shells.slice(0, 20);                                   // cap the headless tail
+    if (toRender.length) {
+      const rendered = await _pool(toRender, Math.min(4, concurrency), Math.max(8000, deadlineMs / 2), (u) => _renderPage(u));
+      for (let i = 0; i < toRender.length; i++) { const txt = rendered[i]; const u = toRender[i]; if (txt && txt.replace(/\s+/g, '').length > 500) { const sig = _crypto.createHash('sha1').update(txt).digest('hex'); if (seenBody.has(sig)) continue; seenBody.add(sig); corpus.push({ url: u, body: txt, status: 200, fetch_ms: 0, bytes: Buffer.byteLength(txt), rendered: true }); } }
+    }
+  } catch (_e) {}
   const _anyChallengePre = (home && home.challenge) || results.some(r => r && r.challenge);
   // JS-render fallback: nothing readable, no challenge, homepage answered 200 -> likely a client-rendered SPA.
   if (!corpus.length && !_anyChallengePre && home && (home.status === 200 || home.ok)) {
@@ -281,7 +410,59 @@ function _extractQuote(html, re) {
   return { matched, quote: sentence };
 }
 
-function ruleCheck(rule, corpus, sector) {
+// A3 — REAL per-breach absence evidence. A must_appear MISS must prove we read the page the disclosure SHOULD live
+// on and show the closest related content actually there (vs the specific missing element) — never a bare "we
+// inspected your homepage, your privacy policy" page list (the founder's complaint). Deterministic, free, in-corpus.
+const _ABSENCE_STOP = new Set(['must', 'appear', 'that', 'this', 'with', 'from', 'your', 'their', 'have', 'page', 'pages', 'website', 'site', 'online', 'published', 'publish', 'disclose', 'disclosed', 'disclosure', 'information', 'provide', 'required', 'require', 'clear', 'statement', 'reference', 'where', 'near', 'listed', 'services', 'service', 'every', 'should', 'obligation', 'obligations', 'including', 'available', 'relevant', 'website', 'visible', 'prominent', 'prominently']);
+const _PRIVACY_FW_RX = /GDPR|DPA|PECR|ICO|EPRIVACY|PDPL|CCPA|CPRA|VCDPA/i;
+const _POLICY_URL_RX = /privacy|data-protection|gdpr|cookie|legal|terms|policies?|disclaimer/i;
+const _ARTICLE_URL_RX = /\/(blog|posts?|news|insights?|articles?|resources?|press|stories|updates|knowledge|case-?stud|guides?)\b|\/20\d\d\//i;
+// A dedicated policy/legal PAGE (where a disclosure lives), not a blog post that merely mentions the topic in its slug.
+function _isPolicyPage(url) { return _POLICY_URL_RX.test(url || '') && !_ARTICLE_URL_RX.test(url || ''); }
+function _absenceEvidence(pool, corpus, rule) {
+  const terms = String(rule.description || '').toLowerCase().match(/[a-z]{4,}/g) || [];
+  const key = [...new Set(terms.filter((t) => !_ABSENCE_STOP.has(t)))].slice(0, 6);
+  const cand = (pool && pool.length) ? pool : (corpus || []);
+  // The page the disclosure SHOULD be on: for privacy/data rules, STRONGLY prefer a dedicated privacy/legal/cookie
+  // PAGE (not a blog post that happens to mention it); else the candidate page richest in the rule's topical terms.
+  const isPrivacy = _PRIVACY_FW_RX.test(rule.framework_short || '');
+  let target = null, tScore = -1;
+  for (const c of cand) {
+    const b = _stripText(c.body || '').toLowerCase();
+    let s = key.reduce((n, t) => n + (b.includes(t) ? 1 : 0), 0);
+    if (isPrivacy && _isPolicyPage(c.url)) s += 5;               // a real policy page is where the obligation lives
+    else if (isPrivacy && _POLICY_URL_RX.test(c.url || '')) s += 1; // a blog mention is weak context, not the page
+    if (s > tScore) { tScore = s; target = c; }
+  }
+  // The closest related real sentence on that page. STRICT: require ≥2 distinct key terms (or all of them, for a
+  // 1-term rule) so a single weak overlap (e.g. "legal" matching "legal updates") never poses as related evidence.
+  const need = Math.min(2, key.length || 1);
+  let nearest = null;
+  if (target && key.length) {
+    const txt = _stripText(target.body || '');
+    const sents = txt.split(/(?<=[.!?•])\s+/);
+    let best = null, bScore = 0;
+    for (const s0 of sents) {
+      const s = s0.trim(); if (s.length < 30 || s.length > 240) continue;
+      const sl = s.toLowerCase();
+      const sc = key.reduce((n, t) => n + (sl.includes(t) ? 1 : 0), 0);
+      if (sc > bScore && sc >= need && _isProse(s)) { bScore = sc; best = s; }
+    }
+    nearest = best;
+  }
+  return {
+    target_url: target ? target.url : null,
+    target_is_policy_page: !!(target && _isPolicyPage(target.url || '')),
+    requirement: rule.description || null,         // the specific element that is missing, in plain words
+    searched_terms: key,                            // what we matched on (transparency)
+    nearest_quote: nearest,                         // the closest GENUINELY-related content on the page (or null)
+    pages_checked: cand.length,
+    // related content present but the requirement absent | page exists yet silent on it | no relevant page at all
+    state: !target ? 'no_relevant_page' : (nearest ? 'related_present_requirement_absent' : 'page_silent'),
+  };
+}
+
+function ruleCheck(rule, corpus, sector, corpusIndex) {
   // Sector relevance gate: if the rule has a sector list and our sector isn't in it, skip.
   if (rule.sectors && rule.sectors.length > 0 && sector && !rule.sectors.includes(sector)) {
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'not_applicable_to_sector' };
@@ -308,11 +489,20 @@ function ruleCheck(rule, corpus, sector) {
     if (!triggered) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'trigger_absent' };
     // Trigger present — now check whether the disclosure is also present.
     for (const c of corpus) { if (c.body.match(re)) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'hit_after_trigger', trigger_evidence: triggerEvidence }; }
-    // Trigger present but disclosure missing → real breach.
-    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: triggerEvidence?.url, evidence_quote: triggerEvidence?.quote, trigger_evidence: triggerEvidence };
+    // Trigger present but disclosure missing → real breach. Carry the real nearest-miss absence evidence too, so the
+    // render shows WHAT is on the page vs the missing element (not "inspected your homepage") for trigger breaches as well.
+    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: triggerEvidence?.url, evidence_quote: triggerEvidence?.quote, trigger_evidence: triggerEvidence, checked_urls: corpus.map(c => c.url), absence_evidence: _absenceEvidence(corpus, corpus, rule) };
   }
-  // prohibit: breach if pattern IS present (e.g. "no GLP-1 on consumer pages")
+  // prohibit: breach if pattern IS present anywhere on the site (e.g. "no GLP-1 on consumer pages").
   if (rule.rule_type === 'prohibit') {
+    // EVERY-WORD scan: collect EVERY offending line across EVERY crawled page (blog posts, FAQs, testimonials,
+    // footers included) — so a prohibited claim in a 2019 article is flagged, not just the first homepage hit.
+    const occ = (corpusIndex && corpusIndex.segments && corpusIndex.segments.length) ? scanRuleGlobal(re, corpusIndex, { proseOnly: true, max: 50 }) : [];
+    if (occ.length) {
+      const first = occ[0];
+      return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: first.url, evidence_snippet: first.matched, evidence_quote: first.line, occurrence_count: occ.length, occurrences: occ };
+    }
+    // Fallback: the pattern hit raw markup (not visible prose) — keep the legacy first-page behaviour so status never regresses.
     for (const c of corpus) {
       const m = c.body.match(re);
       if (m) { const q = _extractQuote(c.body, re); return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: c.url, evidence_snippet: (q && q.matched) || m[0].slice(0, 80), evidence_quote: q && q.quote }; }
@@ -337,6 +527,7 @@ function ruleCheck(rule, corpus, sector) {
     layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short,
     service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example,
     checked_urls: pool.map(c => c.url),
+    absence_evidence: _absenceEvidence(pool, corpus, rule),
     rule_pattern_summary: rule.regex_pattern.slice(0, 80)
   };
 }
@@ -402,7 +593,17 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // set (mergedJur = registered country + two-signal-corroborated markets) and do NOT union in the raw markets.js
   // `codes` (which carry that keyword noise). The registered country is always inside mergedJur, so it can never
   // be lost; we fall back to the raw codes only if the LLM profiler failed entirely.
-  const allJurisdictions = (mergedJur && mergedJur.length) ? Array.from(new Set(mergedJur)) : Array.from(codes);
+  let allJurisdictions = (mergedJur && mergedJur.length) ? Array.from(new Set(mergedJur)) : Array.from(codes);
+  // POST-BREXIT EU GATE (anti-frivolous): a non-EU-registered firm is EU-regulated only with a CONCRETE EU market
+  // signal — EUR pricing, a named EU country served, or an EU-registered entity — NOT a mere "GDPR"/"Europe"
+  // mention (which appears in every UK privacy policy and was attaching EU GDPR/ePrivacy to UK-only SMEs). Applied
+  // to the FINAL set so it catches both the LLM-merged and the raw-codes paths.
+  const _regIsEU = /^(FR|DE|ES|IT|IE|NL|BE|PT|AT|PL|SE|DK|FI|GR|RO|HU|CZ|SK|BG|HR|SI|LT|LV|EE|LU|CY|MT)$/i.test(String(country || ''));
+  // Use STRONG markets (two-signal-verified) — the SAME bar the engine already uses for non-EU foreign markets —
+  // not raw operating_countries, which carries stray-mention noise (e.g. a single "France"/"Italy" word).
+  const _euStrong = (mk.strong_markets || []).some(c => /France|Germany|Spain|Italy|Ireland|Netherlands|Belgium|Portugal|Austria|Poland|Sweden|Denmark|Finland|Greece|Romania|Hungary|Czech|Slovak|Bulgaria|Croatia|Sloven|Lithuan|Latvia|Estonia|Luxembourg|Cyprus|Malta/i.test(c));
+  const _concreteEU = _regIsEU || _euStrong || /€|\bEUR\b/.test(corpusText);
+  if (allJurisdictions.includes('EU') && !_concreteEU) allJurisdictions = allJurisdictions.filter(j => j !== 'EU');
   // client-facing detected names, derived from the SAME gated code set — never the raw markets.js keyword noise.
   const _C2N = { UK: 'United Kingdom', US: 'United States', AE: 'United Arab Emirates', SA: 'Saudi Arabia', QA: 'Qatar', EU: 'European Union', FR: 'France', DE: 'Germany', IE: 'Ireland', SG: 'Singapore', IN: 'India', CA: 'Canada', AU: 'Australia', NL: 'Netherlands', ES: 'Spain', IT: 'Italy' };
   const detectedJurisdictions = Array.from(new Set(allJurisdictions.map((c) => _C2N[c] || _regName || c)));
@@ -441,9 +642,16 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const _homeText = _stripTxt((corpus[0] && corpus[0].body) || '').slice(0, 2600);
   const findings = [];
   let hits = 0, misses = 0, suppressedPrivacy = 0;
-  const normSector = String(sector || '').toLowerCase();
+  // The rule-level sector gate (ruleCheck) MUST use the SAME detected sector as the framework router (effectiveSector
+  // = firmProfile.primary_sector, the 30-slug vocabulary that rule.sector_relevance is keyed on) — never the raw scan
+  // input, which may be empty/mismatched and would silently BYPASS the gate (`sector && …`). This alignment is what
+  // makes the per-rule sector gate actually fire (e.g. drops UK_TRADING_STANDARDS/TS1.1 "unit pricing" on a law firm).
+  const normSector = String(effectiveSector || sector || '').toLowerCase();
+  // B2 — build the every-page/every-word index ONCE (strip each page once, not per rule×page) so prohibit rules can
+  // flag every offending line across the whole site (blogs included) and evidence stays verbatim + located.
+  const corpusIndex = buildCorpusIndex(corpus);
   for (const r of rules) {
-    const out = ruleCheck(r, corpus, normSector);
+    const out = ruleCheck(r, corpus, normSector, corpusIndex);
     if (out.status === 'hit' || out.status === 'hit_after_trigger') { hits++; }
     else if (out.status === 'miss') {
       // Suppress unverifiable privacy-disclosure misses when the policy is JS-rendered/embedded (false-positive guard).
@@ -474,15 +682,57 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       if (_cpd.finding) { misses++; findings.push(_cpd.finding); }
     }
   } catch (_e) {}
+  // ── B1 RESOLVER OVERLAY · verified-only + negative guardrails (the structural anti-frivolous gate) ──────────
+  // Every finding that reaches a client must (a) come from a SERVABLE/proven law and (b) have its
+  // jurisdiction / free-zone / employee-threshold / exclusion fit THIS firm. Conservative by design: a finding whose
+  // framework has no canonical row is KEPT (connect() already jurisdiction-gated it) so an index gap can never
+  // silently swallow real findings — the overlay can only DROP a frivolous/unproven one, never invent or over-cut.
+  let _resolverDropped = []; let _canonJur = [];
+  try {
+    const { overlayDrop } = require('../../../lib/compliance/resolver.js');
+    const { buildSignals } = require('../../../lib/compliance/signals.js');
+    const idx = canonicalIndex();
+    if (idx && idx.size) {
+      const sig = buildSignals({ jurisdictions: allJurisdictions, sector: effectiveSector, corpusText, employees: (signals && (signals.employees || signals.employee_count)) });
+      _canonJur = [...sig.jurSet]; // the EXACT canonical jurisdictions applied (incl. DIFC/ADGM free zones) — recorded so the ship-gate re-checks against the same set
+      const kept = [];
+      for (const f of findings) {
+        const law = idx.get(f.framework) || idx.get(f.framework_short);
+        const reason = overlayDrop(law, Object.assign({}, sig, { framework: f.framework || f.framework_short }));
+        if (reason) _resolverDropped.push({ framework: f.framework || f.framework_short, code: f.code, reason });
+        else kept.push(f);
+      }
+      if (_resolverDropped.length) { findings.length = 0; findings.push(...kept); misses = findings.length; }
+    }
+  } catch (_e) {}
+
+  // ── B3 PER-BREACH LIVE PANEL · [where | calibrated penalty | recent ruling | recent news | impact] ───────────
+  // Each PROVEN finding gets the founder's panel, calibrated to recent REAL fines from OFFICIAL sources (honest
+  // "none found in our monitored sources" when the feed is empty — never a fabricated case). Graceful + cheap.
+  try {
+    const { buildBreachPanel } = require('../../../lib/compliance/enforcement.js');
+    const { toCanonicalJurisdictions } = require('../../../lib/compliance/signals.js');
+    const idx2 = canonicalIndex();
+    if (idx2 && idx2.size) {
+      const records = loadEnforcement(_canonJur.length ? _canonJur : [...toCanonicalJurisdictions(allJurisdictions)]);
+      for (const f of findings) {
+        if (f.status !== 'miss') continue;
+        const law = idx2.get(f.framework) || idx2.get(f.framework_short);
+        if (law) f.breach_panel = buildBreachPanel({ law, finding: f, records });
+      }
+    }
+  } catch (_e) {}
+
   // Most severe first
   findings.sort((a, b) => sevRank(a.severity) - sevRank(b.severity));
 
   const payload = {
     domain, sector, country, ok: true, reachable: true,
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
-    frameworks, jurisdictions: allJurisdictions, detected_jurisdictions: detectedJurisdictions,
+    frameworks, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
     firm_profile: firmProfile, detected_sector: effectiveSector,
     rules_evaluated: rules.length, hits, misses,
+    resolver_dropped: _resolverDropped,
     p0_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P0').length,
     p1_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P1').length,
     p2_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P2').length,
@@ -502,4 +752,4 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { scan };
+module.exports = { scan, ruleCheck, gatherCorpus };

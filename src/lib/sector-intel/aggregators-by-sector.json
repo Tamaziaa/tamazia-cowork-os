@@ -1,0 +1,168 @@
+{
+  "version": "1.0",
+  "generated": "2026-06-09",
+  "note": "Per-sector directory / news / listicle / comparison / marketplace domains that co-rank for a sector's category terms but are NOT real operating competitors. Unioned with the global AGGREGATORS set in rank-insight.js isAggregator(domain, sector, jurisdiction). 'ALL' applies in every jurisdiction; the per-jurisdiction keys add region-specific portals. Keep ONLY aggregators/news/directories here, never a real firm.",
+  "sectors": {
+    "fintech": {
+      "ALL": ["finextra.com", "fintechmagazine.com", "fintechfutures.com", "thefintechtimes.com", "altfi.com", "fintechnews.org", "fintechweekly.com", "tearsheet.co", "pymnts.com", "finovate.com", "ffnews.com", "crowdfundinsider.com", "crunchbase.com", "cbinsights.com", "pitchbook.com", "tracxn.com", "similarweb.com", "owler.com", "investopedia.com", "fool.com", "thebalancemoney.com", "bankrate.com", "nerdwallet.com", "finder.com", "techcrunch.com", "venturebeat.com", "businessinsider.com", "statista.com", "moneyzine.com", "thebanks.eu", "wise-guides.co.uk", "monito.com", "compareremit.com", "comparebanks.co.uk", "moneyfactscompare.co.uk", "moneyfacts.co.uk"],
+      "UK": ["moneysavingexpert.com", "money.co.uk", "comparethemarket.com", "moneysupermarket.com", "gocompare.com", "uswitch.com", "which.co.uk", "thisismoney.co.uk", "altfi.com", "sifted.eu", "ukbusinessforums.co.uk", "smartmoneypeople.com", "moneyweek.com", "cityam.com", "bankofengland.co.uk", "fca.org.uk", "gov.uk"],
+      "US": ["americanbanker.com", "bankingdive.com", "thebalancemoney.com", "wallethub.com", "magnifymoney.com", "depositaccounts.com", "fintechnews.com", "forbes.com", "tearsheet.co"],
+      "AE": ["zawya.com", "wamda.com", "magnitt.com", "arabianbusiness.com", "gulfbusiness.com", "menabytes.com", "fintechnews.ae", "thenationalnews.com"],
+      "EU": ["sifted.eu", "tech.eu", "eu-startups.com", "fintech.global", "thepaypers.com"]
+    },
+    "finance": {
+      "ALL": ["investopedia.com", "fool.com", "thebalancemoney.com", "bankrate.com", "nerdwallet.com", "finder.com", "morningstar.com", "bloomberg.com", "ft.com", "reuters.com", "marketwatch.com", "businessinsider.com", "trustpilot.com", "unbiased.co.uk", "vouchedfor.co.uk"],
+      "UK": ["moneysavingexpert.com", "money.co.uk", "comparethemarket.com", "moneysupermarket.com", "gocompare.com", "uswitch.com", "which.co.uk", "thisismoney.co.uk", "moneyweek.com", "citywire.com", "ftadviser.com", "professionaladviser.com", "unbiased.co.uk", "vouchedfor.co.uk"],
+      "US": ["americanbanker.com", "wallethub.com", "magnifymoney.com", "smartasset.com", "kiplinger.com", "thinkadvisor.com"],
+      "AE": ["zawya.com", "arabianbusiness.com", "gulfbusiness.com", "thenationalnews.com", "souqalmal.com", "yallacompare.com", "policybazaar.ae"],
+      "EU": ["finanztip.de", "boursorama.com", "lesechos.fr"]
+    },
+    "insurance": {
+      "ALL": ["policygenius.com", "insure.com", "thezebra.com", "nerdwallet.com", "bankrate.com", "finder.com", "trustpilot.com", "valuepenguin.com"],
+      "UK": ["comparethemarket.com", "moneysupermarket.com", "gocompare.com", "confused.com", "uswitch.com", "which.co.uk", "defaqto.com", "insurancetimes.co.uk", "postonline.co.uk", "insurancebusinessmag.com"],
+      "US": ["insurancejournal.com", "insurance.com", "thinkadvisor.com", "propertycasualty360.com"],
+      "AE": ["souqalmal.com", "yallacompare.com", "policybazaar.ae", "insurancehero.org.uk"],
+      "EU": ["check24.de", "verivox.de", "lelynx.fr"]
+    },
+    "law-firms": {
+      "ALL": ["legal500.com", "chambers.com", "chambersandpartners.com", "law360.com", "abovethelaw.com", "abajournal.com", "lexology.com", "jdsupra.com", "mondaq.com", "lawyer-monthly.com", "lawyermonthly.com", "globallegalpost.com"],
+      "UK": ["lawsociety.org.uk", "solicitors.lawsociety.org.uk", "sra.org.uk", "reviewsolicitors.co.uk", "barcouncil.org.uk", "legalcheek.com", "legalfutures.co.uk", "lawgazette.co.uk", "thelawyer.com", "rollonfriday.com", "legalweek.com", "bestlawfirms.com", "legalombudsman.org.uk"],
+      "US": ["justia.com", "avvo.com", "findlaw.com", "nolo.com", "lawyers.com", "superlawyers.com", "martindale.com", "lawinfo.com", "hg.org", "lawyer.com", "bestlawyers.com", "usnews.com", "expertise.com", "yelp.com"],
+      "AE": ["legal500.com", "thelawreviews.co.uk", "lexisnexis.com", "thenationalnews.com"],
+      "EU": ["legal500.com", "juve.de", "anwalt.de", "village-justice.com"]
+    },
+    "accounting": {
+      "ALL": ["accountingtoday.com", "journalofaccountancy.com", "cpapracticeadvisor.com", "g2.com", "capterra.com", "getapp.com", "softwareadvice.com", "nerdwallet.com", "trustpilot.com", "unbiased.co.uk"],
+      "UK": ["icaew.com", "accaglobal.com", "accountancyage.com", "accountingweb.co.uk", "economia.icaew.com", "find-and-update.company-information.service.gov.uk", "freeindex.co.uk", "unbiased.co.uk", "bark.com"],
+      "US": ["accountingtoday.com", "cpadirectory.com", "taxbuzz.com", "thumbtack.com"],
+      "AE": ["zawya.com", "arabianbusiness.com", "gulfnews.com"],
+      "EU": ["datev.de"]
+    },
+    "healthcare": {
+      "ALL": ["healthgrades.com", "zocdoc.com", "vitals.com", "ratemds.com", "wellness.com", "webmd.com", "healthline.com", "patient.info", "medscape.com", "doctoralia.com", "trustpilot.com", "topdoctors.com"],
+      "UK": ["nhs.uk", "whatclinic.com", "whatclinic.co.uk", "doctify.com", "topdoctors.co.uk", "treatwell.co.uk", "privatehealth.co.uk", "pulsetoday.co.uk", "iwantgreatcare.org", "nuffieldhealth.com", "bupa.co.uk"],
+      "US": ["healthgrades.com", "zocdoc.com", "vitals.com", "webmd.com", "ratemds.com", "sharecare.com", "wellness.com"],
+      "AE": ["vezeeta.com", "okadoc.com", "daleel.ae", "altibbi.com", "thenationalnews.com"],
+      "EU": ["jameda.de", "doctolib.fr", "doctolib.de", "doctoralia.com"]
+    },
+    "dental": {
+      "ALL": ["whatclinic.com", "dentaldepartures.com", "dentists.com", "1800dentist.com", "doctify.com", "healthgrades.com", "zocdoc.com", "dentistry.co.uk", "trustpilot.com", "treatwell.co.uk"],
+      "UK": ["nhs.uk", "whatclinic.co.uk", "topdoctors.co.uk", "dentistry.co.uk", "the-dentist.co.uk", "gov.uk", "bda.org"],
+      "US": ["1800dentist.com", "emergencydentistsusa.com", "healthgrades.com", "zocdoc.com", "ada.org", "yelp.com"],
+      "AE": ["vezeeta.com", "okadoc.com", "daleel.ae", "dentaldepartures.com"],
+      "EU": ["jameda.de", "doctolib.fr"]
+    },
+    "real-estate": {
+      "ALL": ["realtor.com", "loopnet.com", "inman.com", "trustpilot.com", "housing.com"],
+      "UK": ["rightmove.co.uk", "zoopla.co.uk", "onthemarket.com", "primelocation.com", "placebuzz.com", "home.co.uk", "propertypal.com", "estateagenttoday.co.uk", "propertyindustryeye.com", "thenegotiator.co.uk", "allagents.co.uk", "boomin.com", "britishproperty.uk", "agentseeker.co.uk", "estateagentfinder.co.uk", "nethouseprices.com", "mouseprice.com"],
+      "US": ["zillow.com", "realtor.com", "redfin.com", "trulia.com", "homes.com", "apartments.com", "loopnet.com", "movoto.com", "point2homes.com", "homesnap.com"],
+      "AE": ["propertyfinder.ae", "bayut.com", "dubizzle.com", "justproperty.com", "propertymonitor.ae", "houza.ae", "dubaisells.com"],
+      "EU": ["idealista.com", "immobilienscout24.de", "seloger.com", "immoweb.be", "funda.nl", "pap.fr"]
+    },
+    "hospitality": {
+      "ALL": ["booking.com", "expedia.com", "hotels.com", "agoda.com", "trivago.com", "kayak.com", "lastminute.com", "airbnb.com", "vrbo.com", "tripadvisor.com", "opentable.com", "thefork.com", "resy.com", "hostelworld.com", "laterooms.com", "skyscanner.net", "travelsupermarket.com", "yelp.com", "zomato.com"],
+      "UK": ["designmynight.com", "squaremeal.co.uk", "hardens.com", "timeout.com", "theurbanlist.com", "secretldn.com", "bookatable.co.uk", "5pm.co.uk"],
+      "US": ["yelp.com", "opentable.com", "resy.com", "thrillist.com", "eater.com", "michelin.com"],
+      "AE": ["theentertainerme.com", "visitdubai.com", "timeoutdubai.com", "timeoutabudhabi.com", "zomato.com", "talabat.com", "favouritetable.com"],
+      "EU": ["thefork.com", "thefork.fr", "michelin.com", "tripadvisor.fr"]
+    },
+    "food": {
+      "ALL": ["deliveroo.co.uk", "ubereats.com", "justeat.co.uk", "grubhub.com", "doordash.com", "opentable.com", "thefork.com", "zomato.com", "yelp.com", "tripadvisor.com", "trustpilot.com"],
+      "UK": ["justeat.co.uk", "deliveroo.co.uk", "designmynight.com", "squaremeal.co.uk", "hardens.com", "timeout.com", "bighospitality.co.uk"],
+      "US": ["grubhub.com", "doordash.com", "yelp.com", "eater.com", "seamless.com", "ubereats.com"],
+      "AE": ["talabat.com", "deliveroo.ae", "zomato.com", "theentertainerme.com", "noon.com"],
+      "EU": ["thefork.com", "lieferando.de", "just-eat.fr", "ubereats.com"]
+    },
+    "ecommerce": {
+      "ALL": ["amazon.com", "ebay.com", "etsy.com", "aliexpress.com", "wayfair.com", "temu.com", "shein.com", "walmart.com", "target.com", "houzz.com", "trustpilot.com", "reviews.io", "feefo.com", "idealo.com", "pricerunner.com", "productreview.com.au", "ecommerceguide.com", "shopify.com", "woocommerce.com", "bigcommerce.com", "magento.com", "squarespace.com", "wix.com", "prestashop.com", "wordpress.com", "weebly.com", "ecwid.com", "bigcartel.com", "volusion.com", "godaddy.com", "wholesalecentral.com", "capterra.com", "g2.com"],
+      "UK": ["amazon.co.uk", "ebay.co.uk", "notonthehighstreet.com", "onbuy.com", "wayfair.co.uk", "houzz.co.uk", "idealo.co.uk", "retailgazette.co.uk", "drapersonline.com", "hotukdeals.com"],
+      "US": ["amazon.com", "walmart.com", "target.com", "wayfair.com", "overstock.com", "retaildive.com", "businessoffashion.com"],
+      "AE": ["noon.com", "amazon.ae", "namshi.com", "ounass.ae", "dubizzle.com"],
+      "EU": ["amazon.de", "amazon.fr", "otto.de", "cdiscount.com", "bol.com", "zalando.com"]
+    },
+    "retail": {
+      "ALL": ["amazon.com", "ebay.com", "trustpilot.com", "reviews.io", "feefo.com", "idealo.com", "pricerunner.com", "google.com", "retaildive.com", "shopify.com", "woocommerce.com", "bigcommerce.com", "magento.com", "squarespace.com", "wix.com", "prestashop.com", "wordpress.com"],
+      "UK": ["amazon.co.uk", "ebay.co.uk", "retailgazette.co.uk", "drapersonline.com", "hotukdeals.com", "which.co.uk", "moneysavingexpert.com"],
+      "US": ["amazon.com", "walmart.com", "target.com", "retaildive.com", "nrf.com"],
+      "AE": ["noon.com", "amazon.ae", "namshi.com", "ounass.ae"],
+      "EU": ["amazon.de", "otto.de", "zalando.com"]
+    },
+    "aesthetics": {
+      "ALL": ["realself.com", "whatclinic.com", "doctify.com", "topdoctors.com", "healthgrades.com", "vitals.com", "ratemds.com", "trustpilot.com", "treatwell.com", "byrdie.com", "allure.com"],
+      "UK": ["whatclinic.co.uk", "doctify.com", "topdoctors.co.uk", "treatwell.co.uk", "consultingroom.com", "save-face.co.uk", "glowday.com", "nhs.uk"],
+      "US": ["realself.com", "healthgrades.com", "vitals.com", "ratemds.com", "americanboardcosmeticsurgery.org"],
+      "AE": ["vezeeta.com", "okadoc.com", "daleel.ae"],
+      "EU": ["jameda.de", "doctolib.fr", "doctoralia.com", "estheticon.com"]
+    },
+    "automotive": {
+      "ALL": ["autotrader.com", "edmunds.com", "cars.com", "carvana.com", "vroom.com", "kbb.com", "carfax.com", "truecar.com", "whatcar.com", "trustpilot.com", "carbuzz.com", "motor1.com"],
+      "UK": ["autotrader.co.uk", "carwow.co.uk", "parkers.co.uk", "whatcar.com", "heycar.co.uk", "motors.co.uk", "cinch.co.uk", "comparethemarket.com", "honestjohn.co.uk"],
+      "US": ["autotrader.com", "edmunds.com", "cars.com", "carvana.com", "vroom.com", "carmax.com", "kbb.com", "truecar.com"],
+      "AE": ["dubizzle.com", "yallamotor.com", "carswitch.com", "kavak.com"],
+      "EU": ["mobile.de", "autoscout24.de", "leboncoin.fr", "lacentrale.fr"]
+    },
+    "b2b": {
+      "ALL": ["clutch.co", "upwork.com", "goodfirms.co", "toptal.com", "fiverr.com", "g2.com", "capterra.com", "trustpilot.com", "designrush.com", "sortlist.com", "expertise.com", "gartner.com", "forrester.com"],
+      "UK": ["linkedin.com", "indeed.com", "yell.com", "bark.com", "freeindex.co.uk", "checkatrade.com"],
+      "US": ["linkedin.com", "indeed.com", "thumbtack.com", "manta.com"],
+      "AE": ["bayt.com", "naukrigulf.com", "yellowpages-uae.com"],
+      "EU": ["xing.com", "stepstone.de", "kununu.com"]
+    },
+    "cbd": {
+      "ALL": ["amazon.com", "ebay.com", "labdoor.com", "supplementreviews.com", "examine.com", "trustpilot.com", "iherb.com", "vitaminshoppe.com", "leafly.com", "weedmaps.com", "healthline.com", "webmd.com"],
+      "UK": ["amazon.co.uk", "ebay.co.uk", "hollandandbarrett.com", "healthunlocked.com", "cibdol.com", "leafie.co.uk"],
+      "US": ["amazon.com", "iherb.com", "labdoor.com", "leafly.com", "weedmaps.com", "cbdoracle.com"],
+      "AE": ["noon.com", "amazon.ae"],
+      "EU": ["amazon.de", "vitacost.com", "myprotein.com"]
+    },
+    "crypto": {
+      "ALL": ["coinmarketcap.com", "coingecko.com", "etherscan.io", "blockchain.com", "cointelegraph.com", "coindesk.com", "messari.io", "glassnode.com", "tradingview.com", "cryptocompare.com", "dappradar.com", "defillama.com", "cryptoslate.com", "decrypt.co", "bitcoinmagazine.com", "trustpilot.com", "crunchbase.com", "cryptonews.com", "invezz.com", "coingabbar.com", "tradingguide.co.uk", "theinvestorscentre.co.uk", "newsbtc.com", "beincrypto.com", "cryptopotato.com", "ambcrypto.com", "u.today", "bitcoinist.com", "cryptobriefing.com", "blockworks.co", "theblock.co", "99bitcoins.com", "bitcoin.com", "benzinga.com", "investopedia.com", "forbes.com", "coinbureau.com", "webopedia.com", "investing.com", "uk.investing.com", "fool.com", "nerdwallet.com", "bankrate.com", "finder.com", "datawallet.com", "milkroad.com", "techopedia.com", "swyftx.com", "koinly.io", "recap.io", "cointracker.io"],
+      "UK": ["coinjournal.net", "cityam.com", "finder.com"],
+      "US": ["forbes.com", "nerdwallet.com", "investopedia.com", "bankrate.com", "businessinsider.com"],
+      "AE": ["zawya.com", "arabianbusiness.com", "cointelegraph.com"],
+      "EU": ["bitpanda-academy.com", "btc-echo.de"]
+    },
+    "education": {
+      "ALL": ["coursera.org", "udemy.com", "edx.org", "khanacademy.org", "greatschools.org", "niche.com", "qs.com", "timeshighereducation.com", "topuniversities.com", "study.com", "ratemyprofessors.com", "trustpilot.com", "linkedin.com"],
+      "UK": ["theschoolrun.com", "parentzone.org.uk", "mumsnet.com", "ucas.com", "thecompleteuniversityguide.co.uk", "whatuni.com", "gov.uk", "ofsted.gov.uk"],
+      "US": ["greatschools.org", "niche.com", "usnews.com", "collegeboard.org", "petersons.com"],
+      "AE": ["edarabia.com", "khda.gov.ae", "whichschooladvisor.com"],
+      "EU": ["studyportals.com", "bachelorsportal.com"]
+    },
+    "energy": {
+      "ALL": ["energysage.com", "solarreviews.com", "cleanenergyreviews.info", "pv-magazine.com", "rechargenews.com", "trustpilot.com", "energystar.gov", "greentechmedia.com"],
+      "UK": ["comparethemarket.com", "moneysupermarket.com", "uswitch.com", "which.co.uk", "ofgem.gov.uk", "energysavingtrust.org.uk", "gov.uk"],
+      "US": ["energystar.gov", "seia.org", "dsireusa.org", "energysage.com"],
+      "AE": ["zawya.com", "utilities-me.com"],
+      "EU": ["check24.de", "verivox.de", "selectra.com"]
+    },
+    "personal": {
+      "ALL": ["wikipedia.org", "crunchbase.com", "pitchbook.com", "linkedin.com", "twitter.com", "x.com", "instagram.com", "tiktok.com", "facebook.com", "medium.com", "substack.com", "youtube.com", "muckrack.com", "about.me", "imdb.com"],
+      "UK": ["companieshouse.gov.uk", "thegazette.co.uk"],
+      "US": ["bloomberg.com", "forbes.com", "sec.gov"],
+      "AE": ["arabnet.me", "forbesmiddleeast.com"],
+      "EU": ["xing.com"]
+    },
+    "travel": {
+      "ALL": ["booking.com", "expedia.com", "hotels.com", "agoda.com", "trivago.com", "kayak.com", "skyscanner.net", "tripadvisor.com", "viator.com", "getyourguide.com", "klook.com", "musement.com", "airbnb.com", "vrbo.com", "lonelyplanet.com", "timeout.com", "thecrazytourist.com", "trustpilot.com"],
+      "UK": ["lastminute.com", "laterooms.com", "visitbritain.com", "visitlondon.com", "secretescapes.com", "loveholidays.com"],
+      "US": ["travelocity.com", "orbitz.com", "priceline.com", "tripsavvy.com", "thrillist.com"],
+      "AE": ["visitdubai.com", "timeoutdubai.com", "theentertainerme.com", "holidayme.com"],
+      "EU": ["thefork.com", "tui.com", "civitatis.com"]
+    },
+    "veterinary": {
+      "ALL": ["rover.com", "care.com", "vetster.com", "petmd.com", "trustpilot.com", "yelp.com", "thedodo.com", "chewy.com"],
+      "UK": ["rspca.org.uk", "pdsa.org.uk", "vethelpdirect.com", "find-a-vet.co.uk", "yell.com"],
+      "US": ["rover.com", "care.com", "vetster.com", "banfield.com", "vca.com"],
+      "AE": ["pawsme.ae", "vetsdubai.com"],
+      "EU": ["doctolib.fr"]
+    },
+    "wellness": {
+      "ALL": ["treatwell.com", "mindbody.com", "classpass.com", "trustpilot.com", "yelp.com", "wellness.com", "spafinder.com", "fresha.com", "booksy.com"],
+      "UK": ["treatwell.co.uk", "wahanda.com", "puregym.com", "designmynight.com", "timeout.com"],
+      "US": ["mindbody.com", "classpass.com", "wellandgood.com", "spafinder.com"],
+      "AE": ["fresha.com", "boutiqaat.com", "washmen.com"],
+      "EU": ["treatwell.fr", "treatwell.de", "urbansportsclub.com"]
+    }
+  }
+}

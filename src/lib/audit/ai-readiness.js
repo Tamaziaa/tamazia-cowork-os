@@ -75,6 +75,11 @@ async function aiReadiness({ domain, company, homeText = null, env = {} } = {}) 
   let body = homeText; if (body == null) body = await _get(domain, '/') || '';
   let types = []; try { types = (body && _detectSchema) ? Array.from(_detectSchema(body)) : []; } catch (_e) {}
   const hasOrg = types.some(t => /Organization|LocalBusiness|LegalService|MedicalBusiness|ProfessionalService|Corporation/i.test(String(t)));
+  // per-type presence (drives the render's structured-data gap checklist with REAL detection, not hardcoded false)
+  const _has = (rx) => types.some(t => rx.test(String(t)));
+  const hasLocalBusiness = _has(/LocalBusiness|LegalService|MedicalBusiness|Dentist|ProfessionalService/i);
+  const hasService = _has(/Service|Offer|Product|OfferCatalog/i);
+  const hasFaq = _has(/FAQPage|QAPage/i);
   const hasSameAs = /"sameAs"\s*:/.test(body || '');
   if (!hasOrg) score -= 15;
   if (!hasSameAs) score -= 8;
@@ -99,6 +104,6 @@ async function aiReadiness({ domain, company, homeText = null, env = {} } = {}) 
     });
   }
   score = Math.max(0, Math.min(100, score));
-  return { ok: true, score, blocked_ai_bots: blockedBots.map(b => b.ua), has_llms_txt: hasLlms, has_org_schema: hasOrg, has_same_as: hasSameAs, in_wikidata: inKG, findings };
+  return { ok: true, score, blocked_ai_bots: blockedBots.map(b => b.ua), has_llms_txt: hasLlms, has_org_schema: hasOrg, has_same_as: hasSameAs, in_wikidata: inKG, schema_types: types, has_localbusiness: hasLocalBusiness, has_service: hasService, has_faq: hasFaq, findings };
 }
 module.exports = { aiReadiness, AI_BOTS, _robotsBlocks };

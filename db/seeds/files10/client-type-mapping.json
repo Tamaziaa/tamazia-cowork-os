@@ -1,0 +1,4973 @@
+{
+ "_meta": {
+  "doc": "02_CLIENT_TYPE_MAPPING.json",
+  "purpose": "Resolve any of 400 client types -> ranked law stack. Hybrid of master-library lookup (b) + per-client expansion (a).",
+  "baseline_triggers_assumed_for_all": [
+   "processes_personal_data",
+   "sets_cookies",
+   "public_facing_website",
+   "is_commercial_site",
+   "always"
+  ],
+  "baseline_laws_attached_by_resolver": "From universal_by_jurisdiction[client.jurisdiction] + always[]. See 03_APPLICABILITY_GUARDRAILS.md resolver.",
+  "tier_source": "Tamazia pricing: Foundation £2,500 / Authority £4,500 / Enterprise £9,500; £1,500 audit entry."
+ },
+ "universal_by_jurisdiction": {
+  "UK": [
+   "UK-GDPR-01",
+   "UK-PECR-01",
+   "UK-DUAA-01",
+   "UK-COMP-82",
+   "UK-ECR-02",
+   "UK-CCR-13",
+   "UK-CRA-15",
+   "UK-CPR-08",
+   "UK-DMCC-24",
+   "UK-EQ-10"
+  ],
+  "US": [
+   "US-FTC5",
+   "US-ADA3",
+   "US-CANSPAM",
+   "US-TCPA",
+   "US-COPPA",
+   "US-ROSCA",
+   "US-CCPA",
+   "US-STATE-PRIV"
+  ],
+  "EU": [
+   "EU-GDPR",
+   "EU-EPRIV",
+   "EU-EAA",
+   "EU-AIACT-50",
+   "EU-OMNIBUS",
+   "EU-CRD",
+   "EU-UCPD",
+   "EU-DSA"
+  ],
+  "EU-DE": [
+   "EU-GDPR",
+   "EU-EPRIV",
+   "EU-EAA",
+   "EU-OMNIBUS",
+   "EU-CRD",
+   "EU-UCPD",
+   "EU-DSA",
+   "DE-TMG",
+   "DE-UWG"
+  ],
+  "EU-FR": [
+   "EU-GDPR",
+   "EU-EPRIV",
+   "EU-EAA",
+   "EU-OMNIBUS",
+   "EU-CRD",
+   "EU-UCPD",
+   "EU-DSA",
+   "FR-LCEN"
+  ],
+  "EU-ES": [
+   "EU-GDPR",
+   "EU-EPRIV",
+   "EU-EAA",
+   "EU-OMNIBUS",
+   "EU-CRD",
+   "EU-UCPD",
+   "EU-DSA",
+   "ES-LSSI"
+  ],
+  "EU-IT": [
+   "EU-GDPR",
+   "EU-EPRIV",
+   "EU-EAA",
+   "EU-OMNIBUS",
+   "EU-CRD",
+   "EU-UCPD",
+   "EU-DSA",
+   "IT-CDC"
+  ],
+  "MENA-AE": [
+   "AE-PDPL"
+  ],
+  "MENA-AE-DIFC": [
+   "AE-DIFC-DP"
+  ],
+  "MENA-AE-ADGM": [
+   "AE-ADGM-DP"
+  ],
+  "MENA-SA": [
+   "SA-PDPL"
+  ],
+  "MENA-QA": [
+   "QA-PDPL"
+  ],
+  "MENA-BH": [
+   "BH-PDPL"
+  ],
+  "MENA-KW": [
+   "KW-CITRA"
+  ],
+  "MENA-OM": [
+   "OM-PDPL"
+  ],
+  "MENA-EG": [
+   "EG-PDPL"
+  ],
+  "MENA-JO": [
+   "JO-PDPL"
+  ],
+  "MENA-IL": [
+   "IL-PPL"
+  ]
+ },
+ "always": [
+  "GEO-SCHEMA",
+  "GEO-ROBOTS"
+ ],
+ "sectors": {
+  "legal": {
+   "name": "Law Firms & Legal",
+   "law_pool": [
+    "UK-SRA-TRANS",
+    "UK-SRA-CODE",
+    "UK-LSA-07",
+    "UK-BSB",
+    "US-ABA-7",
+    "EU-CCBE",
+    "AE-DIFC-LEGAL",
+    "UK-FSMA-21",
+    "US-SEC-REGFD"
+   ],
+   "client_types": [
+    {
+     "name": "SRA family & divorce firm, multi-location E&W",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "offers_reserved_legal_activity",
+      "b2c"
+     ]
+    },
+    {
+     "name": "SRA immigration & asylum practice, single office",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "offers_reserved_legal_activity",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Criminal defence solicitors, duty-rota firm",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "offers_reserved_legal_activity",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Personal injury & clinical negligence firm (CFA)",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "offers_reserved_legal_activity",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Commercial/corporate law firm, mid-market",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "offers_reserved_legal_activity"
+     ]
+    },
+    {
+     "name": "Employment law boutique, claimant-side",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Conveyancing & residential property firm",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "offers_reserved_legal_activity",
+      "b2c"
+     ]
+    },
+    {
+     "name": "IP & trademark attorneys, IPReg-regulated",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_reserved_legal_activity"
+     ]
+    },
+    {
+     "name": "Private wealth / trusts & estates firm, HNW",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "offers_reserved_legal_activity",
+      "promotes_financial_products"
+     ]
+    },
+    {
+     "name": "DIFC/ADGM arbitration & disputes firm, Dubai",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "MENA-AE-DIFC"
+     ],
+     "triggers": [
+      "is_difc_law_firm"
+     ]
+    },
+    {
+     "name": "US personal injury law firm, multi-state",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_law_firm",
+      "b2c"
+     ]
+    },
+    {
+     "name": "US immigration law firm, business & investor visas",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_law_firm",
+      "b2c"
+     ]
+    },
+    {
+     "name": "EU cross-border commercial firm, CCBE-bound",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "EU"
+     ],
+     "triggers": [
+      "is_eu_law_firm",
+      "uses_ai_chatbot_or_genai_content"
+     ]
+    },
+    {
+     "name": "Barristers' chambers / sets, E&W",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_barrister_or_chambers",
+      "offers_reserved_legal_activity"
+     ]
+    },
+    {
+     "name": "Legal aid & housing law firm",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Class-action / group-litigation firm",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "is_us_law_firm",
+      "is_listed_or_pre_ipo",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Medical negligence specialists, London",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "offers_reserved_legal_activity",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Sports & entertainment law firm, talent-facing",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "is_us_law_firm"
+     ]
+    },
+    {
+     "name": "Tax & white-collar / financial-crime defence firm",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "offers_reserved_legal_activity"
+     ]
+    },
+    {
+     "name": "Notaries, costs lawyers & niche practitioners",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_reserved_legal_activity"
+     ]
+    }
+   ]
+  },
+  "healthcare": {
+   "name": "Healthcare & Medical",
+   "law_pool": [
+    "UK-MHRA-HMR",
+    "UK-CQC-20",
+    "UK-GMC-GMP",
+    "UK-ASA-12",
+    "US-HIPAA-MKT",
+    "US-FDA-202",
+    "EU-MED-2001-83",
+    "AE-DHA-MED",
+    "SA-SFDA-AD",
+    "US-SEC-REGFD"
+   ],
+   "client_types": [
+    {
+     "name": "Private GP clinic, single site",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "doctor_led_service",
+      "makes_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Multi-site private hospital group, cross-border",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "doctor_led_service",
+      "makes_health_claims",
+      "is_uae_healthcare_facility",
+      "mentions_pom_or_medicines"
+     ]
+    },
+    {
+     "name": "Fertility / IVF clinic, UK or UAE",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "makes_health_claims",
+      "is_uae_healthcare_facility"
+     ]
+    },
+    {
+     "name": "Oncology / cancer-care centre, UK/US",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "doctor_led_service",
+      "is_us_healthcare_provider",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Mental-health & psychiatry clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "makes_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Ophthalmology / laser-eye-surgery group",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "offers_cosmetic_interventions",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Cardiology / specialist consultant practice",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "doctor_led_service",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Physiotherapy & sports-medicine clinic chain",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Medical-tourism facilitator, London/Dubai",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "is_uae_healthcare_facility",
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "DHA/DOH multispecialty clinic, Dubai/Abu Dhabi",
+     "tier": "Authority",
+     "jurisdictions": [
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_uae_healthcare_facility",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "US specialty practice group, multi-clinic",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_healthcare_provider",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "IVF / egg-freezing network, US multi-state",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_healthcare_provider",
+      "serves_us_state_residents",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Diagnostic imaging / private scanning centres",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Women's health & gynaecology clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "makes_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Paediatric private clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "child_directed_content",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Allergy / immunology private clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Home-care & private-nursing provider, multi-region",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_cqc_registered_provider",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Pre-IPO / listed digital-health or biotech, Nasdaq",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_healthcare_provider",
+      "is_listed_or_pre_ipo",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Telehealth / online-doctor platform, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "mentions_pom_or_medicines",
+      "mentions_medicines",
+      "makes_health_claims",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Hearing, optical & audiology retail-clinic chain",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "b2c"
+     ]
+    }
+   ]
+  },
+  "aesthetics": {
+   "name": "Aesthetics, Cosmetic & Dermatology",
+   "law_pool": [
+    "UK-CAP-1212",
+    "UK-MHRA-POM-BOTOX",
+    "UK-MHRA-HMR",
+    "UK-CQC-20",
+    "UK-ASA-12",
+    "AE-DHA-MED",
+    "US-FDA-202",
+    "US-FTC5",
+    "EU-MED-2001-83"
+   ],
+   "client_types": [
+    {
+     "name": "Single-clinic injectables practice (Botox/filler)",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_injectables",
+      "offers_cosmetic_interventions",
+      "is_cqc_registered_provider",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Multi-site aesthetics group",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_injectables",
+      "offers_cosmetic_interventions",
+      "is_cqc_registered_provider"
+     ]
+    },
+    {
+     "name": "Plastic / cosmetic surgeon, London",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_cosmetic_interventions",
+      "is_cqc_registered_provider",
+      "doctor_led_service"
+     ]
+    },
+    {
+     "name": "Dermatology / skin clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_cosmetic_interventions",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Hair-transplant clinic, UK or Turkey-inbound",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_cosmetic_interventions",
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "Medical-spa / aesthetics clinic, DHA Dubai",
+     "tier": "Authority",
+     "jurisdictions": [
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_uae_healthcare_facility",
+      "offers_cosmetic_interventions"
+     ]
+    },
+    {
+     "name": "US med-spa chain, multi-state",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_healthcare_provider",
+      "offers_cosmetic_interventions",
+      "advertises_rx_drugs"
+     ]
+    },
+    {
+     "name": "Laser hair-removal & body-contouring chain",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_cosmetic_interventions",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Cosmetic-injectables training academy",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_injectables",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Aesthetic dermatology group, EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "EU"
+     ],
+     "triggers": [
+      "offers_cosmetic_interventions",
+      "mentions_medicines"
+     ]
+    },
+    {
+     "name": "Non-surgical body & wellness clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_cosmetic_interventions",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Luxury anti-ageing / longevity clinic, London/Dubai",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "offers_cosmetic_interventions",
+      "is_uae_healthcare_facility",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Tattoo-removal & skin-correction clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_cosmetic_interventions",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Cosmetic-injectable e-pharmacy / prescriber platform",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_injectables",
+      "mentions_pom_or_medicines",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Aesthetics group across UK + UAE",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "offers_injectables",
+      "offers_cosmetic_interventions",
+      "is_uae_healthcare_facility"
+     ]
+    },
+    {
+     "name": "Vein / varicose / phlebology clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "is_cqc_registered_provider"
+     ]
+    },
+    {
+     "name": "Scalp-micropigmentation & hair-loss clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_cosmetic_interventions",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Cosmetic-gynaecology / intimate-health clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "offers_cosmetic_interventions",
+      "is_cqc_registered_provider",
+      "b2c"
+     ]
+    },
+    {
+     "name": "US cosmetic-surgery practice, single market",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_healthcare_provider",
+      "offers_cosmetic_interventions"
+     ]
+    },
+    {
+     "name": "Aesthetics personal brand (doctor-founder)",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "offers_injectables",
+      "doctor_led_service",
+      "has_endorsements_or_affiliates"
+     ]
+    }
+   ]
+  },
+  "dental": {
+   "name": "Dental",
+   "law_pool": [
+    "UK-GDC-STD",
+    "UK-GDC-SPEC",
+    "UK-CQC-20",
+    "UK-ASA-12",
+    "AE-DHA-MED",
+    "US-HIPAA-MKT",
+    "US-FTC5"
+   ],
+   "client_types": [
+    {
+     "name": "Single private dental practice",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Multi-location dental group",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Dental-implant specialist clinic",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "claims_dental_specialist_title",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Cosmetic dentistry / veneers practice",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "makes_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Orthodontics / clear-aligner clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "claims_dental_specialist_title"
+     ]
+    },
+    {
+     "name": "Paediatric dental practice",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "child_directed_content"
+     ]
+    },
+    {
+     "name": "Emergency / same-day dental clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Dental-implant & full-mouth-rehab centre, US",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_healthcare_provider",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "DHA-licensed dental clinic, Dubai",
+     "tier": "Authority",
+     "jurisdictions": [
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_uae_healthcare_facility",
+      "is_dental_practice"
+     ]
+    },
+    {
+     "name": "Sedation / nervous-patient dental clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "is_cqc_registered_provider"
+     ]
+    },
+    {
+     "name": "Periodontics / specialist referral practice",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "claims_dental_specialist_title"
+     ]
+    },
+    {
+     "name": "Dental group across UK + UAE",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "is_uae_healthcare_facility"
+     ]
+    },
+    {
+     "name": "Dental-tourism facilitator (Turkey/Hungary inbound)",
+     "tier": "Authority",
+     "jurisdictions": [
+      "EU"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "Endodontics microscope specialist",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "claims_dental_specialist_title"
+     ]
+    },
+    {
+     "name": "Smile-makeover / full-arch brand, US multi-state",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_healthcare_provider",
+      "serves_us_state_residents",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Mobile / domiciliary dental service",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Dental DSO / consolidator, UK/US",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "is_us_healthcare_provider"
+     ]
+    },
+    {
+     "name": "Children's orthodontics chain",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "child_directed_content",
+      "claims_dental_specialist_title"
+     ]
+    },
+    {
+     "name": "Holistic / mercury-free dental clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_dental_practice",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Dental implant-training academy",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    }
+   ]
+  },
+  "hospitality": {
+   "name": "Hotels & Hospitality",
+   "law_pool": [
+    "UK-PTR-18",
+    "AE-DTCM",
+    "US-ADA-HOTEL",
+    "UK-CPR-08",
+    "UK-CMA-GREEN",
+    "AE-RERA"
+   ],
+   "client_types": [
+    {
+     "name": "Independent boutique hotel, single property",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Boutique hotel group, 3-10 properties",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Luxury 5-star city hotel",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Heritage / historic-property hotel",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Resort & spa, UK/EU/UAE",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "takes_payment",
+      "is_dubai_accommodation",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Serviced-apartment / aparthotel operator",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "International hotel group, UK+UAE",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "takes_payment",
+      "is_dubai_accommodation"
+     ]
+    },
+    {
+     "name": "Branded-franchise hotel owner",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Hostel / budget-accommodation group",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Country-house / wedding-venue hotel",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Eco / sustainable lodge or glamping operator",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "DTCM-licensed Dubai hotel / resort",
+     "tier": "Authority",
+     "jurisdictions": [
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_dubai_accommodation",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "US boutique-hotel group, multi-city",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_hotel",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Spa / wellness-retreat hotel, UK/EU",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "takes_payment",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Golf / sporting-estate resort",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Airport / business-transit hotel",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Holiday-park / caravan operator",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Luxury villa / chalet rental operator, EU/UAE",
+     "tier": "Authority",
+     "jurisdictions": [
+      "EU",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "takes_payment",
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "Hotel-management company, multi-brand portfolio",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Cruise / yacht-charter operator, UK/UAE/EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE",
+      "EU"
+     ],
+     "triggers": [
+      "sells_travel_packages",
+      "takes_payment"
+     ]
+    }
+   ]
+  },
+  "realestate": {
+   "name": "Real Estate & Property",
+   "law_pool": [
+    "UK-CPR-PROP",
+    "UK-EAA-79",
+    "AE-RERA",
+    "US-FHA",
+    "UK-FSMA-21",
+    "US-SEC-REGFD",
+    "UK-RICS"
+   ],
+   "client_types": [
+    {
+     "name": "Residential estate agency, single branch",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Multi-branch estate agency, regional",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Letting agency / property management",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Purpose-built student accommodation (PBSA) operator",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Build-to-rent (BTR) operator",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Mixed-use developer selling off-plan to intl buyers",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "promotes_financial_products"
+     ]
+    },
+    {
+     "name": "Commercial property / office agency",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent"
+     ]
+    },
+    {
+     "name": "New-build housebuilder, regional",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Luxury / prime residential agency, London",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "b2c"
+     ]
+    },
+    {
+     "name": "RERA-licensed Dubai property developer",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_dubai_property_business"
+     ]
+    },
+    {
+     "name": "Dubai off-plan property brokerage, intl buyers",
+     "tier": "Authority",
+     "jurisdictions": [
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_dubai_property_business"
+     ]
+    },
+    {
+     "name": "US residential brokerage, multi-agent",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_real_estate",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Property-investment / sourcing company",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "promotes_financial_products"
+     ]
+    },
+    {
+     "name": "Holiday-let / short-term-rental management",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Land-promotion / strategic-land developer",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent"
+     ]
+    },
+    {
+     "name": "Retirement / later-living developer",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Property auction house",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Real-estate fund / REIT, UK/US listed",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_listed_or_pre_ipo"
+     ]
+    },
+    {
+     "name": "International buyer's agent / relocation firm",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "is_dubai_property_business"
+     ]
+    },
+    {
+     "name": "Property-tech / portal",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_estate_or_letting_agent",
+      "is_online_platform_or_marketplace"
+     ]
+    }
+   ]
+  },
+  "financial": {
+   "name": "Financial Services",
+   "law_pool": [
+    "UK-FSMA-21",
+    "UK-COBS4",
+    "UK-CONSUMER-DUTY",
+    "UK-CONC3",
+    "UK-MCOB3",
+    "UK-ICOBS2",
+    "US-SEC-MKT",
+    "US-FINRA-2210",
+    "US-SEC-REGFD",
+    "EU-MIFID2",
+    "AE-DFSA-COB",
+    "EU-TAXONOMY"
+   ],
+   "client_types": [
+    {
+     "name": "Independent financial adviser (IFA), single office",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Wealth-management firm, HNW",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_fca_regulated_retail"
+     ]
+    },
+    {
+     "name": "Mortgage broker / adviser",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "advertises_mortgages",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Accountancy / tax practice",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_accountancy_firm"
+     ]
+    },
+    {
+     "name": "Investment management / asset manager",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_fca_regulated_retail"
+     ]
+    },
+    {
+     "name": "Fintech / payments startup",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_fca_regulated_retail",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Consumer-credit / lending firm",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "advertises_consumer_credit",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Pension / SIPP / retirement-advice firm",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Insurance broker (general)",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "DFSA-regulated wealth / advisory firm, DIFC",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "MENA-AE-DIFC"
+     ],
+     "triggers": [
+      "is_difc_financial_firm"
+     ]
+    },
+    {
+     "name": "US RIA (registered investment adviser), multi-state",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_ria",
+      "serves_us_state_residents"
+     ]
+    },
+    {
+     "name": "US broker-dealer, retail-facing",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_broker_dealer",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Pre-IPO / listed financial enterprise, FCA+DFSA+SEC",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE-DIFC",
+      "US"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_difc_financial_firm",
+      "is_listed_or_pre_ipo"
+     ]
+    },
+    {
+     "name": "FX / payments / remittance firm",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_fca_regulated_retail",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Crowdfunding / P2P-lending platform",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_fca_regulated_retail",
+      "is_online_platform_or_marketplace"
+     ]
+    },
+    {
+     "name": "Private bank / family office, UK/UAE",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE-DIFC"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_difc_financial_firm"
+     ]
+    },
+    {
+     "name": "SME / commercial-finance broker",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "advertises_consumer_credit"
+     ]
+    },
+    {
+     "name": "Equity-release / lifetime-mortgage specialist",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "advertises_mortgages",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Debt-advice / IVA firm",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "advertises_consumer_credit",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Venture-capital / private-equity firm, UK/US",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "is_listed_or_pre_ipo"
+     ]
+    }
+   ]
+  },
+  "crypto": {
+   "name": "Crypto, Web3 & Digital Assets",
+   "law_pool": [
+    "UK-FCA-PS236",
+    "EU-MICA",
+    "AE-VARA",
+    "UK-FSMA-21",
+    "US-SEC-MKT",
+    "US-FINRA-2210",
+    "AE-DFSA-COB",
+    "US-FTC-ENDORSE"
+   ],
+   "client_types": [
+    {
+     "name": "FCA-registered crypto exchange, UK retail",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_crypto_to_uk",
+      "is_fca_regulated_retail",
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Crypto wallet / custody provider, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "promotes_crypto_to_uk",
+      "promotes_crypto_to_eu"
+     ]
+    },
+    {
+     "name": "Web3 / blockchain infrastructure startup, global",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    },
+    {
+     "name": "ADGM-licensed digital-asset exchange, Abu Dhabi",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "MENA-AE-ADGM"
+     ],
+     "triggers": [
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "VARA-licensed virtual-asset firm, Dubai",
+     "tier": "Authority",
+     "jurisdictions": [
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_dubai_vasp"
+     ]
+    },
+    {
+     "name": "NFT / digital-collectibles marketplace, global",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "is_online_platform_or_marketplace",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Crypto-tax / accounting software, UK/US",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "sells_subscription",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Stablecoin / payments protocol, EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "EU"
+     ],
+     "triggers": [
+      "promotes_crypto_to_eu",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Institutional crypto-custody / prime broker, UK/EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "promotes_crypto_to_uk",
+      "promotes_crypto_to_eu"
+     ]
+    },
+    {
+     "name": "DeFi protocol / staking platform, global",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "promotes_crypto_to_uk",
+      "promotes_crypto_to_eu"
+     ]
+    },
+    {
+     "name": "Crypto-mining / infrastructure operator, US/EU",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "US crypto platform, retail",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_broker_dealer",
+      "serves_us_state_residents",
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Crypto education / research platform, global",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "has_endorsements_or_affiliates"
+     ]
+    },
+    {
+     "name": "Tokenised-real-world-assets (RWA) platform, UAE/EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "MENA-AE-ADGM",
+      "EU"
+     ],
+     "triggers": [
+      "promotes_crypto_to_eu",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Crypto on/off-ramp / fiat-gateway provider, UK",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_crypto_to_uk",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Web3 gaming / metaverse studio, global",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "b2c",
+      "child_directed_content"
+     ]
+    },
+    {
+     "name": "Crypto fund / asset manager, UK/UAE",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE-DIFC"
+     ],
+     "triggers": [
+      "promotes_crypto_to_uk",
+      "is_difc_financial_firm"
+     ]
+    },
+    {
+     "name": "Blockchain-consulting / enterprise-Web3 firm, B2B",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": []
+    },
+    {
+     "name": "Crypto-payment-card / neobank, EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "EU"
+     ],
+     "triggers": [
+      "promotes_crypto_to_eu",
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Crypto founder / personal brand, global",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "has_endorsements_or_affiliates",
+      "has_commercial_content"
+     ]
+    }
+   ]
+  },
+  "insurance": {
+   "name": "Insurance",
+   "law_pool": [
+    "UK-ICOBS2",
+    "UK-CONSUMER-DUTY",
+    "UK-FSMA-21",
+    "EU-IDD",
+    "AE-DFSA-COB",
+    "UK-ASA-12"
+   ],
+   "client_types": [
+    {
+     "name": "Personal-lines insurance broker, single office",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Commercial-insurance broker, regional",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail"
+     ]
+    },
+    {
+     "name": "Health / PMI broker",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "makes_health_claims",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Life-insurance / protection adviser",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Specialist / HNW insurance broker",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail"
+     ]
+    },
+    {
+     "name": "Insurtech / digital-insurance MGA, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_eu_insurance",
+      "is_fca_regulated_retail",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Travel-insurance provider",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Motor / fleet-insurance specialist",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail"
+     ]
+    },
+    {
+     "name": "Professional-indemnity / liability broker",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail"
+     ]
+    },
+    {
+     "name": "Pet-insurance provider",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "DFSA / UAE-licensed insurer or broker, Dubai",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "MENA-AE-DIFC"
+     ],
+     "triggers": [
+      "is_difc_financial_firm",
+      "sells_insurance"
+     ]
+    },
+    {
+     "name": "US insurance agency, multi-state",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "serves_us_state_residents",
+      "captures_phone_for_marketing",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Cyber / tech-risk insurance MGA, UK/US",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail"
+     ]
+    },
+    {
+     "name": "Marine / aviation / specialty (re)insurer, London market",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance"
+     ]
+    },
+    {
+     "name": "Income-protection / critical-illness specialist",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Landlord / property-insurance specialist",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail"
+     ]
+    },
+    {
+     "name": "Business-interruption / SME insurance broker",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail"
+     ]
+    },
+    {
+     "name": "Funeral-plan / over-50s provider",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Captive / corporate-risk consultancy, UK/EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_eu_insurance"
+     ]
+    },
+    {
+     "name": "Insurance-comparison / aggregator",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_insurance",
+      "is_online_platform_or_marketplace",
+      "is_fca_regulated_retail"
+     ]
+    }
+   ]
+  },
+  "fb": {
+   "name": "Restaurants, Bars & F&B",
+   "law_pool": [
+    "UK-FIR-14",
+    "UK-CALORIE-21",
+    "UK-HFSS",
+    "UK-PORTMAN",
+    "EU-FIR-1169",
+    "UK-ASA-15",
+    "UK-CMA-GREEN",
+    "EU-HEALTHCLAIMS-1924"
+   ],
+   "client_types": [
+    {
+     "name": "Independent fine-dining restaurant, single site",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Multi-venue restaurant group",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "employees_250_plus"
+     ]
+    },
+    {
+     "name": "Fast-casual / quick-service chain",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "sells_hfss_products",
+      "employees_250_plus"
+     ]
+    },
+    {
+     "name": "Cocktail bar / late-night venue",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_or_markets_alcohol",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Gastropub / pub group",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_or_markets_alcohol",
+      "sells_food_online"
+     ]
+    },
+    {
+     "name": "Craft brewery / distillery with DTC",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_or_markets_alcohol",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Café / coffee-shop chain",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Members' dining / hospitality club",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "sells_or_markets_alcohol"
+     ]
+    },
+    {
+     "name": "Food-delivery / cloud-kitchen brand",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Fine-dining group, US multi-city",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "serves_us_state_residents"
+     ]
+    },
+    {
+     "name": "Halal / specialist-cuisine restaurant group, UK/UAE",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "is_uae_ecommerce"
+     ]
+    },
+    {
+     "name": "Wine merchant / online drinks retailer",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_or_markets_alcohol",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Premium catering / events F&B company",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_food_online"
+     ]
+    },
+    {
+     "name": "Michelin-aspirant destination restaurant, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "sells_food_online"
+     ]
+    },
+    {
+     "name": "Nightclub / entertainment venue",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_or_markets_alcohol",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Vegan / health-positioned food brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "makes_nutrition_health_claims"
+     ]
+    },
+    {
+     "name": "Restaurant franchise / multi-unit operator, UK/US",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "employees_250_plus",
+      "sells_hfss_products"
+     ]
+    },
+    {
+     "name": "Specialty-food / DTC e-commerce brand, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "makes_nutrition_health_claims",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Hotel-restaurant / destination-dining, UK/UAE",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "is_dubai_accommodation"
+     ]
+    },
+    {
+     "name": "Bar / restaurant group across UK + UAE",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "sells_or_markets_alcohol",
+      "sells_food_online",
+      "is_uae_ecommerce"
+     ]
+    }
+   ]
+  },
+  "education": {
+   "name": "Education",
+   "law_pool": [
+    "UK-UKVI",
+    "UK-CMA-HE",
+    "AE-KHDA",
+    "UK-ASA-12",
+    "US-ADA3"
+   ],
+   "client_types": [
+    {
+     "name": "Independent / private school, single site",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    },
+    {
+     "name": "Independent-school group / foundation",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    },
+    {
+     "name": "University, UK, intl recruitment",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_student_sponsor",
+      "is_he_provider"
+     ]
+    },
+    {
+     "name": "Private sixth-form / college",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    },
+    {
+     "name": "EdTech / online-learning platform, UK/US",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "sells_subscription",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Online-course / professional-certification provider, global",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "takes_payment",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Tutoring / supplementary-education company",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "child_directed_content",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Language school / ESOL provider",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_student_sponsor",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Boarding school, UK, intl families",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_student_sponsor",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Nursery / early-years group",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "child_directed_content",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Business school / MBA provider, UK/EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_student_sponsor",
+      "is_he_provider"
+     ]
+    },
+    {
+     "name": "Vocational / apprenticeship training provider",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    },
+    {
+     "name": "International school, UAE (KHDA-regulated)",
+     "tier": "Authority",
+     "jurisdictions": [
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_dubai_school"
+     ]
+    },
+    {
+     "name": "US private K-12 / prep school",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "serves_us_state_residents",
+      "child_directed_content",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Coding bootcamp / skills academy, global",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "University pathway / foundation-college provider",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_student_sponsor",
+      "is_he_provider"
+     ]
+    },
+    {
+     "name": "Executive-education / corporate-training firm, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": []
+    },
+    {
+     "name": "Special-educational-needs (SEN) school / provider",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "child_directed_content",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Study-abroad / student-recruitment agency",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_student_sponsor"
+     ]
+    },
+    {
+     "name": "University with UK + UAE campuses",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_student_sponsor",
+      "is_dubai_school",
+      "is_he_provider"
+     ]
+    }
+   ]
+  },
+  "ecommerce": {
+   "name": "E-commerce & Luxury Retail",
+   "law_pool": [
+    "UK-CMA-GREEN",
+    "EU-ECGT",
+    "AE-ECOM-14",
+    "SA-ECOM",
+    "UK-CPR-08",
+    "UK-CCR-13",
+    "EU-CRD",
+    "EU-OMNIBUS",
+    "US-FTC-ENDORSE",
+    "EU-HEALTHCLAIMS-1924",
+    "UK-ASA-15"
+   ],
+   "client_types": [
+    {
+     "name": "DTC fashion / apparel brand, single market",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Luxury fashion / accessories house, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "takes_payment",
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Fine-jewellery / watch retailer, UK/UAE",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "takes_payment",
+      "is_uae_ecommerce"
+     ]
+    },
+    {
+     "name": "Beauty / cosmetics e-commerce brand",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Multi-market luxury retailer (UK+EU+UAE)",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "takes_payment",
+      "is_uae_ecommerce",
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Health / wellness supplements e-commerce",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "makes_nutrition_health_claims",
+      "sells_supplements"
+     ]
+    },
+    {
+     "name": "Premium home / interiors brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Designer-resale / luxury-consignment platform, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_online_platform_or_marketplace",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Electronics / tech e-commerce retailer",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Fine-wine / spirits e-commerce",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_or_markets_alcohol",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "US DTC brand, multi-state",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "serves_us_state_residents",
+      "has_endorsements_or_affiliates",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Subscription-box / DTC consumables",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_subscription",
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Luxury-watch / collectibles marketplace, global",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "is_online_platform_or_marketplace",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Sustainable / eco-positioned brand, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Cosmeceutical / skincare DTC",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "makes_health_claims",
+      "sells_cbd"
+     ]
+    },
+    {
+     "name": "Marketplace / multi-vendor platform, UK/EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_online_platform_or_marketplace",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Premium pet-products e-commerce",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "sells_vet_medicines"
+     ]
+    },
+    {
+     "name": "Designer-furniture / B2B+B2C hybrid",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Luxury-gifting / hampers brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_or_markets_alcohol",
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Global luxury house, listed parent",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "is_listed_or_pre_ipo",
+      "makes_green_claims"
+     ]
+    }
+   ]
+  },
+  "automotive": {
+   "name": "Automotive",
+   "law_pool": [
+    "UK-CONC3-AUTO",
+    "US-FTC-USEDCAR",
+    "UK-CMA-EV",
+    "UK-CONC3",
+    "UK-CPR-08",
+    "US-SEC-REGFD"
+   ],
+   "client_types": [
+    {
+     "name": "Independent car dealership, single site",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "advertises_car_finance",
+      "sells_vehicles",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Multi-franchise dealer group",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "advertises_car_finance",
+      "sells_vehicles"
+     ]
+    },
+    {
+     "name": "Used-car supermarket",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "advertises_car_finance",
+      "sells_vehicles",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Luxury / prestige-car dealer",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "advertises_car_finance",
+      "sells_vehicles"
+     ]
+    },
+    {
+     "name": "Electric-vehicle dealer / brand, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "sells_vehicles",
+      "makes_emissions_claims",
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Car-leasing / contract-hire broker",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "advertises_car_finance",
+      "advertises_consumer_credit"
+     ]
+    },
+    {
+     "name": "Motorcycle / powersports dealer",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "advertises_car_finance",
+      "sells_vehicles"
+     ]
+    },
+    {
+     "name": "Commercial-vehicle / van dealer",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "advertises_car_finance",
+      "sells_vehicles"
+     ]
+    },
+    {
+     "name": "Classic / collector-car dealer, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "sells_vehicles"
+     ]
+    },
+    {
+     "name": "Car-finance / motor-lender",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "advertises_car_finance",
+      "advertises_consumer_credit",
+      "is_fca_regulated_retail",
+      "b2c"
+     ]
+    },
+    {
+     "name": "US auto dealership group, multi-state",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "is_us_used_car_dealer",
+      "serves_us_state_residents"
+     ]
+    },
+    {
+     "name": "EV-charging / infrastructure provider, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Car-subscription / mobility platform",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_subscription",
+      "advertises_consumer_credit",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Auto-aftermarket / parts e-commerce",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "takes_payment",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Vehicle-servicing / MOT chain",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    },
+    {
+     "name": "Premium-tyre / specialist-fitment chain",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    },
+    {
+     "name": "Car-auction / remarketing platform",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_online_platform_or_marketplace",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Luxury / supercar dealer, Dubai",
+     "tier": "Authority",
+     "jurisdictions": [
+      "MENA-AE"
+     ],
+     "triggers": [
+      "sells_vehicles",
+      "is_uae_ecommerce"
+     ]
+    },
+    {
+     "name": "Fleet-management / leasing enterprise, UK/EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "advertises_consumer_credit"
+     ]
+    },
+    {
+     "name": "OEM / manufacturer regional brand, listed",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "is_listed_or_pre_ipo",
+      "makes_emissions_claims",
+      "makes_green_claims"
+     ]
+    }
+   ]
+  },
+  "wellness": {
+   "name": "Wellness & Fitness",
+   "law_pool": [
+    "UK-ASA-15",
+    "EU-HEALTHCLAIMS-1924",
+    "US-FTC-SUBST",
+    "UK-ASA-12",
+    "UK-MHRA-HMR",
+    "AE-DHA-MED",
+    "US-ADA3"
+   ],
+   "client_types": [
+    {
+     "name": "Independent gym / fitness studio, single site",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Boutique-fitness studio chain (spin/HIIT)",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Day-spa / wellness spa",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Yoga / pilates studio group",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Physiotherapy / rehab clinic chain",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "is_cqc_registered_provider"
+     ]
+    },
+    {
+     "name": "Nutritionist / dietitian practice",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_nutrition_health_claims",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Premium / luxury wellness club, UK/UAE",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "is_uae_healthcare_facility"
+     ]
+    },
+    {
+     "name": "Medical-wellness / IV-drip / longevity clinic",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "mentions_pom_or_medicines",
+      "is_cqc_registered_provider"
+     ]
+    },
+    {
+     "name": "Weight-loss / metabolic clinic",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "mentions_pom_or_medicines"
+     ]
+    },
+    {
+     "name": "Cryotherapy / recovery studio",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Online-coaching / fitness-app brand, global",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "makes_fitness_health_claims",
+      "sells_subscription",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Personal-training / PT-studio brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_fitness_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Wellness retreat / destination spa, UK/EU/UAE",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "Mental-wellness / meditation platform, global",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "sells_subscription",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Chiropractic / osteopathy clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Sports-supplements / performance-nutrition brand",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_nutrition_health_claims",
+      "sells_supplements",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "US gym / wellness chain, multi-state",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "makes_fitness_health_claims",
+      "serves_us_state_residents"
+     ]
+    },
+    {
+     "name": "Acupuncture / complementary-therapy clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Corporate-wellness provider, B2B",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Multi-site wellness group across UK + UAE",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "is_uae_healthcare_facility"
+     ]
+    }
+   ]
+  },
+  "cbd": {
+   "name": "CBD, Supplements & Nutraceuticals",
+   "law_pool": [
+    "UK-FSA-NOVEL",
+    "US-FDA-DSHEA",
+    "UK-MHRA-CBD",
+    "UK-ASA-15",
+    "EU-HEALTHCLAIMS-1924",
+    "US-FTC-SUBST",
+    "UK-CMA-GREEN",
+    "UK-VMD"
+   ],
+   "client_types": [
+    {
+     "name": "CBD-oil / wellness brand, UK DTC",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_cbd_food",
+      "sells_cbd",
+      "makes_nutrition_health_claims",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "CBD-skincare / cosmetics brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_cbd",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Vitamins / supplements DTC brand",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "makes_nutrition_health_claims",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Sports-nutrition / protein brand",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "makes_nutrition_health_claims",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Functional-foods / gut-health brand, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "sells_food_online",
+      "makes_nutrition_health_claims",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Nootropics / cognitive-supplement brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "makes_nutrition_health_claims"
+     ]
+    },
+    {
+     "name": "Menopause / women's-health supplement brand",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "makes_nutrition_health_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Vegan / plant-based supplement brand, UK/EU",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "US dietary-supplement brand, multi-state",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "makes_fitness_health_claims",
+      "serves_us_state_residents"
+     ]
+    },
+    {
+     "name": "Herbal / traditional-medicine brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "mentions_pom_or_medicines"
+     ]
+    },
+    {
+     "name": "CBD brand across UK + EU + US",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU",
+      "US"
+     ],
+     "triggers": [
+      "sells_cbd",
+      "sells_cbd_food",
+      "sells_supplements"
+     ]
+    },
+    {
+     "name": "Probiotics / microbiome brand, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "makes_nutrition_health_claims"
+     ]
+    },
+    {
+     "name": "Children's-vitamins brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "child_directed_content",
+      "makes_nutrition_health_claims"
+     ]
+    },
+    {
+     "name": "Beauty-supplements (nutricosmetics) brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "makes_nutrition_health_claims"
+     ]
+    },
+    {
+     "name": "Medical-cannabis clinic / prescriber",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "mentions_pom_or_medicines",
+      "doctor_led_service",
+      "is_cqc_registered_provider"
+     ]
+    },
+    {
+     "name": "Longevity / NAD+ supplement brand, global",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "makes_fitness_health_claims"
+     ]
+    },
+    {
+     "name": "Sleep / relaxation-supplement brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "makes_nutrition_health_claims"
+     ]
+    },
+    {
+     "name": "Pet-supplements / nutraceutical brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_vet_medicines",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Adaptogen / functional-mushroom brand, UK/EU",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "sells_food_online"
+     ]
+    },
+    {
+     "name": "Listed / scaling nutraceutical group, UK/US",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "sells_supplements",
+      "is_listed_or_pre_ipo"
+     ]
+    }
+   ]
+  },
+  "veterinary": {
+   "name": "Veterinary & Pet Care",
+   "law_pool": [
+    "UK-RCVS",
+    "UK-VMD",
+    "UK-ASA-12",
+    "UK-FSMA-21",
+    "US-FTC5",
+    "AE-DHA-MED"
+   ],
+   "client_types": [
+    {
+     "name": "Independent vet practice, single site",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Multi-site veterinary group",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Veterinary-specialist / referral hospital",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Emergency / out-of-hours vet",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Equine / large-animal vet practice",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice"
+     ]
+    },
+    {
+     "name": "Exotic / specialist-pet vet",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice"
+     ]
+    },
+    {
+     "name": "Pet-insurance-linked vet network",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice",
+      "sells_insurance",
+      "promotes_financial_products"
+     ]
+    },
+    {
+     "name": "Veterinary-pharmacy / POM-V e-commerce",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_vet_medicines",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Mobile / home-visit vet service",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice",
+      "b2c"
+     ]
+    },
+    {
+     "name": "US veterinary hospital group, multi-state",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "serves_us_state_residents",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Pet-grooming / daycare chain",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    },
+    {
+     "name": "Premium pet-food / nutrition brand",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_vet_medicines",
+      "makes_nutrition_health_claims",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Pet-pharma / supplement brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_vet_medicines",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Animal-rehabilitation / hydrotherapy clinic",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice",
+      "makes_health_claims"
+     ]
+    },
+    {
+     "name": "Veterinary-dental specialist",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice"
+     ]
+    },
+    {
+     "name": "Pet-crematorium / end-of-life service",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    },
+    {
+     "name": "Veterinary-telehealth platform, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_veterinary_practice",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Pet-tech / wearables brand, global",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Veterinary-group consolidator / corporate",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_veterinary_practice"
+     ]
+    },
+    {
+     "name": "DHA/Gulf-licensed vet clinic, Dubai",
+     "tier": "Authority",
+     "jurisdictions": [
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_uae_healthcare_facility",
+      "is_veterinary_practice"
+     ]
+    }
+   ]
+  },
+  "b2b": {
+   "name": "Professional & B2B Services",
+   "law_pool": [
+    "UK-ICAEW",
+    "UK-RICS",
+    "UK-ARB",
+    "EU-SERVICES-DIR",
+    "UK-COMP-82",
+    "UK-CMA-GREEN",
+    "EU-TAXONOMY"
+   ],
+   "client_types": [
+    {
+     "name": "Management-consultancy boutique",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": []
+    },
+    {
+     "name": "Chartered-accountancy / audit firm",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_accountancy_firm"
+     ]
+    },
+    {
+     "name": "HR / recruitment consultancy",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": []
+    },
+    {
+     "name": "Architecture / design practice",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "uses_architect_title"
+     ]
+    },
+    {
+     "name": "Chartered-surveying / RICS firm",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_rics_firm"
+     ]
+    },
+    {
+     "name": "Engineering-consultancy firm, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_eu_professional_service"
+     ]
+    },
+    {
+     "name": "PR / communications agency",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": []
+    },
+    {
+     "name": "Cybersecurity / IT-services firm, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_eu_professional_service"
+     ]
+    },
+    {
+     "name": "Patent / IP-consultancy firm, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_eu_professional_service"
+     ]
+    },
+    {
+     "name": "Insolvency / restructuring practice",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": []
+    },
+    {
+     "name": "Corporate-finance / M&A advisory",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products"
+     ]
+    },
+    {
+     "name": "Actuarial / pensions consultancy",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": []
+    },
+    {
+     "name": "Tax-advisory / R&D-claims firm",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_accountancy_firm"
+     ]
+    },
+    {
+     "name": "Health-and-safety / compliance consultancy",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": []
+    },
+    {
+     "name": "ESG / sustainability consultancy, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "makes_esg_finance_claims"
+     ]
+    },
+    {
+     "name": "Translation / localisation agency, global",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_eu_professional_service"
+     ]
+    },
+    {
+     "name": "Market-research / data firm",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": []
+    },
+    {
+     "name": "Big-4-adjacent professional-services group",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_accountancy_firm",
+      "is_eu_professional_service"
+     ]
+    },
+    {
+     "name": "Outsourced-CFO / fractional-exec firm",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products"
+     ]
+    },
+    {
+     "name": "DIFC/ADGM-based corporate-services firm, Dubai",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "MENA-AE-DIFC"
+     ],
+     "triggers": [
+      "is_difc_financial_firm"
+     ]
+    }
+   ]
+  },
+  "travel": {
+   "name": "Travel, Tourism & Experiences",
+   "law_pool": [
+    "UK-ATOL",
+    "UK-PTR-18",
+    "EU-PTD-2015",
+    "US-DOT-FARE",
+    "UK-CMA-GREEN",
+    "UK-ASA-12",
+    "AE-DTCM",
+    "EU-CRD"
+   ],
+   "client_types": [
+    {
+     "name": "Luxury tour operator / DMC",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_travel_packages",
+      "sells_flight_packages"
+     ]
+    },
+    {
+     "name": "Independent travel agency, single site",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_travel_packages",
+      "sells_flight_packages",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Adventure / expedition-travel operator",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "Cruise specialist / agency",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_travel_packages",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Honeymoon / luxury-romance specialist",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_travel_packages",
+      "sells_flight_packages"
+     ]
+    },
+    {
+     "name": "Ski / seasonal-chalet operator, EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "EU"
+     ],
+     "triggers": [
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "Safari / wildlife operator, UK/Africa-inbound",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_travel_packages",
+      "sells_flight_packages"
+     ]
+    },
+    {
+     "name": "Villa / private-rental travel brand, EU/UAE",
+     "tier": "Authority",
+     "jurisdictions": [
+      "EU",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "sells_travel_packages",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Experience / activity-booking platform",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_online_platform_or_marketplace",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "MICE / corporate-travel management",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "Medical-tourism travel facilitator, UK/UAE",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "sells_travel_packages",
+      "is_uae_healthcare_facility"
+     ]
+    },
+    {
+     "name": "Wellness-retreat travel operator, global",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "makes_health_claims",
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "Religious / pilgrimage-travel operator (Hajj/Umrah)",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_flight_packages",
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "Yacht-charter / luxury-marine operator, UAE/EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "MENA-AE",
+      "EU"
+     ],
+     "triggers": [
+      "sells_travel_packages",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Eco / sustainable-tourism operator, UK/EU",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "sells_travel_packages"
+     ]
+    },
+    {
+     "name": "Private-jet / aviation-charter broker, UK/UAE",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "sells_flight_packages",
+      "sells_air_travel"
+     ]
+    },
+    {
+     "name": "Coach / group-tour operator",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "sells_travel_packages",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Destination / tourism board, regional",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_public_sector_body"
+     ]
+    },
+    {
+     "name": "Visa / travel-documentation service",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "b2c"
+     ]
+    },
+    {
+     "name": "OTA / travel-tech platform, UK/EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "is_online_platform_or_marketplace",
+      "sells_travel_packages",
+      "takes_payment"
+     ]
+    }
+   ]
+  },
+  "energy": {
+   "name": "Energy, Cleantech & Sustainability",
+   "law_pool": [
+    "UK-CMA-GREEN",
+    "EU-ECGT",
+    "US-FTC-GREEN",
+    "UK-OFGEM",
+    "EU-TAXONOMY",
+    "UK-COBS4",
+    "US-SEC-REGFD"
+   ],
+   "client_types": [
+    {
+     "name": "Domestic solar-PV installer, regional",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Heat-pump installer / brand",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "Home-insulation provider",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "b2c"
+     ]
+    },
+    {
+     "name": "EV-charging-infrastructure provider, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Renewable-energy supplier",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_energy_supplier",
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Battery-storage / home-energy brand",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Commercial-solar / EPC developer",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Green-mortgage / sustainable-finance provider",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "advertises_mortgages",
+      "makes_esg_finance_claims",
+      "is_fca_regulated_retail"
+     ]
+    },
+    {
+     "name": "Carbon-offset / credits platform, UK/EU",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "ESG-data / reporting-software firm, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "makes_esg_finance_claims",
+      "sells_subscription"
+     ]
+    },
+    {
+     "name": "US clean-energy installer, multi-state",
+     "tier": "Authority",
+     "jurisdictions": [
+      "US"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "serves_us_state_residents"
+     ]
+    },
+    {
+     "name": "Sustainable-packaging / materials brand, UK/EU",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Biomass / biofuel provider",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Wind / utility-scale developer",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Green-building / retrofit consultancy",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Smart-home / energy-efficiency-tech brand",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "takes_payment"
+     ]
+    },
+    {
+     "name": "Electric-fleet / commercial-EV provider",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "makes_emissions_claims"
+     ]
+    },
+    {
+     "name": "Cleantech startup, pre-Series-A, global",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Water / waste / circular-economy firm, UK/EU",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "EU"
+     ],
+     "triggers": [
+      "makes_green_claims"
+     ]
+    },
+    {
+     "name": "Listed / pre-IPO energy enterprise, UK/US",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "makes_green_claims",
+      "is_listed_or_pre_ipo",
+      "makes_esg_finance_claims"
+     ]
+    }
+   ]
+  },
+  "personal": {
+   "name": "Executive & Personal Brand",
+   "law_pool": [
+    "US-FTC-ENDORSE",
+    "EU-DSA-26",
+    "AE-CYBER-34",
+    "UK-GDPR-01",
+    "UK-FSMA-21",
+    "UK-GMC-GMP",
+    "UK-SRA-CODE"
+   ],
+   "client_types": [
+    {
+     "name": "Managing partner / law-firm founder",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "is_sra_regulated_firm",
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Surgeon / consultant doctor personal brand",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "doctor_led_service",
+      "offers_injectables",
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "CEO of scaling company, global",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Startup founder pre-raise, global",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Fund manager / financial executive",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Public figure / media personality",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Politician / public-affairs figure",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Author / speaker / thought-leader, global",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "has_endorsements_or_affiliates",
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "HNW family principal / private individual, UAE/UK",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "MENA-AE",
+      "UK"
+     ],
+     "triggers": [
+      "publishes_content_uae"
+     ]
+    },
+    {
+     "name": "Real-estate / property mogul, UK/UAE",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "is_dubai_property_business",
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Crypto / Web3 founder, global",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "promotes_crypto_to_uk",
+      "has_commercial_content",
+      "has_endorsements_or_affiliates"
+     ]
+    },
+    {
+     "name": "Celebrity / entertainer, UK/US",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "has_endorsements_or_affiliates",
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Consultant / boutique-firm principal",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Investor / VC partner, UK/US",
+     "tier": "Authority",
+     "jurisdictions": [
+      "UK",
+      "US"
+     ],
+     "triggers": [
+      "promotes_financial_products",
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Academic / expert-witness professional",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Executive recovering from negative coverage",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "MENA-AE"
+     ],
+     "triggers": [
+      "publishes_content_uae",
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Faith / community leader",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Influencer / creator monetising authority, global",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK",
+      "US",
+      "EU"
+     ],
+     "triggers": [
+      "has_endorsements_or_affiliates",
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Board director / NED building profile",
+     "tier": "Foundation",
+     "jurisdictions": [
+      "UK"
+     ],
+     "triggers": [
+      "has_commercial_content"
+     ]
+    },
+    {
+     "name": "Family-office / dynasty reputation, multi-jurisdiction",
+     "tier": "Enterprise",
+     "jurisdictions": [
+      "UK",
+      "MENA-AE",
+      "US"
+     ],
+     "triggers": [
+      "publishes_content_uae",
+      "promotes_financial_products"
+     ]
+    }
+   ]
+  }
+ }
+}

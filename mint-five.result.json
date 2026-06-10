@@ -1,0 +1,62 @@
+[
+  {
+    "domain": "irwinmitchell.com",
+    "sector": "legal",
+    "country": "UK",
+    "company": "Irwin Mitchell",
+    "size": "BIG",
+    "ok": true,
+    "url": "https://tamazia.co.uk/audit/irwin-mitchell/tY4JGaqQ?l=0&x=1796474174&sig=c5df66756f5943d75705561543d08714",
+    "reachable": true,
+    "pointers": 53,
+    "ms": 129928
+  },
+  {
+    "domain": "foxtons.co.uk",
+    "sector": "realestate",
+    "country": "UK",
+    "company": "Foxtons",
+    "size": "BIG",
+    "ok": true,
+    "url": "https://tamazia.co.uk/audit/foxtons/TSMhJBQG?l=0&x=1796474332&sig=abcebb6f63c431742bfb588163924a2d",
+    "reachable": true,
+    "pointers": 42,
+    "ms": 157861
+  },
+  {
+    "domain": "azets.co.uk",
+    "sector": "financial",
+    "country": "UK",
+    "company": "Azets",
+    "size": "BIG",
+    "ok": true,
+    "url": "https://tamazia.co.uk/audit/azets/dioGq8NH?l=0&x=1796474469&sig=73a1d615878ecd33bdbad1efcacec757",
+    "reachable": true,
+    "pointers": 59,
+    "ms": 136697
+  },
+  {
+    "domain": "harleystreetdentalclinic.co.uk",
+    "sector": "dental",
+    "country": "UK",
+    "company": "Harley Street Dental Clinic",
+    "size": "SMALL",
+    "ok": true,
+    "url": "https://tamazia.co.uk/audit/harley-street-dental-clinic/x3hxYwnl?l=0&x=1796474613&sig=92738f030c328f8beaa94f6c6b3585d8",
+    "reachable": true,
+    "pointers": 76,
+    "ms": 143898
+  },
+  {
+    "domain": "firmdalehotels.com",
+    "sector": "hospitality",
+    "country": "UK",
+    "company": "Firmdale Hotels",
+    "size": "SMALL",
+    "ok": true,
+    "url": "https://tamazia.co.uk/audit/firmdale-hotels/Ra49GYIp?l=0&x=1796474742&sig=423b8aac3947a2da1c6eadaf11c3d3c8",
+    "reachable": true,
+    "pointers": 70,
+    "ms": 129715
+  }
+]

@@ -116,48 +116,71 @@ function extractSignals({ body, headers }) {
 }
 
 // --- Optional PageSpeed (Core Web Vitals) — only if a free key is configured ---
-function _parsePsi(d) {
+function _parsePsi(d, strategy) {
   try {
     const lr = d.lighthouseResult || {};
     const cats = lr.categories || {};
     const a = lr.audits || {};
     const num = (id) => (a[id] && a[id].numericValue) || null;
+    const sc = (c) => (cats[c] && typeof cats[c].score === 'number') ? cats[c].score : null;
+    const cwv = { lcp_ms: num('largest-contentful-paint'), inp_ms: num('interaction-to-next-paint') || num('experimental-interaction-to-next-paint') || null, cls: num('cumulative-layout-shift'), fcp_ms: num('first-contentful-paint'), tbt_ms: num('total-blocking-time') };
     return {
-      perf: cats.performance ? cats.performance.score : null,
-      seo: cats.seo ? cats.seo.score : null,
-      lcp_ms: num('largest-contentful-paint'),
-      cls: num('cumulative-layout-shift'),
-      tbt_ms: num('total-blocking-time'),
-      fcp_ms: num('first-contentful-paint'),
+      strategy: strategy || 'mobile',
+      // flat fields — backward-compat for psiPointers()/buildCwv(psi)/scan.psi.audits readers
+      perf: sc('performance'),
+      seo: sc('seo'),
+      lcp_ms: cwv.lcp_ms,
+      cls: cwv.cls,
+      tbt_ms: cwv.tbt_ms,
+      fcp_ms: cwv.fcp_ms,
+      // the render's per-strategy contract (buildPsiStrat needs scores + cwv + audits)
+      scores: { performance: sc('performance'), accessibility: sc('accessibility'), 'best-practices': sc('best-practices'), seo: sc('seo') },
+      cwv,
       audits: Object.values(a).filter(x => x && x.score !== null && x.score < 0.9 && ['binary','numeric','metricSavings'].includes(x.scoreDisplayMode))
         .map(x => { const _it = Array.isArray(x.details && x.details.items) ? x.details.items : []; const _n = _it.map(q => q && q.node).filter(Boolean)[0] || null; return { id: x.id, title: x.title || '', description: String(x.description || '').replace(/\s*\[[^\]]*\]\([^)]*\)/g, '').trim(), score: x.score, displayValue: x.displayValue || '', items: _it.length || 0, node_snippet: (_n && _n.snippet) ? String(_n.snippet) : '', node_selector: (_n && _n.selector) ? String(_n.selector) : '', node_count: _it.filter(q => q && q.node).length }; }),
     };
   } catch (_e) { return null; }
 }
-async function pageSpeed(domain, key) {
-  // Dev cache: if PSI_CACHE_DIR/<domain>.json exists, use it (lets full mints run under the shell time cap).
+// One PSI strategy (mobile|desktop): cache-first, then 3 attempts with backoff (PSI/Lighthouse intermittently 429s
+// or returns an empty run). Validates lighthouseResult is present + write-through caches so re-mints never drop SEO.
+async function _pageSpeedOne(domain, key, strategy) {
   try {
     const dir = process.env.PSI_CACHE_DIR;
-    if (dir) { const fs = require('fs'); const f = dir + '/' + domain + '.json'; if (fs.existsSync(f)) return _parsePsi(JSON.parse(fs.readFileSync(f, 'utf8'))); }
+    if (dir) {
+      const fs = require('fs');
+      // per-strategy cache key; fall back to the legacy <domain>.json (mobile-only) for back-compat
+      const cands = [dir + '/' + domain + '-' + strategy + '.json'].concat(strategy === 'mobile' ? [dir + '/' + domain + '.json'] : []);
+      for (const f of cands) if (fs.existsSync(f)) return _parsePsi(JSON.parse(fs.readFileSync(f, 'utf8')), strategy);
+    }
   } catch (_e) {}
   if (!key) return null;
-  const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=mobile&category=performance&category=seo&category=accessibility&key=${key}`;
-  // Strongest-possible: 3 attempts with backoff (PSI/Lighthouse intermittently 429s or returns an empty run),
-  // validate the lighthouseResult is present, and write-through to the cache so re-mints never silently drop SEO.
+  const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=${strategy}&category=performance&category=seo&category=accessibility&category=best-practices&key=${key}`;
   for (let i = 0; i < 3; i++) {
     try {
       const r = await timed((signal) => fetch(u, { signal }), 40000);
       if (r.ok) {
         const j = await r.json();
         if (j && j.lighthouseResult && j.lighthouseResult.audits) {
-          try { const dir = process.env.PSI_CACHE_DIR; if (dir) { const fs = require('fs'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(dir + '/' + domain + '.json', JSON.stringify(j)); } } catch (_e) {}
-          return _parsePsi(j);
+          try { const dir = process.env.PSI_CACHE_DIR; if (dir) { const fs = require('fs'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(dir + '/' + domain + '-' + strategy + '.json', JSON.stringify(j)); } } catch (_e) {}
+          return _parsePsi(j, strategy);
         }
-      }
+      } else if (r.status === 429 || r.status >= 500) { /* rate-limited / server error: backoff + retry */ }
     } catch (_e) { /* transient: retry */ }
-    if (i < 2) await new Promise(res => setTimeout(res, 1500 * (i + 1)));
+    if (i < 2) await new Promise(res => setTimeout(res, 1800 * (i + 1)));
   }
   return null;
+}
+// Fetch BOTH strategies in PARALLEL — the render shows a mobile|desktop toggle, so a single-strategy result would
+// make the whole PSI block vanish (psiStrats=null). Returns { ...mobileFlat, scores, mobile, desktop } so the legacy
+// flat readers AND the new per-strategy render both work; if one strategy fails the other still renders (resilient).
+async function pageSpeed(domain, key) {
+  const [mobile, desktop] = await Promise.all([
+    _pageSpeedOne(domain, key, 'mobile'),
+    _pageSpeedOne(domain, key, 'desktop'),
+  ]);
+  if (!mobile && !desktop) return null;
+  const base = mobile || desktop;                                  // flat back-compat fields prefer mobile
+  return Object.assign({}, base, { scores: base.scores, mobile: mobile || null, desktop: desktop || null });
 }
 
 function P(bucket, severity, citation, fact, layman, fix, evidence) {
