@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tamazia-ops MCP server (stdio).
+"""tamazia-ops MCP server (stdio, stdlib-only).
 
 Read-only operations cockpit for the Tamazia agency engine, exposed to Claude Code
 and Cowork as MCP tools. Every tool reads the LIVE Neon DB over the serverless HTTP
@@ -10,7 +10,9 @@ Design rules (kept deliberately):
     compliance_* / framework_* / classifier_* tables are never touched.
   - Fail-soft: a tool that cannot reach Neon (or a token is missing) returns a clear
     one-line message and never raises, so the MCP server stays up.
-  - No new dependencies beyond `mcp`. HTTP is stdlib urllib.
+  - ZERO dependencies. The MCP stdio JSON-RPC protocol is implemented by hand against
+    the Python standard library so this runs on Python 3.9 (the user's Mac has 3.9.6
+    and cannot install 3.10+, which the `mcp` SDK requires). HTTP is stdlib urllib.
   - The funnel SQL is copied VERBATIM from scripts/gen-state.js so the counts match
     the live schema and the auto-generated docs/PIPELINE-STATE.md exactly.
 
@@ -18,29 +20,21 @@ NEON_URL and the Slack/Telegram tokens are read from the environment first, then
 the engine .env (COWORK-OS-EXECUTION/.env, then cowork-os/.env). The secret value is
 never printed by any tool.
 
+Protocol: MCP stdio = JSON-RPC 2.0, one compact JSON object per line, read line /
+write line. We implement initialize, notifications/initialized, tools/list and
+tools/call by hand. Nothing but protocol messages is ever written to stdout; all
+diagnostics go to stderr.
+
 Run:  python3 server.py        (stdio transport; launched by the MCP client)
 """
 
 import json
 import os
 import re
+import sys
 import urllib.request
 from datetime import datetime, timezone
-
-# ---------------------------------------------------------------------------
-# MCP SDK (FastMCP, current stable pattern). Imported lazily-tolerant so a
-# missing install produces a clear message instead of a bare ImportError.
-# ---------------------------------------------------------------------------
-try:
-    from mcp.server.fastmcp import FastMCP
-except Exception as _imp_err:  # pragma: no cover - surfaced at startup only
-    raise SystemExit(
-        "tamazia-ops: the `mcp` Python SDK is not installed. Run "
-        "`pip install -r requirements.txt` (needs Python 3.10+). "
-        "Underlying import error: " + str(_imp_err)
-    )
-
-mcp = FastMCP("tamazia-ops")
+from typing import Any, Dict, List, Optional
 
 # ---------------------------------------------------------------------------
 # Config: NEON_URL + tokens from env, falling back to the engine .env files.
@@ -173,7 +167,6 @@ def _funnel():
 # ===========================================================================
 # TOOL 1: pipeline_status
 # ===========================================================================
-@mcp.tool()
 def pipeline_status() -> str:
     """One sentence with the seven Tamazia funnel counts (sourced -> booked)."""
     try:
@@ -191,7 +184,6 @@ def pipeline_status() -> str:
 # ===========================================================================
 # TOOL 2: source_performance
 # ===========================================================================
-@mcp.tool()
 def source_performance() -> str:
     """Per-source bounce rate, reply rate, and cost-per-lead where derivable.
 
@@ -266,7 +258,6 @@ def source_performance() -> str:
 # ===========================================================================
 # TOOL 3: engine_health
 # ===========================================================================
-@mcp.tool()
 def engine_health() -> str:
     """Which engines ran (engine_runs) and which are stuck (system_health stuck_*).
 
@@ -335,7 +326,6 @@ def engine_health() -> str:
 # ===========================================================================
 # TOOL 4: todays_bookings
 # ===========================================================================
-@mcp.tool()
 def todays_bookings() -> str:
     """cal_bookings whose start_at is today (UTC). One line per booking."""
     q = """
@@ -373,7 +363,6 @@ def todays_bookings() -> str:
 # ===========================================================================
 # TOOL 5: recent_replies
 # ===========================================================================
-@mcp.tool()
 def recent_replies(limit: int = 15) -> str:
     """Recent inbound_emails that matched a lead (matched_lead_id IS NOT NULL).
 
@@ -466,7 +455,6 @@ def _post_telegram(text):
 # ===========================================================================
 # TOOL 6: push_digest
 # ===========================================================================
-@mcp.tool()
 def push_digest() -> str:
     """Post pipeline status + any health fails to Slack (#all-tamazia) and Telegram.
 
@@ -526,8 +514,240 @@ def push_digest() -> str:
     )
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# Tool registry - name -> (callable, description, JSON-Schema for inputs).
+# The 6 tool bodies above are unchanged from the SDK version; this table is the
+# hand-rolled replacement for the @mcp.tool() decorators.
+# ===========================================================================
+def _schema(properties=None, required=None):
+    return {
+        "type": "object",
+        "properties": properties or {},
+        "required": required or [],
+    }
+
+
+TOOLS = {
+    "pipeline_status": {
+        "fn": pipeline_status,
+        "description": (
+            "One sentence with the seven Tamazia funnel counts: leads sourced -> "
+            "qualified -> FIT -> email-ready -> sent -> replied -> booked. Reads live Neon."
+        ),
+        "inputSchema": _schema(),
+    },
+    "source_performance": {
+        "fn": source_performance,
+        "description": (
+            "Per-source bounce rate, reply rate, and cost-per-lead where derivable "
+            "(joins leads.source to sends / bounce_events / inbound_emails and "
+            "lead_sources.cost_per_month_gbp). Metrics it cannot derive are 'n/a', never guessed."
+        ),
+        "inputSchema": _schema(),
+    },
+    "engine_health": {
+        "fn": engine_health,
+        "description": (
+            "Which engines ran (last finished_at + status per job from engine_runs) and "
+            "which are stuck (system_health rows where check_key LIKE 'stuck_%')."
+        ),
+        "inputSchema": _schema(),
+    },
+    "todays_bookings": {
+        "fn": todays_bookings,
+        "description": "cal_bookings rows whose start_at is today (UTC), one line per booking.",
+        "inputSchema": _schema(),
+    },
+    "recent_replies": {
+        "fn": recent_replies,
+        "description": (
+            "Recent inbound_emails with matched_lead_id set (received time, sender, "
+            "subject, classification, matched lead id). Optional 'limit' clamped to 1..50."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "limit": {
+                    "type": "integer",
+                    "description": "Max replies to return, clamped 1..50 (default 15).",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 15,
+                }
+            },
+        ),
+    },
+    "push_digest": {
+        "fn": push_digest,
+        "description": (
+            "Posts the pipeline status + any failing health checks to Slack (#all-tamazia "
+            "via SLACK_BOT_TOKEN) and Telegram (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)."
+        ),
+        "inputSchema": _schema(),
+    },
+}
+
+
+# ===========================================================================
+# Hand-rolled MCP stdio JSON-RPC 2.0 transport (stdlib only, Python 3.9 safe).
+# One compact JSON object per line in and out; flush after every write; stderr
+# for any logging so stdout stays a clean protocol channel.
+# ===========================================================================
+PROTOCOL_VERSION = "2024-11-05"
+SERVER_INFO = {"name": "tamazia-ops", "version": "1.0.0"}
+
+
+def _log(msg):
+    """Diagnostics to stderr only - stdout is reserved for protocol messages."""
+    try:
+        sys.stderr.write("[tamazia-ops] " + str(msg) + "\n")
+        sys.stderr.flush()
+    except Exception:
+        pass
+
+
+def _write_message(obj):
+    """Serialize one JSON-RPC message as a single compact line and flush stdout."""
+    sys.stdout.write(json.dumps(obj, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+
+
+def _result(req_id, result):
+    _write_message({"jsonrpc": "2.0", "id": req_id, "result": result})
+
+
+def _error(req_id, code, message):
+    _write_message(
+        {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+    )
+
+
+def _handle_initialize(params):
+    """Echo the client's protocolVersion if present, else our default."""
+    client_ver = None
+    if isinstance(params, dict):
+        client_ver = params.get("protocolVersion")
+    return {
+        "protocolVersion": client_ver or PROTOCOL_VERSION,
+        "capabilities": {"tools": {}},
+        "serverInfo": SERVER_INFO,
+    }
+
+
+def _handle_tools_list():
+    tools = []
+    for name, spec in TOOLS.items():
+        tools.append(
+            {
+                "name": name,
+                "description": spec["description"],
+                "inputSchema": spec["inputSchema"],
+            }
+        )
+    return {"tools": tools}
+
+
+def _handle_tools_call(params):
+    """Dispatch one tools/call. Returns an MCP tool result dict (never raises)."""
+    if not isinstance(params, dict):
+        return {
+            "content": [{"type": "text", "text": "Invalid params for tools/call."}],
+            "isError": True,
+        }
+    name = params.get("name")
+    arguments = params.get("arguments") or {}
+    if not isinstance(arguments, dict):
+        arguments = {}
+    spec = TOOLS.get(name)
+    if spec is None:
+        return {
+            "content": [{"type": "text", "text": "Unknown tool: " + str(name)}],
+            "isError": True,
+        }
+    try:
+        fn = spec["fn"]
+        # Only recent_replies takes an argument; pass through the optional 'limit'.
+        if name == "recent_replies":
+            text = fn(arguments.get("limit", 15))
+        else:
+            text = fn()
+        return {
+            "content": [{"type": "text", "text": str(text)}],
+            "isError": False,
+        }
+    except Exception as e:  # never crash the loop on a tool exception
+        _log("tool '" + str(name) + "' raised: " + repr(e))
+        return {
+            "content": [{"type": "text", "text": "Tool error: " + str(e)[:300]}],
+            "isError": True,
+        }
+
+
+def _dispatch(message):
+    """Route one parsed JSON-RPC message. Notifications (no id) get no response."""
+    if not isinstance(message, dict):
+        return  # malformed top-level - skip silently (already logged by caller)
+
+    method = message.get("method")
+    has_id = "id" in message and message.get("id") is not None
+    req_id = message.get("id")
+    params = message.get("params")
+
+    # Notifications (and any message without an id) never get a response.
+    if not has_id:
+        # notifications/initialized and friends: acknowledge by doing nothing.
+        return
+
+    if method == "initialize":
+        _result(req_id, _handle_initialize(params))
+        return
+    if method == "tools/list":
+        _result(req_id, _handle_tools_list())
+        return
+    if method == "tools/call":
+        _result(req_id, _handle_tools_call(params))
+        return
+    if method == "ping":
+        # Harmless liveness check some clients send; reply with empty result.
+        _result(req_id, {})
+        return
+
+    # Any other method that carries an id -> standard JSON-RPC method-not-found.
+    _error(req_id, -32601, "Method not found")
+
+
+def main():
+    """Read JSON-RPC lines from stdin until EOF; respond on stdout. Fail-soft."""
+    _log("starting (stdlib-only, Python " + sys.version.split()[0] + ")")
+    while True:
+        try:
+            line = sys.stdin.readline()
+        except Exception as e:
+            _log("stdin read error, exiting: " + repr(e))
+            break
+        if line == "":
+            # EOF -> client closed the pipe; exit cleanly.
+            break
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            message = json.loads(line)
+        except Exception as e:
+            # Malformed line: skip it, keep the loop alive.
+            _log("skipping malformed line: " + repr(e))
+            continue
+        try:
+            _dispatch(message)
+        except Exception as e:
+            # Last-ditch guard: a bug in dispatch must never kill the server.
+            _log("dispatch error: " + repr(e))
+            try:
+                mid = message.get("id") if isinstance(message, dict) else None
+                if mid is not None:
+                    _error(mid, -32603, "Internal error")
+            except Exception:
+                pass
+
+
 if __name__ == "__main__":
-    # stdio transport: the MCP client (Claude Code / Cowork) launches this and
-    # speaks JSON-RPC over stdin/stdout. Never print to stdout outside the SDK.
-    mcp.run()
+    main()

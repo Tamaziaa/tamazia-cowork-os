@@ -1,14 +1,17 @@
 # tamazia-ops MCP server
 
-A small, dependency-light **stdio MCP server** that exposes the Tamazia agency
+A small, **zero-dependency stdio MCP server** that exposes the Tamazia agency
 engine's live operational state to Claude Code and Cowork as callable tools. It is
 **read-only + additive** against Neon (no DDL, no destructive writes) and never
 touches the audit engine tables (`audit_*`, `compliance_*`, `framework_*`,
 `classifier_*`, etc.).
 
-Built in **Python** (the Oracle VM and this control box have `python3`, not `node`),
-using the official `mcp` SDK (`FastMCP`). All HTTP (Neon, Slack, Telegram) uses the
-Python standard library, so the only dependency is `mcp` itself.
+Built in **Python with the standard library only** (the Oracle VM and this control box
+have `python3`, not `node`). The MCP stdio JSON-RPC protocol is implemented **by hand**
+(no `mcp` SDK, nothing to `pip install`), so it runs on **Python 3.9+**. This is
+deliberate: the target Mac runs Python **3.9.6** and cannot install 3.10, which the
+official `mcp` SDK requires. All HTTP (Neon, Slack, Telegram) uses `urllib` from the
+stdlib.
 
 ## Tools
 
@@ -24,20 +27,27 @@ Python standard library, so the only dependency is `mcp` itself.
 The funnel SQL is copied **verbatim** from `scripts/gen-state.js` so the counts match
 the live schema and the auto-generated `docs/PIPELINE-STATE.md`. Neon access mirrors
 `ops/neonq.py` exactly (serverless HTTP `/sql` endpoint). Slack/Telegram posting
-mirrors `scripts/intel-pulse.js`.
+mirrors `scripts/intel-pulse.js`. The six tool bodies are unchanged from the earlier
+SDK version; only the transport/registration layer was rewritten by hand.
 
 Every tool is **fail-soft**: if Neon is unreachable or a token is missing, the tool
 returns a clear one-line message and the server keeps running.
 
 ## Install
 
-Requires **Python 3.10+** (the `mcp` SDK floor; see the version note at the bottom).
+Requires **Python 3.9+** and nothing else. There are **no dependencies** to install:
+the MCP stdio protocol is implemented in `server.py` against the standard library.
 
 ```bash
+# Optional / no-op - requirements.txt is comments only, there is nothing to install.
 pip install -r requirements.txt
 ```
 
-That installs just `mcp`. No other packages.
+Verify the file at least compiles under your interpreter (3.9.6 on the target Mac):
+
+```bash
+python3 -m py_compile server.py
+```
 
 ## Configuration (env)
 
@@ -119,7 +129,7 @@ long-lived client connects over a pipe. For a simple always-available process:
 
 ```bash
 cd /home/ubuntu/tamazia-engine/mcp/tamazia-ops
-pip install -r requirements.txt
+# No pip install needed - stdlib only.
 pm2 start "python3 server.py" --name tz-ops-mcp
 pm2 save
 ```
@@ -130,26 +140,38 @@ existing `scripts/intel-pulse.js` cron, or add a tiny cron that imports `push_di
 and the Neon helpers from `server.py`. The server is primarily an interactive surface
 for Claude Code / Cowork.
 
-## Version targeted + what to verify on first run
+## Implementation note + what to verify on first run
 
-- **Targeted SDK:** the official `mcp` Python SDK using the **`FastMCP`** pattern,
-  imported as `from mcp.server.fastmcp import FastMCP`, started with `mcp.run()`
-  over the default **stdio** transport. This is the current stable, documented pattern
-  (SDK `1.x`).
-- **Python version:** the `mcp` SDK requires **Python 3.10+**. The control box this
-  was authored on runs Python **3.9.6**, so the handshake could **not** be exercised
-  here. The Oracle VM and CI runners should have a 3.10+ interpreter - install and run
-  there. If `python3` on the target is < 3.10, use a 3.10+ binary explicitly in the
-  config `command` (e.g. `python3.11`).
-- **First-run checklist:**
-  1. `pip install -r requirements.txt` succeeds and `python3 -c "import mcp.server.fastmcp"` is clean.
-  2. The client lists six tools under `tamazia-ops` after connecting.
+- **Transport:** the MCP stdio JSON-RPC 2.0 protocol is implemented **by hand** in
+  `server.py` (no SDK). It reads one compact JSON object per line from stdin and writes
+  one per line to stdout, flushing after each, and uses **stderr** for all logging so
+  stdout stays a clean protocol channel. Handled methods: `initialize` (echoes the
+  client's `protocolVersion`, else `2024-11-05`), `tools/list`, `tools/call`, `ping`,
+  and the `notifications/initialized` notification (acknowledged with no response).
+  Notifications and any message without an `id` never get a reply; unknown methods that
+  carry an `id` get a JSON-RPC `-32601 Method not found`. Malformed lines are skipped,
+  EOF on stdin exits cleanly, and a tool exception is returned as
+  `{ isError: true }`, never crashing the loop.
+- **Python version:** runs on **Python 3.9+** (the target Mac has **3.9.6**). The code
+  avoids 3.10-only syntax (no `match`, no `X | Y` unions, no `tomllib`); type hints come
+  from `typing`. There are **no dependencies**.
+- **Offline smoke test (done at authoring time):** piping a hand-written `initialize`
+  line then a `tools/list` line into `python3 server.py` emits two well-formed JSON-RPC
+  responses; `tools/list` returns all six tools. This works **without** `NEON_URL` -
+  only the live Neon tools need it. Reproduce with:
+
+  ```bash
+  printf '%s\n%s\n' \
+    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}' \
+    '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+    | python3 server.py
+  ```
+
+- **First-run checklist (verify the handshake with a real MCP client):**
+  1. `python3 -m py_compile server.py` is clean (3.9.6 OK).
+  2. The client connects and lists **six** tools under `tamazia-ops`.
   3. `pipeline_status()` returns the funnel sentence (confirms `NEON_URL` resolves and
      `/sql` is reachable). If it says "Cannot reach Neon", check the `.env` path /
      `TAMAZIA_ENV`.
   4. `push_digest()` reports `Slack: posted...` and `Telegram: sent.` Missing tokens
      surface as `skipped`, not errors.
-  - If your installed SDK is older and `mcp.server.fastmcp` is absent, the server
-    exits at startup with a clear message; upgrade `mcp`, or port the six
-    `@mcp.tool()` functions to the low-level `from mcp.server import Server` +
-    `mcp.server.stdio.stdio_server()` API (same tool bodies, different registration).
