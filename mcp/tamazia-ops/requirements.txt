@@ -1,0 +1,7 @@
+# tamazia-ops MCP server - single dependency.
+# Everything else (HTTP to Neon/Slack/Telegram) uses the Python stdlib (urllib, json, re).
+#
+# `mcp` is the official Model Context Protocol Python SDK (FastMCP + stdio transport).
+# It requires Python >= 3.10. Pinned to a >= floor so the FastMCP import path
+# (mcp.server.fastmcp) is present; loosen/raise only after re-testing the handshake.
+mcp>=1.2.0
