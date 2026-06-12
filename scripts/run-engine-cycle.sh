@@ -10,6 +10,7 @@ run() { echo "[$(TS)] >> $1"; eval "$1" 2>&1 | tail -3; echo "[$(TS)] done: $1";
 {
   echo "===== ENGINE CYCLE $(TS) ====="
   set -a; source .env 2>/dev/null; set +a
+  HB_ID=$(node scripts/heartbeat.js start engine-cycle 2>/dev/null || echo "")   # A2: open a per-cycle heartbeat row in engine_runs
   run "node scripts/ensure-schema.js"                                   # SELF-HEALING SCHEMA: auto-provision missing tables/columns (additive, fail-open) BEFORE any DB work
   run "node scripts/cc2-provision.js"                                  # CC-2: icp_catalog seeds + v_admin_leads view (idempotent; columns/tables also in the spec)
   run "node scripts/zoho-imap-poll.js"                                  # replies (skips if no IMAP pwd)
@@ -27,7 +28,9 @@ run() { echo "[$(TS)] >> $1"; eval "$1" 2>&1 | tail -3; echo "[$(TS)] done: $1";
   run "node src/skills/S016-alias-health-monitor/scripts/monitor.js"    # S016 alias health: per-alias metrics + auto-pause on bounce/complaint
   run "node src/skills/S019-engagement-tracker/scripts/track.js --scan-reengagement"  # S019 re-engagement scan over audit-page events
   run "node scripts/health-check.js"                                    # self-diagnostic: 30 adverse-scenario probes → system_health
+  run "node scripts/check-stuck-jobs.js"                                # A2: stuck-job detection (2x amber / 4x red+Telegram) over engine_runs
   run "node scripts/build-crm-dashboard.js"                             # dashboard refresh
+  node scripts/heartbeat.js finish "$HB_ID" ok 2>/dev/null || true       # A2: close the per-cycle heartbeat row
   echo "===== CYCLE END $(TS) ====="
 } >> "$LOG" 2>&1
 echo "cycle complete · see $LOG"
