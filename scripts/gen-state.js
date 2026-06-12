@@ -59,7 +59,12 @@ function main() {
   const dir = path.join(ROOT, 'docs');
   try { fs.mkdirSync(dir, { recursive: true }); } catch (_e) {}
   fs.writeFileSync(path.join(dir, 'PIPELINE-STATE.md'), out);
-  console.log(`[gen-state] wrote docs/PIPELINE-STATE.md (${out.length} bytes, health ${v(health)}%)`);
+  // Also persist the digest to Neon so it is always readable without a repo push (branch-safe, survives a failed git push).
+  try {
+    const esc = s => `'${String(s).replace(/'/g, "''")}'`;
+    pg(`INSERT INTO system_state (key,value,updated_at) VALUES ('pipeline_state_md',${esc(out)},now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`);
+  } catch (_e) {}
+  console.log(`[gen-state] wrote docs/PIPELINE-STATE.md + Neon system_state.pipeline_state_md (${out.length} bytes, health ${v(health)}%)`);
 }
 
 main();
