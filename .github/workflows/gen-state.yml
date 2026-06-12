@@ -1,0 +1,33 @@
+name: gen-state (regenerate PIPELINE-STATE.md)
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/PIPELINE-STATE.md'   # never re-trigger on our own commit
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC daily
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  gen-state:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m pip install --quiet -r requirements.txt
+      - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - run: |
+          set -a; source .env 2>/dev/null; set +a
+          node scripts/gen-state.js
+      - name: Commit if changed
+        run: |
+          git config user.name "tamazia-bot"
+          git config user.email "bot@tamazia.co.uk"
+          git add docs/PIPELINE-STATE.md
+          git diff --cached --quiet || git commit -m "chore(state): regenerate PIPELINE-STATE.md [skip ci]"
+          git push
