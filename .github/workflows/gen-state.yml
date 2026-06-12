@@ -24,10 +24,13 @@ jobs:
       - run: |
           set -a; source .env 2>/dev/null; set +a
           node scripts/gen-state.js
-      - name: Commit if changed
+      - name: Commit if changed (best-effort; Neon holds the digest regardless)
+        continue-on-error: true
         run: |
+          set -a; source .env 2>/dev/null; set +a
           git config user.name "tamazia-bot"
           git config user.email "bot@tamazia.co.uk"
           git add docs/PIPELINE-STATE.md
-          git diff --cached --quiet || git commit -m "chore(state): regenerate PIPELINE-STATE.md [skip ci]"
-          git push
+          git diff --cached --quiet && { echo "no change"; exit 0; }
+          git commit -m "chore(state): regenerate PIPELINE-STATE.md [skip ci]"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/Tamaziaa/tamazia-cowork-os.git" HEAD:main
