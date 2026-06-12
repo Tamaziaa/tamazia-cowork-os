@@ -3696,6 +3696,18 @@
         "notnull": false,
         "identity": false
       },
+      "sector_tag": {
+        "type": "varchar(64)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "subsector_tag": {
+        "type": "varchar(64)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
       "contact_first": {
         "type": "varchar(64)",
         "default": null,

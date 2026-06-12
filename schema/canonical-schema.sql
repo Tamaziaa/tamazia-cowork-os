@@ -661,6 +661,8 @@ CREATE TABLE IF NOT EXISTS leads (
   company varchar(255) NOT NULL,
   domain varchar(255),
   sector varchar(64),
+  sector_tag varchar(64),
+  subsector_tag varchar(64),
   contact_first varchar(64),
   contact_last varchar(64),
   contact_title varchar(128),
