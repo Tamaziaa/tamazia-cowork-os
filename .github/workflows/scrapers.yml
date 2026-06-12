@@ -35,7 +35,7 @@ jobs:
       - name: Run gated scrapers
         run: |
           set -a; source .env 2>/dev/null; set +a
-          node scripts/source-leads.js --source ${{ github.event.inputs.sources || 'jobspy,maps,serp-top' }} --max ${{ github.event.inputs.max || '40' }}
+          node scripts/heartbeat.js wrap scrapers -- node scripts/source-leads.js --source ${{ github.event.inputs.sources || 'jobspy,maps,serp-top' }} --max ${{ github.event.inputs.max || '40' }}
       - name: Alert on failure
         if: failure()
         run: |

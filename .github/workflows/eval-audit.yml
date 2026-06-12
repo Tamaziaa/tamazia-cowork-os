@@ -18,4 +18,4 @@ jobs:
       - name: Run audit eval (fails on any benchmark breach)
         run: |
           set -a; source .env 2>/dev/null; set +a
-          node scripts/eval-audit.mjs
+          node scripts/heartbeat.js wrap eval-audit -- node scripts/eval-audit.mjs

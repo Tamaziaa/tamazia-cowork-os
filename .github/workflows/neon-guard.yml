@@ -16,7 +16,7 @@ jobs:
       - name: Check Neon schema drift (code refs vs live)
         run: |
           set -a; source .env 2>/dev/null; set +a
-          node scripts/ensure-schema.js --check
+          node scripts/heartbeat.js wrap neon-guard -- node scripts/ensure-schema.js --check
       - name: Alert on drift
         if: failure()
         run: |

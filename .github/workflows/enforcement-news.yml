@@ -30,7 +30,7 @@ jobs:
       - name: Refresh enforcement news
         run: |
           set -a; source .env 2>/dev/null; set +a
-          node scripts/refresh-enforcement-news.js
+          node scripts/heartbeat.js wrap enforcement-news -- node scripts/refresh-enforcement-news.js
       - name: Alert on failure
         if: failure()
         run: |

@@ -59,13 +59,15 @@ jobs:
       - name: Advance the backlog (no-send)
         run: |
           set -a; source .env; set +a
-          node scripts/enrich-and-queue-channels.js ${{ inputs.enrich }} || true
-          node scripts/run-deep-research-batch.js ${{ inputs.research }} || true
-          node scripts/verify-contacts.js ${{ inputs.verify }}         || true
-          node scripts/dedupe-leads.js                                  || true
-          node scripts/qualify-and-queue.js ${{ inputs.qualify }}       || true
-          node scripts/enqueue-leads.js ${{ inputs.mint }}             || true
-          node scripts/mint-worker.js --once                            || true
+          node scripts/heartbeat.js wrap backlog-burst -- bash -c '
+            node scripts/enrich-and-queue-channels.js ${{ inputs.enrich }} || true
+            node scripts/run-deep-research-batch.js ${{ inputs.research }} || true
+            node scripts/verify-contacts.js ${{ inputs.verify }}         || true
+            node scripts/dedupe-leads.js                                  || true
+            node scripts/qualify-and-queue.js ${{ inputs.qualify }}       || true
+            node scripts/enqueue-leads.js ${{ inputs.mint }}             || true
+            node scripts/mint-worker.js --once                            || true
+          '
       - name: Funnel summary
         run: |
           set -a; source .env; set +a
