@@ -125,7 +125,18 @@ async function processLead(lead) {
   pg(`UPDATE outreach_drafts SET send_status='sent', sent_at=NOW(), draft_metadata = draft_metadata || ${pgEsc(JSON.stringify({ relay_provider: result.provider, relay_email_id: email_id, rfc_message_id: (result.message_id || '').replace(/[<>]/g, ''), from_alias_id: alias.id, from_alias_email: alias.email }))}::jsonb WHERE id=${draft.id}`);
   // CANONICAL SEND LOG: one source of truth for the dashboard, relay attribution, and reply matching.
   // The new touch flow previously only updated outreach_drafts, so new sends were invisible in `sends`.
-  pg(`INSERT INTO sends (lead_id, alias_id, recipient, subject, subject_used, message_id, relay_used, relay_name, sent_at, status, delivery_status, touch_number, kind) VALUES (${lead.id}, ${alias.id || 'NULL'}, ${pgEsc(lead.email)}, ${pgEsc(draft.subject)}, ${pgEsc(draft.subject)}, ${pgEsc((result.message_id || '').replace(/[<>]/g, ''))}, ${pgEsc(result.provider)}, ${pgEsc(result.provider)}, NOW(), 'sent', 'sent', ${touch}, 'email')`);
+  // lead_id is REQUIRED for per-source / per-sector reporting (a NULL lead_id groups as 'unknown'); this is
+  // a lead-directed touch so we MUST always attribute it. Guard against a non-numeric id (would otherwise
+  // interpolate the literal `undefined`/`NULL` and orphan the row) and skip the log rather than write junk.
+  // Stamp sector + jurisdiction straight from the lead so reports that read sends.sector work without a join.
+  const leadIdNum = Number(lead.id);
+  if (Number.isInteger(leadIdNum) && leadIdNum > 0) {
+    pg(`INSERT INTO sends (lead_id, alias_id, recipient, subject, subject_used, message_id, relay_used, relay_name, sent_at, status, delivery_status, touch_number, kind, sector, jurisdiction)
+        SELECT ${leadIdNum}, ${alias.id || 'NULL'}, ${pgEsc(lead.email)}, ${pgEsc(draft.subject)}, ${pgEsc(draft.subject)}, ${pgEsc((result.message_id || '').replace(/[<>]/g, ''))}, ${pgEsc(result.provider)}, ${pgEsc(result.provider)}, NOW(), 'sent', 'sent', ${touch}, 'email', NULLIF(l.sector,''), NULLIF(l.jurisdiction,'')
+        FROM leads l WHERE l.id=${leadIdNum}`);
+  } else {
+    console.log(`  WARN: lead ${JSON.stringify(lead.id)} has no integer id — skipped sends log row (would orphan reporting)`);
+  }
   // Advance lead status + schedule next touch
   if (touch < 3) {
     const days = CADENCE_DAYS[touch + 1] - CADENCE_DAYS[touch];

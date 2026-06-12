@@ -31,6 +31,11 @@ function runScript(rel) {
   console.log('[reconcile] 2/4 audit-link verify …');
   runScript('scripts/verify-audits.js');
 
+  // 2b. cal.com KV -> Neon: copy the webhook's KV booking records into cal_bookings so step 3 has data to
+  //     read. Fail-open (no-ops loudly if the cross-account KV token is not set). MUST precede step 3.
+  console.log('[reconcile] cal-bookings KV->Neon sync …');
+  runScript('scripts/reconcile-cal-bookings.js');
+
   // 3. cal.com bookings -> lifecycle_stage='booked' (only forward; never demote a won/lost)
   const booked = pg(`UPDATE leads SET lifecycle_stage='booked', updated_at=NOW()
     WHERE id IN (SELECT DISTINCT lead_id FROM cal_bookings WHERE lead_id IS NOT NULL
