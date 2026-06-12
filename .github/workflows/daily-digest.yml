@@ -17,4 +17,4 @@ jobs:
       - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - run: |
           set -a; source .env 2>/dev/null; set +a
-          node scripts/daily-digest.js
+          node scripts/heartbeat.js wrap daily-digest -- node scripts/daily-digest.js

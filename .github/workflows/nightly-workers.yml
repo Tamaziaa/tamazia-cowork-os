@@ -34,7 +34,7 @@ jobs:
       - name: Reconcile (Neon <-> Mystrika <-> cal <-> audits)
         run: |
           set -a; source .env; set +a
-          node scripts/reconcile.js || true
+          node scripts/heartbeat.js wrap nightly-workers -- node scripts/reconcile.js || true
       - name: Recycle (non-repliers -> 90d, repliers -> suppression)
         run: |
           set -a; source .env; set +a

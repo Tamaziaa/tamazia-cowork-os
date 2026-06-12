@@ -26,4 +26,4 @@ jobs:
       - name: Materialise .env from secret
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Run intel pulse
-        run: node scripts/intel-pulse.js
+        run: node scripts/heartbeat.js wrap intel-pulse -- node scripts/intel-pulse.js

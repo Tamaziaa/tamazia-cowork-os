@@ -1,0 +1,9 @@
+# tamazia-ops MCP server - stdlib only, no dependencies.
+#
+# The MCP stdio JSON-RPC protocol is implemented by hand against the Python
+# standard library (json, os, re, sys, urllib, datetime, typing), so there is
+# NOTHING to pip install. This is deliberate: the target machine runs Python
+# 3.9.6, and the official `mcp` SDK requires Python 3.10+. There are no
+# third-party packages on this line and there should not be.
+#
+# `pip install -r requirements.txt` is a no-op (and unnecessary).
