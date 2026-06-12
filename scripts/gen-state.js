@@ -26,7 +26,7 @@ function main() {
   const scored = one(`SELECT COUNT(*) FROM leads WHERE quality_score IS NOT NULL`);
   const qualified = one(`SELECT COUNT(*) FROM leads WHERE lifecycle_stage='qualified'`);
   const fit = one(`SELECT COUNT(*) FROM leads WHERE COALESCE(quality_fit,FALSE)=TRUE`);
-  const emailReady = one(`SELECT COUNT(*) FROM leads l WHERE l.status LIKE 'touch_%_queued' AND COALESCE(NULLIF(l.email,''),l.contact_email,'')<>'' AND COALESCE(acquisition_channel,'') NOT ILIKE '%test%' AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal')`);
+  const emailReady = one(`SELECT COUNT(*) FROM leads l WHERE l.status LIKE 'touch_%_queued' AND COALESCE(NULLIF(l.email,''),l.contact_email,'')<>'' AND COALESCE(acquisition_channel,'') NOT ILIKE '%test%' AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal') AND EXISTS (SELECT 1 FROM outreach_drafts od WHERE od.lead_id=l.id AND od.send_status='pending' AND od.channel='email')`);
   const sent = one(`SELECT COUNT(*) FROM sends`);
   const replied = one(`SELECT COUNT(*) FROM inbound_emails WHERE matched_lead_id IS NOT NULL`);
   const booked = one(`SELECT COUNT(*) FROM cal_bookings`);
