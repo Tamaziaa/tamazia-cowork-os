@@ -13,17 +13,17 @@
 // Env (loaded from <root>/.env, same as the other engine scripts):
 //   NEON_URL                 Neon connection string (read+additive write via scripts/psql)
 //   CLOUDFLARE_API_TOKEN     token with KV read scope on the namespace below
-//   CLOUDFLARE_ACCOUNT_ID    account that owns the KV namespace (see CROSS-ACCOUNT note)
+//   CLOUDFLARE_ACCOUNT_ID    account that owns the KV namespace (the engine account; see ACCOUNT note)
 //   CLOUDFLARE_KV_ACCOUNT_ID (optional) overrides CLOUDFLARE_ACCOUNT_ID for the KV call only
 //   CAL_BOOKINGS_KV_NAMESPACE_ID (optional) overrides the namespace id below
 //
-// NOTE - CROSS-ACCOUNT: wrangler.toml binds FORM_SUBMISSIONS to namespace id
-//   7c7537a8d5ad444491a92aa16c4abce0, and its header records this namespace as living in Cloudflare account
-//   "4a3b271b..." (cross-account), which is NOT the engine's CLOUDFLARE_ACCOUNT_ID (78c79417...). The namespace
-//   id is known and hard-defaulted below. The owning ACCOUNT id is only partially documented (4a3b271b...),
-//   so set CLOUDFLARE_KV_ACCOUNT_ID to that account's full id (and use a token scoped to it) before this can
-//   read the live KV. TODO(aman): confirm the full 4a3b271b account id + a KV-read token for it, then set
-//   CLOUDFLARE_KV_ACCOUNT_ID in the engine .env. Until then this job no-ops loudly (fail-open) rather than guess.
+// NOTE - ACCOUNT (verified 2026-06-13 via the live CF API, supersedes an earlier cross-account guess):
+//   the live website wrangler.toml binds FORM_SUBMISSIONS to namespace id 11971a76eda74339936dd7738680d973,
+//   and that namespace lives in the ENGINE account (78c79417..., == CLOUDFLARE_ACCOUNT_ID), NOT a separate
+//   account. The engine's CLOUDFLARE_API_TOKEN_FULL already reads it (confirmed: it holds csp:/form keys;
+//   the cal-webhook writes bookings under `bookings:cal:<uid>`). So NO CLOUDFLARE_KV_ACCOUNT_ID and no extra
+//   token are needed - the default fallback to CLOUDFLARE_ACCOUNT_ID is correct. cal_bookings reads 0 today
+//   only because no call has been booked yet (SEND is off); this job fills it once the first booking lands.
 
 const path = require('path');
 const fs = require('fs');
@@ -49,10 +49,12 @@ for (const f of ENV_FILES) {
 const env = (k) => (process.env[k] !== undefined ? process.env[k] : ENV[k]);
 
 const NEON = env('NEON_URL') || env('NEON_CONNECTION_STRING');
-const CF_TOKEN = env('CLOUDFLARE_API_TOKEN');
+// Prefer the FULL token (verified 2026-06-13 to have KV-read on this namespace); fall back to the plain one.
+const CF_TOKEN = env('CLOUDFLARE_API_TOKEN_FULL') || env('CLOUDFLARE_API_TOKEN');
 const CF_ACCOUNT = env('CLOUDFLARE_KV_ACCOUNT_ID') || env('CLOUDFLARE_ACCOUNT_ID');
-// Known from website wrangler.toml ([[kv_namespaces]] binding=FORM_SUBMISSIONS). Overridable for safety.
-const KV_NAMESPACE = env('CAL_BOOKINGS_KV_NAMESPACE_ID') || '7c7537a8d5ad444491a92aa16c4abce0';
+// Verified 2026-06-13 vs live website wrangler.toml ([[kv_namespaces]] binding=FORM_SUBMISSIONS) AND the live CF
+// API (the namespace lives in the engine account == CLOUDFLARE_ACCOUNT_ID). Overridable for safety.
+const KV_NAMESPACE = env('CAL_BOOKINGS_KV_NAMESPACE_ID') || '11971a76eda74339936dd7738680d973';
 
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i >= 0 ? process.argv[i + 1] : d; };
 const DRY = process.argv.includes('--dry');
@@ -116,8 +118,8 @@ function toRow(rec) {
 (async () => {
   if (!NEON) { console.error('[cal-reconcile] no NEON_URL — abort'); process.exit(0); }
   if (!CF_TOKEN || !CF_ACCOUNT) {
-    console.error('[cal-reconcile] missing CLOUDFLARE_API_TOKEN / account id — cannot read KV. ' +
-      'Set CLOUDFLARE_KV_ACCOUNT_ID to the namespace owner (cross-account 4a3b271b...) + a KV-read token. No-op.');
+    console.error('[cal-reconcile] missing CLOUDFLARE_API_TOKEN(_FULL) / account id — cannot read KV. ' +
+      'Expected CLOUDFLARE_API_TOKEN_FULL + CLOUDFLARE_ACCOUNT_ID (engine account 78c79417...) in env. No-op.');
     process.exit(0);
   }
 
@@ -126,7 +128,7 @@ function toRow(rec) {
   catch (e) {
     // Fail-open: a KV/account/token problem must never crash the nightly cycle. Flag and exit 0.
     console.error('[cal-reconcile] KV read failed (non-fatal):', String(e.message || e).slice(0, 200));
-    console.error('  Check CLOUDFLARE_KV_ACCOUNT_ID (cross-account: namespace lives in 4a3b271b..., NOT 78c79417...) and token KV scope.');
+    console.error('  Check the token KV scope (namespace 11971a76... lives in the engine account 78c79417... == CLOUDFLARE_ACCOUNT_ID).');
     process.exit(0);
   }
 
