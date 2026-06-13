@@ -40,11 +40,25 @@ const GEO = {
   names: /(united kingdom|\buk\b|england|scotland|wales|london|manchester|birmingham|edinburgh|glasgow|leeds|bristol|uae|united arab emirates|dubai|abu dhabi|sharjah|usa|united states|new york|los angeles|miami|chicago|france|paris|lyon|spain|madrid|barcelona|germany|berlin|munich|frankfurt|ireland|dublin|netherlands|amsterdam|belgium|brussels|portugal|lisbon|italy|rome|milan|sweden|stockholm|denmark|copenhagen|finland|helsinki|austria|vienna|luxembourg|poland|warsaw|greece|athens|czechia|czech republic|prague|hungary|budapest|romania|bucharest|bulgaria|croatia|zagreb|slovenia|slovakia|estonia|tallinn|latvia|riga|lithuania|vilnius|cyprus|malta|norway|oslo|iceland|saudi|riyadh|jeddah|qatar|doha|kuwait|bahrain|oman|european union|\beu\b|europe)/i,
 };
 
+// gap-fix: WORD-BOUNDARY match (was a raw substring `includes`). Short keywords false-matched inside unrelated
+// words: 'spa' (hospitality) hit "dispatch"/"espanol", 'bar' hit "barrister", 'fund' (financial) hit "refund",
+// 'ivf' hit fragments — pulling leads to a wrong sector. A keyword counts only when both neighbours are
+// non-alphanumeric (or a string edge), so multi-word phrases ("law firm", "real estate") still match verbatim.
+function kwHit(t, k) {
+  let idx = t.indexOf(k);
+  if (idx < 0) return false;
+  for (let from = 0; (idx = t.indexOf(k, from)) >= 0; from = idx + 1) {
+    const before = idx === 0 ? '' : t.charAt(idx - 1);
+    const after = (idx + k.length >= t.length) ? '' : t.charAt(idx + k.length);
+    if ((before === '' || !/[a-z0-9]/.test(before)) && (after === '' || !/[a-z0-9]/.test(after))) return true;
+  }
+  return false;
+}
 function classifySector(text) {
   const t = String(text || '').toLowerCase();
   let best = null, bestHits = 0;
   for (const [s, def] of Object.entries(SECTORS)) {
-    const hits = def.kw.reduce((n, k) => n + (t.includes(k) ? 1 : 0), 0);
+    const hits = def.kw.reduce((n, k) => n + (kwHit(t, k) ? 1 : 0), 0);
     if (hits > bestHits) { bestHits = hits; best = s; }
   }
   return bestHits > 0 ? best : null;

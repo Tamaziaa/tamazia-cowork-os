@@ -52,7 +52,10 @@ const GRID_INDEX = GRID_SECTORS.map((s) => ({
   subsectors: (Array.isArray(s.subsectors) ? s.subsectors : []).map((ss) => ({ code: ss.code, name_lc: String(ss.name || '').toLowerCase(), name: ss.name })),
 }));
 // Map the legacy 8-sector hint (icp.js keys + ALIAS canon) onto a canonical grid code, so lead.sector adds a signal.
-const HINT_TO_CODE = { 'law-firms': 'LS', legal: 'LS', healthcare: 'HC', dental: 'DN', medical: 'HC', clinic: 'HC', aesthetic: 'AE', aesthetics: 'AE', cosmetic: 'AE', financial: 'FS', finance: 'FS', insurance: 'IN', 'real-estate': 'RE', property: 'RE', hospitality: 'HO', hotel: 'HO', restaurants: 'FB', 'f&b': 'FB', food: 'FB', education: 'ED', professional: 'PB', automotive: 'AU', wellness: 'WF', fitness: 'WF', crypto: 'CR', ecommerce: 'EC', travel: 'TR', energy: 'EN' };
+// gap-fix: include the EXACT sector strings the SERP scraper writes (serp-engine SECTORS keys) so the thin-site
+// hint FALLBACK can place them. Previously 'ecommerce-retail'/'professional-services'/'supplements'/'veterinary'/
+// 'personal-brand' resolved to null -> matched=null -> forced Tier-3 'unclassified' even for a priority firm (PB).
+const HINT_TO_CODE = { 'law-firms': 'LS', legal: 'LS', healthcare: 'HC', dental: 'DN', medical: 'HC', clinic: 'HC', aesthetic: 'AE', aesthetics: 'AE', cosmetic: 'AE', financial: 'FS', 'financial-services': 'FS', finance: 'FS', insurance: 'IN', 'real-estate': 'RE', property: 'RE', hospitality: 'HO', hotel: 'HO', restaurants: 'FB', 'f&b': 'FB', food: 'FB', education: 'ED', professional: 'PB', 'professional-services': 'PB', automotive: 'AU', wellness: 'WF', 'beauty-wellness': 'WF', fitness: 'WF', crypto: 'CR', ecommerce: 'EC', 'ecommerce-retail': 'EC', supplements: 'SU', veterinary: 'VT', 'personal-brand': 'PX', travel: 'TR', energy: 'EN' };
 
 const truthy = (v) => v === true || /^(1|t|true|yes|y|on)$/i.test(String(v == null ? '' : v));
 // Tolerant parsers — accept a JSON string (tab-row callers) OR an already-parsed value (to_jsonb callers).
@@ -118,6 +121,24 @@ function visibleText(html) {
   return (meta + ' ' + body).replace(/\s+/g, ' ').slice(0, 24000);
 }
 
+// gap-fix: WORD-BOUNDARY keyword match. `text.includes(kw)` was a raw substring test, so short codes
+// false-matched inside unrelated words: 'bar' (FB) hit "barrister"/"chambers...board", 'vet' (VT) hit
+// "veteran"/"vetting", 'ned' (PX) hit "planned", 'mot' (AU) hit "remote"/"promotional", 'ria' (FS) hit a
+// person's name "Maria", 'iva' (FS) hit "private", 'cafe' (FB) hit "cafeteria" — corrupting sector_code and
+// inflating the #2 margin. A keyword counts as present only when both neighbours are non-alphanumeric (or a
+// string edge), which keeps literal '+'/'&'/'-'/digits INSIDE multi-token keywords ("law firm", "k-12",
+// "nad+", "f&b", "web3", "trusts and estates") matching verbatim. O(occurrences) — still linear.
+function kwHit(text, kw) {
+  let idx = text.indexOf(kw);
+  if (idx < 0) return false;
+  for (let from = 0; (idx = text.indexOf(kw, from)) >= 0; from = idx + 1) {
+    const before = idx === 0 ? '' : text.charAt(idx - 1);
+    const after = (idx + kw.length >= text.length) ? '' : text.charAt(idx + kw.length);
+    if ((before === '' || !/[a-z0-9]/.test(before)) && (after === '' || !/[a-z0-9]/.test(after))) return true;
+  }
+  return false;
+}
+
 // ---- V3 SECTOR CLASSIFIER (generous; ambiguity => 'weak', never reject) ----
 // Scores every grid sector by keyword hits across the lead's RESOLVED text (company name + website_intel + sector
 // hint). Picks the best sector code, the best-matching subsector within it, and a confidence band. GENEROUS by
@@ -134,12 +155,15 @@ function classifySectorV3(lead) {
   const text = parts.join(' \n ').toLowerCase();
   // Legacy hint -> canonical code (an independent signal). Resolve via normSector aliasing first, then the map.
   const hintRaw = String((lead && lead.sector) || '').toLowerCase().trim();
-  const hintCode = HINT_TO_CODE[normSector(hintRaw)] || HINT_TO_CODE[hintRaw] || null;
+  // gap-fix: RAW key first, then the alias-folded key. normSector folds dental/aesthetics/beauty-wellness onto
+  // 'healthcare' and restaurants onto 'hospitality', so alias-first mislabeled a thin-site dental lead as HC (not DN),
+  // beauty as HC (not WF), restaurants as HO (not FB) — corrupting sector_code + the per-sector campaign routing.
+  const hintCode = HINT_TO_CODE[hintRaw] || HINT_TO_CODE[normSector(hintRaw)] || null;
 
   let best = null, bestHits = 0, second = 0;
   for (const sec of GRID_INDEX) {
     let hits = 0;
-    for (const kw of sec.keywords) { if (kw && text.includes(kw)) hits++; }
+    for (const kw of sec.keywords) { if (kw && kwHit(text, kw)) hits++; }
     if (hintCode && sec.code === hintCode) hits += 1; // the hint is one extra agreeing signal
     if (hits > bestHits) { second = bestHits; bestHits = hits; best = sec; }
     else if (hits > second) { second = hits; }
@@ -179,7 +203,10 @@ async function scoreLead(lead) {
   const domain = (lead.domain || '').toLowerCase().replace(/^www\./, '');
 
   // Layer 1 — GENUINE BUSINESS (hard gate, domain-boundary matched)
-  const genuine = !!domain && !isAggregator(domain) && domain.split('.').length <= 4;
+  // gap-fix: align the label-count ceiling with serp-engine.isGenuineClient (which was raised to <=5 so legit
+  // sub-hosted brands survive). At <=4 here, a 5-label domain that PASSED sourcing was then killed as not_genuine
+  // at scoring — sourced-then-silently-dropped. Same ceiling on both sides closes that gap.
+  const genuine = !!domain && !isAggregator(domain) && domain.split('.').length <= 5;
   add('1_genuine_business', 10, genuine, genuine ? 'own brandable domain' : 'aggregator/shell — reject');
   if (!genuine) return { score: 0, pass: false, fit: false, tier: 3, layers, reason: 'not_genuine' };
 
@@ -293,7 +320,7 @@ async function scoreLead(lead) {
   const sector_confidence = cls.sector_confidence;
   // gap-fix: when the classifier can't place a sector (thin/SPA site), fall back to the legacy hint code so a clearly
   // priority lead (e.g. sector='healthcare') is tiered on its sector, not forced to Tier 3 as "unclassified".
-  const _hintCode = HINT_TO_CODE[normSector(lead.sector)] || HINT_TO_CODE[String(lead.sector || '').toLowerCase().trim()] || null;
+  const _hintCode = HINT_TO_CODE[String(lead.sector || '').toLowerCase().trim()] || HINT_TO_CODE[normSector(lead.sector)] || null;
   const matched = (sector_code ? GRID_INDEX.find((s) => s.code === sector_code) : null) || (_hintCode ? GRID_INDEX.find((s) => s.code === _hintCode) : null);
   const isPrioritySector = !!(matched && matched.is_priority);
   const sectorRegulated = !!(matched && matched.has_regulators); // "regulated" need-signal = matched sector has regulators[]

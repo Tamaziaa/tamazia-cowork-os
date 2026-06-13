@@ -72,7 +72,13 @@ async function scoreWithRetry(lead, n = 2) {
     // leave it untouched for the next pass (idempotent) rather than mis-tier it on a blip.
     const wasGood = lead.icp_tier === 1 || lead.icp_tier === 2 || lead.quality_fit === true;
     if (wasGood && (q.reachable === false || q.score === 0 || q.total_score == null)) {
-      console.log(`  ${String(lead.domain || '').padEnd(30)} weak/unreachable scan -> KEPT at tier ${lead.icp_tier} (transient-safe)`); skipped++; continue;
+      // gap-fix: do NOT demote (transient-safe) BUT bump quality_scored_at so this lead sinks to the BACK of the
+      // stalest-first ORDER BY instead of being re-selected at the FRONT of every pass. We deliberately leave
+      // requal_version UNSET so a future run still retries it (its site may be back) — but within this multi-pass
+      // run it no longer re-fetches the same dead set forever and starve fresh leads (the backlog could stall once
+      // the unreachable-wasGood set neared the batch size; ~6.7k of 7.7k eligible leads are wasGood).
+      pg(`UPDATE leads SET quality_scored_at=NOW() WHERE id=${lead.id}`);
+      console.log(`  ${String(lead.domain || '').padEnd(30)} weak/unreachable scan -> KEPT at tier ${lead.icp_tier} (transient-safe, deferred)`); skipped++; continue;
     }
     const tier = q.tier || 3;                                   // catch-all: anything that fits no tier -> Tier 3
     // Tier 2 AND Tier 3 stay ALIVE (the deep queue). The re-run never writes 'rejected': per V3 only the four
