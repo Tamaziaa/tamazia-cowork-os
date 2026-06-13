@@ -15,7 +15,7 @@
       "priority_rank": 1,
       "is_priority": true,
       "regulators": ["SRA", "ABA", "Bar Standards Board", "BSB", "IPReg", "CCBE", "Florida Bar", "State Bar"],
-      "keywords": ["law firm", "law firms", "solicitor", "solicitors", "barrister", "barristers", "chambers", "lawyer", "lawyers", "attorney", "advocate", "legal", "legal services", "dispute resolution", "arbitration", "litigation", "conveyancing", "conveyancer", "family law", "divorce lawyer", "immigration solicitor", "immigration lawyer", "criminal defence", "personal injury", "clinical negligence", "medical negligence", "commercial law", "corporate law", "employment law", "ip lawyer", "trademark attorney", "patent attorney", "private wealth", "trusts and estates", "wills and probate", "class action", "group litigation", "tax law", "white-collar defence", "sports law", "entertainment law", "notary", "costs lawyer", "no win no fee", "legal aid", "housing law"],
+      "keywords": ["law firm", "law firms", "solicitor", "solicitors", "barrister", "barristers", "barristers chambers", "chambers", "lawyer", "lawyers", "attorney", "advocate", "legal", "legal services", "dispute resolution", "arbitration", "litigation", "conveyancing", "conveyancer", "family law", "divorce lawyer", "immigration solicitor", "immigration lawyer", "criminal defence", "personal injury", "clinical negligence", "medical negligence", "commercial law", "corporate law", "employment law", "ip lawyer", "trademark attorney", "patent attorney", "private wealth", "trusts and estates", "wills and probate", "class action", "group litigation", "tax law", "white-collar defence", "sports law", "entertainment law", "notary", "costs lawyer", "no win no fee", "legal aid", "housing law"],
       "sic_codes": ["69101", "69102", "69109", "69201"],
       "subsectors": [
         { "code": "LS-01", "name": "SRA-regulated family & divorce firm, 3–8 partners, multi-location England & Wales", "regulator": "SRA", "pricing_tier": "Authority" },
@@ -108,7 +108,7 @@
       "priority_rank": 4,
       "is_priority": true,
       "regulators": ["GDC", "ASA", "CQC", "FTC", "DHA", "State Dental Board"],
-      "keywords": ["dental", "dentist", "dental practice", "dental clinic", "private dentist", "dental implant", "implant dentist", "cosmetic dentistry", "veneers", "orthodontics", "clear aligner", "invisalign", "paediatric dentist", "emergency dentist", "same-day dental", "sedation dentistry", "periodontics", "endodontics", "smile makeover", "full arch", "mobile dentist", "domiciliary dental", "dental dso", "dental group", "holistic dentist", "mercury-free dental", "dental implant training", "dental tourism"],
+      "keywords": ["dental", "dentist", "dental practice", "dental clinic", "private dentist", "dental implant", "implant dentist", "cosmetic dentistry", "cosmetic dentist", "veneers", "orthodontics", "clear aligner", "invisalign", "paediatric dentist", "emergency dentist", "same-day dental", "sedation dentistry", "periodontics", "endodontics", "smile makeover", "full arch", "mobile dentist", "domiciliary dental", "dental dso", "dental group", "holistic dentist", "mercury-free dental", "dental implant training", "dental tourism"],
       "sic_codes": ["86230"],
       "subsectors": [
         { "code": "DN-01", "name": "Single private dental practice, UK", "regulator": "GDC/ASA", "pricing_tier": "Foundation" },
@@ -263,7 +263,7 @@
       "priority_rank": 9,
       "is_priority": true,
       "regulators": ["ASA", "UKVI", "Ofsted", "ESFA", "KHDA", "ISI", "DfE", "ADA"],
-      "keywords": ["private school", "independent school", "school group", "university", "sixth form", "college", "edtech", "online learning", "online course", "professional certification", "tutoring", "supplementary education", "language school", "esol", "boarding school", "nursery", "early years", "business school", "mba", "vocational training", "apprenticeship", "international school", "k-12", "prep school", "coding bootcamp", "skills academy", "pathway college", "foundation college", "executive education", "corporate training", "special educational needs", "sen school", "study abroad", "student recruitment", "education provider"],
+      "keywords": ["private school", "independent school", "school group", "university", "sixth form", "college", "edtech", "online learning", "online course", "professional certification", "tutoring", "tutor", "private tutor", "tuition", "supplementary education", "language school", "esol", "boarding school", "nursery", "early years", "business school", "mba", "vocational training", "apprenticeship", "international school", "k-12", "prep school", "coding bootcamp", "skills academy", "pathway college", "foundation college", "executive education", "corporate training", "special educational needs", "sen school", "study abroad", "student recruitment", "education provider"],
       "sic_codes": ["85100", "85200", "85310", "85320", "85410", "85421", "85422", "85590", "85600"],
       "subsectors": [
         { "code": "ED-01", "name": "Independent / private school, single site, UK", "regulator": "ASA", "pricing_tier": "Foundation" },

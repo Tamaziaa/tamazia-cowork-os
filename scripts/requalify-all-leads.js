@@ -27,7 +27,7 @@ const num = v => (v == null || v === '' || Number.isNaN(Number(v))) ? 'NULL' : N
 const RESCORE_STAGES = "('sourced','enriched','verified','qualified','pending_approval','rejected','parked')";
 
 // V3 re-run stamp (idempotency). Bump to force a fresh full pass.
-const REQUAL_VERSION = process.env.REQUAL_VERSION || 'v3-2026-06-13';
+const REQUAL_VERSION = process.env.REQUAL_VERSION || 'v3-2026-06-13-gapfix';  // bumped: 50-gap fixes (classifier text, ||->max, gTLD/alias gates, reachable contacts)
 // Self-healing: a transient fetch/score failure must NEVER demote a good lead (QA mandate + V3 §M).
 async function scoreWithRetry(lead, n = 2) {
   let lastErr;

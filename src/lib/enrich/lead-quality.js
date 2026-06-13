@@ -23,7 +23,7 @@ const COMPLIANCE_MIN = Number(process.env.COMPLIANCE_MIN || (STRICT ? 2 : 2));  
 const SEO_MIN = Number(process.env.SEO_MIN || (STRICT ? 3 : 3));                 // SEO gaps for a visibility gap
 const DM_CONF_MIN = Number(process.env.DM_CONF_MIN || 75);                       // decision-maker email confidence for Tier-1
 // V3 tier thresholds (env-tunable). TIER1_MIN = total_score floor for Tier 1; BAR_MIN = floor for Tier 2.
-const TIER1_MIN = Number(process.env.TIER1_MIN || 70);
+const TIER1_MIN = Number(process.env.TIER1_MIN || 62);   // gap-fix: a regulated firm with no ads tops ~69; 70 was unreachable
 const BAR_MIN = Number(process.env.BAR_MIN || 45);
 
 // Sector truth comes from sourcing/icp.js (single source). SERVED = any of the 8 launch verticals (buyer floor,
@@ -63,7 +63,13 @@ const _dns = require('dns').promises;
 const _mxCache = {};
 async function _hasMX(domain) {
   if (domain in _mxCache) return _mxCache[domain];
-  let ok = false; try { const r = await _dns.resolveMx(domain); ok = Array.isArray(r) && r.length > 0; } catch (_e) { ok = false; }
+  let ok = false;
+  for (let attempt = 0; attempt < 2 && !ok; attempt++) {   // gap-fix: retry once — a transient DNS miss must not permanently kill a real brand as no_mx
+    try { const r = await _dns.resolveMx(domain); ok = Array.isArray(r) && r.length > 0; } catch (_e) { ok = false; }
+  }
+  if (!ok) {                                               // gap-fix: A-record fallback — a domain that resolves accepts mail via implicit MX (RFC 5321)
+    try { const a = await _dns.resolve(domain); ok = Array.isArray(a) && a.length > 0; } catch (_e) {}
+  }
   return (_mxCache[domain] = ok);
 }
 const _DISPOSABLE = new Set(['mailinator.com','guerrillamail.com','10minutemail.com','tempmail.com','yopmail.com','trashmail.com','sharklasers.com','guerrillamailblock.com','temp-mail.org','dispostable.com','getnada.com','maildrop.cc']);
@@ -93,6 +99,23 @@ async function fetchSite(domain) {
     try { const r = await fetchWithRetry(`https://${domain}${p}`, { headers: H, timeout: 9000, retries: 0 }); if (r.ok && r.body) return r.body; } catch (_e) {}
   }
   return '';
+}
+
+// gap-fix: extract VISIBLE page text (drop script/style/markup) so the sector classifier matches real copy
+// ("dispute resolution", "med spa", "endodontics") instead of being starved on the bare company name.
+// Also surfaces <title>/meta/og text for thin (SPA) pages. Capped so a huge page can't blow up the match.
+function visibleText(html) {
+  if (!html) return '';
+  let meta = '';
+  const t = html.match(/<title[^>]*>([^<]{2,200})<\/title>/i); if (t) meta += ' ' + t[1];
+  for (const m of html.matchAll(/<meta[^>]+(?:name|property)=["'](?:description|og:title|og:site_name|og:description|application-name)["'][^>]+content=["']([^"']{2,300})["']/gi)) meta += ' ' + m[1];
+  const body = String(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&[a-z#0-9]+;/gi, ' ');
+  return (meta + ' ' + body).replace(/\s+/g, ' ').slice(0, 24000);
 }
 
 // ---- V3 SECTOR CLASSIFIER (generous; ambiguity => 'weak', never reject) ----
@@ -132,7 +155,7 @@ function classifySectorV3(lead) {
     for (const tok of ss.name_lc.split(/[^a-z0-9+&]+/).filter((w) => w.length >= 4)) { if (text.includes(tok)) h++; }
     if (h > subHits) { subHits = h; subBest = ss; }
   }
-  const sub_sector_code = (subBest && subBest.code) || (best.subsectors[0] && best.subsectors[0].code) || null;
+  const sub_sector_code = (subHits > 0 && subBest && subBest.code) ? subBest.code : null; // gap-fix: no misleading default sub-sector when nothing matched
 
   // Confidence band. Two signals agree = hint code matches the keyword winner.
   const hintAgrees = !!(hintCode && best.code === hintCode);
@@ -178,7 +201,7 @@ async function scoreLead(lead) {
 
   // Layer 3 — DECISION-MAKER CONTACT (named email) — now the strongest conversion predictor (16 pts)
   const primaryEmail = lead.primary_email || lead.contact_email || '';
-  const dmConf = Number(lead.decision_maker_confidence || lead.contact_confidence || 0);
+  const dmConf = Math.max(Number(lead.decision_maker_confidence || 0), Number(lead.contact_confidence || 0)); // gap-fix: `||` let a low decision_maker_confidence shadow a higher contact_confidence
   const { isVerifiedStatus } = require('./verify-status.js');
   const dmEmailVerified = truthy(lead.email_verified) || isVerifiedStatus(lead.verify_status);
   const hasNamed = !!(primaryEmail && /@/.test(primaryEmail)) && dmConf >= 60;
@@ -245,9 +268,12 @@ async function scoreLead(lead) {
   try { if (dmAny) dmGate = await emailGate(primaryEmail, domain); } catch (_e) {}
   const cleanNamedDM = dmGate.clean && !dmGate.role;                       // real person @ own domain, MX live -> SENDABLE
   const cleanRoleDM = dmGate.clean && dmGate.role;                        // info@owndomain, MX live -> Tier-2
+  // gap-fix: a genuine served firm whose ONLY contact is a free mailbox (practice@gmail.com) is still reachable
+  // -> Tier-2 eligible, not "unreachable" forever. We still never treat it as an own-domain cleanNamedDM.
+  const freeProviderDM = dmAny && dmGate.reason === 'free_provider' && servedSector;
   // Confirmed-bad safety net (only ever DEMOTES): enrichment/Apify said the address is definitively undeliverable.
   const confirmedBad = /^(invalid|bad|undeliverable|no_mx|disposable|invalid_syntax|nxdomain)$/i.test(String(lead.verify_status || ''));
-  const reachable = cleanNamedDM || cleanRoleDM || hasSocial;
+  const reachable = cleanNamedDM || cleanRoleDM || hasSocial || freeProviderDM;
 
   // A fixable gap = ANY real problem the audit can hook on: a missing compliance doc, OR a missing SEO element,
   // OR not being cited by AI search. (seriousGaps/visibilityGap stay as PRIORITY signals, not gates.)
@@ -259,11 +285,16 @@ async function scoreLead(lead) {
   // ---- V3 4-COMPONENT MODEL + CANONICAL-GRID CLASSIFICATION (additive; reuses the layer detections above) ----
   // ============================================================================================
   // 1) Classify against the canonical grid (company name + website_intel + sector hint).
-  const cls = classifySectorV3(lead);
+  // gap-fix: feed the fetched page's visible text into the classifier (website_intel is empty for ~99.9% of leads).
+  const _clsText = (lead.website_intel && String(lead.website_intel).trim()) ? lead.website_intel : visibleText(html);
+  const cls = classifySectorV3({ ...lead, website_intel: _clsText });
   const sector_code = cls.sector_code;
   const sub_sector_code = cls.sub_sector_code;
   const sector_confidence = cls.sector_confidence;
-  const matched = sector_code ? GRID_INDEX.find((s) => s.code === sector_code) : null;
+  // gap-fix: when the classifier can't place a sector (thin/SPA site), fall back to the legacy hint code so a clearly
+  // priority lead (e.g. sector='healthcare') is tiered on its sector, not forced to Tier 3 as "unclassified".
+  const _hintCode = HINT_TO_CODE[normSector(lead.sector)] || HINT_TO_CODE[String(lead.sector || '').toLowerCase().trim()] || null;
+  const matched = (sector_code ? GRID_INDEX.find((s) => s.code === sector_code) : null) || (_hintCode ? GRID_INDEX.find((s) => s.code === _hintCode) : null);
   const isPrioritySector = !!(matched && matched.is_priority);
   const sectorRegulated = !!(matched && matched.has_regulators); // "regulated" need-signal = matched sector has regulators[]
 
@@ -272,14 +303,15 @@ async function scoreLead(lead) {
 
   // 2b) NEED SIGNAL (additive, cap 35) — REUSE the detections already computed above; do not re-detect.
   //     regulated 12 (matched sector has regulators) | hiring 10 | ads 8 | seo_gap 8 | compliance_gap 5 | multi_location 2.
-  const hiringSignal = truthy(lead.hiring_signal) || truthy(lead.is_hiring) || truthy(lead.jobs_found) || (Number(lead.job_count || 0) > 0);
-  const multiLocation = truthy(lead.multi_location) || (Number(lead.location_count || 0) > 1) || (asArr(lead.locations).length > 1);
+  const hiringSignal = truthy(lead.sig_hiring) || truthy(lead.hiring_signal) || truthy(lead.is_hiring) || truthy(lead.jobs_found) || (Number(lead.job_count || 0) > 0);
+  const multiLocation = truthy(lead.sig_multi_location) || truthy(lead.multi_location) || (Number(lead.location_count || 0) > 1) || (asArr(lead.locations).length > 1);
   let need_signal_score = 0;
   if (sectorRegulated) need_signal_score += 12;        // regulated (structural compliance liability)
   if (hiringSignal) need_signal_score += 10;            // actively hiring = growth/intent
   if (adRunner) need_signal_score += 8;                 // ad/pixel signal (Layer 5) — booster
   if (seoGapCount >= 1) need_signal_score += 8;         // any SEO gap (Layer 9)
-  if (complianceGapCount >= 1) need_signal_score += 5;  // any compliance gap (Layer 8)
+  if (complianceGapCount >= 1) need_signal_score += 8;  // any compliance gap (Layer 8) — core product, weight >= SEO (gap-fix)
+  if (complianceGapCount >= 2) need_signal_score += 2;  // 2+ gaps = serious compliance need (gap-fix)
   if (multiLocation) need_signal_score += 2;            // multi-site = bigger, multi-jurisdiction need
   need_signal_score = Math.min(35, need_signal_score);
 
@@ -293,7 +325,7 @@ async function scoreLead(lead) {
   const smtpVerifiedPersonal = cleanNamedDM && dmEmailVerified;                                // personal email + SMTP/verify-status confirmed
   const hasLinkedin = !!(socials && socials.linkedin) || /linkedin\.com\/(company|in)\//i.test(html);
   const isCatchAll = /catch[\s_-]?all/i.test(String(lead.verify_status || ''));
-  const inferredEmail = cleanNamedDM && !dmEmailVerified && !isCatchAll;                        // clean personal email, not yet verified
+  const inferredEmail = cleanNamedDM && !dmEmailVerified;                        // gap-fix: catch-all domains DO accept mail; keep the inferred-email credit
   let contact_quality_score = 0;
   if (namedDMRole) contact_quality_score += 8;                      // named decision-maker matching the role set
   if (smtpVerifiedPersonal) contact_quality_score += 8;            // SMTP/verify-confirmed personal email
@@ -324,13 +356,17 @@ async function scoreLead(lead) {
   //    Tier 2 = priority sector AND (total>=BAR_MIN  OR  named+linkedin with unverified/generic email).
   //    Tier 3 = everything else.
   const namedAndLinkedin = (namedDMRole || cleanNamedDM) && hasLinkedin;
-  const tier1Contact = namedDMRole && hasLinkedin && smtpVerifiedPersonal && !confirmedBad;
-  const tier2Contact = (namedAndLinkedin && (inferredEmail || cleanRoleDM)) || cleanNamedDM || cleanRoleDM; // named+linkedin w/ unverified/generic email, or any usable contact
+  // gap-fix: most corporate domains BLOCK SMTP probes, so requiring smtpVerifiedPersonal made Tier-1 near-empty.
+  // A clean named DM (own domain, live MX) + LinkedIn at a REGULATED + ESTABLISHED firm is a legitimate auto-send target.
+  const tier1Contact = (namedDMRole || cleanNamedDM) && hasLinkedin && !confirmedBad
+    && (smtpVerifiedPersonal || (cleanNamedDM && sectorRegulated && established));
+  // gap-fix: any usable contact (named, generic info@, free-provider at a served firm, catch-all) keeps a lead alive at Tier-2.
+  const tier2Contact = (namedAndLinkedin && (inferredEmail || cleanRoleDM)) || cleanNamedDM || cleanRoleDM || freeProviderDM;
   let tier, tier_reason;
   if (isPrioritySector && total_score >= TIER1_MIN && tier1Contact) {
-    tier = 1; tier_reason = 'priority_sector_score>=' + TIER1_MIN + '_named_linkedin_verified';
-  } else if (isPrioritySector && (total_score >= BAR_MIN || (namedAndLinkedin && (inferredEmail || cleanRoleDM)))) {
-    tier = 2; tier_reason = total_score >= BAR_MIN ? ('priority_sector_score>=' + BAR_MIN) : 'priority_sector_named_linkedin_unverified';
+    tier = 1; tier_reason = 'priority_sector_score>=' + TIER1_MIN + '_named_linkedin_reachable';
+  } else if (isPrioritySector && (total_score >= BAR_MIN || (namedAndLinkedin && (inferredEmail || cleanRoleDM)) || tier2Contact)) {
+    tier = 2; tier_reason = total_score >= BAR_MIN ? ('priority_sector_score>=' + BAR_MIN) : 'priority_sector_usable_contact';
   } else {
     tier = 3;
     tier_reason = !isPrioritySector ? (sector_code ? 'non_priority_sector_' + sector_code : 'unclassified_sector')

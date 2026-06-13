@@ -10,11 +10,18 @@ const ROOT = path.resolve(__dirname, '..', '..', '..');
 function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); }
 const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
 
-// Modifiers multiply each base type → wide unique coverage
-const MODIFIERS = ['', 'best', 'luxury', 'top', 'premium', 'private', 'leading', 'award winning', 'high end', 'exclusive'];
+// Modifiers multiply each base type → wide unique coverage.
+// Mix of luxury (kept) + neutral/volume terms so the bank also surfaces the ~40% Foundation-tier ICPs
+// (independent, single-location, volume, legal-aid) that the luxury-only skew was under-sourcing.
+// '' is the no-modifier option (bare "<type> <city>"). 'near me' adds local-intent volume coverage.
+const MODIFIERS = ['', 'best', 'luxury', 'top', 'premium', 'private', 'leading', 'award winning', 'high end', 'exclusive',
+  'independent', 'local', 'family-run', 'specialist', 'near me'];
 const INTENT = ['', 'near me', 'prices', 'booking', 'reviews', 'consultation'];
 
-// Base types per sector (kept in sync with serp-engine SECTORS, expanded)
+// Base types per sector (kept in sync with serp-engine SECTORS, expanded).
+// First 10 = original legacy sectors (kept verbatim). Block below = first-class banks for the
+// canonical sectors that were previously never queried; types are drawn from each sector's
+// keywords[]/subsectors[] in config/sector-grid.json so the bank generates real self-descriptions.
 const TYPES = {
   hospitality: ['hotel', 'boutique hotel', 'restaurant', 'fine dining', 'members club', 'event venue', 'rooftop bar', 'wedding venue'],
   healthcare: ['private clinic', 'aesthetics clinic', 'cosmetic surgery', 'dental practice', 'fertility clinic', 'dermatology clinic', 'IV therapy clinic', 'physiotherapy clinic'],
@@ -25,10 +32,24 @@ const TYPES = {
   'beauty-wellness': ['luxury spa', 'wellness retreat', 'medical spa', 'hair salon', 'fitness studio', 'pilates studio', 'cryotherapy', 'beauty clinic'],
   automotive: ['car dealership', 'classic car dealer', 'car leasing', 'supercar hire', 'prestige cars', 'EV dealership', 'car detailing', 'used car dealer'],
   education: ['private school', 'tutoring company', 'international school', 'business school', 'language school', 'nursery', 'online course provider', 'sixth form college'],
-  'professional-services': ['accountancy firm', 'management consultancy', 'architecture practice', 'PR agency', 'recruitment agency', 'marketing agency', 'design studio', 'IT consultancy']
+  'professional-services': ['accountancy firm', 'management consultancy', 'architecture practice', 'PR agency', 'recruitment agency', 'marketing agency', 'design studio', 'IT consultancy'],
+  // ---- newly first-class canonical sectors ----
+  dental: ['dental practice', 'dentist', 'cosmetic dentist', 'dental implant clinic', 'orthodontist', 'invisalign provider', 'private dentist', 'paediatric dentist'],
+  aesthetics: ['aesthetic clinic', 'med spa', 'botox clinic', 'injectables clinic', 'cosmetic clinic', 'dermatology clinic', 'hair transplant clinic', 'skin clinic'],
+  restaurants: ['restaurant', 'fine dining restaurant', 'restaurant group', 'gastropub', 'cocktail bar', 'wine bar', 'brasserie', 'steakhouse'],
+  crypto: ['crypto exchange', 'digital asset exchange', 'crypto custody provider', 'web3 company', 'blockchain company', 'crypto wallet', 'defi platform', 'crypto fund'],
+  insurance: ['insurance broker', 'commercial insurance broker', 'health insurance broker', 'life insurance adviser', 'protection adviser', 'professional indemnity broker', 'pet insurance provider', 'insurtech company'],
+  supplements: ['supplement brand', 'vitamins brand', 'sports nutrition brand', 'protein brand', 'cbd brand', 'nootropics brand', 'probiotics brand', 'functional foods brand'],
+  veterinary: ['veterinary practice', 'vet clinic', 'veterinary group', 'veterinary hospital', 'emergency vet', 'equine vet', 'veterinary specialist', 'mobile vet'],
+  travel: ['tour operator', 'luxury travel agency', 'travel agency', 'cruise specialist', 'destination management company', 'safari operator', 'honeymoon specialist', 'private jet charter'],
+  energy: ['solar installer', 'heat pump installer', 'renewable energy company', 'ev charging provider', 'battery storage company', 'home insulation company', 'commercial solar developer', 'green energy supplier'],
+  'personal-brand': ['personal brand', 'executive brand', 'thought leader', 'keynote speaker', 'public figure', 'author speaker', 'startup founder', 'reputation management']
 };
+// [city, country]; country names map to gl codes in serp-client (UK/UAE/USA/France/Spain/Germany
+// known; others fail-open to 'gb'). EU cities added so the served EU region is actually queried.
 const GEOS = [['London', 'UK'], ['Manchester', 'UK'], ['Birmingham', 'UK'], ['Edinburgh', 'UK'], ['Leeds', 'UK'], ['Bristol', 'UK'],
-  ['Dubai', 'UAE'], ['Abu Dhabi', 'UAE'], ['New York', 'USA'], ['Los Angeles', 'USA'], ['Miami', 'USA'], ['Chicago', 'USA']];
+  ['Dubai', 'UAE'], ['Abu Dhabi', 'UAE'], ['New York', 'USA'], ['Los Angeles', 'USA'], ['Miami', 'USA'], ['Chicago', 'USA'],
+  ['Paris', 'France'], ['Madrid', 'Spain'], ['Barcelona', 'Spain'], ['Berlin', 'Germany'], ['Munich', 'Germany'], ['Frankfurt', 'Germany'], ['Amsterdam', 'Netherlands'], ['Dublin', 'Ireland'], ['Milan', 'Italy'], ['Rome', 'Italy'], ['Brussels', 'Belgium'], ['Lisbon', 'Portugal'], ['Stockholm', 'Sweden'], ['Copenhagen', 'Denmark'], ['Vienna', 'Austria']];
 
 /** Full unique query bank for a sector (modifier × type × geo × intent, deduped). */
 function generateBank(sector) {
