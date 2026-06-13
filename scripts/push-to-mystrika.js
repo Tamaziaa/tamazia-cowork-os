@@ -8,7 +8,9 @@ const path = require('path');
 const M = require(path.resolve(__dirname, '..', 'src', 'lib', 'mystrika', 'client.js'));
 const { conversionScore, SEND_TIERS } = require(path.resolve(__dirname, '..', 'src', 'lib', 'sourcing', 'conversion.js'));
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
-function pg(sql){ return execFileSync(path.join(__dirname,'psql'),[NEON,'-tA','-c',sql],{encoding:'utf8'}); }
+// maxBuffer: the push SELECT base64-encodes up to 5 rendered email bodies (t0s/t0b/t1b/t2b/t3b) per lead ×
+// LIMIT (default 200) — multi-MB of output that overflows Node's 1MB execFileSync default and throws ENOBUFS.
+function pg(sql){ return execFileSync(path.join(__dirname,'psql'),[NEON,'-tA','-c',sql],{encoding:'utf8',maxBuffer:128*1024*1024}); }
 const b64d = (s)=>{ try { return Buffer.from(String(s||''),'base64').toString('utf8'); } catch(_){ return ''; } };
 const arg = (n,d)=>{ const i=process.argv.indexOf('--'+n); return i>=0?process.argv[i+1]:d; };
 const DRY = process.argv.includes('--dry');

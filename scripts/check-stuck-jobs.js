@@ -28,7 +28,9 @@ const CADENCE = {
   'daily-digest': 1440,
   'neon-guard': 1440,
   'nightly-workers': 1440,
-  'backlog-burst': 1440,
+  // NOTE: backlog-burst, v3-rerun, remint-audits, source-leads are workflow_dispatch-only (no cron), so they have
+  // no cadence to be "stuck" against — including them here fires false amber/red + Telegram a couple of days after
+  // any manual run. Only schedule-backed jobs belong in this map.
   'enforcement-news': 10080,
   'eval-audit': 10080,
 };
