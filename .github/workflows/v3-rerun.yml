@@ -1,0 +1,70 @@
+# V3 re-run · re-tier ALL existing leads through the V3 model: fix the company names, classify to the
+# canonical 20x20 sector grid, score the 4-component model, and put every lead in Tier 1 / 2 / 3
+# (Tier 3 = catch-all). NO SENDING — send-due.js is deliberately absent (defence in depth on paused=true).
+#
+#   Phase 0  additive V3 schema (idempotent, ADD COLUMN IF NOT EXISTS only)
+#   Phase 1  pure-Neon name normalisation (free, no network — fixes ~half the junk names instantly)
+#   Phase 3  re-tier loop (requalify-all-leads.js, guard-fixed: protects in-flight/Tier-1, snapshots, retries)
+# Phase 2 (the site-fetch waterfall for the remaining descriptive-title names) runs inside requalify, where
+#   scoreLead already re-fetches each homepage; those names land name_status='unverified' and are
+#   suppressed in outreach copy until resolved (never wrong, just generic).
+name: V3 re-run (re-tier all leads, no-send)
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch:
+        description: 'leads per requalify pass'
+        default: '500'
+      passes:
+        description: 'requalify passes (7679/500 ~= 16 for full coverage; idempotent so over-running is safe)'
+        default: '16'
+
+concurrency:
+  group: engine-db-work          # serialise with the engine cycle / backlog-burst so queue_rank never corrupts
+  cancel-in-progress: false
+
+jobs:
+  rerun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm install --omit=dev || npm install || true
+      - name: Python deps (pg8000 shim)
+        run: python -m pip install --quiet -r requirements.txt
+      - name: Materialise .env from secret
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Phase 0 - additive V3 schema (idempotent)
+        run: |
+          set -a; source .env; set +a
+          node scripts/ensure-schema.js || true
+          node scripts/v3/migrate-v3-schema.js
+      - name: Phase 1 - pure-Neon name normalisation (free, no network)
+        run: |
+          set -a; source .env; set +a
+          node scripts/v3/normalise-names.js 99999
+      - name: Phase 3 - re-tier all leads to 1/2/3 + canonical sectors (no-send)
+        run: |
+          set -a; source .env; set +a
+          for i in $(seq 1 ${{ inputs.passes }}); do
+            echo "=== requalify pass $i / ${{ inputs.passes }} ==="
+            node scripts/requalify-all-leads.js ${{ inputs.batch }} || true
+          done
+      - name: Funnel summary (tiers + canonical sectors + names)
+        run: |
+          set -a; source .env; set +a
+          node -e '
+            const q = async (sql) => { const host = process.env.NEON_URL.replace(/.*@([^/]+)\/.*/, "$1");
+              const r = await fetch("https://"+host+"/sql",{method:"POST",headers:{"Neon-Connection-String":process.env.NEON_URL,"Content-Type":"application/json"},body:JSON.stringify({query:sql,params:[]})}); return (await r.json()).rows||[]; };
+            (async()=>{
+              console.log("tiers:", JSON.stringify(await q("SELECT icp_tier, count(*)::int n FROM leads GROUP BY 1 ORDER BY 1")));
+              console.log("canonical sectors:", JSON.stringify(await q("SELECT sector_code, count(*)::int n FROM leads WHERE sector_code IS NOT NULL GROUP BY 1 ORDER BY 2 DESC")));
+              console.log("name_status:", JSON.stringify(await q("SELECT name_status, count(*)::int n FROM leads GROUP BY 1")));
+              console.log("requal coverage:", JSON.stringify(await q("SELECT (requal_version IS NOT NULL) done, count(*)::int n FROM leads GROUP BY 1")));
+            })().catch(e=>console.error(e.message));
+          '
