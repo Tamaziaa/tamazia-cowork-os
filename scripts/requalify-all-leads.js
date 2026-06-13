@@ -56,10 +56,17 @@ async function scoreWithRetry(lead, n = 2) {
   const leads = raw.split('\n').filter(Boolean).map(j => { try { return JSON.parse(j); } catch (_e) { return null; } }).filter(Boolean);
 
   let t1 = 0, t2 = 0, t3 = 0, moved = 0, skipped = 0;
-  for (const lead of leads) {
-    let q;
-    try { q = await scoreWithRetry(lead); }
-    catch (e) { console.log(`  ${lead.domain} score err (KEPT as-is, not demoted): ${e.message}`); skipped++; continue; }
+  // Parallelise the slow part (scoreWithRetry fetches each homepage) in small chunks; keep the per-row writes
+  // SEQUENTIAL so the snapshot + UPDATE + transient-safe logic stays exactly as before. ~CONCURRENCY x faster,
+  // so the whole backlog re-tiers inside one CI job instead of timing out.
+  const CONCURRENCY = Number(process.env.REQUAL_CONCURRENCY || 8);
+  for (let _i = 0; _i < leads.length; _i += CONCURRENCY) {
+    const _scored = await Promise.all(leads.slice(_i, _i + CONCURRENCY).map(async (lead) => {
+      try { return { lead, q: await scoreWithRetry(lead) }; }
+      catch (e) { return { lead, err: e }; }
+    }));
+    for (const { lead, q, err } of _scored) {
+    if (err) { console.log(`  ${lead.domain} score err (KEPT as-is, not demoted): ${err.message}`); skipped++; continue; }
     // Transient-safe (QA BUG-2/3): an empty/failed homepage scan returns score 0 with no throw, which would
     // collapse a good lead to Tier 3. If the scan was weak/unreachable, never re-tier a previously-good lead —
     // leave it untouched for the next pass (idempotent) rather than mis-tier it on a blip.
@@ -87,6 +94,7 @@ async function scoreWithRetry(lead, n = 2) {
     if (before !== stage) moved++;
     if (tier === 1) t1++; else if (tier === 2) t2++; else t3++;
     console.log(`  ${String(lead.domain || '').padEnd(30)} ${before.padEnd(16)} -> ${stage.padEnd(16)} score=${q.score} tier=${tier} (${q.tier_reason || ''})`);
+    }
   }
   console.log(`[requalify ${REQUAL_VERSION}] re-scored ${t1 + t2 + t3} · Tier1 ${t1} · Tier2 ${t2} · Tier3 ${t3} · ${moved} changed · ${skipped} skipped(transient, kept as-is)`);
 })().catch(e => { console.error('[requalify] FATAL', e.message); process.exit(1); });
