@@ -19,7 +19,7 @@ const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 (() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
 const { scoreLead } = require(path.join(ROOT, 'src', 'lib', 'enrich', 'lead-quality.js'));
-function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); }
+function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).toString().trim(); }  // bug-fix: a 500-lead to_jsonb SELECT blew Node's default 1MB execFileSync buffer -> ENOBUFS -> every pass died silently
 const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
 const num = v => (v == null || v === '' || Number.isNaN(Number(v))) ? 'NULL' : Number(v);  // NULL-safe numeric for the V3 score columns
 
