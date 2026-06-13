@@ -23,7 +23,10 @@ const fs = require('fs');
 const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 (() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
-function pg(sql) { try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString(); } catch (e) { return ''; } }
+// maxBuffer: the export SELECT pulls up to 5 rendered email bodies per lead × LIMIT (default 1000) — many MB
+// of output. Without maxBuffer it overflows Node's 1MB default, the catch swallows the ENOBUFS, and the export
+// silently returns '' ("0 leads to export") instead of the real list. 128MB makes the pull output-safe.
+function pg(sql) { try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 }).toString(); } catch (e) { return ''; } }
 function csv(v) { const s = v == null ? '' : String(v); return '"' + s.replace(/"/g, '""') + '"'; }
 let _nd = (x) => x; try { _nd = require(path.resolve(__dirname, '..', 'src', 'lib', 'gates.js')).noDashes; } catch (_) {}
 function _pos(k) { return k && k.my_position ? '#' + k.my_position : 'outside the top 100'; }
