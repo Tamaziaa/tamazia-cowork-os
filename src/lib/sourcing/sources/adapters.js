@@ -15,7 +15,10 @@ async function getJSON(u,o,ms){try{const r=await timed(s=>fetch(u,{...o,signal:s
 function rootDomain(u){try{return new URL(u.startsWith('http')?u:'https://'+u).hostname.replace(/^www\./,'');}catch{return '';}}
 let _serpClient=null; try { _serpClient=require('../../scraping/serp-client.js'); } catch(_e){}
 const SECTOR_TERMS = ['law firm','solicitors','dental clinic','aesthetic clinic','private clinic','estate agents','property developer','luxury hotel','fine dining','wealth management','financial advisers','accountants','cosmetic surgery'];
-const GEOS = [['London','UK'],['Manchester','UK'],['Edinburgh','UK'],['Dubai','UAE'],['Abu Dhabi','UAE'],['New York','USA'],['Miami','USA'],['Madrid','Spain'],['Paris','France']];
+// [city, country]; country names map to gl codes in serp-client (unmapped fail-open to 'gb').
+// Expanded EU coverage so the served EU region is actually sourced (was ~0.7% of leads).
+const GEOS = [['London','UK'],['Manchester','UK'],['Edinburgh','UK'],['Dubai','UAE'],['Abu Dhabi','UAE'],['New York','USA'],['Miami','USA'],
+  ['Paris','France'],['Madrid','Spain'],['Barcelona','Spain'],['Berlin','Germany'],['Munich','Germany'],['Frankfurt','Germany'],['Amsterdam','Netherlands'],['Dublin','Ireland'],['Milan','Italy'],['Rome','Italy'],['Brussels','Belgium'],['Lisbon','Portugal'],['Stockholm','Sweden'],['Copenhagen','Denmark'],['Vienna','Austria']];
 
 // ---------- SERP top-results (strengthened "top 100") · SERPER, live ----------
 const serp_top = {
