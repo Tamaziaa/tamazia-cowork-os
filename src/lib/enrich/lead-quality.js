@@ -22,6 +22,9 @@ const STRICT = /^(1|true|yes|on)$/i.test(process.env.ICP_STRICT || '');
 const COMPLIANCE_MIN = Number(process.env.COMPLIANCE_MIN || (STRICT ? 2 : 2));   // compliance gaps for "serious"
 const SEO_MIN = Number(process.env.SEO_MIN || (STRICT ? 3 : 3));                 // SEO gaps for a visibility gap
 const DM_CONF_MIN = Number(process.env.DM_CONF_MIN || 75);                       // decision-maker email confidence for Tier-1
+// V3 tier thresholds (env-tunable). TIER1_MIN = total_score floor for Tier 1; BAR_MIN = floor for Tier 2.
+const TIER1_MIN = Number(process.env.TIER1_MIN || 70);
+const BAR_MIN = Number(process.env.BAR_MIN || 45);
 
 // Sector truth comes from sourcing/icp.js (single source). SERVED = any of the 8 launch verticals (buyer floor,
 // Tier-2-eligible). REGULATED = the subset with a structural compliance liability (Tier-1 core; law/health/
@@ -33,6 +36,23 @@ const REGULATED = new Set(Object.entries(SECTORS).filter(([, v]) => v.regulated)
 const ALIAS = { legal: 'law-firms', lawfirm: 'law-firms', 'law firm': 'law-firms', 'financial-services': 'financial', finance: 'financial', insurance: 'financial', fintech: 'financial', wealth: 'financial', accounting: 'financial', 'beauty-wellness': 'healthcare', dental: 'healthcare', medical: 'healthcare', clinic: 'healthcare', restaurants: 'hospitality', 'f&b': 'hospitality', food: 'hospitality', 'real estate': 'real-estate', realestate: 'real-estate', property: 'real-estate' };
 const normSector = (s) => { s = String(s || '').toLowerCase().trim(); return ALIAS[s] || s; };
 const { isAggregator } = require('../scraping/serp-engine.js'); // domain-boundary matched (no substring bug)
+
+// ---- V3 CANONICAL SECTOR GRID (single source of taxonomy truth) ----
+// Loaded ONCE at module init. 20 sectors (codes LS..PX); ranks 1-10 is_priority=true. Each sector carries
+// keywords[] (generous, for the classifier), regulators[] (drives the "regulated" need signal), and 20 subsectors.
+// The classifier scores each sector by keyword hits across the lead's resolved text and picks the best.
+const SECTOR_GRID = require('../../../config/sector-grid.json');
+const GRID_SECTORS = (SECTOR_GRID && Array.isArray(SECTOR_GRID.sectors)) ? SECTOR_GRID.sectors : [];
+// Pre-lowercase keywords once; sort longest-first so multi-word phrases ("law firm") match before fragments.
+const GRID_INDEX = GRID_SECTORS.map((s) => ({
+  code: s.code,
+  is_priority: !!s.is_priority,
+  has_regulators: Array.isArray(s.regulators) && s.regulators.length > 0,
+  keywords: (Array.isArray(s.keywords) ? s.keywords : []).map((k) => String(k).toLowerCase()).filter(Boolean).sort((a, b) => b.length - a.length),
+  subsectors: (Array.isArray(s.subsectors) ? s.subsectors : []).map((ss) => ({ code: ss.code, name_lc: String(ss.name || '').toLowerCase(), name: ss.name })),
+}));
+// Map the legacy 8-sector hint (icp.js keys + ALIAS canon) onto a canonical grid code, so lead.sector adds a signal.
+const HINT_TO_CODE = { 'law-firms': 'LS', legal: 'LS', healthcare: 'HC', dental: 'DN', medical: 'HC', clinic: 'HC', aesthetic: 'AE', aesthetics: 'AE', cosmetic: 'AE', financial: 'FS', finance: 'FS', insurance: 'IN', 'real-estate': 'RE', property: 'RE', hospitality: 'HO', hotel: 'HO', restaurants: 'FB', 'f&b': 'FB', food: 'FB', education: 'ED', professional: 'PB', automotive: 'AU', wellness: 'WF', fitness: 'WF', crypto: 'CR', ecommerce: 'EC', travel: 'TR', energy: 'EN' };
 
 const truthy = (v) => v === true || /^(1|t|true|yes|y|on)$/i.test(String(v == null ? '' : v));
 // Tolerant parsers — accept a JSON string (tab-row callers) OR an already-parsed value (to_jsonb callers).
@@ -73,6 +93,54 @@ async function fetchSite(domain) {
     try { const r = await fetchWithRetry(`https://${domain}${p}`, { headers: H, timeout: 9000, retries: 0 }); if (r.ok && r.body) return r.body; } catch (_e) {}
   }
   return '';
+}
+
+// ---- V3 SECTOR CLASSIFIER (generous; ambiguity => 'weak', never reject) ----
+// Scores every grid sector by keyword hits across the lead's RESOLVED text (company name + website_intel + sector
+// hint). Picks the best sector code, the best-matching subsector within it, and a confidence band. GENEROUS by
+// design: a single plausible hit still yields 'weak' (route to review). Returns { sector_code, sub_sector_code,
+// sector_confidence } with confidence 'strong' | 'probable' | 'weak' | 'none'.
+//   strong   = clear winner (>=3 hits, or margin>=2 over #2) OR two independent signals agree (hint code === keyword winner)
+//   probable = a solid lead (>=2 hits) but not a runaway
+//   weak     = exactly one plausible hit (low but plausible)
+//   none     = no keyword hit and no usable hint
+function classifySectorV3(lead) {
+  const parts = [lead && lead.company, lead && lead.website_intel, lead && lead.sector]
+    .map((v) => (v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v))))
+    .filter(Boolean);
+  const text = parts.join(' \n ').toLowerCase();
+  // Legacy hint -> canonical code (an independent signal). Resolve via normSector aliasing first, then the map.
+  const hintRaw = String((lead && lead.sector) || '').toLowerCase().trim();
+  const hintCode = HINT_TO_CODE[normSector(hintRaw)] || HINT_TO_CODE[hintRaw] || null;
+
+  let best = null, bestHits = 0, second = 0;
+  for (const sec of GRID_INDEX) {
+    let hits = 0;
+    for (const kw of sec.keywords) { if (kw && text.includes(kw)) hits++; }
+    if (hintCode && sec.code === hintCode) hits += 1; // the hint is one extra agreeing signal
+    if (hits > bestHits) { second = bestHits; bestHits = hits; best = sec; }
+    else if (hits > second) { second = hits; }
+  }
+
+  // Nothing matched at all (no keyword hit, no usable hint) -> 'none'.
+  if (!best || bestHits === 0) return { sector_code: null, sub_sector_code: null, sector_confidence: 'none' };
+
+  // Best matching subsector: most keyword/phrase hits of its verbatim name against the text (else first subsector).
+  let subBest = null, subHits = -1;
+  for (const ss of best.subsectors) {
+    let h = 0;
+    for (const tok of ss.name_lc.split(/[^a-z0-9+&]+/).filter((w) => w.length >= 4)) { if (text.includes(tok)) h++; }
+    if (h > subHits) { subHits = h; subBest = ss; }
+  }
+  const sub_sector_code = (subBest && subBest.code) || (best.subsectors[0] && best.subsectors[0].code) || null;
+
+  // Confidence band. Two signals agree = hint code matches the keyword winner.
+  const hintAgrees = !!(hintCode && best.code === hintCode);
+  let sector_confidence;
+  if (bestHits >= 3 || (bestHits - second) >= 2 || hintAgrees) sector_confidence = 'strong';
+  else if (bestHits >= 2) sector_confidence = 'probable';
+  else sector_confidence = 'weak'; // exactly one plausible hit -> review, never reject
+  return { sector_code: best.code, sub_sector_code, sector_confidence };
 }
 
 /**
@@ -187,14 +255,100 @@ async function scoreLead(lead) {
   const icpFit = servedSector && hasFixableGap;
   const strongBuyer = regulated && established && hasFixableGap;
 
+  // ============================================================================================
+  // ---- V3 4-COMPONENT MODEL + CANONICAL-GRID CLASSIFICATION (additive; reuses the layer detections above) ----
+  // ============================================================================================
+  // 1) Classify against the canonical grid (company name + website_intel + sector hint).
+  const cls = classifySectorV3(lead);
+  const sector_code = cls.sector_code;
+  const sub_sector_code = cls.sub_sector_code;
+  const sector_confidence = cls.sector_confidence;
+  const matched = sector_code ? GRID_INDEX.find((s) => s.code === sector_code) : null;
+  const isPrioritySector = !!(matched && matched.is_priority);
+  const sectorRegulated = !!(matched && matched.has_regulators); // "regulated" need-signal = matched sector has regulators[]
+
+  // 2a) SECTOR FIT (0-35): from the classification confidence band.
+  const sector_fit_score = sector_confidence === 'strong' ? 35 : sector_confidence === 'probable' ? 25 : sector_confidence === 'weak' ? 12 : 0;
+
+  // 2b) NEED SIGNAL (additive, cap 35) — REUSE the detections already computed above; do not re-detect.
+  //     regulated 12 (matched sector has regulators) | hiring 10 | ads 8 | seo_gap 8 | compliance_gap 5 | multi_location 2.
+  const hiringSignal = truthy(lead.hiring_signal) || truthy(lead.is_hiring) || truthy(lead.jobs_found) || (Number(lead.job_count || 0) > 0);
+  const multiLocation = truthy(lead.multi_location) || (Number(lead.location_count || 0) > 1) || (asArr(lead.locations).length > 1);
+  let need_signal_score = 0;
+  if (sectorRegulated) need_signal_score += 12;        // regulated (structural compliance liability)
+  if (hiringSignal) need_signal_score += 10;            // actively hiring = growth/intent
+  if (adRunner) need_signal_score += 8;                 // ad/pixel signal (Layer 5) — booster
+  if (seoGapCount >= 1) need_signal_score += 8;         // any SEO gap (Layer 9)
+  if (complianceGapCount >= 1) need_signal_score += 5;  // any compliance gap (Layer 8)
+  if (multiLocation) need_signal_score += 2;            // multi-site = bigger, multi-jurisdiction need
+  need_signal_score = Math.min(35, need_signal_score);
+
+  // 2c) CONTACT QUALITY (additive, cap 25) — REUSE the email/DM gate + socials computed above.
+  //     named DM (role set) 8 | SMTP-verified personal 8 | linkedin 4 | inferred email 4 | multi-contact 3 | generic+named 2 | catch-all+named 1.
+  const _ROLE_TITLES = /(founder|owner|principal|partner|director|ceo|cfo|coo|cto|cmo|president|head of|managing|proprietor|chief|md\b)/i;
+  const dmName = String(lead.decision_maker_name || lead.contact_name || lead.dm_name || lead.full_name || '').trim();
+  const dmTitle = String(lead.decision_maker_title || lead.contact_title || lead.dm_title || lead.title_role || lead.job_title || '').trim();
+  const hasName = !!dmName || (hasNamed && cleanNamedDM); // a real human is attached (named field, or a personal clean email)
+  const namedDMRole = cleanNamedDM && (_ROLE_TITLES.test(dmTitle) || (!dmTitle && hasNamed)); // named person whose role matches the DM set
+  const smtpVerifiedPersonal = cleanNamedDM && dmEmailVerified;                                // personal email + SMTP/verify-status confirmed
+  const hasLinkedin = !!(socials && socials.linkedin) || /linkedin\.com\/(company|in)\//i.test(html);
+  const isCatchAll = /catch[\s_-]?all/i.test(String(lead.verify_status || ''));
+  const inferredEmail = cleanNamedDM && !dmEmailVerified && !isCatchAll;                        // clean personal email, not yet verified
+  let contact_quality_score = 0;
+  if (namedDMRole) contact_quality_score += 8;                      // named decision-maker matching the role set
+  if (smtpVerifiedPersonal) contact_quality_score += 8;            // SMTP/verify-confirmed personal email
+  if (hasLinkedin) contact_quality_score += 4;                      // LinkedIn presence
+  if (inferredEmail) contact_quality_score += 4;                    // inferred (unverified) personal email
+  if (emailCount >= 2) contact_quality_score += 3;                  // multiple contacts (depth, Layer 4)
+  if (cleanRoleDM && hasName) contact_quality_score += 2;          // generic (info@) inbox + a known name
+  if (isCatchAll && hasName) contact_quality_score += 1;          // catch-all domain + a known name
+  contact_quality_score = Math.min(25, contact_quality_score);
+
+  // 2d) COMPLETENESS (0-5): all of domain+name+person+linkedin = 3; fresh signal <24h = 2.
+  const hasPerson = !!dmName || hasNamed;                           // a named person exists
+  const fullStack = !!domain && !!hasName && hasPerson && hasLinkedin;
+  const _sigTs = lead.last_signal_at || lead.signal_at || lead.scraped_at || lead.last_seen || lead.updated_at || null;
+  const _sigMs = _sigTs ? Date.parse(_sigTs) : NaN;
+  const freshSignal = Number.isFinite(_sigMs) && (Date.now() - _sigMs) < 24 * 3600 * 1000 && (Date.now() - _sigMs) >= 0;
+  let completeness_score = 0;
+  if (fullStack) completeness_score += 3;
+  if (freshSignal) completeness_score += 2;
+  completeness_score = Math.min(5, completeness_score);
+
+  // 2e) TOTAL (0-100) = the four V3 components.
+  const total_score = Math.min(100, sector_fit_score + need_signal_score + contact_quality_score + completeness_score);
+
+  // 3) TIER 1/2/3 (founder: everything lands in 1/2/3; Tier 3 = catch-all, no nurture/parked). This REPLACES the
+  //    old 1/2/3 decision and stays consistent with the legacy semantics (fit = tier===1; pass = tier<=2 && genuine).
+  //    Tier 1 = priority sector AND total>=TIER1_MIN AND named DM + linkedin + verified email.
+  //    Tier 2 = priority sector AND (total>=BAR_MIN  OR  named+linkedin with unverified/generic email).
+  //    Tier 3 = everything else.
+  const namedAndLinkedin = (namedDMRole || cleanNamedDM) && hasLinkedin;
+  const tier1Contact = namedDMRole && hasLinkedin && smtpVerifiedPersonal && !confirmedBad;
+  const tier2Contact = (namedAndLinkedin && (inferredEmail || cleanRoleDM)) || cleanNamedDM || cleanRoleDM; // named+linkedin w/ unverified/generic email, or any usable contact
   let tier, tier_reason;
-  if (!icpFit) { tier = 3; tier_reason = servedSector ? 'no_fixable_gap' : 'not_served_sector'; }
-  else if (strongBuyer && cleanNamedDM && !confirmedBad) { tier = 1; tier_reason = 'regulated_buyer_clean_named_dm' + (seriousGaps && visibilityGap ? '_priority' : ''); }
-  else { tier = 2; tier_reason = !cleanNamedDM ? (cleanRoleDM ? 'role_email_only' : (dmAny ? ('dm_email_' + dmGate.reason) : 'no_dm_email')) : (!regulated ? 'served_not_regulated' : 'not_established'); }
+  if (isPrioritySector && total_score >= TIER1_MIN && tier1Contact) {
+    tier = 1; tier_reason = 'priority_sector_score>=' + TIER1_MIN + '_named_linkedin_verified';
+  } else if (isPrioritySector && (total_score >= BAR_MIN || (namedAndLinkedin && (inferredEmail || cleanRoleDM)))) {
+    tier = 2; tier_reason = total_score >= BAR_MIN ? ('priority_sector_score>=' + BAR_MIN) : 'priority_sector_named_linkedin_unverified';
+  } else {
+    tier = 3;
+    tier_reason = !isPrioritySector ? (sector_code ? 'non_priority_sector_' + sector_code : 'unclassified_sector')
+      : (!tier2Contact ? 'no_usable_contact' : 'below_bar_' + BAR_MIN);
+  }
 
   const fit = tier === 1;
   const pass = tier <= 2 && genuine;
-  return { score, pass, fit, tier, tier_reason, reachable, layers, compliance_gaps: complianceGaps, seo_gaps: seoGaps, serious_gaps: seriousGaps, visibility_gap: visibilityGap, dm_clean: cleanNamedDM, dm_role: cleanRoleDM, dm_reason: dmGate.reason, dm_verified: cleanNamedDM };
+  const filter_key = sector_code;
+  return {
+    // ---- pre-existing fields (preserved verbatim — callers must keep working) ----
+    score, pass, fit, tier, tier_reason, reachable, layers,
+    compliance_gaps: complianceGaps, seo_gaps: seoGaps, serious_gaps: seriousGaps, visibility_gap: visibilityGap,
+    dm_clean: cleanNamedDM, dm_role: cleanRoleDM, dm_reason: dmGate.reason, dm_verified: cleanNamedDM,
+    // ---- V3 additions (sector classification, 4 components, total, routing) ----
+    sector_code, sub_sector_code, sector_confidence, filter_key,
+    sector_fit_score, need_signal_score, contact_quality_score, completeness_score, total_score,
+  };
 }
 
 module.exports = { scoreLead, PASS, REGULATED };
