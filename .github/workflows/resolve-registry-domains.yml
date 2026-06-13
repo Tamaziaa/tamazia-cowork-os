@@ -1,0 +1,35 @@
+# Resolve official websites for registry-sourced leads stuck with no domain (Companies House / SEC / OpenCorporates
+# / GLEIF). Recovers the ~250 silently-dead no-domain leads so they can enter qualification. Free-first SERP, no-send.
+# Run with a small `limit` first to confirm the resolved domains are correct, then a larger limit for the full backfill.
+name: Resolve registry domains (backfill, no-send)
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'how many no-domain registry leads to resolve this run (start small to validate accuracy)'
+        default: '10'
+
+concurrency:
+  group: engine-db-work
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm install --omit=dev || npm install || true
+      - name: Python deps (pg8000 shim)
+        run: python -m pip install --quiet -r requirements.txt
+      - name: Materialise .env from secret
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Resolve registry domains (logs each resolution + a summary)
+        run: |
+          set -a; source .env; set +a
+          node scripts/resolve-registry-domains.js ${{ inputs.limit }}

@@ -20,6 +20,8 @@ const sec = require('../../../lib/sourcing/sec-edgar.js');
 const ch = require('../../../lib/sourcing/companies-house.js');
 const oc = require('../../../lib/sourcing/opencorporates.js');
 const osm = require('../../../lib/sourcing/osm-overpass.js');
+const gleif = require('../../../lib/sourcing/gleif.js');                                                         // global LEI registry (no key, unlimited); websites resolved downstream
+let _serpClient = null; try { _serpClient = require('../../../lib/scraping/serp-client.js'); } catch (_e) {}     // free-first SERP (SearXNG/DDG -> Serper) for domain resolution
 const findEmail = require('../../../lib/sourcing/find-every-email.js');
 const linkedinFinder = require('../../../lib/sourcing/linkedin-finder.js');
 const instagramFinder = require('../../../lib/sourcing/instagram-finder.js');
@@ -27,13 +29,13 @@ const instagramFinder = require('../../../lib/sourcing/instagram-finder.js');
 // Source rotation map: sector × jurisdiction → ordered list of sources
 const ROUTING = {
   'law-firms|UK': ['companies_house_uk', 'osm_overpass'],
-  'law-firms|US': ['sec_edgar', 'opencorporates'],
+  'law-firms|US': ['sec_edgar', 'opencorporates', 'gleif'],
   'law-firms|EU': ['osm_overpass', 'opencorporates'],
   'healthcare|UK': ['companies_house_uk', 'osm_overpass'],
   'healthcare|US': ['sec_edgar', 'osm_overpass'],
   'healthcare|EU': ['osm_overpass'],
   'fintech|UK': ['companies_house_uk', 'osm_overpass'],
-  'fintech|US': ['sec_edgar', 'opencorporates'],
+  'fintech|US': ['sec_edgar', 'opencorporates', 'gleif'],
   'insurance|UK': ['companies_house_uk'],
   'real-estate|UK': ['companies_house_uk', 'osm_overpass'],
   'real-estate|UAE': ['osm_overpass'],
@@ -41,7 +43,7 @@ const ROUTING = {
   'hospitality|EU': ['osm_overpass'],
   'pharma|UK': ['companies_house_uk', 'osm_overpass'],
   'ecommerce|UK': ['companies_house_uk'],
-  'ecommerce|US': ['sec_edgar', 'opencorporates'],
+  'ecommerce|US': ['sec_edgar', 'opencorporates', 'gleif'],
   'charity|UK': ['companies_house_uk', 'osm_overpass'],
   'education|UK': ['companies_house_uk', 'osm_overpass']
 };
@@ -132,6 +134,24 @@ async function sourceFromOsm({ sector, jurisdiction, city, run_id }) {
   }));
 }
 
+// GLEIF · global LEI registry (2.5M entities, no key). Returns legal-entity records (name/address/status), no
+// website -> domain resolved by resolveRegistryDomains() before upsert, like the other registry sources.
+async function sourceFromGleif({ sector, sector_query, jurisdiction, run_id }) {
+  let out = [];
+  try { out = await gleif.search({ country: jurisdiction, name_contains: sector_query || null, page_size: 30 }); } catch (_e) { out = []; }
+  return out.map(c => ({
+    company: c.company,
+    domain: null,                                  // GLEIF carries no website; resolved downstream
+    sector,
+    jurisdiction,
+    city: null,
+    source: 'gleif',
+    source_query: `gleif:${jurisdiction}` + (sector_query ? `:${sector_query}` : ''),
+    source_payload_hash: hashRecord(c),
+    source_raw: c
+  }));
+}
+
 async function startRun({ source, sector, jurisdiction, query }) {
   const sql = `INSERT INTO sourcing_runs (source, sector, jurisdiction, query, status) VALUES (${pgEsc(source)}, ${pgEsc(sector)}, ${pgEsc(jurisdiction)}, ${pgEsc(query)}, 'running') RETURNING id`;
   const id = pg(sql);
@@ -157,6 +177,54 @@ function _passesIcpGate(rec) {
   return true;
 }
 
+// ---- DOMAIN RESOLUTION for registry sources (CH / SEC / OpenCorporates / GLEIF return legal records, no website) ----
+// Without a website a registry lead can never be enriched, audited, or emailed (it is silently stuck). We resolve the
+// official site via the SAME free-first SERP pattern jobspy uses (adapters.js), with an accuracy guard so we never
+// attach the WRONG company's domain. Unresolved leads are kept and marked status='needs_domain' (never dropped).
+const _REGISTRY_NO_DOMAIN = new Set(['companies_house_uk', 'sec_edgar', 'opencorporates', 'gleif']);
+const _RES_BAD = /indeed|glassdoor|linkedin|facebook|crunchbase|wikipedia|youtube|reed\.co|totaljobs|monster|ziprecruiter|bayt|naukri|google|bing|bloomberg|companieshouse|companies-house|find-and-update|gov\.|\.gov|trustpilot|yell|yelp|twitter|x\.com|instagram|tiktok|apple|amazon|opencorporates|gleif|sec\.gov|dnb\.com|bizapedia|endole|dun|duedil/i;
+const _validResDom = (dd) => !!dd && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(dd) && !/^\d+\.\d+\.\d+\.\d+$/.test(dd) && dd.length <= 60;
+// Accept a resolved domain only if it plausibly belongs to THIS company: a 4+ char company-name token appears in the
+// domain label OR in the result title. Guards against "Smith & Co" resolving to an unrelated smith.com.
+function _domainMatchesCompany(company, domain, title) {
+  const toks = normaliseCompany(company).split(' ').filter(t => t.length >= 4);
+  if (!toks.length) return false;                                  // name too generic to verify -> don't risk a wrong match
+  const domLabel = String(domain || '').split('.')[0].replace(/[^a-z0-9]/g, '');
+  const t = String(title || '').toLowerCase();
+  return toks.some(tok => domLabel.includes(tok) || t.includes(tok));
+}
+async function resolveWebsite(company, jurisdiction) {
+  if (!_serpClient || !company) return null;
+  const country = jurisdiction === 'US' ? 'USA' : jurisdiction;    // serp-client GL map uses 'USA'/'UK'/'UAE'
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const q = attempt === 0 ? (company + ' official website') : ('"' + company + '" website');
+    let d = null; try { d = await _serpClient.search(q, country, 6); } catch (_e) {}
+    for (const o of ((d && d.organic) || [])) {
+      const dd = String(o.domain || extractDomain(o.url || o.link || '') || '').toLowerCase();
+      if (!_validResDom(dd) || _RES_BAD.test(dd)) continue;
+      if (_icp.isExcluded && _icp.isExcluded(dd)) continue;
+      if (!_domainMatchesCompany(company, dd, o.title)) continue;
+      return dd;
+    }
+    if (attempt === 0) await new Promise(r => setTimeout(r, 350));
+  }
+  return null;
+}
+// Resolve websites for a batch of registry recs in place. Caps SERP calls per cell so the free-first budget holds.
+async function resolveRegistryDomains(recs, jurisdiction, cap = 40) {
+  let resolved = 0, needs = 0, used = 0;
+  for (const rec of recs) {
+    if (rec.domain || !_REGISTRY_NO_DOMAIN.has(rec.source) || !rec.company) continue;
+    if (used >= cap) { rec.status = rec.status || 'needs_domain'; needs++; continue; }
+    used++;
+    let dom = null; try { dom = await resolveWebsite(rec.company, rec.jurisdiction || jurisdiction); } catch (_e) {}
+    if (dom) { rec.domain = dom; if (rec.source_raw && typeof rec.source_raw === 'object') rec.source_raw.domain_resolved_via = 'serp'; resolved++; }
+    else { rec.status = rec.status || 'needs_domain'; needs++; }
+  }
+  if (resolved || needs) console.log(`  domain-resolve [${jurisdiction}]: ${resolved} resolved, ${needs} needs_domain (of ${recs.length})`);
+  return recs;
+}
+
 async function upsertLead(rec) {
   const norm = normaliseCompany(rec.company);
   if (!norm) return { inserted: 0, updated: 0 };
@@ -180,7 +248,7 @@ async function upsertLead(rec) {
   // Insert
   const sql = `
     INSERT INTO leads (company, domain, sector, jurisdiction, city, email, phone, source, source_query, source_payload_hash, source_raw, status, imported_at, created_at, updated_at, priority_score)
-    VALUES (${pgEsc(rec.company)}, ${pgEsc(rec.domain)}, ${pgEsc(rec.sector)}, ${pgEsc(rec.jurisdiction)}, ${pgEsc(rec.city)}, ${pgEsc(rec.email)}, ${pgEsc(rec.phone)}, ${pgEsc(rec.source)}, ${pgEsc(rec.source_query)}, ${pgEsc(rec.source_payload_hash)}, ${pgEsc(JSON.stringify(rec.source_raw || {}))}::jsonb, 'new', NOW(), NOW(), NOW(), 50)
+    VALUES (${pgEsc(rec.company)}, ${pgEsc(rec.domain)}, ${pgEsc(rec.sector)}, ${pgEsc(rec.jurisdiction)}, ${pgEsc(rec.city)}, ${pgEsc(rec.email)}, ${pgEsc(rec.phone)}, ${pgEsc(rec.source)}, ${pgEsc(rec.source_query)}, ${pgEsc(rec.source_payload_hash)}, ${pgEsc(JSON.stringify(rec.source_raw || {}))}::jsonb, ${pgEsc(rec.status || 'new')}, NOW(), NOW(), NOW(), 50)
     RETURNING id`;
   const idRaw = pg(sql);
   const lead_id = idRaw && /^\d+$/.test(idRaw) ? Number(idRaw) : null;
@@ -219,7 +287,10 @@ async function sourceForCell({ sector, jurisdiction, city, sector_query }) {
       if (src === 'companies_house_uk') recs = await sourceFromCompaniesHouse({ sector, sector_query: chQuery, jurisdiction, run_id });
       else if (src === 'sec_edgar') recs = await sourceFromSecEdgar({ sector, sector_query: ocQuery, jurisdiction, run_id });
       else if (src === 'opencorporates') recs = await sourceFromOpenCorporates({ sector, sector_query: ocQuery, jurisdiction, run_id });
+      else if (src === 'gleif') recs = await sourceFromGleif({ sector, sector_query: chQuery, jurisdiction, run_id });
       else if (src === 'osm_overpass') recs = await sourceFromOsm({ sector: osmQuery, jurisdiction, city, run_id });
+      // registry sources (CH/SEC/OC/GLEIF) arrive with domain=null -> resolve the official website before upsert.
+      recs = await resolveRegistryDomains(recs, jurisdiction);
     } catch (e) {
       await endRun({ run_id, status: 'error', error: String(e).slice(0, 200) });
       continue;
@@ -268,4 +339,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { dailyRun, sourceForCell, upsertLead };
+module.exports = { dailyRun, sourceForCell, upsertLead, resolveWebsite, resolveRegistryDomains, sourceFromGleif };
