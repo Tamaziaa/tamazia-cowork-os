@@ -60,11 +60,18 @@ async function scoreWithRetry(lead, n = 2) {
     let q;
     try { q = await scoreWithRetry(lead); }
     catch (e) { console.log(`  ${lead.domain} score err (KEPT as-is, not demoted): ${e.message}`); skipped++; continue; }
-    // Transient-safe: if the homepage was unreachable this pass, never demote a previously-good lead.
+    // Transient-safe (QA BUG-2/3): an empty/failed homepage scan returns score 0 with no throw, which would
+    // collapse a good lead to Tier 3. If the scan was weak/unreachable, never re-tier a previously-good lead —
+    // leave it untouched for the next pass (idempotent) rather than mis-tier it on a blip.
     const wasGood = lead.icp_tier === 1 || lead.icp_tier === 2 || lead.quality_fit === true;
-    if (q.reachable === false && wasGood) { console.log(`  ${String(lead.domain || '').padEnd(30)} unreachable -> KEPT at tier ${lead.icp_tier} (not demoted)`); skipped++; continue; }
+    if (wasGood && (q.reachable === false || q.score === 0 || q.total_score == null)) {
+      console.log(`  ${String(lead.domain || '').padEnd(30)} weak/unreachable scan -> KEPT at tier ${lead.icp_tier} (transient-safe)`); skipped++; continue;
+    }
     const tier = q.tier || 3;                                   // catch-all: anything that fits no tier -> Tier 3
-    const stage = tier === 1 ? 'qualified' : tier === 2 ? 'pending_approval' : 'rejected';
+    // Tier 2 AND Tier 3 stay ALIVE (the deep queue). The re-run never writes 'rejected': per V3 only the four
+    // hard kills die, and those (suppressed/dnc/bounced/duplicate/no-domain) are already excluded by the SELECT.
+    // icp_tier carries the real 1/2/3; nothing the founder qualified is dropped to a dead stage (QA BUG-1).
+    const stage = tier === 1 ? 'qualified' : 'pending_approval';
     const before = lead.lifecycle_stage || '';
     // snapshot this row's prior state once before changing it
     pg(`INSERT INTO requalify_backup_v3 (id,lifecycle_stage,icp_tier,quality_score,quality_fit,requal_version)
