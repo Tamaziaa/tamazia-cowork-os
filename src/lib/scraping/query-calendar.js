@@ -98,6 +98,6 @@ if (require.main === module) {
   const sectors = Object.keys(TYPES);
   let total = 0;
   for (const s of sectors) { const n = seedBank(s); total += n; console.log(`${s.padEnd(22)} bank: ${n} unique queries`); }
-  console.log(`\nTotal unique queries across 10 sectors: ${total}`);
-  console.log('At ~15 queries/sector/day, the bank cycles every', Math.round(total / 10 / 15), 'days before any repeat.');
+  console.log(`\nTotal unique queries across ${sectors.length} sectors: ${total}`);
+  console.log('At ~15 queries/sector/day, the bank cycles every', Math.round(total / sectors.length / 15), 'days before any repeat.');
 }
