@@ -10,7 +10,7 @@
 const path = require('path');
 const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..', '..');
-const { search, hasKey, rootDomain } = require('./serp-client.js');
+const { search, hasKey, hasSerp, rootDomain } = require('./serp-client.js');
 const { pickTodaysQueries, logQueryRun } = require('./query-calendar.js');
 
 function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); }
@@ -186,7 +186,9 @@ function scrapedTodayForSector(sector) {
  * re-running only tops up sectors still below their per-sector floor (already-met sectors skip).
  */
 async function runDaily({ perSector = 50, sectors = Object.keys(SECTORS) } = {}) {
-  if (!hasKey()) return { error: 'no_serp_key', hint: 'Set SERPER_KEY (serper.dev free 2500) in .env' };
+  // free-first: proceed if EITHER a paid key OR a configured free provider (SearXNG/Brave/Apify) is available.
+  // search() chains the free providers first, so a missing SERPER_KEY must not abort the wide scrape.
+  if (!hasSerp()) return { error: 'no_serp_provider', hint: 'Set SEARXNG_URL (free, unlimited) or SERPER_KEY (serper.dev free 2500) in .env' };
   const results = [];
   let total = 0;
   for (const sector of sectors) {
@@ -213,7 +215,7 @@ module.exports = { runDaily, scrapeSector, isGenuineClient, isAggregator, SECTOR
 if (require.main === module) {
   (async () => {
     const sectorArg = process.argv[2];
-    if (!hasKey()) { console.log('No SERP key set. Add SERPER_KEY to .env (serper.dev — 2500 free queries).'); process.exit(0); }
+    if (!hasSerp()) { console.log('No SERP provider set. Add SEARXNG_URL (free) or SERPER_KEY to .env.'); process.exit(0); }
     if (sectorArg) console.log(JSON.stringify(await scrapeSector(sectorArg, { target: 50 }), null, 2));
     else { console.log('Daily run (500 target)...'); console.log(JSON.stringify(await runDaily(), null, 2)); }
   })();
