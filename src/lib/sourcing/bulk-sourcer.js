@@ -15,6 +15,20 @@ function pg(sql) {
   if (!url) return null;
   try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; }
 }
+// Insert variant that classifies a unique_violation (23505) instead of swallowing it (see safe-insert.js).
+// A dup-domain race against the partial unique index -> { dup:true } (benign skip), never a crash.
+const { isUniqueViolationError } = require(path.join(ROOT, 'src/lib/sourcing/safe-insert.js'));
+function pgInsert(sql) {
+  const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
+  if (!url) return { id: null, error: 'neon_unconfigured' };
+  try {
+    const out = execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim();
+    return { id: /^\d+$/.test(out) ? Number(out) : null };
+  } catch (e) {
+    if (isUniqueViolationError(e)) return { id: null, dup: true };
+    return { id: null, error: (e && e.stderr ? String(e.stderr).trim() : (e && e.message)) || 'insert_failed' };
+  }
+}
 function pgEsc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
 
 const SECTOR_QUERIES_CH = {
@@ -53,8 +67,12 @@ async function upsertLead(rec) {
   const exists = pg(`SELECT id FROM leads WHERE LOWER(company)=${pgEsc(rec.company.toLowerCase())}${domainClause} LIMIT 1`);
   if (exists) return { existed: true, id: Number(exists) };
   const sql = `INSERT INTO leads (company, domain, sector, jurisdiction, city, email, phone, source, source_query, source_payload_hash, source_raw, status, imported_at, created_at, updated_at, priority_score) VALUES (${pgEsc(rec.company)}, ${pgEsc(rec.domain)}, ${pgEsc(rec.sector)}, ${pgEsc(rec.jurisdiction || 'UK')}, ${pgEsc(rec.city)}, ${pgEsc(rec.email)}, ${pgEsc(rec.phone)}, ${pgEsc(rec.source)}, ${pgEsc(rec.source_query)}, ${pgEsc(crypto.createHash('sha256').update(rec.company + (rec.domain||'')).digest('hex').slice(0,16))}, ${pgEsc(JSON.stringify(rec))}::jsonb, 'new', NOW(), NOW(), NOW(), 50) RETURNING id`;
-  const id = pg(sql);
-  return { inserted: id ? Number(id) : null };
+  // Unique-violation safe: a dup-domain race past the SELECT above raises 23505 from the partial unique
+  // index — treat as "already exists, skip" (existed), never a crash.
+  const r = pgInsert(sql);
+  if (r.dup) return { existed: true };
+  if (r.error) { console.error('[bulk upsert] ' + (rec.domain || rec.company) + ': ' + String(r.error).slice(0, 160)); return { inserted: null }; }
+  return { inserted: r.id };
 }
 
 async function sourceCH({ daily_target = 600 } = {}) {

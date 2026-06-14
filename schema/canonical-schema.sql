@@ -2397,3 +2397,8 @@ ALTER TABLE win_loss_records ADD COLUMN IF NOT EXISTS created_at timestamptz DEF
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS name varchar(120);
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS status varchar(20) DEFAULT 'active'::character varying;
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+
+-- Partial unique index closing the leads.domain TOCTOU (added by bug5-infra flag-3).
+-- Survivors-only: ignores rows marked status='duplicate' (the non-destructive dedupe tombstone) and
+-- NULL/empty domains. Verified safe live: 0 conflicting groups under this predicate.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_domain_active_unique ON leads (lower(domain)) WHERE COALESCE(status,'') <> 'duplicate' AND COALESCE(domain,'') <> '';
