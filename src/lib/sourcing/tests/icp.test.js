@@ -14,9 +14,10 @@ assert(p.pass && p.sector === 'law-firms', 'UK solicitor should pass pre-filter'
 assert(!preFilter({ domain: 'facebook.com', country: 'USA' }).pass);
 // pre-filter: out-of-geo random sector → fail on geo or sector
 assert(!preFilter({ domain: 'example.cn', country: 'China', title: 'random shop' }).pass);
-// FIT requires gap + ad-runner + sector
-let f = scoreICP({ sector: 'law-firms', country: 'UK', adRunner: true, adPlatforms: ['google','x'], seoGapCount: 4, aiVisibilityGap: true, complianceApplicable: true, decisionMakerFound: true });
-assert(f.fit === true && f.band === 'hot' && f.score >= 70, 'strong lead should be FIT+hot: ' + JSON.stringify(f));
+// FIT (Tier-1) = regulated sector + fixable gap + ESTABLISHED + decision-maker. Ads are a booster, NOT required.
+// (V3 decoupling: a Tier-1 brand must be established; siteMature/emailCount>=2/hasSocial supplies that signal.)
+let f = scoreICP({ sector: 'law-firms', country: 'UK', adRunner: true, adPlatforms: ['google','x'], seoGapCount: 4, aiVisibilityGap: true, complianceApplicable: true, decisionMakerFound: true, siteMature: true });
+assert(f.fit === true && f.band === 'hot' && f.score >= 70, 'strong established lead should be FIT+hot: ' + JSON.stringify(f));
 let nf = scoreICP({ sector: 'law-firms', country: 'UK', adRunner: false, seoGapCount: 0, aiVisibilityGap: false });
 assert(nf.fit === false, 'no ad-runner + no gap must not be FIT');
 // hot score
