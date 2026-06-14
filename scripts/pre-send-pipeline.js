@@ -54,7 +54,7 @@ async function processLead(lead, { force } = {}) {
     slug = s; hash = h; expSeconds = Number(exp) || Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
     log.steps.push({ step: 'audit_page', reused: true, audit_id: Number(id), slug, hash });
   } else {
-    const built = auditBuilder.build({ lead_id: lead.id, domain: lead.domain, company: lead.company || lead.domain, sector: lead.sector || 'law-firms', country: lead.country || 'UK' });
+    const built = await auditBuilder.build({ lead_id: lead.id, domain: lead.domain, company: lead.company || lead.domain, sector: lead.sector || 'law-firms', country: lead.country || 'UK' });
     slug = built.slug; hash = built.hash; expSeconds = built.signed_exp;
     log.steps.push({ step: 'audit_page', reused: false, slug, hash });
   }
