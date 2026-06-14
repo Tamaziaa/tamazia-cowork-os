@@ -36,7 +36,13 @@ if (require.main === module) (async()=>{
   // Build sector -> campaign map from the live campaigns ("Tamazia | Law Firms" etc.) for auto-routing.
   let nameToId = {};
   try { const cl = await M.listCampaigns(); const arr = (cl.data && (cl.data.data || cl.data.campaigns)) || cl.data || []; for (const c of (Array.isArray(arr)?arr:[])) nameToId[String(c.name||'').toLowerCase()] = c.id || c.campaign_id; } catch(_){}
-  const SECTOR_CAMPAIGN = { 'law-firms':'law firms','legal':'law firms','healthcare':'healthcare','dental':'healthcare','real-estate':'real estate','hospitality':'f&b','restaurants':'f&b','financial':'financial','finance':'financial','education':'education','automotive':'automotive','professional':'professional','ecommerce':'e-commerce' };
+  // Keys MUST cover every value the lead SELECT's COALESCE(sector, sector_code, filter_key) can emit. Round-3
+  // added that COALESCE, which now surfaces the canonical long-form slugs (e.g. 'financial-services',
+  // 'professional-services', 'beauty-wellness') written by the V3 re-tier path — not just the short forms.
+  // Those long-form slugs were absent here, so campaignFor() returned null and every such prospect was
+  // silently dropped at the byCamp grouping (e.g. ~50 live 'financial-services' FIT leads routed nowhere).
+  // Aliases mirror src/lib/enrich/lead-quality.js + src/lib/sourcing/icp.js so routing speaks the same vocab.
+  const SECTOR_CAMPAIGN = { 'law-firms':'law firms','legal':'law firms','healthcare':'healthcare','dental':'healthcare','medical':'healthcare','beauty-wellness':'healthcare','aesthetics':'healthcare','real-estate':'real estate','property':'real estate','hospitality':'f&b','restaurants':'f&b','financial':'financial','finance':'financial','financial-services':'financial','insurance':'financial','education':'education','automotive':'automotive','professional':'professional','professional-services':'professional','ecommerce':'e-commerce','ecommerce-retail':'e-commerce' };
   const campaignFor = (sector) => {
     if (forceCampaign) return forceCampaign;
     const want = SECTOR_CAMPAIGN[String(sector||'').toLowerCase()] || '';
