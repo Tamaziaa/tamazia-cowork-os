@@ -31,11 +31,14 @@ jobs:
           set -a; source .env; set +a
           node scripts/ensure-schema.js
           node scripts/cc2-provision.js
-      - name: Reconcile (Neon <-> Mystrika <-> cal <-> audits)
+      - name: Reconcile + recycle (Neon <-> Mystrika <-> cal <-> audits, then recycle)
         run: |
           set -a; source .env; set +a
-          node scripts/heartbeat.js wrap nightly-workers -- node scripts/reconcile.js || true
-      - name: Recycle (non-repliers -> 90d, repliers -> suppression)
-        run: |
-          set -a; source .env; set +a
-          node scripts/recycle.js || true
+          # One heartbeat spanning BOTH steps: recycle.js re-tiers leads back to lifecycle_stage='qualified', and
+          # reconcile.js flips leads to 'booked' — both write the tier/lifecycle columns the engine cycle's seam
+          # reads. Wrapping the pair keeps nightly-workers visible to the engine-cycle race guard (heartbeat.js
+          # active-writer) for its whole DB-write window, so the cycle skips its racy steps throughout.
+          node scripts/heartbeat.js wrap nightly-workers -- bash -c '
+            node scripts/reconcile.js || true
+            node scripts/recycle.js   || true
+          '

@@ -8,9 +8,17 @@ on:
       max:
         description: 'Max leads to fully process'
         default: '25'
+
+# Share the scrapers' group: this runs the SAME source-leads.js that scrapers.yml runs, so an on-demand
+# dispatch must not run concurrently with the daily scrape (double-insert / duplicate-lead risk).
+concurrency:
+  group: lead-scrapers
+  cancel-in-progress: false
+
 jobs:
   source:
     runs-on: ubuntu-latest
+    timeout-minutes: 40   # match scrapers.yml; bound a hung scraper so it can't pin a runner for the 6h default
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

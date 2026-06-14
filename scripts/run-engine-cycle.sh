@@ -18,6 +18,15 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
   echo "===== ENGINE CYCLE $(TS) ====="
   set -a; source .env 2>/dev/null; set +a
   HB_ID=$(node scripts/heartbeat.js start engine-cycle 2>/dev/null || echo "")   # A2: open a per-cycle heartbeat row in engine_runs
+  # RACE GUARD (replaces workflow-level serialisation; engine-cycle now has its OWN concurrency group so it never
+  # self-cancels). The heavy re-tier writers (v3-rerun/v3-validate/backlog-burst/nightly-workers) rewrite
+  # icp_tier/quality_fit/lifecycle_stage/sector_code on the same rows the qualify->enqueue->mint->render seam
+  # touches. If one is live, we SKIP only those race-sensitive steps this cycle (everything else still runs).
+  # Fail-open: empty => no writer => normal cycle. See scripts/heartbeat.js activeWriter().
+  WRITER_ACTIVE="$(node scripts/heartbeat.js active-writer 2>/dev/null || echo "")"
+  if [ -n "$WRITER_ACTIVE" ]; then echo "[$(TS)] RACE-GUARD: heavy writer '$WRITER_ACTIVE' is running — SKIPPING qualify/enqueue/mint/render this cycle (re-tier race protection)"; fi
+  # Guard wrapper for the race-sensitive steps: run the step only when no heavy writer holds the re-tier rows.
+  run_guarded() { if [ -n "$WRITER_ACTIVE" ]; then echo "[$(TS)] >> SKIP (writer '$WRITER_ACTIVE' active): $1"; echo "[$(TS)] done: $1"; else run "$1"; fi; }
   run "node scripts/ensure-schema.js"                                   # SELF-HEALING SCHEMA: auto-provision missing tables/columns (additive, fail-open) BEFORE any DB work
   run "node scripts/cc2-provision.js"                                  # CC-2: icp_catalog seeds + v_admin_leads view (idempotent; columns/tables also in the spec)
   run "node scripts/zoho-imap-poll.js"                                  # replies (skips if no IMAP pwd)
@@ -30,11 +39,17 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
   run "node scripts/dedupe-leads.js"                                    # suppress duplicate-domain leads (non-destructive)
   # qualify is the canonical "rows processed" of the pipeline. Capture its count so the engine_runs heartbeat
   # reports real throughput instead of the hard-coded 0 that made every cycle look idle to the MCP/Health tab.
-  QUALIFY_OUT="$(TMO 'node scripts/qualify-and-queue.js 12' 2>&1)"; echo "$QUALIFY_OUT" | tail -3
-  PROCESSED="$(printf '%s\n' "$QUALIFY_OUT" | sed -n 's/.*\[qualify\] scored \([0-9]\{1,\}\).*/\1/p' | tail -1)"; PROCESSED="${PROCESSED:-0}"
-  run "node scripts/enqueue-leads.js 500"                               # MINT seam (1/2): enqueue qualified, not-yet-minted leads into minting_queue
-  run "node scripts/mint-worker.js --once"                              # MINT seam (2/2): drain the queue -> build audit_pages -> set leads.audit_url (the Touch-1 link). REPLACES the never-existed build-audit-pages.js
-  run "node scripts/render-touches.js 10"                             # S064 render 7 touches for qualified leads (the seam: qualify -> render -> send)
+  # RACE-GUARDED: qualify writes the same tier/lifecycle columns the heavy re-tier writers rewrite — skip when one
+  # is live (PROCESSED stays 0 for the skipped cycle, which is the honest count).
+  if [ -n "$WRITER_ACTIVE" ]; then
+    echo "[$(TS)] >> SKIP (writer '$WRITER_ACTIVE' active): node scripts/qualify-and-queue.js 12"; PROCESSED="0"
+  else
+    QUALIFY_OUT="$(TMO 'node scripts/qualify-and-queue.js 12' 2>&1)"; echo "$QUALIFY_OUT" | tail -3
+    PROCESSED="$(printf '%s\n' "$QUALIFY_OUT" | sed -n 's/.*\[qualify\] scored \([0-9]\{1,\}\).*/\1/p' | tail -1)"; PROCESSED="${PROCESSED:-0}"
+  fi
+  run_guarded "node scripts/enqueue-leads.js 500"                      # MINT seam (1/2): enqueue qualified, not-yet-minted leads into minting_queue
+  run_guarded "node scripts/mint-worker.js --once"                     # MINT seam (2/2): drain the queue -> build audit_pages -> set leads.audit_url (the Touch-1 link). REPLACES the never-existed build-audit-pages.js
+  run_guarded "node scripts/render-touches.js 10"                      # S064 render 7 touches for qualified leads (the seam: qualify -> render -> send)
   run "node src/skills/S016-alias-health-monitor/scripts/monitor.js"    # S016 alias health: per-alias metrics + auto-pause on bounce/complaint
   run "node src/skills/S019-engagement-tracker/scripts/track.js --scan-reengagement"  # S019 re-engagement scan over audit-page events
   run "node scripts/health-check.js"                                    # self-diagnostic: 30 adverse-scenario probes → system_health

@@ -3,6 +3,13 @@ on:
   schedule:
     - cron: "0 7 * * *"   # 07:00 UTC daily
   workflow_dispatch: {}
+
+# Single-flight: a manual dispatch must not run alongside the cron run — two digests would double-send and
+# race the digested_at marking (the same row could be reported twice or buried).
+concurrency:
+  group: daily-digest
+  cancel-in-progress: false
+
 jobs:
   digest:
     runs-on: ubuntu-latest
