@@ -16,7 +16,12 @@ const { pickTodaysQueries, logQueryRun } = require('./query-calendar.js');
 function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); }
 const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
 
-// ---- 10 sectors × client-types (regulated / high-ad-budget, aligned to Tamazia) ----
+// ---- Sectors × client-types (regulated / high-ad-budget, aligned to Tamazia canonical 20x20 grid) ----
+// The first 10 are the original legacy sectors (kept verbatim). The block below adds first-class
+// entries for the canonical sectors that were previously NEVER searched as their own sector
+// (dental, aesthetics, restaurants, crypto, insurance, supplements, veterinary, travel, energy,
+// personal-brand), so good brands in them actually get sourced. Head-terms are drawn from each
+// sector's keywords[] in config/sector-grid.json.
 const SECTORS = {
   hospitality: ['luxury hotel', 'boutique hotel', 'fine dining restaurant', 'private members club', 'event venue'],
   healthcare: ['private clinic', 'aesthetics clinic', 'cosmetic surgery', 'dental practice', 'fertility clinic'],
@@ -27,9 +32,24 @@ const SECTORS = {
   'beauty-wellness': ['luxury spa', 'wellness retreat', 'medical spa', 'hair salon group', 'fitness studio'],
   automotive: ['luxury car dealership', 'classic car dealer', 'car leasing company', 'supercar hire', 'prestige motors'],
   education: ['private school', 'tutoring company', 'international school', 'business school', 'language school'],
-  'professional-services': ['accountancy firm', 'management consultancy', 'architecture practice', 'PR agency', 'recruitment agency']
+  'professional-services': ['accountancy firm', 'management consultancy', 'architecture practice', 'PR agency', 'recruitment agency'],
+  // ---- newly first-class canonical sectors (were previously never searched on their own) ----
+  dental: ['dental practice', 'dentist', 'cosmetic dentist', 'dental implants', 'orthodontist'],
+  aesthetics: ['aesthetic clinic', 'med spa', 'botox clinic', 'injectables', 'cosmetic clinic'],
+  restaurants: ['restaurant group', 'fine dining', 'gastropub', 'restaurant', 'cocktail bar'],
+  crypto: ['crypto exchange', 'digital asset exchange', 'crypto custody', 'web3 company', 'blockchain company'],
+  insurance: ['insurance broker', 'insurance brokerage', 'commercial insurance broker', 'health insurance broker', 'life insurance adviser'],
+  supplements: ['supplement brand', 'vitamins brand', 'sports nutrition brand', 'cbd brand', 'protein brand'],
+  veterinary: ['veterinary practice', 'vet clinic', 'veterinary group', 'veterinary hospital', 'emergency vet'],
+  travel: ['tour operator', 'luxury travel agency', 'travel agency', 'cruise specialist', 'destination management company'],
+  energy: ['solar installer', 'heat pump installer', 'renewable energy company', 'ev charging provider', 'battery storage company'],
+  'personal-brand': ['personal brand', 'executive brand', 'thought leader', 'public figure', 'keynote speaker']
 };
-const GEOS = [['London', 'UK'], ['Manchester', 'UK'], ['Dubai', 'UAE'], ['Abu Dhabi', 'UAE'], ['New York', 'USA'], ['Miami', 'USA'], ['Edinburgh', 'UK'], ['Birmingham', 'UK']];
+// GEOS = [city, country]. Country names map to Google gl codes in serp-client (UK/UAE/USA/France/
+// Spain/Germany known; others fail-open to 'gb'). EU cities added so the served EU region is actually
+// queried (previously EU was ~0.7% of leads because no EU city was ever searched).
+const GEOS = [['London', 'UK'], ['Manchester', 'UK'], ['Dubai', 'UAE'], ['Abu Dhabi', 'UAE'], ['New York', 'USA'], ['Miami', 'USA'], ['Edinburgh', 'UK'], ['Birmingham', 'UK'],
+  ['Paris', 'France'], ['Madrid', 'Spain'], ['Barcelona', 'Spain'], ['Berlin', 'Germany'], ['Munich', 'Germany'], ['Frankfurt', 'Germany'], ['Amsterdam', 'Netherlands'], ['Dublin', 'Ireland'], ['Milan', 'Italy'], ['Rome', 'Italy'], ['Brussels', 'Belgium'], ['Lisbon', 'Portugal'], ['Stockholm', 'Sweden'], ['Copenhagen', 'Denmark'], ['Vienna', 'Austria']];
 
 // ---- Hard blocklist (domain-boundary matched, NOT substring) ----
 // Base registrable domains: blocked if domain === base OR domain endsWith '.'+base.
@@ -62,18 +82,44 @@ function isAggregator(domain) {
 }
 function isGenuineClient(domain) {
   if (isAggregator(domain)) return false;
-  if (domain.split('.').length > 4) return false;                 // deep subdomains = usually platforms
-  if (/^(blog|shop|store|news|help|support|docs|wiki)\./i.test(domain)) return false;
+  if (domain.split('.').length > 5) return false;                 // very deep subdomains = usually platforms (raised >4 -> >5 so legit sub-hosted brands survive)
+  // Prefix kill: drop obvious non-primary sub-hosts (blog/news/help/support/docs/wiki) which are not the brand's main site.
+  // NOTE: shop./store. are intentionally NOT killed here. A brand's own shop.brand.com / store.brand.com is a real client.
+  // Marketplace hosts (amazon/ebay/etsy/...) are already blocked by isAggregator above.
+  if (/^(blog|news|help|support|docs|wiki)\./i.test(domain)) return false;
   if (domain.length < 4) return false;
   return true;
 }
 function companyFromDomain(d) { return d.split('.')[0].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
 
-function alreadyHave(domain) { return !!pg(`SELECT 1 FROM leads WHERE LOWER(domain)=${esc(domain)} OR LOWER(website) LIKE ${esc('%' + domain + '%')} LIMIT 1`); }
+// Normalise a domain or URL to a bare registrable host: lowercase, strip scheme, strip leading www.,
+// strip any path/query, strip a trailing dot. Used for EXACT dedup equality (not substring) so that
+// e.g. clinic.com no longer wrongly dedupes myclinic.com.
+function normaliseDomain(value) {
+  if (!value) return '';
+  let d = String(value).trim().toLowerCase();
+  d = d.replace(/^[a-z][a-z0-9+.-]*:\/\//, '');   // strip scheme (http://, https://, etc.)
+  d = d.replace(/[/?#].*$/, '');                  // strip path / query / fragment
+  d = d.replace(/^www\./, '');                    // strip leading www.
+  d = d.replace(/\.+$/, '');                      // strip trailing dot(s)
+  return d;
+}
+
+// Dedup-on-insert: a domain is "already have" only if an existing lead has the SAME normalised domain
+// (on either the domain column or the website column). Exact equality on both sides via a normalised
+// SQL expression. No substring LIKE (which over-merged distinct brands).
+function alreadyHave(domain) {
+  const nd = normaliseDomain(domain);
+  if (!nd) return false;
+  const normExpr = (col) => `regexp_replace(regexp_replace(regexp_replace(regexp_replace(lower(${col}), '^[a-z][a-z0-9+.-]*://', ''), '[/?#].*$', ''), '^www\\.', ''), '\\.+$', '')`;
+  return !!pg(`SELECT 1 FROM leads WHERE ${normExpr('domain')}=${esc(nd)} OR ${normExpr('website')}=${esc(nd)} LIMIT 1`);
+}
 
 function insertLead({ company, domain, sector, country, stream, verify, query }) {
-  pg(`INSERT INTO leads (company, domain, website, sector, jurisdiction, source, acquisition_channel, lead_type, lifecycle_stage, aggressive_source, scrape_stream, verify_status, scrape_query, scraped_at, priority_score, created_at)
-      VALUES (${esc(company)}, ${esc(domain)}, ${esc('https://' + domain)}, ${esc(sector)}, ${esc(country)},
+  // Write BOTH jurisdiction AND country from the same source value (mirrors scripts/source-leads.js).
+  // Previously only jurisdiction was populated, so the country column was blank on these leads.
+  pg(`INSERT INTO leads (company, domain, website, sector, jurisdiction, country, source, acquisition_channel, lead_type, lifecycle_stage, aggressive_source, scrape_stream, verify_status, scrape_query, scraped_at, priority_score, created_at)
+      VALUES (${esc(company)}, ${esc(domain)}, ${esc('https://' + domain)}, ${esc(sector)}, ${esc(country)}, ${esc(country)},
               ${esc('serp_' + stream)}, ${esc('ad_intelligence_google')}, ${esc('commercial_' + sector)},
               'sourced', ${stream === 'sponsored' ? 'TRUE' : 'FALSE'}, ${esc(stream)}, ${esc(verify)}, ${esc(query)}, NOW(), ${stream === 'sponsored' ? 62 : 50}, NOW())`);
 }
@@ -118,16 +164,37 @@ async function scrapeSector(sector, { target = 50, queryCap = 40 } = {}) {
   return { sector, found, queries, dupes, aggregators_skipped: aggr };
 }
 
-/** Full daily run: 50/sector × 10 sectors = 500, runs until thresholds hit. */
+/** Count how many leads a sector already sourced TODAY (per-sector idempotency / fairness). */
+function scrapedTodayForSector(sector) {
+  return Number(pg(`SELECT COUNT(*) FROM leads WHERE scraped_at::date = CURRENT_DATE AND sector=${esc(sector)}`) || 0);
+}
+
+/**
+ * Full daily run: perSector PER sector, runs until each sector hits its OWN floor.
+ * PER-SECTOR FAIRNESS: each sector gets its own daily quota (perSector). A noisy sector
+ * (hospitality/healthcare/real-estate) can no longer consume a single global budget and
+ * starve thin-but-good sectors (education/professional/dental/automotive). Idempotent:
+ * re-running only tops up sectors still below their per-sector floor (already-met sectors skip).
+ */
 async function runDaily({ perSector = 50, sectors = Object.keys(SECTORS) } = {}) {
   if (!hasKey()) return { error: 'no_serp_key', hint: 'Set SERPER_KEY (serper.dev free 2500) in .env' };
   const results = [];
   let total = 0;
   for (const sector of sectors) {
-    const r = await scrapeSector(sector, { target: perSector });
+    // Per-sector cap: only source up to this sector's own remaining floor for today.
+    const already = scrapedTodayForSector(sector);
+    const remaining = perSector - already;
+    if (remaining <= 0) {
+      const r = { sector, found: 0, queries: 0, dupes: 0, aggregators_skipped: 0, skipped: 'sector_floor_met', already };
+      results.push(r);
+      console.log(`  ${sector.padEnd(22)} skip (floor met: ${already}/${perSector} today)`);
+      continue;
+    }
+    const r = await scrapeSector(sector, { target: remaining });
+    r.already = already;
     results.push(r);
     total += r.found || 0;
-    console.log(`  ${sector.padEnd(22)} found=${r.found || 0} queries=${r.queries || 0} dupes=${r.dupes || 0} aggr=${r.aggregators_skipped || 0}${r.error ? ' ERR:' + r.error : ''}`);
+    console.log(`  ${sector.padEnd(22)} found=${r.found || 0} queries=${r.queries || 0} dupes=${r.dupes || 0} aggr=${r.aggregators_skipped || 0} (had ${already}/${perSector})${r.error ? ' ERR:' + r.error : ''}`);
   }
   return { total, target: perSector * sectors.length, results };
 }

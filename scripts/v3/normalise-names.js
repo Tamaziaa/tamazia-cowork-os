@@ -50,7 +50,7 @@ const { normaliseName } = require(path.join(ROOT, 'src', 'lib', 'sourcing', 'res
 
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
 if (!NEON) { console.error('[normalise-names] FATAL: NEON_URL not found in env'); process.exit(1); }
-function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [NEON, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); }
+function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [NEON, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).toString().trim(); }  // maxBuffer: a large to_jsonb batch must not blow Node's 1MB default
 const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
 
 // --- args ---
@@ -60,8 +60,10 @@ const limIdx = argv.indexOf('--limit');
 const LIMIT = limIdx >= 0 ? Number(argv[limIdx + 1]) : (DRY ? 30 : 0); // 0 = no cap (full pile)
 const BATCH = 500;
 
-// Idempotency: skip rows already stamped by THIS pass.
-const SKIP_DONE = "AND COALESCE(name_source,'') <> 'normalised'";
+// Idempotency: skip ANY row already processed by this pass (resolved OR marked unverified) — both stamp
+// name_normalised_at. This makes re-runs near-instant; the ~4k 'unverified' rows are resolved by the Phase-2
+// network waterfall (resolveName during scoreLead), not by re-running these pure string rules every time.
+const SKIP_DONE = "AND name_normalised_at IS NULL";
 
 function fetchBatch(offset, take) {
   // to_jsonb keeps quoting safe for arbitrary company strings.
