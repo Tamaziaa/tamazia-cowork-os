@@ -27,6 +27,12 @@ function runScript(rel) {
   console.log('[reconcile] 1/4 mystrika reply-sync …');
   runScript('scripts/sync-mystrika-replies.js');
 
+  // 1b. Reply matching: attach any inbound_emails rows to their lead (matched_lead_id) so per-lead /
+  //     per-sector reply tracking stays current. Idempotent, additive, fail-open. Run AFTER step 1 so
+  //     newly-arrived inbound rows are matched the same night.
+  console.log('[reconcile] 1b mystrika inbound reply-match …');
+  runScript('scripts/match-inbound-replies.js');
+
   // 2. Audit truth (verify + re-mint broken links; sets audit_verified)
   console.log('[reconcile] 2/4 audit-link verify …');
   runScript('scripts/verify-audits.js');

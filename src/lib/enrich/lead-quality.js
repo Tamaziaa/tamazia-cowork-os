@@ -23,7 +23,7 @@ const COMPLIANCE_MIN = Number(process.env.COMPLIANCE_MIN || (STRICT ? 2 : 2));  
 const SEO_MIN = Number(process.env.SEO_MIN || (STRICT ? 3 : 3));                 // SEO gaps for a visibility gap
 const DM_CONF_MIN = Number(process.env.DM_CONF_MIN || 75);                       // decision-maker email confidence for Tier-1
 // V3 tier thresholds (env-tunable). TIER1_MIN = total_score floor for Tier 1; BAR_MIN = floor for Tier 2.
-const TIER1_MIN = Number(process.env.TIER1_MIN || 70);
+const TIER1_MIN = Number(process.env.TIER1_MIN || 62);   // gap-fix: a regulated firm with no ads tops ~69; 70 was unreachable
 const BAR_MIN = Number(process.env.BAR_MIN || 45);
 
 // Sector truth comes from sourcing/icp.js (single source). SERVED = any of the 8 launch verticals (buyer floor,
@@ -52,7 +52,10 @@ const GRID_INDEX = GRID_SECTORS.map((s) => ({
   subsectors: (Array.isArray(s.subsectors) ? s.subsectors : []).map((ss) => ({ code: ss.code, name_lc: String(ss.name || '').toLowerCase(), name: ss.name })),
 }));
 // Map the legacy 8-sector hint (icp.js keys + ALIAS canon) onto a canonical grid code, so lead.sector adds a signal.
-const HINT_TO_CODE = { 'law-firms': 'LS', legal: 'LS', healthcare: 'HC', dental: 'DN', medical: 'HC', clinic: 'HC', aesthetic: 'AE', aesthetics: 'AE', cosmetic: 'AE', financial: 'FS', finance: 'FS', insurance: 'IN', 'real-estate': 'RE', property: 'RE', hospitality: 'HO', hotel: 'HO', restaurants: 'FB', 'f&b': 'FB', food: 'FB', education: 'ED', professional: 'PB', automotive: 'AU', wellness: 'WF', fitness: 'WF', crypto: 'CR', ecommerce: 'EC', travel: 'TR', energy: 'EN' };
+// gap-fix: include the EXACT sector strings the SERP scraper writes (serp-engine SECTORS keys) so the thin-site
+// hint FALLBACK can place them. Previously 'ecommerce-retail'/'professional-services'/'supplements'/'veterinary'/
+// 'personal-brand' resolved to null -> matched=null -> forced Tier-3 'unclassified' even for a priority firm (PB).
+const HINT_TO_CODE = { 'law-firms': 'LS', legal: 'LS', healthcare: 'HC', dental: 'DN', medical: 'HC', clinic: 'HC', aesthetic: 'AE', aesthetics: 'AE', cosmetic: 'AE', financial: 'FS', 'financial-services': 'FS', finance: 'FS', insurance: 'IN', 'real-estate': 'RE', property: 'RE', hospitality: 'HO', hotel: 'HO', restaurants: 'FB', 'f&b': 'FB', food: 'FB', education: 'ED', professional: 'PB', 'professional-services': 'PB', automotive: 'AU', wellness: 'WF', 'beauty-wellness': 'WF', fitness: 'WF', crypto: 'CR', ecommerce: 'EC', 'ecommerce-retail': 'EC', supplements: 'SU', veterinary: 'VT', 'personal-brand': 'PX', travel: 'TR', energy: 'EN' };
 
 const truthy = (v) => v === true || /^(1|t|true|yes|y|on)$/i.test(String(v == null ? '' : v));
 // Tolerant parsers — accept a JSON string (tab-row callers) OR an already-parsed value (to_jsonb callers).
@@ -63,12 +66,24 @@ const _dns = require('dns').promises;
 const _mxCache = {};
 async function _hasMX(domain) {
   if (domain in _mxCache) return _mxCache[domain];
-  let ok = false; try { const r = await _dns.resolveMx(domain); ok = Array.isArray(r) && r.length > 0; } catch (_e) { ok = false; }
+  let ok = false;
+  for (let attempt = 0; attempt < 2 && !ok; attempt++) {   // gap-fix: retry once — a transient DNS miss must not permanently kill a real brand as no_mx
+    try { const r = await _dns.resolveMx(domain); ok = Array.isArray(r) && r.length > 0; } catch (_e) { ok = false; }
+  }
+  if (!ok) {                                               // gap-fix: A-record fallback — a domain that resolves accepts mail via implicit MX (RFC 5321)
+    try { const a = await _dns.resolve(domain); ok = Array.isArray(a) && a.length > 0; } catch (_e) {}
+  }
   return (_mxCache[domain] = ok);
 }
 const _DISPOSABLE = new Set(['mailinator.com','guerrillamail.com','10minutemail.com','tempmail.com','yopmail.com','trashmail.com','sharklasers.com','guerrillamailblock.com','temp-mail.org','dispostable.com','getnada.com','maildrop.cc']);
 const _FREE = new Set(['gmail.com','googlemail.com','yahoo.com','yahoo.co.uk','hotmail.com','hotmail.co.uk','outlook.com','aol.com','icloud.com','me.com','live.com','live.co.uk','msn.com','protonmail.com','proton.me','gmx.com','mail.com','yandex.com','ymail.com','btinternet.com']);
-const _ROLE = new Set(['info','contact','hello','admin','sales','support','enquiries','enquiry','office','mail','team','reception','hi','help','noreply','no-reply','accounts','billing','careers','jobs','hr','marketing','press','media','general','mailbox','post']);
+// gap-fix: the role/generic-inbox set was too thin, so generic inboxes NOT listed here (bookings@, reservations@,
+// pr@, membership@, editorial@, feedback@, inquiry@, care@, events@, customerservice@, contactus@, finance@,
+// legal@ ...) passed emailGate as a NAMED decision-maker (cleanNamedDM) and reached Tier-1 auto-send. Empirically
+// 'reservations'(9), 'pr'(6), 'membership'(5), 'editorial'(4) etc. were sitting in Tier-1. This list now mirrors
+// free-verify.js ROLE (single behaviour) plus the generic inboxes observed in the live Tier-1 set. Generic inbox
+// => cleanRoleDM (Tier-2 hold), never an own-domain named DM.
+const _ROLE = new Set(['info','contact','hello','admin','sales','support','enquiries','enquiry','enquire','inquiry','inquiries','office','mail','mailbox','team','reception','hi','help','noreply','no-reply','do-not-reply','donotreply','accounts','account','billing','finance','careers','jobs','recruitment','hr','marketing','press','media','pr','general','post','postmaster','webmaster','abuse','privacy','legal','newsletter','notifications','bookings','booking','reservations','reservation','appointments','appointment','membership','memberships','editorial','editor','feedback','events','advertising','ads','customerservice','customercare','care','service','services','contactus','clientcare','frontdesk','referrals','admissions','partnership','partnerships']);
 const _EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // THE 4-5 PURE FILTERS — deterministic, free, high-precision at DISCARDING only clearly-bad / bounce-prone /
 // off-ICP emails. Returns { clean, role, reason }. clean=true => deliverable-shaped on the firm's OWN domain.
@@ -95,6 +110,50 @@ async function fetchSite(domain) {
   return '';
 }
 
+// gap-fix: extract VISIBLE page text (drop script/style/markup) so the sector classifier matches real copy
+// ("dispute resolution", "med spa", "endodontics") instead of being starved on the bare company name.
+// Also surfaces <title>/meta/og text for thin (SPA) pages. Capped so a huge page can't blow up the match.
+function visibleText(html) {
+  if (!html) return '';
+  let meta = '';
+  const t = html.match(/<title[^>]*>([^<]{2,200})<\/title>/i); if (t) meta += ' ' + t[1];
+  for (const m of html.matchAll(/<meta[^>]+(?:name|property)=["'](?:description|og:title|og:site_name|og:description|application-name)["'][^>]+content=["']([^"']{2,300})["']/gi)) meta += ' ' + m[1];
+  const body = String(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&[a-z#0-9]+;/gi, ' ');
+  return (meta + ' ' + body).replace(/\s+/g, ' ').slice(0, 24000);
+}
+
+// gap-fix: WORD-BOUNDARY keyword match. `text.includes(kw)` was a raw substring test, so short codes
+// false-matched inside unrelated words: 'bar' (FB) hit "barrister"/"chambers...board", 'vet' (VT) hit
+// "veteran"/"vetting", 'ned' (PX) hit "planned", 'mot' (AU) hit "remote"/"promotional", 'ria' (FS) hit a
+// person's name "Maria", 'iva' (FS) hit "private", 'cafe' (FB) hit "cafeteria" — corrupting sector_code and
+// inflating the #2 margin. A keyword counts as present only when both neighbours are non-alphanumeric (or a
+// string edge), which keeps literal '+'/'&'/'-'/digits INSIDE multi-token keywords ("law firm", "k-12",
+// "nad+", "f&b", "web3", "trusts and estates") matching verbatim. O(occurrences) — still linear.
+function kwHit(text, kw) {
+  let idx = text.indexOf(kw);
+  if (idx < 0) return false;
+  // gap-fix: plural tolerance for ALPHABETIC keywords only (keyword + 's'/'es' then a boundary), so singular
+  // grid keywords ('solicitor','dentist','accountant','surveyor') still match their plural forms in real copy
+  // ('solicitors','dentists'). Restricting to /^[a-z]+$/ keeps the literal '+'/'&'/'-'/digit keywords
+  // ('k-12','f&b','web3','nad+') matching verbatim, as the boundary fix intends.
+  const alpha = /^[a-z]+$/.test(kw);
+  for (let from = 0; (idx = text.indexOf(kw, from)) >= 0; from = idx + 1) {
+    const before = idx === 0 ? '' : text.charAt(idx - 1);
+    if (!(before === '' || !/[a-z0-9]/.test(before))) continue;
+    const end = idx + kw.length;
+    const after = end >= text.length ? '' : text.charAt(end);
+    if (after === '' || !/[a-z0-9]/.test(after)) return true;
+    if (alpha && after === 's') { const a2 = (end + 1 >= text.length) ? '' : text.charAt(end + 1); if (a2 === '' || !/[a-z0-9]/.test(a2)) return true; }
+    if (alpha && after === 'e' && text.charAt(end + 1) === 's') { const a3 = (end + 2 >= text.length) ? '' : text.charAt(end + 2); if (a3 === '' || !/[a-z0-9]/.test(a3)) return true; }
+  }
+  return false;
+}
+
 // ---- V3 SECTOR CLASSIFIER (generous; ambiguity => 'weak', never reject) ----
 // Scores every grid sector by keyword hits across the lead's RESOLVED text (company name + website_intel + sector
 // hint). Picks the best sector code, the best-matching subsector within it, and a confidence band. GENEROUS by
@@ -111,14 +170,17 @@ function classifySectorV3(lead) {
   const text = parts.join(' \n ').toLowerCase();
   // Legacy hint -> canonical code (an independent signal). Resolve via normSector aliasing first, then the map.
   const hintRaw = String((lead && lead.sector) || '').toLowerCase().trim();
-  const hintCode = HINT_TO_CODE[normSector(hintRaw)] || HINT_TO_CODE[hintRaw] || null;
+  // gap-fix: RAW key first, then the alias-folded key. normSector folds dental/aesthetics/beauty-wellness onto
+  // 'healthcare' and restaurants onto 'hospitality', so alias-first mislabeled a thin-site dental lead as HC (not DN),
+  // beauty as HC (not WF), restaurants as HO (not FB) — corrupting sector_code + the per-sector campaign routing.
+  const hintCode = HINT_TO_CODE[hintRaw] || HINT_TO_CODE[normSector(hintRaw)] || null;
 
-  let best = null, bestHits = 0, second = 0;
+  let best = null, bestHits = 0, second = 0, bestKwHits = 0;
   for (const sec of GRID_INDEX) {
-    let hits = 0;
-    for (const kw of sec.keywords) { if (kw && text.includes(kw)) hits++; }
-    if (hintCode && sec.code === hintCode) hits += 1; // the hint is one extra agreeing signal
-    if (hits > bestHits) { second = bestHits; bestHits = hits; best = sec; }
+    let kw = 0;
+    for (const k of sec.keywords) { if (k && kwHit(text, k)) kw++; }
+    const hits = kw + ((hintCode && sec.code === hintCode) ? 1 : 0); // the hint is one extra agreeing signal
+    if (hits > bestHits) { second = bestHits; bestHits = hits; best = sec; bestKwHits = kw; } // track keyword-only hits of the winner
     else if (hits > second) { second = hits; }
   }
 
@@ -132,14 +194,19 @@ function classifySectorV3(lead) {
     for (const tok of ss.name_lc.split(/[^a-z0-9+&]+/).filter((w) => w.length >= 4)) { if (text.includes(tok)) h++; }
     if (h > subHits) { subHits = h; subBest = ss; }
   }
-  const sub_sector_code = (subBest && subBest.code) || (best.subsectors[0] && best.subsectors[0].code) || null;
+  const sub_sector_code = (subHits > 0 && subBest && subBest.code) ? subBest.code : null; // gap-fix: no misleading default sub-sector when nothing matched
 
-  // Confidence band. Two signals agree = hint code matches the keyword winner.
-  const hintAgrees = !!(hintCode && best.code === hintCode);
+  // Confidence band. "Two signals agree" must be TWO INDEPENDENT signals: the hint code AND at least one real
+  // keyword hit in the resolved text.
+  // gap-fix: previously `hintAgrees` alone conferred 'strong', but a sector hint with ZERO keyword evidence makes
+  // the +1 hint bump its own sole winner (bestHits=1, hintAgrees=true) -> a junk/mislabeled lead ('X', sector
+  // 'law-firms', empty site) scored sector_confidence='strong' = full 35/35 sector_fit. Require >=1 keyword hit for
+  // the hint to count as corroboration; a hint-ONLY match is at most 'weak' (route to review), matching the comment.
+  const hintAgrees = !!(hintCode && best.code === hintCode && bestKwHits >= 1);
   let sector_confidence;
-  if (bestHits >= 3 || (bestHits - second) >= 2 || hintAgrees) sector_confidence = 'strong';
-  else if (bestHits >= 2) sector_confidence = 'probable';
-  else sector_confidence = 'weak'; // exactly one plausible hit -> review, never reject
+  if (bestKwHits >= 3 || (bestHits - second) >= 2 || hintAgrees) sector_confidence = 'strong';
+  else if (bestKwHits >= 2) sector_confidence = 'probable';
+  else sector_confidence = 'weak'; // exactly one plausible hit (or hint-only) -> review, never reject
   return { sector_code: best.code, sub_sector_code, sector_confidence };
 }
 
@@ -156,7 +223,10 @@ async function scoreLead(lead) {
   const domain = (lead.domain || '').toLowerCase().replace(/^www\./, '');
 
   // Layer 1 — GENUINE BUSINESS (hard gate, domain-boundary matched)
-  const genuine = !!domain && !isAggregator(domain) && domain.split('.').length <= 4;
+  // gap-fix: align the label-count ceiling with serp-engine.isGenuineClient (which was raised to <=5 so legit
+  // sub-hosted brands survive). At <=4 here, a 5-label domain that PASSED sourcing was then killed as not_genuine
+  // at scoring — sourced-then-silently-dropped. Same ceiling on both sides closes that gap.
+  const genuine = !!domain && !isAggregator(domain) && domain.split('.').length <= 5;
   add('1_genuine_business', 10, genuine, genuine ? 'own brandable domain' : 'aggregator/shell — reject');
   if (!genuine) return { score: 0, pass: false, fit: false, tier: 3, layers, reason: 'not_genuine' };
 
@@ -178,7 +248,7 @@ async function scoreLead(lead) {
 
   // Layer 3 — DECISION-MAKER CONTACT (named email) — now the strongest conversion predictor (16 pts)
   const primaryEmail = lead.primary_email || lead.contact_email || '';
-  const dmConf = Number(lead.decision_maker_confidence || lead.contact_confidence || 0);
+  const dmConf = Math.max(Number(lead.decision_maker_confidence || 0), Number(lead.contact_confidence || 0)); // gap-fix: `||` let a low decision_maker_confidence shadow a higher contact_confidence
   const { isVerifiedStatus } = require('./verify-status.js');
   const dmEmailVerified = truthy(lead.email_verified) || isVerifiedStatus(lead.verify_status);
   const hasNamed = !!(primaryEmail && /@/.test(primaryEmail)) && dmConf >= 60;
@@ -245,9 +315,18 @@ async function scoreLead(lead) {
   try { if (dmAny) dmGate = await emailGate(primaryEmail, domain); } catch (_e) {}
   const cleanNamedDM = dmGate.clean && !dmGate.role;                       // real person @ own domain, MX live -> SENDABLE
   const cleanRoleDM = dmGate.clean && dmGate.role;                        // info@owndomain, MX live -> Tier-2
+  // gap-fix: a genuine served firm whose ONLY contact is a free mailbox (practice@gmail.com) is still reachable
+  // -> Tier-2 eligible, not "unreachable" forever. We still never treat it as an own-domain cleanNamedDM.
+  const freeProviderDM = dmAny && dmGate.reason === 'free_provider' && servedSector;
   // Confirmed-bad safety net (only ever DEMOTES): enrichment/Apify said the address is definitively undeliverable.
   const confirmedBad = /^(invalid|bad|undeliverable|no_mx|disposable|invalid_syntax|nxdomain)$/i.test(String(lead.verify_status || ''));
-  const reachable = cleanNamedDM || cleanRoleDM || hasSocial;
+  // gap-fix: CATCH-ALL guard. The canonical verifier folds accept-all into 'risky' BEFORE storage (free-verify L121,
+  // verify-status.js), so the stored value is 'risky', never the literal 'catch-all'. A catch-all domain ACCEPTS a
+  // guessed address at SMTP without it existing, so a guessed-but-unverified DM on such a domain must NOT auto-send.
+  // True when the domain is catch-all/unconfirmed (risky/catch*/accept*/unknown) AND we have no positive verification.
+  const _vs = String(lead.verify_status || '').trim();
+  const catchAllUnverified = /^(risky|catch[\s_-]?all|accept[\s_-]?all|unknown)$/i.test(_vs) && !dmEmailVerified;
+  const reachable = cleanNamedDM || cleanRoleDM || hasSocial || freeProviderDM;
 
   // A fixable gap = ANY real problem the audit can hook on: a missing compliance doc, OR a missing SEO element,
   // OR not being cited by AI search. (seriousGaps/visibilityGap stay as PRIORITY signals, not gates.)
@@ -259,11 +338,16 @@ async function scoreLead(lead) {
   // ---- V3 4-COMPONENT MODEL + CANONICAL-GRID CLASSIFICATION (additive; reuses the layer detections above) ----
   // ============================================================================================
   // 1) Classify against the canonical grid (company name + website_intel + sector hint).
-  const cls = classifySectorV3(lead);
+  // gap-fix: feed the fetched page's visible text into the classifier (website_intel is empty for ~99.9% of leads).
+  const _clsText = (lead.website_intel && String(lead.website_intel).trim()) ? lead.website_intel : visibleText(html);
+  const cls = classifySectorV3({ ...lead, website_intel: _clsText });
   const sector_code = cls.sector_code;
   const sub_sector_code = cls.sub_sector_code;
   const sector_confidence = cls.sector_confidence;
-  const matched = sector_code ? GRID_INDEX.find((s) => s.code === sector_code) : null;
+  // gap-fix: when the classifier can't place a sector (thin/SPA site), fall back to the legacy hint code so a clearly
+  // priority lead (e.g. sector='healthcare') is tiered on its sector, not forced to Tier 3 as "unclassified".
+  const _hintCode = HINT_TO_CODE[String(lead.sector || '').toLowerCase().trim()] || HINT_TO_CODE[normSector(lead.sector)] || null;
+  const matched = (sector_code ? GRID_INDEX.find((s) => s.code === sector_code) : null) || (_hintCode ? GRID_INDEX.find((s) => s.code === _hintCode) : null);
   const isPrioritySector = !!(matched && matched.is_priority);
   const sectorRegulated = !!(matched && matched.has_regulators); // "regulated" need-signal = matched sector has regulators[]
 
@@ -272,14 +356,15 @@ async function scoreLead(lead) {
 
   // 2b) NEED SIGNAL (additive, cap 35) — REUSE the detections already computed above; do not re-detect.
   //     regulated 12 (matched sector has regulators) | hiring 10 | ads 8 | seo_gap 8 | compliance_gap 5 | multi_location 2.
-  const hiringSignal = truthy(lead.hiring_signal) || truthy(lead.is_hiring) || truthy(lead.jobs_found) || (Number(lead.job_count || 0) > 0);
-  const multiLocation = truthy(lead.multi_location) || (Number(lead.location_count || 0) > 1) || (asArr(lead.locations).length > 1);
+  const hiringSignal = truthy(lead.sig_hiring) || truthy(lead.hiring_signal) || truthy(lead.is_hiring) || truthy(lead.jobs_found) || (Number(lead.job_count || 0) > 0);
+  const multiLocation = truthy(lead.sig_multi_location) || truthy(lead.multi_location) || (Number(lead.location_count || 0) > 1) || (asArr(lead.locations).length > 1);
   let need_signal_score = 0;
   if (sectorRegulated) need_signal_score += 12;        // regulated (structural compliance liability)
   if (hiringSignal) need_signal_score += 10;            // actively hiring = growth/intent
   if (adRunner) need_signal_score += 8;                 // ad/pixel signal (Layer 5) — booster
   if (seoGapCount >= 1) need_signal_score += 8;         // any SEO gap (Layer 9)
-  if (complianceGapCount >= 1) need_signal_score += 5;  // any compliance gap (Layer 8)
+  if (complianceGapCount >= 1) need_signal_score += 8;  // any compliance gap (Layer 8) — core product, weight >= SEO (gap-fix)
+  if (complianceGapCount >= 2) need_signal_score += 2;  // 2+ gaps = serious compliance need (gap-fix)
   if (multiLocation) need_signal_score += 2;            // multi-site = bigger, multi-jurisdiction need
   need_signal_score = Math.min(35, need_signal_score);
 
@@ -293,7 +378,7 @@ async function scoreLead(lead) {
   const smtpVerifiedPersonal = cleanNamedDM && dmEmailVerified;                                // personal email + SMTP/verify-status confirmed
   const hasLinkedin = !!(socials && socials.linkedin) || /linkedin\.com\/(company|in)\//i.test(html);
   const isCatchAll = /catch[\s_-]?all/i.test(String(lead.verify_status || ''));
-  const inferredEmail = cleanNamedDM && !dmEmailVerified && !isCatchAll;                        // clean personal email, not yet verified
+  const inferredEmail = cleanNamedDM && !dmEmailVerified;                        // gap-fix: catch-all domains DO accept mail; keep the inferred-email credit
   let contact_quality_score = 0;
   if (namedDMRole) contact_quality_score += 8;                      // named decision-maker matching the role set
   if (smtpVerifiedPersonal) contact_quality_score += 8;            // SMTP/verify-confirmed personal email
@@ -324,13 +409,21 @@ async function scoreLead(lead) {
   //    Tier 2 = priority sector AND (total>=BAR_MIN  OR  named+linkedin with unverified/generic email).
   //    Tier 3 = everything else.
   const namedAndLinkedin = (namedDMRole || cleanNamedDM) && hasLinkedin;
-  const tier1Contact = namedDMRole && hasLinkedin && smtpVerifiedPersonal && !confirmedBad;
-  const tier2Contact = (namedAndLinkedin && (inferredEmail || cleanRoleDM)) || cleanNamedDM || cleanRoleDM; // named+linkedin w/ unverified/generic email, or any usable contact
+  // gap-fix: most corporate domains BLOCK SMTP probes, so requiring smtpVerifiedPersonal made Tier-1 near-empty.
+  // A clean named DM (own domain, live MX) + LinkedIn at a REGULATED + ESTABLISHED firm is a legitimate auto-send target.
+  // gap-fix: also exclude catchAllUnverified — a guessed personal address on a catch-all domain (verify_status
+  // 'risky') is NOT proof of a real mailbox, so it cannot earn auto-send. It still qualifies as a Tier-2 contact
+  // below (catch-all domains are contactable, just lower-confidence). smtpVerifiedPersonal (a positive verify)
+  // overrides, so a catch-all domain WITH an independently-verified address can still reach Tier-1.
+  const tier1Contact = (namedDMRole || cleanNamedDM) && hasLinkedin && !confirmedBad
+    && (smtpVerifiedPersonal || (cleanNamedDM && sectorRegulated && established && !catchAllUnverified));
+  // gap-fix: any usable contact (named, generic info@, free-provider at a served firm, catch-all) keeps a lead alive at Tier-2.
+  const tier2Contact = (namedAndLinkedin && (inferredEmail || cleanRoleDM)) || cleanNamedDM || cleanRoleDM || freeProviderDM;
   let tier, tier_reason;
   if (isPrioritySector && total_score >= TIER1_MIN && tier1Contact) {
-    tier = 1; tier_reason = 'priority_sector_score>=' + TIER1_MIN + '_named_linkedin_verified';
-  } else if (isPrioritySector && (total_score >= BAR_MIN || (namedAndLinkedin && (inferredEmail || cleanRoleDM)))) {
-    tier = 2; tier_reason = total_score >= BAR_MIN ? ('priority_sector_score>=' + BAR_MIN) : 'priority_sector_named_linkedin_unverified';
+    tier = 1; tier_reason = 'priority_sector_score>=' + TIER1_MIN + '_named_linkedin_reachable';
+  } else if (isPrioritySector && (total_score >= BAR_MIN || (namedAndLinkedin && (inferredEmail || cleanRoleDM)) || tier2Contact)) {
+    tier = 2; tier_reason = total_score >= BAR_MIN ? ('priority_sector_score>=' + BAR_MIN) : 'priority_sector_usable_contact';
   } else {
     tier = 3;
     tier_reason = !isPrioritySector ? (sector_code ? 'non_priority_sector_' + sector_code : 'unclassified_sector')

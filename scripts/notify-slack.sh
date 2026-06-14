@@ -27,7 +27,7 @@ CHANNEL="${CHANNEL#\#}"
 # Try once by name; if channel_not_found, look up channel ID and retry by ID.
 post_msg() {
   local CH="$1"
-  curl -s -X POST "https://slack.com/api/chat.postMessage" \
+  curl -s --max-time 15 -X POST "https://slack.com/api/chat.postMessage" \
     -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
     -H "Content-type: application/json; charset=utf-8" \
     --data "$(jq -nc --arg ch "${CH}" --arg t "${MESSAGE}" '{channel:$ch, text:$t}')"
@@ -39,7 +39,7 @@ if echo "${RESP}" | jq -e '.ok == true' > /dev/null; then
 fi
 
 # Fallback: resolve channel by name.
-CHAN_ID=$(curl -s -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+CHAN_ID=$(curl -s --max-time 15 -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
   "https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200" \
   | jq -r --arg n "${CHANNEL}" '.channels[] | select(.name==$n) | .id' | head -1)
 
@@ -51,7 +51,7 @@ if [ -n "${CHAN_ID}" ]; then
 fi
 
 # Final fallback: post into #all-tamazia (existing default workspace channel).
-DEFAULT_ID=$(curl -s -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+DEFAULT_ID=$(curl -s --max-time 15 -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
   "https://slack.com/api/conversations.list?types=public_channel&limit=200" \
   | jq -r '.channels[] | select(.name=="all-tamazia") | .id' | head -1)
 [ -n "${DEFAULT_ID}" ] && post_msg "${DEFAULT_ID}" | jq -e '.ok == true' > /dev/null

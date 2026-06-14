@@ -1,0 +1,62 @@
+# V3 gap-fix VALIDATION — fast, no-send. Runs the gap-fixed scorer (lead-quality.js) over a SMALL batch of real
+# leads to confirm the new tier distribution before the full re-run. Skips the slow Phase-1 name normalisation.
+# Uses a THROWAWAY requal_version so these rows are re-done by the real full re-run (idempotent, reversible).
+name: V3 gap-fix validate (small batch, no-send)
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch:
+        description: 'leads to re-score in this validation pass'
+        default: '40'
+      version:
+        description: 'throwaway requal_version stamp'
+        default: 'v3-validate-gapfix'
+
+concurrency:
+  group: engine-db-work          # serialise with the engine cycle so queue_rank never corrupts
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm install --omit=dev || npm install || true
+      - name: Python deps (pg8000 shim)
+        run: python -m pip install --quiet -r requirements.txt
+      - name: Materialise .env from secret
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Phase 0 - additive V3 schema (idempotent)
+        run: |
+          set -a; source .env; set +a
+          node scripts/ensure-schema.js || true
+          node scripts/v3/migrate-v3-schema.js || true
+      - name: Re-score a small batch with the gap-fixed scorer
+        env:
+          REQUAL_VERSION: ${{ inputs.version }}
+        run: |
+          set -a; source .env; set +a
+          node scripts/requalify-all-leads.js ${{ inputs.batch }}
+      - name: Show what the gap-fixed scorer produced (this batch only)
+        env:
+          REQUAL_VERSION: ${{ inputs.version }}
+        run: |
+          set -a; source .env; set +a
+          node -e '
+            const v = process.env.REQUAL_VERSION;
+            const q = async (sql) => { const host = process.env.NEON_URL.replace(/.*@([^/]+)\/.*/, "$1");
+              const r = await fetch("https://"+host+"/sql",{method:"POST",headers:{"Neon-Connection-String":process.env.NEON_URL,"Content-Type":"application/json"},body:JSON.stringify({query:sql,params:[]})}); return (await r.json()).rows||[]; };
+            (async()=>{
+              console.log("=== this validation batch (requal_version="+v+") ===");
+              console.log("tiers:", JSON.stringify(await q("SELECT icp_tier, count(*)::int n FROM leads WHERE requal_version="+"'"+v+"'"+" GROUP BY 1 ORDER BY 1")));
+              console.log("sectors:", JSON.stringify(await q("SELECT sector_code, sector_confidence, count(*)::int n FROM leads WHERE requal_version="+"'"+v+"'"+" GROUP BY 1,2 ORDER BY 3 DESC LIMIT 20")));
+              console.log("score spread:", JSON.stringify(await q("SELECT min(total_score) lo, round(avg(total_score)) avg, max(total_score) hi FROM leads WHERE requal_version="+"'"+v+"'")));
+              console.log("sample:", JSON.stringify(await q("SELECT domain, sector_code, sector_confidence, total_score, icp_tier FROM leads WHERE requal_version="+"'"+v+"'"+" ORDER BY total_score DESC NULLS LAST LIMIT 12")));
+            })().catch(e=>console.error(e.message));
+          '

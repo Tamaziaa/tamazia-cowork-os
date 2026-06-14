@@ -68,6 +68,12 @@ def main():
 
     params = parse_url(conn_url)
     params["ssl_context"] = True  # Neon requires TLS
+    # Hung-step guard: bound the TCP connect so a Neon network partition / cold-start stall can never
+    # block an engine step forever (every pg() call in the engine flows through this shim). Overridable.
+    try:
+        params["timeout"] = float(os.environ.get("NEON_CONNECT_TIMEOUT", "20"))
+    except (TypeError, ValueError):
+        params["timeout"] = 20.0
 
     conn = pg8000.native.Connection(**params)
     try:

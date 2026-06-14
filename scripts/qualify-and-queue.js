@@ -18,8 +18,12 @@ const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 (() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
 const { scoreLead, PASS } = require(path.join(ROOT, 'src', 'lib', 'enrich', 'lead-quality.js'));
-function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); }
+// maxBuffer: the eligible SELECT does `to_jsonb(l)` over the full 124-col leads row × LIMIT (engine cycle uses
+// 12, backlog-burst uses 300). 300 fat rows of JSON overflow Node's 1MB execFileSync default -> ENOBUFS throws.
+// 256MB covers any realistic batch.
+function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).toString().trim(); }
 const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
+const num = v => (v == null || v === '' || Number.isNaN(Number(v))) ? 'NULL' : Number(v);  // NULL-safe numeric for the V3 score columns
 
 (async () => {
   const limit = Number(process.argv[2] || 12);
@@ -49,7 +53,12 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
         const VE = require(path.join(ROOT, 'src', 'lib', 'enrich', 'verify-email.js'));
         const dm = lead.primary_email || lead.contact_email;
         const vr = await VE.verifyEmailBest(dm, process.env, { allowApify: true });
-        pg(`UPDATE leads SET verify_status=${esc(vr.status)}, primary_email_verified_by=${esc(vr.provider)}, email_verified=${vr.verified ? 'TRUE' : 'email_verified'} WHERE id=${lead.id}`);
+        // bug-fix: was `email_verified=${vr.verified ? 'TRUE' : 'email_verified'}` — the false branch wrote the
+        // column to ITSELF (a no-op), so a stale email_verified=TRUE survived even when this fresh authoritative
+        // check returned 'bad'/'invalid', producing the live email_verified=true + verify_status=bad contradiction
+        // (3 rows, all primary_email_verified_by='apify_verify'). This verdict IS authoritative for the primary
+        // email, so a non-verified result must set the flag FALSE, not leave it stale.
+        pg(`UPDATE leads SET verify_status=${esc(vr.status)}, primary_email_verified_by=${esc(vr.provider)}, email_verified=${vr.verified ? 'TRUE' : 'FALSE'} WHERE id=${lead.id}`);
         if (/^(bad|invalid|undeliverable|no_mx|disposable)$/i.test(String(vr.status || ''))) {
           q = Object.assign({}, q, { tier: 2, tier_reason: 'apify_confirmed_bad_email' });
           console.log(`  ↓ ${lead.domain} DM confirmed-bad via ${vr.provider} (${vr.status}) -> demoted to Tier-2`);
@@ -60,9 +69,16 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
     // Tier 1 -> qualified (auto-mint + auto-send). Tier 2 -> pending_approval (mint only after founder approves).
     // Tier 3 -> rejected. quality_fit drives the existing enqueue/auto-send path, so ONLY Tier 1 is TRUE.
     const stage = tier === 1 ? 'qualified' : tier === 2 ? 'pending_approval' : 'rejected';
-    pg(`UPDATE leads SET quality_score=${q.score}, quality_fit=${tier === 1 ? 'TRUE' : 'FALSE'}, icp_tier=${tier},
+    // gap-fix: persist the SAME V3 columns requalify-all-leads.js writes (total_score + sector_code/sub_sector_code/
+    // sector_confidence/filter_key + the 4 component scores). Previously this path wrote only quality_score/_fit/
+    // icp_tier/_layers, so ~2,050 leads scored HERE had total_score + sector_code NULL while requalify-scored leads
+    // had them populated — a column-coverage divergence that left downstream (cockpit/Metabase) reading NULLs.
+    pg(`UPDATE leads SET quality_score=${q.score}, total_score=${num(q.total_score != null ? q.total_score : q.score)},
+        quality_fit=${tier === 1 ? 'TRUE' : 'FALSE'}, icp_tier=${tier},
+        sector_code=${esc(q.sector_code)}, sub_sector_code=${esc(q.sub_sector_code)}, sector_confidence=${esc(q.sector_confidence)}, filter_key=${esc(q.filter_key || q.sector_code)},
+        sector_fit_score=${num(q.sector_fit_score)}, need_signal_score=${num(q.need_signal_score)}, contact_quality_score=${num(q.contact_quality_score)}, completeness_score=${num(q.completeness_score)},
         quality_layers=${esc(JSON.stringify(q.layers))}::jsonb, quality_scored_at=NOW(),
-        personalisation_pointers = COALESCE(personalisation_pointers,'{}'::jsonb) || ${esc(JSON.stringify({ top_finding: (q.compliance_gaps && q.compliance_gaps[0]) || (q.seo_gaps && q.seo_gaps[0]) || '', fit: q.fit, tier }))}::jsonb,
+        personalisation_pointers = COALESCE(personalisation_pointers,'{}'::jsonb) || ${esc(JSON.stringify({ top_finding: (q.compliance_gaps && q.compliance_gaps[0]) || (q.seo_gaps && q.seo_gaps[0]) || '', fit: q.fit, tier, tier_reason: q.tier_reason }))}::jsonb,
         lifecycle_stage='${stage}' WHERE id=${lead.id}`);
     if (tier === 1) {
       t1++;

@@ -49,7 +49,8 @@ async function llm(prompt) {
     try {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${gkey}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4 } })
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4 } }),
+        signal: AbortSignal.timeout(25000) // never hang the pulse on a stalled LLM; fall over / degrade
       });
       if (r.ok) { const j = await r.json(); const t = j?.candidates?.[0]?.content?.parts?.[0]?.text; if (t) return t; }
     } catch (_e) {}
@@ -59,7 +60,8 @@ async function llm(prompt) {
     try {
       const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + qkey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, temperature: 0.4, messages: [{ role: 'user', content: prompt }] })
+        body: JSON.stringify({ model, temperature: 0.4, messages: [{ role: 'user', content: prompt }] }),
+        signal: AbortSignal.timeout(25000) // never hang the pulse on a stalled LLM; fall over / degrade
       });
       if (r.ok) { const j = await r.json(); const t = j?.choices?.[0]?.message?.content; if (t) return t; }
     } catch (_e) {}
@@ -71,11 +73,11 @@ function parseJson(t) { if (!t) return null; const m = t.match(/\{[\s\S]*\}/); i
 
 async function postSlack(text) {
   const tok = ENV.SLACK_BOT_TOKEN; if (!tok) return;
-  try { await fetch('https://slack.com/api/chat.postMessage', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ channel: '#all-tamazia', text }) }); } catch (_e) {}
+  try { await fetch('https://slack.com/api/chat.postMessage', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ channel: '#all-tamazia', text }), signal: AbortSignal.timeout(12000) }); } catch (_e) {}
 }
 async function postTelegram(text) {
   const tok = ENV.TELEGRAM_BOT_TOKEN, chat = ENV.TELEGRAM_CHAT_ID; if (!tok || !chat) return;
-  try { await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text, parse_mode: 'Markdown' }) }); } catch (_e) {}
+  try { await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text, parse_mode: 'Markdown' }), signal: AbortSignal.timeout(12000) }); } catch (_e) {}
 }
 
 async function run() {

@@ -19,7 +19,10 @@ const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 (() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
 const { scoreLead } = require(path.join(ROOT, 'src', 'lib', 'enrich', 'lead-quality.js'));
-function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); }
+// maxBuffer: the eligible SELECT does `to_jsonb(l)` over the full 124-col leads row × LIMIT (called with 500
+// by v3-rerun / backlog-burst). Node's 1MB execFileSync default overflows -> ENOBUFS throws -> the whole pass
+// dies silently. 256MB covers any realistic batch of fat lead rows.
+function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).toString().trim(); }
 const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
 const num = v => (v == null || v === '' || Number.isNaN(Number(v))) ? 'NULL' : Number(v);  // NULL-safe numeric for the V3 score columns
 
@@ -27,7 +30,7 @@ const num = v => (v == null || v === '' || Number.isNaN(Number(v))) ? 'NULL' : N
 const RESCORE_STAGES = "('sourced','enriched','verified','qualified','pending_approval','rejected','parked')";
 
 // V3 re-run stamp (idempotency). Bump to force a fresh full pass.
-const REQUAL_VERSION = process.env.REQUAL_VERSION || 'v3-2026-06-13';
+const REQUAL_VERSION = process.env.REQUAL_VERSION || 'v3-2026-06-13-gapfix';  // bumped: 50-gap fixes (classifier text, ||->max, gTLD/alias gates, reachable contacts)
 // Self-healing: a transient fetch/score failure must NEVER demote a good lead (QA mandate + V3 §M).
 async function scoreWithRetry(lead, n = 2) {
   let lastErr;
@@ -46,9 +49,14 @@ async function scoreWithRetry(lead, n = 2) {
     SELECT to_jsonb(l) FROM leads l
     WHERE COALESCE(l.domain,'') <> ''
       AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal')
-      -- protect in-flight + terminal leads: never re-tier something already in a sequence or closed
+      -- protect in-flight + terminal leads: never re-tier something already in a sequence or closed.
+      -- The enumerated list only caught touch_0; send-due.js advances status to touch_1/2/3_queued and
+      -- cadence_complete, so a lead mid-cadence (e.g. touch_2_queued) was NOT protected and could be
+      -- demoted under an active sequence. Match ALL touch_%_queued / touch_%_blocked states by pattern.
       AND COALESCE(l.status,'') NOT IN ('duplicate','suppressed','dnc','bounced','opted_out',
-                                        'touch_0_queued','touch_0_blocked','queued','sent','replied','contacted','won','lost','booked')
+                                        'queued','sent','replied','contacted','won','lost','booked','cadence_complete')
+      AND COALESCE(l.status,'') NOT LIKE 'touch\_%\_queued'
+      AND COALESCE(l.status,'') NOT LIKE 'touch\_%\_blocked'
       AND (l.lifecycle_stage IS NULL OR l.lifecycle_stage IN ${RESCORE_STAGES})
       AND COALESCE(l.requal_version,'') <> ${esc(REQUAL_VERSION)}   -- idempotent: skip rows already done this version
     ORDER BY l.quality_scored_at ASC NULLS FIRST, l.id ASC LIMIT ${limit}`);
@@ -56,16 +64,29 @@ async function scoreWithRetry(lead, n = 2) {
   const leads = raw.split('\n').filter(Boolean).map(j => { try { return JSON.parse(j); } catch (_e) { return null; } }).filter(Boolean);
 
   let t1 = 0, t2 = 0, t3 = 0, moved = 0, skipped = 0;
-  for (const lead of leads) {
-    let q;
-    try { q = await scoreWithRetry(lead); }
-    catch (e) { console.log(`  ${lead.domain} score err (KEPT as-is, not demoted): ${e.message}`); skipped++; continue; }
+  // Parallelise the slow part (scoreWithRetry fetches each homepage) in small chunks; keep the per-row writes
+  // SEQUENTIAL so the snapshot + UPDATE + transient-safe logic stays exactly as before. ~CONCURRENCY x faster,
+  // so the whole backlog re-tiers inside one CI job instead of timing out.
+  const CONCURRENCY = Number(process.env.REQUAL_CONCURRENCY || 8);
+  for (let _i = 0; _i < leads.length; _i += CONCURRENCY) {
+    const _scored = await Promise.all(leads.slice(_i, _i + CONCURRENCY).map(async (lead) => {
+      try { return { lead, q: await scoreWithRetry(lead) }; }
+      catch (e) { return { lead, err: e }; }
+    }));
+    for (const { lead, q, err } of _scored) {
+    if (err) { console.log(`  ${lead.domain} score err (KEPT as-is, not demoted): ${err.message}`); skipped++; continue; }
     // Transient-safe (QA BUG-2/3): an empty/failed homepage scan returns score 0 with no throw, which would
     // collapse a good lead to Tier 3. If the scan was weak/unreachable, never re-tier a previously-good lead —
     // leave it untouched for the next pass (idempotent) rather than mis-tier it on a blip.
     const wasGood = lead.icp_tier === 1 || lead.icp_tier === 2 || lead.quality_fit === true;
     if (wasGood && (q.reachable === false || q.score === 0 || q.total_score == null)) {
-      console.log(`  ${String(lead.domain || '').padEnd(30)} weak/unreachable scan -> KEPT at tier ${lead.icp_tier} (transient-safe)`); skipped++; continue;
+      // gap-fix: do NOT demote (transient-safe) BUT bump quality_scored_at so this lead sinks to the BACK of the
+      // stalest-first ORDER BY instead of being re-selected at the FRONT of every pass. We deliberately leave
+      // requal_version UNSET so a future run still retries it (its site may be back) — but within this multi-pass
+      // run it no longer re-fetches the same dead set forever and starve fresh leads (the backlog could stall once
+      // the unreachable-wasGood set neared the batch size; ~6.7k of 7.7k eligible leads are wasGood).
+      pg(`UPDATE leads SET quality_scored_at=NOW() WHERE id=${lead.id}`);
+      console.log(`  ${String(lead.domain || '').padEnd(30)} weak/unreachable scan -> KEPT at tier ${lead.icp_tier} (transient-safe, deferred)`); skipped++; continue;
     }
     const tier = q.tier || 3;                                   // catch-all: anything that fits no tier -> Tier 3
     // Tier 2 AND Tier 3 stay ALIVE (the deep queue). The re-run never writes 'rejected': per V3 only the four
@@ -87,6 +108,7 @@ async function scoreWithRetry(lead, n = 2) {
     if (before !== stage) moved++;
     if (tier === 1) t1++; else if (tier === 2) t2++; else t3++;
     console.log(`  ${String(lead.domain || '').padEnd(30)} ${before.padEnd(16)} -> ${stage.padEnd(16)} score=${q.score} tier=${tier} (${q.tier_reason || ''})`);
+    }
   }
   console.log(`[requalify ${REQUAL_VERSION}] re-scored ${t1 + t2 + t3} · Tier1 ${t1} · Tier2 ${t2} · Tier3 ${t3} · ${moved} changed · ${skipped} skipped(transient, kept as-is)`);
 })().catch(e => { console.error('[requalify] FATAL', e.message); process.exit(1); });

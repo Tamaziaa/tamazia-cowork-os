@@ -15,7 +15,12 @@ function pg(sql) { return execFileSync(path.join(__dirname, 'psql'), [NEON, '-tA
   // country hint = best-effort from jurisdiction text; the engine still auto-detects from the live site.
   const sql = `INSERT INTO minting_queue (domain, company, sector, country, lead_id, status)
     SELECT DISTINCT ON (lower(l.domain))
-      l.domain, l.company, COALESCE(NULLIF(l.sector,''),'general'),
+      l.domain, l.company,
+      -- DATA-CONTRACT FIX: the V3 re-tier path (requalify-all-leads.js, run by v3-rerun/backlog-burst)
+      -- writes sector_code and leaves the legacy sector column blank. ~6.2k leads currently have a real
+      -- sector_code but an empty sector, so reading sector alone mints them all as general. Fall back to
+      -- sector_code (then filter_key) so the minted audit speaks the lead real sector.
+      COALESCE(NULLIF(l.sector,''), NULLIF(l.sector_code,''), NULLIF(l.filter_key,''), 'general'),
       CASE
         WHEN l.jurisdiction ILIKE '%emirat%' OR l.jurisdiction ILIKE '%uae%' OR l.jurisdiction ILIKE '%dubai%' THEN 'UAE'
         WHEN l.jurisdiction ILIKE '%united states%' OR l.jurisdiction ILIKE '%usa%' OR l.jurisdiction ILIKE '% us %' THEN 'USA'

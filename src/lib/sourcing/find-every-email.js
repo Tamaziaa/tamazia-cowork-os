@@ -35,10 +35,15 @@ function buildLocalPart(pattern, first, last) {
 function generateCandidates({ first, last, domain }) {
   const seen = new Set();
   const out = [];
+  // gap-fix: a falsy / malformed domain produced candidates like "john.doe@undefined" (template-string of an
+  // undefined `domain`). Those are syntactically junk, MX lookup is meaningless, and they leak into the email
+  // pool as guessed addresses. Require a dotted host before generating anything.
+  const dom = String(domain || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '').trim();
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(dom)) return out;
   for (let i = 0; i < COMMON_PATTERNS.length; i++) {
     const local = buildLocalPart(COMMON_PATTERNS[i], first, last);
     if (!local || local.length < 2) continue;
-    const email = `${local}@${domain.toLowerCase()}`;
+    const email = `${local}@${dom}`;
     if (seen.has(email)) continue;
     seen.add(email);
     out.push({ email, pattern: COMMON_PATTERNS[i], confidence_prior: (100 - i * 5) / 100 });
@@ -75,9 +80,12 @@ function smtpRcptProbe(mxHost, fromAddr, rcptAddr, timeoutMs = 5000) {
         sock.write(`RCPT TO:<${rcptAddr}>\r\n`); stage = 3;
       } else if (stage === 3) {
         result.code = last.slice(0, 3);
-        result.ok = last.startsWith('250');
+        // gap-fix: RCPT TO success is any 25x (250 OK, 251 will-forward, 252 cannot-VRFY-but-will-attempt). The old
+        // `startsWith('250')` treated 251/252 — which several mail servers return for a deliverable address — as a
+        // hard rejection, under-counting real inboxes. 4xx is greylist/transient (not a reject), so only 5xx is bad.
+        result.ok = /^25[012]/.test(last);
         clearTimeout(t);
-        cleanup(result.ok ? 'accepted' : 'rejected');
+        cleanup(result.ok ? 'accepted' : (/^4/.test(last) ? 'greylisted' : 'rejected'));
       } else if (last.startsWith('5') || last.startsWith('4')) {
         result.code = last.slice(0, 3);
         clearTimeout(t);

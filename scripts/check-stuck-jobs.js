@@ -28,7 +28,9 @@ const CADENCE = {
   'daily-digest': 1440,
   'neon-guard': 1440,
   'nightly-workers': 1440,
-  'backlog-burst': 1440,
+  // NOTE: backlog-burst, v3-rerun, remint-audits, source-leads are workflow_dispatch-only (no cron), so they have
+  // no cadence to be "stuck" against — including them here fires false amber/red + Telegram a couple of days after
+  // any manual run. Only schedule-backed jobs belong in this map.
   'enforcement-news': 10080,
   'eval-audit': 10080,
 };
@@ -36,7 +38,7 @@ const CADENCE = {
 async function telegram(text) {
   const tok = ENV.TELEGRAM_BOT_TOKEN, chat = ENV.TELEGRAM_CHAT_ID;
   if (!tok || !chat) return;
-  try { await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text, parse_mode: 'Markdown' }) }); } catch (_e) {}
+  try { await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text, parse_mode: 'Markdown' }), signal: AbortSignal.timeout(12000) }); } catch (_e) {}
 }
 
 async function main() {
@@ -45,8 +47,12 @@ async function main() {
   const red = [];
   let warn = 0;
   for (const [job, cad] of Object.entries(CADENCE)) {
-    const raw = pg(`SELECT EXTRACT(EPOCH FROM (now()-MAX(COALESCE(finished_at,started_at))))/60 FROM engine_runs WHERE job=${esc(job)}`);
-    if (raw == null || raw === '') continue; // never ran -> not stuck
+    // Liveness = time since the last SUCCESSFUL COMPLETION, not the last start. The old
+    // MAX(COALESCE(finished_at,started_at)) counted an open 'running' row as "alive", so a job that starts every
+    // cycle but is killed before finish() (the engine-cycle zombie pattern) looked healthy forever and never
+    // alarmed. We now measure off finished_at of a genuinely-completed run; 'running'/'killed'/'error' don't count.
+    const raw = pg(`SELECT EXTRACT(EPOCH FROM (now()-MAX(finished_at)))/60 FROM engine_runs WHERE job=${esc(job)} AND finished_at IS NOT NULL AND COALESCE(status,'') NOT IN ('killed','error')`);
+    if (raw == null || raw === '') continue; // never completed a clean run -> not flagged (no false alarm on a fresh table)
     const m = Number(raw.split('\n')[0]);
     if (!isFinite(m)) continue;
     let status = 'ok';

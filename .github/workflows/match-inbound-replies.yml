@@ -1,0 +1,29 @@
+name: match-inbound-replies (backfill matched_lead_id)
+# Attaches inbound_emails rows to their lead (per-lead / per-sector reply tracking).
+# Manual backfill only — no send, additive Neon writes (matched_lead_id + match_method). Mirrors gen-state.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max unmatched inbound rows to examine (blank = all)"
+        required: false
+        default: ""
+permissions:
+  contents: read
+jobs:
+  match-inbound:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: npm install --no-audit --no-fund
+      - run: python -m pip install --quiet -r requirements.txt
+      - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Backfill reply matches (no-send)
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          node scripts/match-inbound-replies.js ${{ github.event.inputs.limit }}

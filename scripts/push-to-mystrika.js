@@ -7,8 +7,11 @@ const { execFileSync } = require('child_process');
 const path = require('path');
 const M = require(path.resolve(__dirname, '..', 'src', 'lib', 'mystrika', 'client.js'));
 const { conversionScore, SEND_TIERS } = require(path.resolve(__dirname, '..', 'src', 'lib', 'sourcing', 'conversion.js'));
+const { isVerifiedStatus } = require(path.resolve(__dirname, '..', 'src', 'lib', 'enrich', 'verify-status.js'));
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
-function pg(sql){ return execFileSync(path.join(__dirname,'psql'),[NEON,'-tA','-c',sql],{encoding:'utf8'}); }
+// maxBuffer: the push SELECT base64-encodes up to 5 rendered email bodies (t0s/t0b/t1b/t2b/t3b) per lead ×
+// LIMIT (default 200) — multi-MB of output that overflows Node's 1MB execFileSync default and throws ENOBUFS.
+function pg(sql){ return execFileSync(path.join(__dirname,'psql'),[NEON,'-tA','-c',sql],{encoding:'utf8',maxBuffer:128*1024*1024}); }
 const b64d = (s)=>{ try { return Buffer.from(String(s||''),'base64').toString('utf8'); } catch(_){ return ''; } };
 const arg = (n,d)=>{ const i=process.argv.indexOf('--'+n); return i>=0?process.argv[i+1]:d; };
 const DRY = process.argv.includes('--dry');
@@ -40,9 +43,9 @@ if (require.main === module) (async()=>{
   };
   const limit = parseInt(arg('max','200'),10);
   const raw = pg(`SELECT COALESCE(NULLIF(l.contact_email,''), l.email, ''), regexp_replace(COALESCE(NULLIF(trim(l.first_name||' '||COALESCE(l.last_name,'')),''), l.company,'there'),'[\\t\\r\\n]',' ','g'),
-      regexp_replace(COALESCE(l.company,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.domain,''), regexp_replace(COALESCE(l.sector,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.audit_url,''),
+      regexp_replace(COALESCE(l.company,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.domain,''), regexp_replace(COALESCE(NULLIF(l.sector,''),NULLIF(l.sector_code,''),NULLIF(l.filter_key,''),''),'[\\t\\r\\n]',' ','g'), COALESCE(l.audit_url,''),
       regexp_replace(COALESCE(l.personalisation_pointers->>'top_finding',''),'[\\t\\r\\n]',' ','g'), regexp_replace(COALESCE(l.operating_city,''),'[\\t\\r\\n]',' ','g'),
-      regexp_replace(COALESCE(l.rank_insight_sentence,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.hiring_signal,''), COALESCE(l.fit_score,0), COALESCE(l.hot_score,0), CASE WHEN COALESCE(l.contact_linkedin,'')<>'' THEN '1' ELSE '0' END, CASE WHEN COALESCE(jsonb_array_length(l.decision_makers),0)>0 OR COALESCE(l.contact_name,'')<>'' THEN '1' ELSE '0' END,
+      regexp_replace(COALESCE(l.rank_insight_sentence,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.hiring_signal,''), COALESCE(l.fit_score,0), COALESCE(l.hot_score,0), CASE WHEN COALESCE(l.contact_linkedin,'')<>'' THEN '1' ELSE '0' END, CASE WHEN COALESCE(jsonb_array_length(l.decision_makers),0)>0 OR COALESCE(l.contact_name,'')<>'' THEN '1' ELSE '0' END, COALESCE(l.verify_status,''), COALESCE(l.email_verified::text,''),
       replace(encode(convert_to(COALESCE(d.t0s,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t0b,''),'UTF8'),'base64'),E'\\n',''),
       replace(encode(convert_to(COALESCE(d.t1b,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t2b,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t3b,''),'UTF8'),'base64'),E'\\n',''), COALESCE(l.primary_email,''), COALESCE(l.secondary_emails::text,'[]')
     FROM leads l LEFT JOIN LATERAL (
@@ -51,6 +54,7 @@ if (require.main === module) (async()=>{
       FROM outreach_drafts od WHERE od.lead_id=l.id AND od.channel='email') d ON TRUE
     WHERE l.quality_fit=TRUE AND COALESCE(l.lifecycle_stage,'')='qualified' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal')
       AND COALESCE(l.audit_verified,FALSE)=TRUE AND COALESCE(l.audit_url,'') <> '' AND COALESCE(l.contact_email,l.email,'') <> '' AND COALESCE(l.mystrika_pushed,FALSE)=FALSE
+      AND COALESCE(l.verify_status,'') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable')
     ORDER BY COALESCE(l.quality_score,0) DESC NULLS LAST, l.id DESC LIMIT ${limit}`);
   const rows = raw.split('\n').filter(Boolean).map(r=>r.split('\t'));
   if (!rows.length) { console.log('0 new FIT leads to push (need quality_fit + qualified + audit_verified + email + not already pushed).'); return; }
@@ -58,11 +62,16 @@ if (require.main === module) (async()=>{
   const seenGlobal = new Set();   // 1 prospect = 1 email, deduped across the whole run
   const coveredPrimaries = new Set(); // lead-primary emails whose DM was already sent via a colliding lead this run
   for (const r of rows) {
-    const [email,name,company,domain,sector,audit,finding,city,ri,hiring,fitScore,hotScore,hasLi,hasDm,t0s,t0b,t1b,t2b,t3b,primaryEmail,secondaryJson]=r;
+    const [email,name,company,domain,sector,audit,finding,city,ri,hiring,fitScore,hotScore,hasLi,hasDm,verifyStatus,emailVerified,t0s,t0b,t1b,t2b,t3b,primaryEmail,secondaryJson]=r;
     if (!email && !primaryEmail) continue;
     if (!audit) continue;  // touch-1 guard: never push a lead without a minted audit_url
     const t0body=b64d(t0b); if (!t0body) continue;
-    const conv=conversionScore({fit:true,fit_score:+fitScore||0,hot_score:+hotScore||0,has_verified_email:true,decision_maker:hasDm==='1',has_linkedin:hasLi==='1',audit_verified:true,hiring_signal:hiring});
+    // gap-fix: read the lead's REAL verification instead of hardcoding has_verified_email:true (which defeated the
+    // conversion verify gate and would push unverified/bad emails). verified-good -> Tier A/B; catch-all/risky ->
+    // deliverable -> Tier B; empty/pending/bad -> Tier C -> skipped (SEND_TIERS excludes C). Sending stays OFF.
+    const verified = isVerifiedStatus(verifyStatus) || (/^(t|true|1)$/i.test(emailVerified||'') && !/^(bad|invalid|undeliverable|no_mx|nxdomain|disposable)$/i.test(verifyStatus||''));
+    const deliverable = !verified && /(catch|risky|accept)/i.test(verifyStatus||'');
+    const conv=conversionScore({fit:true,fit_score:+fitScore||0,hot_score:+hotScore||0,has_verified_email:verified,has_deliverable_email:deliverable,decision_maker:hasDm==='1',has_linkedin:hasLi==='1',audit_verified:true,hiring_signal:hiring});
     if (!SEND_TIERS.has(conv.tier)) continue;  // only email leads we are VERY sure about (Tier A/B)
     // Build the recipient set: the DECISION-MAKER (primary) first, then verified/risky secondary contacts.
     const pe = String(primaryEmail||email||'').toLowerCase();

@@ -1,14 +1,16 @@
 // Instagram handle finder · no key, no Instagram login.
 // DuckDuckGo HTML site:instagram.com search. Ranked by name + company match in title/snippet.
 
-const { ddgSearch } = require('./linkedin-finder.js');
+const { ddgSearch, hasWord } = require('./linkedin-finder.js');
 
+// gap-fix: WORD-BOUNDARY token match (was raw `t.includes(name)`), same false-positive class as linkedin-finder —
+// a short first/last/company token substring-matched inside unrelated words and inflated the handle score.
 function scoreCandidate({ first, last, company }, candidate) {
   let score = 0;
   const t = (candidate.title + ' ' + candidate.snippet).toLowerCase();
-  if (first && t.includes(String(first).toLowerCase())) score += 25;
-  if (last && t.includes(String(last).toLowerCase())) score += 25;
-  if (company && t.includes(String(company).toLowerCase())) score += 35;
+  if (first && hasWord(t, first)) score += 25;
+  if (last && hasWord(t, last)) score += 25;
+  if (company && hasWord(t, company)) score += 35;
   if (candidate.url && /instagram\.com\/[A-Za-z0-9_.]+/i.test(candidate.url) && !candidate.url.includes('/p/') && !candidate.url.includes('/reel/')) score += 15;
   return score;
 }
