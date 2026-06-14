@@ -63,12 +63,30 @@ if (require.main === module) (async()=>{
     WHERE l.quality_fit=TRUE AND COALESCE(l.lifecycle_stage,'')='qualified' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal')
       AND COALESCE(l.audit_verified,FALSE)=TRUE AND COALESCE(l.audit_url,'') <> '' AND COALESCE(l.contact_email,l.email,'') <> '' AND COALESCE(l.mystrika_pushed,FALSE)=FALSE
       AND COALESCE(l.verify_status,'') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable')
+      AND COALESCE(l.replied,FALSE)=FALSE AND COALESCE(l.status,'') NOT IN ('suppressed','dnc','bounced','duplicate')
+      -- SUPPRESSION HARD-GATE (legal opt-out, UK PECR/GDPR): the suppression table is the canonical opt-out
+      -- registry (written by imap-poll on STOP + recycle.js for repliers). The lead's own status columns can
+      -- lag or never reflect it (e.g. a reply matched on domain-only, or a different lead sharing the email),
+      -- so a suppressed address could otherwise be re-pushed here. Enforce the registry directly on EVERY
+      -- candidate primary email, scoped to live (non-expired) entries.
+      AND NOT EXISTS (SELECT 1 FROM suppression sup WHERE lower(sup.email) = lower(COALESCE(NULLIF(l.primary_email,''), NULLIF(l.contact_email,''), l.email)) AND (sup.expires_at IS NULL OR sup.expires_at > NOW()))
     ORDER BY COALESCE(l.quality_score,0) DESC NULLS LAST, l.id DESC LIMIT ${limit}`);
   const rows = raw.split('\n').filter(Boolean).map(r=>r.split('\t'));
   if (!rows.length) { console.log('0 new FIT leads to push (need quality_fit + qualified + audit_verified + email + not already pushed).'); return; }
   const prospects = [];
   const seenGlobal = new Set();   // 1 prospect = 1 email, deduped across the whole run
   const coveredPrimaries = new Set(); // lead-primary emails whose DM was already sent via a colliding lead this run
+  // SUPPRESSION SET (legal opt-out): the lead SELECT already gates the PRIMARY email, but SECONDARY contacts are
+  // pulled from secondary_emails JSON and are NEVER seen by that SELECT — a suppressed colleague address could
+  // otherwise be pushed. Load the live (non-expired) opt-out list once and filter EVERY recipient (primary +
+  // secondary) against it. Fail-CLOSED is impossible here (no list = we cannot prove opt-out), but the table is
+  // tiny so the read is reliable; on a read failure we keep the existing per-lead gate as the safety net.
+  const suppressed = new Set();
+  try {
+    const supRaw = pg(`SELECT lower(email) FROM suppression WHERE email IS NOT NULL AND (expires_at IS NULL OR expires_at > NOW())`);
+    for (const e of String(supRaw||'').split('\n')) { const x = e.trim(); if (x) suppressed.add(x); }
+  } catch(_) {}
+  if (suppressed.size) console.log('suppression: loaded '+suppressed.size+' opted-out addresses (filtering all recipients)');
   for (const r of rows) {
     const [leadId,email,name,company,domain,sector,audit,finding,city,ri,hiring,fitScore,hotScore,hasLi,hasDm,verifyStatus,emailVerified,t0s,t0b,t1b,t2b,t3b,primaryEmail,secondaryJson,qualityScore]=r;
     if (!email && !primaryEmail) continue;
@@ -94,17 +112,19 @@ if (require.main === module) (async()=>{
     // lead still gets flagged pushed (otherwise it would re-send its secondaries every run).
     if (pe && seenGlobal.has(pe)) coveredPrimaries.add(pe);
     const recips = [];
-    if (pe) recips.push({ email: pe, name: name||'', isPrimary: true });
+    if (pe && !suppressed.has(pe)) recips.push({ email: pe, name: name||'', isPrimary: true });
     let secs=[]; try { secs = JSON.parse(secondaryJson||'[]'); } catch(_){}
     for (const s of secs) {
       const se=String(s.email||'').toLowerCase();
       if (!se || !/@/.test(se)) continue;
+      if (suppressed.has(se)) continue;                                     // opted-out colleague — never contact
       if (!(s.verified || okStatus(s.verify_status||s.status))) continue;   // only deliverable secondaries
       recips.push({ email: se, name: s.name||'', role: s.role||'', isPrimary: false });
       if (recips.length >= PER_COMPANY) break;
     }
     for (const rc of recips) {
       if (!rc.email || seenGlobal.has(rc.email)) continue; seenGlobal.add(rc.email);
+      if (suppressed.has(rc.email)) continue;   // belt-and-suspenders: never push an opted-out address
       const first = firstOf(rc.name);
       prospects.push({ email: rc.email, name: rc.name||name||'there', company, domain, sector, audit_url: audit, top_finding: finding, city,
         rank_insight: ri, hiring_signal: hiring, conversion_tier: conv.tier, conversion_score: conv.score,
