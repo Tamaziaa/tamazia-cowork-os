@@ -36,11 +36,20 @@ function run() {
   // EVERY row status='duplicate' and ZERO survivors (the whole lead silently dropped from the send pool;
   // observed live on smilecliniq.com/fenwick.com/loaf.com/thirdspace.london). This second pass restores the
   // current rn=1 row to the funnel if it was wrongly suppressed. Idempotent; never touches won/client/replied.
+  // bug-fix(round-5): the re-promote used to hardcode lifecycle_stage='sourced', blowing an already-SCORED
+  // survivor (e.g. smilecliniq.com id 529, quality_score=75) all the way back to pre-enrichment and forcing a
+  // wasteful full re-qualify. Restore the stage its EXISTING tier implies (qualified for Tier-1, pending_approval
+  // for a scored Tier-2/3) and only fall back to 'sourced' when the row was never scored. quality_score IS NULL.
   pg(`WITH ranked AS (
         SELECT id, ROW_NUMBER() OVER (PARTITION BY lower(domain) ORDER BY ${order}) rn
         FROM leads WHERE COALESCE(domain,'')<>''
       )
-      UPDATE leads SET status='new', lifecycle_stage='sourced', duplicate_of=NULL, updated_at=NOW()
+      UPDATE leads SET status='new',
+        lifecycle_stage = CASE
+          WHEN leads.quality_score IS NULL THEN 'sourced'
+          WHEN COALESCE(leads.quality_fit,false)=true OR leads.icp_tier=1 THEN 'qualified'
+          ELSE 'pending_approval' END,
+        duplicate_of=NULL, updated_at=NOW()
       FROM ranked r
       WHERE leads.id=r.id AND r.rn=1
         AND COALESCE(leads.replied,FALSE)=FALSE
