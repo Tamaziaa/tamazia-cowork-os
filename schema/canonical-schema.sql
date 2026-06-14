@@ -2402,3 +2402,4 @@ ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT n
 -- Survivors-only: ignores rows marked status='duplicate' (the non-destructive dedupe tombstone) and
 -- NULL/empty domains. Verified safe live: 0 conflicting groups under this predicate.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_domain_active_unique ON leads (lower(domain)) WHERE COALESCE(status,'') <> 'duplicate' AND COALESCE(domain,'') <> '';
+ALTER TABLE minting_queue ADD COLUMN IF NOT EXISTS claimed_at timestamptz;
