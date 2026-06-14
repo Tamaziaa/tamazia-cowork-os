@@ -47,18 +47,30 @@ function args() {
   if (!o.sources.length) o.sources = ['serp-top'];
   return o;
 }
-function adapterByName(n) { return Object.values(REGISTRY).find(s => s.name === n); }
+// Match adapters tolerantly: callers (scrape-all.js, cron) sometimes pass underscores (serp_top,
+// social_ads) while adapter .name values are hyphenated (serp-top, social-ads). Normalise both sides
+// so a hyphen/underscore mismatch can never silently zero a source.
+const _canon = s => String(s || '').toLowerCase().replace(/[_\s]+/g, '-');
+function adapterByName(n) { const c = _canon(n); return Object.values(REGISTRY).find(s => _canon(s.name) === c); }
 
 async function gather(o) {
   let captured = null;
   if (o.capture) { try { captured = JSON.parse(require('fs').readFileSync(o.capture, 'utf8')); } catch (_) {} }
   const raws = [];
   for (const name of o.sources) {
-    const ad = adapterByName(name); if (!ad) continue;
+    const ad = adapterByName(name);
+    if (!ad) { console.error(`[source ${name}] no adapter registered (known: ${Object.values(REGISTRY).map(s => s.name).join(', ')}) — skipped`); continue; }
+    const before = raws.length;
+    const mode = ad.mode(process.env);
     try {
-      if (captured && captured[name]) raws.push(...ad.ingestCaptured(captured[name]));
-      if (ad.mode(process.env) === 'api') raws.push(...await ad.candidates({}, process.env));
+      if (captured && captured[ad.name]) raws.push(...ad.ingestCaptured(captured[ad.name]));
+      else if (captured && captured[name]) raws.push(...ad.ingestCaptured(captured[name]));
+      if (mode === 'api') raws.push(...await ad.candidates({}, process.env));
     } catch (e) { console.error('[source ' + name + '] ' + e.message); }
+    const got = raws.length - before;
+    // Explain a 0-yield chrome-mode source instead of failing silently (root cause of reddit/youtube/
+    // x-ads/social-ads logging 0 every run: they need an API token or a --capture file).
+    if (got === 0 && mode !== 'api') console.error(`[source ${ad.name}] mode=chrome and no --capture provided — yields 0 (set the source's API token or pass --capture).`);
   }
   return raws;
 }

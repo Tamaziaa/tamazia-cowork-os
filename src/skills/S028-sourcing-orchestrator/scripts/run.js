@@ -161,8 +161,16 @@ async function upsertLead(rec) {
   const norm = normaliseCompany(rec.company);
   if (!norm) return { inserted: 0, updated: 0 };
   if (!_passesIcpGate(rec)) return { inserted: 0, updated: 0, gated: 1 };
-  // Check existing
-  const existsRaw = pg(`SELECT id FROM leads WHERE LOWER(company)=${pgEsc(rec.company.toLowerCase())} ${rec.domain ? `OR domain=${pgEsc(rec.domain)}` : ''} LIMIT 1`);
+  // Check existing. Domain match must be normalised AND cover the `website` column, because the SERP
+  // engine stores the bare host in `domain` and a full `https://host` URL in `website`. A raw
+  // `domain=rec.domain` equality missed those, leaking cross-writer duplicates (and www. variants).
+  let domainClause = '';
+  if (rec.domain) {
+    const nd = String(rec.domain).toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/[/?#].*$/, '').replace(/^www\./, '').replace(/\.+$/, '');
+    const normExpr = (col) => `regexp_replace(regexp_replace(regexp_replace(regexp_replace(lower(${col}), '^[a-z][a-z0-9+.-]*://', ''), '[/?#].*$', ''), '^www\\.', ''), '\\.+$', '')`;
+    domainClause = ` OR ${normExpr('domain')}=${pgEsc(nd)} OR ${normExpr('website')}=${pgEsc(nd)}`;
+  }
+  const existsRaw = pg(`SELECT id FROM leads WHERE LOWER(company)=${pgEsc(rec.company.toLowerCase())}${domainClause} LIMIT 1`);
   const existing = existsRaw && /^\d+$/.test(existsRaw) ? Number(existsRaw) : null;
   if (existing) {
     // Update only if we have new data

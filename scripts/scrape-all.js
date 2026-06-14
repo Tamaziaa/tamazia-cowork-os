@@ -23,12 +23,17 @@ const STAGGER = Math.max(0, parseInt(process.env.SCRAPE_STAGGER_MS || '8000', 10
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // source name -> default cadence (minutes). Tunable via SCRAPE_EVERY_<NAME>_MIN.
-const DEFAULT_EVERY = { serp_top: 30, maps: 45, jobspy: 60, social_ads: 90, reddit: 120, youtube: 180 };
+// Keys MUST match adapter .name values in src/lib/sourcing/sources/adapters.js (hyphenated).
+// Previously these used underscores (serp_top/social_ads), which adapterByName() failed to resolve,
+// silently sourcing 0 from every source on the VM. source-leads.js now also normalises, but keep
+// canonical hyphenated names here so the plan log and SCRAPE_SOURCES overrides are correct.
+const DEFAULT_EVERY = { 'serp-top': 30, maps: 45, jobspy: 60, 'social-ads': 90, reddit: 120, youtube: 180 };
 function buildJobs() {
   let names = Object.keys(DEFAULT_EVERY);
   if (process.env.SCRAPE_SOURCES) names = process.env.SCRAPE_SOURCES.split(',').map(s => s.trim()).filter(Boolean);
   return names.map((name) => {
-    const every = Math.max(1, parseInt(process.env['SCRAPE_EVERY_' + name.toUpperCase() + '_MIN'] || DEFAULT_EVERY[name] || 60, 10));
+    const envName = name.toUpperCase().replace(/-/g, '_'); // SERP-TOP -> SERP_TOP (env vars can't contain '-')
+    const every = Math.max(1, parseInt(process.env['SCRAPE_EVERY_' + envName + '_MIN'] || DEFAULT_EVERY[name] || 60, 10));
     const args = [path.join(ROOT, 'scripts', 'source-leads.js'), '--source', name, '--max', MAX];
     if (DRY) args.push('--dry-run');
     return { name, every, args };
