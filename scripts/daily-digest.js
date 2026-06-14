@@ -14,7 +14,10 @@ const GROUPS = [
 ];
 (async () => {
   const raw = pg("SELECT kind, title FROM notifications WHERE digested_at IS NULL AND realtime=FALSE AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC").trim();
-  if (!raw) { console.log('digest: nothing to report (quiet day).'); pg("UPDATE notifications SET digested_at=NOW() WHERE digested_at IS NULL AND realtime=FALSE"); return; }
+  // Quiet day: mark ONLY the same 24h window the SELECT considered (matches the success-path UPDATE below).
+  // The old unbounded UPDATE here buried every older undigested row — including ones a failed/missed run never
+  // surfaced — by stamping digested_at without ever sending them. Keep the bound so nothing is silently lost.
+  if (!raw) { console.log('digest: nothing to report (quiet day).'); pg("UPDATE notifications SET digested_at=NOW() WHERE digested_at IS NULL AND realtime=FALSE AND created_at > NOW() - INTERVAL '24 hours'"); return; }
   const rows = raw.split('\n').map(l => { const i = l.indexOf('\t'); return { kind: l.slice(0, i), title: l.slice(i + 1) }; });
   const buckets = GROUPS.map(([name, rx]) => ({ name, rx, items: [] }));
   let other = [];

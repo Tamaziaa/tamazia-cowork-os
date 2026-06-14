@@ -61,8 +61,16 @@ async function search(query, country = 'UK', num = 100, opts = {}) {
 }
 
 function hasKey() { return !!(process.env.SERPER_KEY || process.env.SERPAPI_KEY || process.env.SCRAPERAPI_KEY); }
+// bug-fix: a FREE SERP provider is configured (SearXNG self-hosted / Brave free 2k / Apify Google-SERP proxy).
+// The search() waterfall is free-first and never needs a paid key, but runDaily()/run-serp-scrape gated the whole
+// wide-scrape on hasKey() — so with a free provider live (e.g. SEARXNG_URL set) but no SERPER_KEY, the 500/day
+// path silently no-ops, contradicting the documented invariant "sourcing NEVER depends on SERPER credits".
+// hasSerp() = a paid OR a configured-free provider is available. (DuckDuckGo is keyless-but-flaky, so it is NOT
+// counted here as "configured" — we only widen when a reliable free provider is explicitly set up.)
+function hasFreeSerp() { return !!(process.env.SEARXNG_URL || process.env.BRAVE_API_KEY || (/^(1|true|yes|on)$/i.test(process.env.APIFY_SERP_ENABLED || '') && process.env.APIFY_PROXY_PASSWORD)); }
+function hasSerp() { return hasKey() || hasFreeSerp(); }
 
-module.exports = { search, hasKey, rootDomain, GL };
+module.exports = { search, hasKey, hasFreeSerp, hasSerp, rootDomain, GL };
 
 if (require.main === module) {
   (async () => {

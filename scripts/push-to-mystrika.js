@@ -13,6 +13,8 @@ const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
 // LIMIT (default 200) — multi-MB of output that overflows Node's 1MB execFileSync default and throws ENOBUFS.
 function pg(sql){ return execFileSync(path.join(__dirname,'psql'),[NEON,'-tA','-c',sql],{encoding:'utf8',maxBuffer:128*1024*1024}); }
 const b64d = (s)=>{ try { return Buffer.from(String(s||''),'base64').toString('utf8'); } catch(_){ return ''; } };
+// SQL string-literal: returns a single-quoted, escaped literal (used by the sends-attribution log writer).
+const pgEsc = (v)=> `'${String(v==null?'':v).replace(/'/g,"''")}'`;
 const arg = (n,d)=>{ const i=process.argv.indexOf('--'+n); return i>=0?process.argv[i+1]:d; };
 const DRY = process.argv.includes('--dry');
 // Each contact = its own prospect (Mystrika has no CC/BCC). Decision-maker = primary; the rest = secondary.
@@ -34,7 +36,13 @@ if (require.main === module) (async()=>{
   // Build sector -> campaign map from the live campaigns ("Tamazia | Law Firms" etc.) for auto-routing.
   let nameToId = {};
   try { const cl = await M.listCampaigns(); const arr = (cl.data && (cl.data.data || cl.data.campaigns)) || cl.data || []; for (const c of (Array.isArray(arr)?arr:[])) nameToId[String(c.name||'').toLowerCase()] = c.id || c.campaign_id; } catch(_){}
-  const SECTOR_CAMPAIGN = { 'law-firms':'law firms','legal':'law firms','healthcare':'healthcare','dental':'healthcare','real-estate':'real estate','hospitality':'f&b','restaurants':'f&b','financial':'financial','finance':'financial','education':'education','automotive':'automotive','professional':'professional','ecommerce':'e-commerce' };
+  // Keys MUST cover every value the lead SELECT's COALESCE(sector, sector_code, filter_key) can emit. Round-3
+  // added that COALESCE, which now surfaces the canonical long-form slugs (e.g. 'financial-services',
+  // 'professional-services', 'beauty-wellness') written by the V3 re-tier path — not just the short forms.
+  // Those long-form slugs were absent here, so campaignFor() returned null and every such prospect was
+  // silently dropped at the byCamp grouping (e.g. ~50 live 'financial-services' FIT leads routed nowhere).
+  // Aliases mirror src/lib/enrich/lead-quality.js + src/lib/sourcing/icp.js so routing speaks the same vocab.
+  const SECTOR_CAMPAIGN = { 'law-firms':'law firms','legal':'law firms','healthcare':'healthcare','dental':'healthcare','medical':'healthcare','beauty-wellness':'healthcare','aesthetics':'healthcare','real-estate':'real estate','property':'real estate','hospitality':'f&b','restaurants':'f&b','financial':'financial','finance':'financial','financial-services':'financial','insurance':'financial','education':'education','automotive':'automotive','professional':'professional','professional-services':'professional','ecommerce':'e-commerce','ecommerce-retail':'e-commerce' };
   const campaignFor = (sector) => {
     if (forceCampaign) return forceCampaign;
     const want = SECTOR_CAMPAIGN[String(sector||'').toLowerCase()] || '';
@@ -42,12 +50,12 @@ if (require.main === module) (async()=>{
     return null;
   };
   const limit = parseInt(arg('max','200'),10);
-  const raw = pg(`SELECT COALESCE(NULLIF(l.contact_email,''), l.email, ''), regexp_replace(COALESCE(NULLIF(trim(l.first_name||' '||COALESCE(l.last_name,'')),''), l.company,'there'),'[\\t\\r\\n]',' ','g'),
+  const raw = pg(`SELECT l.id::text, COALESCE(NULLIF(l.contact_email,''), l.email, ''), regexp_replace(COALESCE(NULLIF(trim(l.first_name||' '||COALESCE(l.last_name,'')),''), l.company,'there'),'[\\t\\r\\n]',' ','g'),
       regexp_replace(COALESCE(l.company,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.domain,''), regexp_replace(COALESCE(NULLIF(l.sector,''),NULLIF(l.sector_code,''),NULLIF(l.filter_key,''),''),'[\\t\\r\\n]',' ','g'), COALESCE(l.audit_url,''),
       regexp_replace(COALESCE(l.personalisation_pointers->>'top_finding',''),'[\\t\\r\\n]',' ','g'), regexp_replace(COALESCE(l.operating_city,''),'[\\t\\r\\n]',' ','g'),
       regexp_replace(COALESCE(l.rank_insight_sentence,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.hiring_signal,''), COALESCE(l.fit_score,0), COALESCE(l.hot_score,0), CASE WHEN COALESCE(l.contact_linkedin,'')<>'' THEN '1' ELSE '0' END, CASE WHEN COALESCE(jsonb_array_length(l.decision_makers),0)>0 OR COALESCE(l.contact_name,'')<>'' THEN '1' ELSE '0' END, COALESCE(l.verify_status,''), COALESCE(l.email_verified::text,''),
       replace(encode(convert_to(COALESCE(d.t0s,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t0b,''),'UTF8'),'base64'),E'\\n',''),
-      replace(encode(convert_to(COALESCE(d.t1b,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t2b,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t3b,''),'UTF8'),'base64'),E'\\n',''), COALESCE(l.primary_email,''), COALESCE(l.secondary_emails::text,'[]')
+      replace(encode(convert_to(COALESCE(d.t1b,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t2b,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t3b,''),'UTF8'),'base64'),E'\\n',''), COALESCE(l.primary_email,''), COALESCE(l.secondary_emails::text,'[]'), COALESCE(l.quality_score,0)
     FROM leads l LEFT JOIN LATERAL (
       SELECT MAX(CASE WHEN draft_metadata->>'touch'='0' THEN draft_subject END) t0s, MAX(CASE WHEN draft_metadata->>'touch'='0' THEN draft_body END) t0b,
              MAX(CASE WHEN draft_metadata->>'touch'='1' THEN draft_body END) t1b, MAX(CASE WHEN draft_metadata->>'touch'='2' THEN draft_body END) t2b, MAX(CASE WHEN draft_metadata->>'touch'='3' THEN draft_body END) t3b
@@ -62,7 +70,7 @@ if (require.main === module) (async()=>{
   const seenGlobal = new Set();   // 1 prospect = 1 email, deduped across the whole run
   const coveredPrimaries = new Set(); // lead-primary emails whose DM was already sent via a colliding lead this run
   for (const r of rows) {
-    const [email,name,company,domain,sector,audit,finding,city,ri,hiring,fitScore,hotScore,hasLi,hasDm,verifyStatus,emailVerified,t0s,t0b,t1b,t2b,t3b,primaryEmail,secondaryJson]=r;
+    const [leadId,email,name,company,domain,sector,audit,finding,city,ri,hiring,fitScore,hotScore,hasLi,hasDm,verifyStatus,emailVerified,t0s,t0b,t1b,t2b,t3b,primaryEmail,secondaryJson,qualityScore]=r;
     if (!email && !primaryEmail) continue;
     if (!audit) continue;  // touch-1 guard: never push a lead without a minted audit_url
     const t0body=b64d(t0b); if (!t0body) continue;
@@ -71,7 +79,14 @@ if (require.main === module) (async()=>{
     // deliverable -> Tier B; empty/pending/bad -> Tier C -> skipped (SEND_TIERS excludes C). Sending stays OFF.
     const verified = isVerifiedStatus(verifyStatus) || (/^(t|true|1)$/i.test(emailVerified||'') && !/^(bad|invalid|undeliverable|no_mx|nxdomain|disposable)$/i.test(verifyStatus||''));
     const deliverable = !verified && /(catch|risky|accept)/i.test(verifyStatus||'');
-    const conv=conversionScore({fit:true,fit_score:+fitScore||0,hot_score:+hotScore||0,has_verified_email:verified,has_deliverable_email:deliverable,decision_maker:hasDm==='1',has_linkedin:hasLi==='1',audit_verified:true,hiring_signal:hiring});
+    // bug-fix: the V3 re-tier path (requalify-all-leads.js) writes quality_score/total_score and leaves the LEGACY
+    // fit_score/hot_score columns at 0 for ~all icp_tier=1 leads (609/614 live). conversionScore weights fit_score*0.35,
+    // so a genuine Tier-1 (quality_score ~82) scored fit_score=0 -> conv tier 'C' -> EXCLUDED from SEND_TIERS -> every
+    // audit-verified send-ready lead was silently dropped at this gate (0/22 passed). Fall back to the populated V3
+    // quality_score when the legacy fit_score is absent, so conversion likelihood reflects real lead quality. Safe: the
+    // audit_verified + verify_status gates above are unchanged; this only stops dropping already-qualified send-ready leads.
+    const fitForConv = Math.max(+fitScore||0, +qualityScore||0);
+    const conv=conversionScore({fit:true,fit_score:fitForConv,hot_score:+hotScore||0,has_verified_email:verified,has_deliverable_email:deliverable,decision_maker:hasDm==='1',has_linkedin:hasLi==='1',audit_verified:true,hiring_signal:hiring});
     if (!SEND_TIERS.has(conv.tier)) continue;  // only email leads we are VERY sure about (Tier A/B)
     // Build the recipient set: the DECISION-MAKER (primary) first, then verified/risky secondary contacts.
     const pe = String(primaryEmail||email||'').toLowerCase();
@@ -95,7 +110,7 @@ if (require.main === module) (async()=>{
         rank_insight: ri, hiring_signal: hiring, conversion_tier: conv.tier, conversion_score: conv.score,
         touch0_subject: b64d(t0s), touch0_body: rc.isPrimary ? t0body : greet(t0body, first),
         touch1_body: rc.isPrimary ? b64d(t1b) : greet(b64d(t1b), first), touch2_body: rc.isPrimary ? b64d(t2b) : greet(b64d(t2b), first), touch3_body: rc.isPrimary ? b64d(t3b) : greet(b64d(t3b), first),
-        is_primary: rc.isPrimary, lead_primary: pe });
+        is_primary: rc.isPrimary, lead_primary: pe, lead_id: Number(leadId) || null });
     }
   }
   // TOUCH-1 CORRECTNESS GUARD: assert each prospect's audit_url (slug,hash) maps to ITS OWN domain in audit_pages.
@@ -135,8 +150,33 @@ if (require.main === module) (async()=>{
   for (const [cid, ps] of Object.entries(byCamp)) {
     const res = await M.addProspects(cid, ps, true);
     console.log('  -> '+cid+': ok='+res.ok+' added='+res.added+' batches='+res.ok_batches+'/'+res.batches);
-    if (res.ok) pushedProspects = pushedProspects.concat(ps);
+    // Tag each prospect with the campaign it was actually accepted into so the sends-log row records it.
+    if (res.ok) { for (const p of ps) p._campaign_id = cid; pushedProspects = pushedProspects.concat(ps); }
   }
+  // SEND-ATTRIBUTION (canonical sends log): write ONE `sends` row per prospect Mystrika accepted, attributed to
+  // its lead_id. Without this the Mystrika send brain was invisible in `sends` (per-source/per-sector dashboards
+  // grouped every Mystrika send as "unknown" because lead_id was NULL) and reply-matching by Message-ID/recipient
+  // had no row to hit. lead_id is REQUIRED (guard non-integer ids, skip rather than orphan the row). message_id is a
+  // deterministic, namespaced id we control (Mystrika assigns its own at actual send; recipient-match M2 + lead-email
+  // M3 in match-inbound-replies.js still resolve replies, and this id makes each row uniquely traceable). Per-recipient
+  // (one prospect = one mailbox = one send), touch 0 (the push enqueues touch-0). Idempotent via ON CONFLICT-free
+  // existence guard on (lead_id, recipient, touch) so a re-run never double-logs. Fail-soft per row; never blocks.
+  let logged = 0, logSkipped = 0;
+  for (const p of pushedProspects) {
+    const leadIdNum = Number(p.lead_id);
+    if (!Number.isInteger(leadIdNum) || leadIdNum <= 0) { logSkipped++; continue; } // never orphan reporting with a junk id
+    const recip = String(p.email || '').toLowerCase();
+    if (!recip) { logSkipped++; continue; }
+    const msgId = `mystrika-${String(p._campaign_id || '')}-${leadIdNum}-t0@tamazia`.replace(/[^A-Za-z0-9@._-]/g, '');
+    try {
+      pg(`INSERT INTO sends (lead_id, recipient, subject, subject_used, message_id, relay_used, relay_name, sent_at, status, delivery_status, touch_number, kind, sector, jurisdiction)
+          SELECT ${leadIdNum}, ${pgEsc(recip)}, ${pgEsc(p.touch0_subject||'')}, ${pgEsc(p.touch0_subject||'')}, ${pgEsc(msgId)}, 'mystrika', 'mystrika', NOW(), 'sent', 'queued', 0, 'cold', NULLIF(l.sector,''), NULLIF(l.jurisdiction,'')
+          FROM leads l WHERE l.id=${leadIdNum}
+          AND NOT EXISTS (SELECT 1 FROM sends s WHERE s.lead_id=${leadIdNum} AND lower(s.recipient)=${pgEsc(recip)} AND COALESCE(s.touch_number,0)=0 AND s.relay_name='mystrika')`);
+      logged++;
+    } catch (_) { logSkipped++; }
+  }
+  console.log(`sends-log: wrote ${logged} attributed rows (lead_id set), skipped ${logSkipped}`);
   // Mark a LEAD pushed once ANY of its prospects (primary OR secondary) went out, OR its DM email was already
   // sent via a colliding lead this run. Prevents re-selecting + re-sending the same secondaries next run.
   const pushedPrimaries = [...new Set([...pushedProspects.map(p=>p.lead_primary).filter(Boolean), ...coveredPrimaries])];

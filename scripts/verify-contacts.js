@@ -27,8 +27,14 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
     SELECT id::text, contact_email
     FROM leads
     WHERE contact_email IS NOT NULL AND contact_email <> '' AND POSITION('@' IN contact_email) > 1
-      AND (verify_status IS NULL OR verify_status = '')
-    ORDER BY priority_score DESC NULLS LAST, id DESC LIMIT ${limit}`);
+      -- bug-fix: 'pending' is the UNVERIFIED placeholder the SERP scraper writes at insert (serp-engine.js:
+      -- organic_top100 -> verify_status='pending'; health-check/intel-pulse both treat it as "awaiting verify").
+      -- The old (NULL OR '') filter MISSED it, so every organic lead stamped 'pending' was never free-verified —
+      -- 388 of 614 icp_tier=1 leads were stranded at 'pending' (never deliverability-checked) and so could not
+      -- become send-ready. free-verify.js only ever emits valid/risky/invalid/unknown, so re-checking a 'pending'
+      -- row is correct (it was never actually verified). prioritise Tier-1 so send-ready depth fills first.
+      AND COALESCE(verify_status,'') IN ('', 'pending')
+    ORDER BY (icp_tier = 1) DESC NULLS LAST, priority_score DESC NULLS LAST, id DESC LIMIT ${limit}`);
   if (!raw) { console.log('[verify] nothing to verify.'); return; }
   const rows = raw.split('\n').filter(Boolean).map(l => { const [id, email] = l.split('\t'); return { id: Number(id), email }; });
   let valid = 0, risky = 0, invalid = 0;

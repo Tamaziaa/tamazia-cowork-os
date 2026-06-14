@@ -39,7 +39,8 @@ async function companiesHouseLookup(reg, key) {
   if (!key || !/^\w{0,2}\d{6,8}$/.test(reg)) return null;
   try {
     const auth = 'Basic ' + Buffer.from(key + ':').toString('base64');
-    const r = await fetch(`https://api.company-information.service.gov.uk/company/${reg}/officers`, { headers: { Authorization: auth } });
+    // bug-fix: no timeout -> a hung Companies House response could stall the firmographics/enrich step forever.
+    const r = await fetch(`https://api.company-information.service.gov.uk/company/${reg}/officers`, { headers: { Authorization: auth }, signal: AbortSignal.timeout(12000) });
     if (!r.ok) return null; const d = await r.json();
     return (d.items || []).filter(o => !o.resigned_on).slice(0, 8).map(o => ({ name: o.name, role: o.officer_role || '', appointed: o.appointed_on || '', source: 'companies_house' }));
   } catch (_) { return null; }
@@ -47,7 +48,7 @@ async function companiesHouseLookup(reg, key) {
 async function openCorporatesLookup(name, jur, token) {
   if (!token || !name) return null;
   try {
-    const r = await fetch(`https://api.opencorporates.com/v0.4/companies/search?q=${encodeURIComponent(name)}${jur ? '&jurisdiction_code=' + jur : ''}&api_token=${token}`);
+    const r = await fetch(`https://api.opencorporates.com/v0.4/companies/search?q=${encodeURIComponent(name)}${jur ? '&jurisdiction_code=' + jur : ''}&api_token=${token}`, { signal: AbortSignal.timeout(12000) });
     if (!r.ok) return null; const d = await r.json();
     const c = ((d.results && d.results.companies) || [])[0]; if (!c) return null;
     return { company_number: c.company.company_number, status: c.company.current_status || '', incorporation_date: c.company.incorporation_date || '', jurisdiction: c.company.jurisdiction_code || '', name: c.company.name };

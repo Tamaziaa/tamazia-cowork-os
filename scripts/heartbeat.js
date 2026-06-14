@@ -7,6 +7,7 @@
 //   node scripts/heartbeat.js start <job> [host]                         -> prints the new run id (stdout)
 //   node scripts/heartbeat.js finish <id> [status] [processed] [errors] [last_error...]
 //   node scripts/heartbeat.js wrap <job> -- <command...>                 -> start, run, finish (status from exit code)
+//   node scripts/heartbeat.js active-writer                              -> prints a live heavy-writer job name, or '' (engine-cycle race guard)
 //
 // engine_runs is also in schema/canonical-schema.json, so ensure-schema.js provisions it; the CREATE
 // here is a fail-open belt-and-braces so a heartbeat never errors on a fresh DB.
@@ -59,11 +60,33 @@ function finish(id, status, processed, errors, lastError) {
   pg(`UPDATE engine_runs SET ${sets.join(',')} WHERE id=${Number(id) || 0}`);
 }
 
+// Race guard for the engine cycle. The heavy re-tier writers (v3-rerun / v3-validate / backlog-burst /
+// nightly-workers) rewrite icp_tier / quality_fit / lifecycle_stage / sector_code on
+// the SAME rows the cycle's qualify->enqueue->mint->render seam reads+writes. They used to share the
+// `engine-db-work` concurrency group with engine-cycle so the two never overlapped — but that group queued the
+// every-30-min cycle behind ~5h v3-runs, and GitHub then CANCELLED the superseded pending cycles (founder-alarming
+// "cancelled" runs). engine-cycle now has its OWN group (so it never self-cancels) and protects the race at the
+// DATA layer instead: this prints the job name of an actively-running heavy writer (status='running' within a TTL),
+// or '' if none. The cycle SKIPS just its race-sensitive steps when a writer is live, and runs everything else.
+// TTL (default 360m) covers v3-rerun's 330m cap; the reaper independently force-closes truly-dead 'running' rows
+// after 90m of the same job, so a crashed writer can never wedge the guard permanently. Fail-open: any DB error
+// returns '' (cycle proceeds) — never block the cycle on the guard itself.
+const WRITER_JOBS = ['v3-rerun', 'v3-validate', 'backlog-burst', 'nightly-workers'];
+const WRITER_TTL_MIN = Number(process.env.ENGINE_WRITER_TTL_MIN || 360);
+function activeWriter() {
+  const list = WRITER_JOBS.map(esc).join(',');
+  const r = pg(`SELECT job FROM engine_runs
+      WHERE job IN (${list}) AND status='running' AND started_at > now() - interval '${WRITER_TTL_MIN} minutes'
+      ORDER BY started_at DESC LIMIT 1`);
+  return r ? (r.split('\n')[0] || '').trim() : '';
+}
+
 function main() {
   const a = process.argv.slice(2);
   const mode = a[0];
   if (mode === 'start') { process.stdout.write(start(a[1], a[2])); return; }
   if (mode === 'finish') { finish(a[1], a[2], a[3], a[4], a.slice(5).join(' ')); return; }
+  if (mode === 'active-writer') { process.stdout.write(activeWriter()); return; }   // race guard for the engine cycle (see activeWriter())
   if (mode === 'wrap') {
     const sep = a.indexOf('--');
     const job = a[1];
@@ -87,7 +110,7 @@ function main() {
     finish(id, ok ? 'ok' : 'error', null, ok ? 0 : 1, tail);
     process.exit(timedOut ? 124 : (r.status == null ? 1 : r.status));
   }
-  console.error('usage: heartbeat.js start|finish|wrap');
+  console.error('usage: heartbeat.js start|finish|wrap|active-writer');
   process.exit(2);
 }
 

@@ -7,14 +7,19 @@ on:
     - cron: "*/30 * * * *"
   workflow_dispatch: {}
 
-# SERIALISE with the heavy DB writers (backlog-burst / v3-rerun / nightly-workers all use this
-# same group). Before this, engine-cycle had its own group and ran CONCURRENTLY with v3-rerun /
-# backlog-burst — so requalify-all-leads.js could re-tier (icp_tier / quality_fit / lifecycle_stage)
-# the very leads this cycle's qualify->enqueue->mint was reading, producing status='touch_N_queued'
-# rows whose lifecycle_stage had been flipped to pending_approval/rejected underneath them.
-# cancel-in-progress:false => a 30-min cycle simply queues behind a long burst rather than racing it.
+# OWN concurrency group (NOT engine-db-work). engine-cycle used to share engine-db-work with the heavy
+# re-tier writers (v3-rerun ~330min / backlog-burst / nightly-workers) to stop requalify-all-leads.js
+# re-tiering (icp_tier / quality_fit / lifecycle_stage / sector_code) the very rows this cycle's
+# qualify->enqueue->mint->render seam reads — BUT that queued every 30-min schedule behind a multi-hour
+# writer, and GitHub then CANCELLED the superseded pending cycles ("cancelled" runs that alarm the founder).
+# Fix: each cycle is short (per-step STEP_TIMEOUT + 25-min job cap => <30min), so its OWN group with
+# cancel-in-progress:false lets back-to-back schedules queue/finish cleanly with NO self-cancellation. The
+# tier/lifecycle race is now protected at the DATA layer instead: run-engine-cycle.sh asks heartbeat.js
+# `active-writer` for a live heavy writer and SKIPS just the race-sensitive steps that cycle (the writers
+# keep engine-db-work among themselves). Same protection, zero cancellation/email noise. Do NOT move this
+# back into engine-db-work.
 concurrency:
-  group: engine-db-work
+  group: engine-cycle
   cancel-in-progress: false
 
 jobs:
