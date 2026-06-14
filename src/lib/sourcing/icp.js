@@ -58,7 +58,13 @@ const GEO = {
 function kwHit(t, k) {
   let idx = t.indexOf(k);
   if (idx < 0) return false;
-  const alpha = /^[a-z]+$/.test(k);
+  // gap-fix(3): plural tolerance previously only fired for SINGLE-word alphabetic keywords (/^[a-z]+$/),
+  // so multi-word keywords ('estate agent','law firm','car dealer','wealth management') never matched their
+  // real-world plural ('Estate Agents','Law Firms','Car Dealers') — those titles classified to null and lost
+  // the regulated-sector boost in scoreICP. Allow plural tolerance for any all-letter, space-separated keyword
+  // (still ends in a letter, still requires a boundary after the appended s/es — the dispatch/refund/barrister
+  // prefix false-matches stay blocked because those need the keyword as a prefix of a LONGER word, not +s).
+  const alpha = /^[a-z]+( [a-z]+)*$/.test(k);
   for (let from = 0; (idx = t.indexOf(k, from)) >= 0; from = idx + 1) {
     const before = idx === 0 ? '' : t.charAt(idx - 1);
     if (!(before === '' || !/[a-z0-9]/.test(before))) continue;

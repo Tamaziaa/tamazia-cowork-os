@@ -30,6 +30,21 @@ function run() {
         AND COALESCE(leads.replied,FALSE)=FALSE
         AND COALESCE(leads.status,'') NOT IN ('duplicate')
         AND COALESCE(leads.lifecycle_stage,'') NOT IN ('won','client','duplicate')`);
+  // bug-fix: RE-PROMOTE the surviving primary. Across runs the chosen primary can CHANGE (e.g. once a row
+  // gains contact_email/quality_score it outranks the old primary). The marking UPDATE above never un-marks
+  // a row already status='duplicate', so a flipped primary stayed suppressed — leaving some domains with
+  // EVERY row status='duplicate' and ZERO survivors (the whole lead silently dropped from the send pool;
+  // observed live on smilecliniq.com/fenwick.com/loaf.com/thirdspace.london). This second pass restores the
+  // current rn=1 row to the funnel if it was wrongly suppressed. Idempotent; never touches won/client/replied.
+  pg(`WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY lower(domain) ORDER BY ${order}) rn
+        FROM leads WHERE COALESCE(domain,'')<>''
+      )
+      UPDATE leads SET status='new', lifecycle_stage='sourced', duplicate_of=NULL, updated_at=NOW()
+      FROM ranked r
+      WHERE leads.id=r.id AND r.rn=1
+        AND COALESCE(leads.replied,FALSE)=FALSE
+        AND leads.status='duplicate'`);
   const after = Number(pg(`SELECT COUNT(*) FROM leads WHERE status='duplicate'`) || 0);
   console.log(`Dedupe: marked ${after - before} new duplicate(s) · ${after} suppressed total`);
   return { newly_marked: after - before, total_suppressed: after };
