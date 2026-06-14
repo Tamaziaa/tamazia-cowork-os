@@ -49,9 +49,14 @@ async function scoreWithRetry(lead, n = 2) {
     SELECT to_jsonb(l) FROM leads l
     WHERE COALESCE(l.domain,'') <> ''
       AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal')
-      -- protect in-flight + terminal leads: never re-tier something already in a sequence or closed
+      -- protect in-flight + terminal leads: never re-tier something already in a sequence or closed.
+      -- The enumerated list only caught touch_0; send-due.js advances status to touch_1/2/3_queued and
+      -- cadence_complete, so a lead mid-cadence (e.g. touch_2_queued) was NOT protected and could be
+      -- demoted under an active sequence. Match ALL touch_%_queued / touch_%_blocked states by pattern.
       AND COALESCE(l.status,'') NOT IN ('duplicate','suppressed','dnc','bounced','opted_out',
-                                        'touch_0_queued','touch_0_blocked','queued','sent','replied','contacted','won','lost','booked')
+                                        'queued','sent','replied','contacted','won','lost','booked','cadence_complete')
+      AND COALESCE(l.status,'') NOT LIKE 'touch\_%\_queued'
+      AND COALESCE(l.status,'') NOT LIKE 'touch\_%\_blocked'
       AND (l.lifecycle_stage IS NULL OR l.lifecycle_stage IN ${RESCORE_STAGES})
       AND COALESCE(l.requal_version,'') <> ${esc(REQUAL_VERSION)}   -- idempotent: skip rows already done this version
     ORDER BY l.quality_scored_at ASC NULLS FIRST, l.id ASC LIMIT ${limit}`);
