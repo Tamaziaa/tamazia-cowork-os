@@ -40,9 +40,17 @@ function normCompany(s) { return String(s || '').toLowerCase().replace(/\b(ltd|l
 async function upsertLead(rec) {
   const norm = normCompany(rec.company);
   if (!norm || norm.length < 3) return { skipped: true };
-  // Check by company-name or domain
-  const where = rec.domain ? `LOWER(company)=${pgEsc(rec.company.toLowerCase())} OR domain=${pgEsc(rec.domain)}` : `LOWER(company)=${pgEsc(rec.company.toLowerCase())}`;
-  const exists = pg(`SELECT id FROM leads WHERE ${where} LIMIT 1`);
+  // Check by company-name or domain. bug-fix: a raw `domain=rec.domain` equality missed leads stored with a
+  // full `https://host` URL in the `website` column (the SERP engine writes bare host in `domain` and a URL in
+  // `website`) and missed www./scheme/trailing-dot variants — leaking cross-writer duplicates. Mirror the
+  // normalised dedup the S028 orchestrator already uses: compare a normalised host against BOTH columns.
+  let domainClause = '';
+  if (rec.domain) {
+    const nd = String(rec.domain).toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/[/?#].*$/, '').replace(/^www\./, '').replace(/\.+$/, '');
+    const normExpr = (col) => `regexp_replace(regexp_replace(regexp_replace(regexp_replace(lower(${col}), '^[a-z][a-z0-9+.-]*://', ''), '[/?#].*$', ''), '^www\\.', ''), '\\.+$', '')`;
+    domainClause = ` OR ${normExpr('domain')}=${pgEsc(nd)} OR ${normExpr('website')}=${pgEsc(nd)}`;
+  }
+  const exists = pg(`SELECT id FROM leads WHERE LOWER(company)=${pgEsc(rec.company.toLowerCase())}${domainClause} LIMIT 1`);
   if (exists) return { existed: true, id: Number(exists) };
   const sql = `INSERT INTO leads (company, domain, sector, jurisdiction, city, email, phone, source, source_query, source_payload_hash, source_raw, status, imported_at, created_at, updated_at, priority_score) VALUES (${pgEsc(rec.company)}, ${pgEsc(rec.domain)}, ${pgEsc(rec.sector)}, ${pgEsc(rec.jurisdiction || 'UK')}, ${pgEsc(rec.city)}, ${pgEsc(rec.email)}, ${pgEsc(rec.phone)}, ${pgEsc(rec.source)}, ${pgEsc(rec.source_query)}, ${pgEsc(crypto.createHash('sha256').update(rec.company + (rec.domain||'')).digest('hex').slice(0,16))}, ${pgEsc(JSON.stringify(rec))}::jsonb, 'new', NOW(), NOW(), NOW(), 50) RETURNING id`;
   const id = pg(sql);

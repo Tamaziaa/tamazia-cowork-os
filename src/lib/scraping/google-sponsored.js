@@ -54,8 +54,11 @@ function ingestSponsored(q, sponsoredUrls) {
   for (const u of sponsoredUrls) {
     const dom = rootDomain(u);
     if (!dom || SOCIAL.test(dom)) continue;
-    // dedupe by domain
-    const exists = pg(`SELECT 1 FROM leads WHERE LOWER(domain)=${esc(dom)} OR LOWER(website) LIKE ${esc('%' + dom + '%')} LIMIT 1`);
+    // dedupe by domain. bug-fix: `LOWER(website) LIKE '%dom%'` substring-matched distinct brands
+    // (dom 'loaf.com' wrongly matched 'meatloaf.com') and silently skipped a genuine new lead. Use a
+    // normalised EXACT match on the website column (strip scheme/path/www/trailing-dot), same as elsewhere.
+    const _normWebsite = `regexp_replace(regexp_replace(regexp_replace(regexp_replace(lower(website), '^[a-z][a-z0-9+.-]*://', ''), '[/?#].*$', ''), '^www\\.', ''), '\\.+$', '')`;
+    const exists = pg(`SELECT 1 FROM leads WHERE LOWER(domain)=${esc(dom)} OR ${_normWebsite}=${esc(dom)} LIMIT 1`);
     if (exists) continue;
     const company = dom.split('.')[0].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     pg(`INSERT INTO leads (company, domain, website, sector, jurisdiction, source, acquisition_channel, lead_type, lifecycle_stage, aggressive_source, priority_score, created_at)
