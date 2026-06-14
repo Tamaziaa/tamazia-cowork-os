@@ -77,7 +77,13 @@ async function _hasMX(domain) {
 }
 const _DISPOSABLE = new Set(['mailinator.com','guerrillamail.com','10minutemail.com','tempmail.com','yopmail.com','trashmail.com','sharklasers.com','guerrillamailblock.com','temp-mail.org','dispostable.com','getnada.com','maildrop.cc']);
 const _FREE = new Set(['gmail.com','googlemail.com','yahoo.com','yahoo.co.uk','hotmail.com','hotmail.co.uk','outlook.com','aol.com','icloud.com','me.com','live.com','live.co.uk','msn.com','protonmail.com','proton.me','gmx.com','mail.com','yandex.com','ymail.com','btinternet.com']);
-const _ROLE = new Set(['info','contact','hello','admin','sales','support','enquiries','enquiry','office','mail','team','reception','hi','help','noreply','no-reply','accounts','billing','careers','jobs','hr','marketing','press','media','general','mailbox','post']);
+// gap-fix: the role/generic-inbox set was too thin, so generic inboxes NOT listed here (bookings@, reservations@,
+// pr@, membership@, editorial@, feedback@, inquiry@, care@, events@, customerservice@, contactus@, finance@,
+// legal@ ...) passed emailGate as a NAMED decision-maker (cleanNamedDM) and reached Tier-1 auto-send. Empirically
+// 'reservations'(9), 'pr'(6), 'membership'(5), 'editorial'(4) etc. were sitting in Tier-1. This list now mirrors
+// free-verify.js ROLE (single behaviour) plus the generic inboxes observed in the live Tier-1 set. Generic inbox
+// => cleanRoleDM (Tier-2 hold), never an own-domain named DM.
+const _ROLE = new Set(['info','contact','hello','admin','sales','support','enquiries','enquiry','enquire','inquiry','inquiries','office','mail','mailbox','team','reception','hi','help','noreply','no-reply','do-not-reply','donotreply','accounts','account','billing','finance','careers','jobs','recruitment','hr','marketing','press','media','pr','general','post','postmaster','webmaster','abuse','privacy','legal','newsletter','notifications','bookings','booking','reservations','reservation','appointments','appointment','membership','memberships','editorial','editor','feedback','events','advertising','ads','customerservice','customercare','care','service','services','contactus','clientcare','frontdesk','referrals','admissions','partnership','partnerships']);
 const _EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // THE 4-5 PURE FILTERS — deterministic, free, high-precision at DISCARDING only clearly-bad / bounce-prone /
 // off-ICP emails. Returns { clean, role, reason }. clean=true => deliverable-shaped on the firm's OWN domain.
@@ -300,6 +306,12 @@ async function scoreLead(lead) {
   const freeProviderDM = dmAny && dmGate.reason === 'free_provider' && servedSector;
   // Confirmed-bad safety net (only ever DEMOTES): enrichment/Apify said the address is definitively undeliverable.
   const confirmedBad = /^(invalid|bad|undeliverable|no_mx|disposable|invalid_syntax|nxdomain)$/i.test(String(lead.verify_status || ''));
+  // gap-fix: CATCH-ALL guard. The canonical verifier folds accept-all into 'risky' BEFORE storage (free-verify L121,
+  // verify-status.js), so the stored value is 'risky', never the literal 'catch-all'. A catch-all domain ACCEPTS a
+  // guessed address at SMTP without it existing, so a guessed-but-unverified DM on such a domain must NOT auto-send.
+  // True when the domain is catch-all/unconfirmed (risky/catch*/accept*/unknown) AND we have no positive verification.
+  const _vs = String(lead.verify_status || '').trim();
+  const catchAllUnverified = /^(risky|catch[\s_-]?all|accept[\s_-]?all|unknown)$/i.test(_vs) && !dmEmailVerified;
   const reachable = cleanNamedDM || cleanRoleDM || hasSocial || freeProviderDM;
 
   // A fixable gap = ANY real problem the audit can hook on: a missing compliance doc, OR a missing SEO element,
@@ -385,8 +397,12 @@ async function scoreLead(lead) {
   const namedAndLinkedin = (namedDMRole || cleanNamedDM) && hasLinkedin;
   // gap-fix: most corporate domains BLOCK SMTP probes, so requiring smtpVerifiedPersonal made Tier-1 near-empty.
   // A clean named DM (own domain, live MX) + LinkedIn at a REGULATED + ESTABLISHED firm is a legitimate auto-send target.
+  // gap-fix: also exclude catchAllUnverified — a guessed personal address on a catch-all domain (verify_status
+  // 'risky') is NOT proof of a real mailbox, so it cannot earn auto-send. It still qualifies as a Tier-2 contact
+  // below (catch-all domains are contactable, just lower-confidence). smtpVerifiedPersonal (a positive verify)
+  // overrides, so a catch-all domain WITH an independently-verified address can still reach Tier-1.
   const tier1Contact = (namedDMRole || cleanNamedDM) && hasLinkedin && !confirmedBad
-    && (smtpVerifiedPersonal || (cleanNamedDM && sectorRegulated && established));
+    && (smtpVerifiedPersonal || (cleanNamedDM && sectorRegulated && established && !catchAllUnverified));
   // gap-fix: any usable contact (named, generic info@, free-provider at a served firm, catch-all) keeps a lead alive at Tier-2.
   const tier2Contact = (namedAndLinkedin && (inferredEmail || cleanRoleDM)) || cleanNamedDM || cleanRoleDM || freeProviderDM;
   let tier, tier_reason;
