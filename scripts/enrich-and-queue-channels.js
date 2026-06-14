@@ -31,7 +31,12 @@ function instagramTouch0({ company }) {
 
 (async () => {
   const limit = Number(process.argv[2] || 10);
-  // Pick leads that lack contact data and aren't internal/test/lexquity
+  // Pick leads that lack contact data and aren't internal/test/lexquity.
+  // bug-fix(round-5): best_channel='none' was TERMINAL — a lead the waterfall found no contact for (often just a
+  // transient empty-site/timeout) was stamped 'none' and, because the filter required best_channel='', NEVER
+  // re-enriched even after its site came back. 166 leads sit permanently stuck at none+zero-contact. Re-admit
+  // 'none' leads that still have a domain and no email, BOUNDED to once a week via updated_at (the script stamps
+  // updated_at on every pass) so they get a periodic retry without re-fetching the same dead set every 30min cycle.
   const raw = pg(`
     SELECT id::text, company, COALESCE(domain,''), COALESCE(first_name,'')
     FROM leads
@@ -39,9 +44,12 @@ function instagramTouch0({ company }) {
       AND COALESCE(sector,'') NOT IN ('lexquity-investor','arbitration-institution','arbitration-practitioner','professional-services','internal')
       AND COALESCE(company,'') NOT ILIKE 'Test %' AND COALESCE(company,'') NOT ILIKE 'Tamazia%'
       AND COALESCE(company,'') NOT ILIKE '%arbitration%' AND COALESCE(company,'') NOT ILIKE '%(ICC)%'
-      AND COALESCE(best_channel,'') = ''
       AND COALESCE(contact_email,'') = ''
-    ORDER BY priority_score DESC NULLS LAST, id DESC
+      AND (
+        COALESCE(best_channel,'') = ''
+        OR (best_channel = 'none' AND COALESCE(domain,'') <> '' AND updated_at < NOW() - INTERVAL '7 days')
+      )
+    ORDER BY (COALESCE(best_channel,'') = '') DESC, priority_score DESC NULLS LAST, id DESC
     LIMIT ${limit}`);
   const leads = raw.split('\n').filter(Boolean).map(l => { const [id, company, domain, first] = l.split('\t'); return { id: Number(id), company, domain, first }; });
   console.log(`Enriching ${leads.length} leads via free waterfall...`);
