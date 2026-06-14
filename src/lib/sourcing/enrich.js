@@ -23,7 +23,10 @@ async function getText(url, ms) {
   if (_resGet) { try { const rr = await _resGet(url, { timeout: ms || 15000 }); if (rr && rr.ok && rr.body) return rr.body; } catch (_) {} }
   return '';
 }
-async function sql(query) { const u = NEON(); if (!u) return { ok: false, rows: [] }; try { const host = u.replace(/.*@([^/]+)\/.*/, '$1'); const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': u, 'Content-Type': 'application/json' }, body: JSON.stringify({ query, params: [] }), signal: AbortSignal.timeout(20000) }); if (!r.ok) return { ok: false, rows: [] }; const d = await r.json(); return { ok: true, rows: d.rows || d.results || [] }; } catch (_) { return { ok: false, rows: [] }; } }
+// gap-fix: this Neon fetch was the ONE unbounded request in the enrich path (every other call goes through
+// timed()/AbortSignal). A hung Neon connection would block cacheGet/cachePut/loadLists indefinitely and stall
+// the whole enrichment of a lead. Add the same 15s abort the rest of the file (and gates.js) already use.
+async function sql(query) { const u = NEON(); if (!u) return { ok: false, rows: [] }; try { const host = u.replace(/.*@([^/]+)\/.*/, '$1'); const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': u, 'Content-Type': 'application/json' }, body: JSON.stringify({ query, params: [] }), signal: AbortSignal.timeout(15000) }); if (!r.ok) return { ok: false, rows: [] }; const d = await r.json(); return { ok: true, rows: d.rows || d.results || [] }; } catch (_) { return { ok: false, rows: [] }; } }
 const esc = s => String(s).replace(/'/g, "''");
 
 // ---- free verification lists (loaded once from Neon, fallback to built-ins) ----
@@ -116,7 +119,12 @@ async function serperDecisionMakers(company, key) {
 // The firm's OWN website is the strongest email signal. Pull every address (mailto + plain-text +
 // common obfuscations), and for each, bind a nearby NAME + ROLE from the surrounding HTML so the
 // decision-maker's email can be identified (source 'site_named' when a person is attached).
-const _ASSET = /\.(png|jpe?g|gif|svg|webp|css|js|ico|pdf|woff2?|ttf|mp4|webm)$/i;
+// gap-fix: the plain-text email regex is `\.[A-Z]{2,}$`, so a media filename containing '@' (e.g.
+// "clip-@-60-fps-h.264.mp4") is captured with its TRAILING DIGIT DROPPED ('...264.mp', not '.mp4') because
+// [A-Z]{2,} stops at the first non-letter — which slipped straight past an `.mp4$`-anchored asset filter and
+// landed video filenames in the email pool (seen live: an 'aerial-twilight-footage…mp' "email"). Cover the
+// bare/letter-truncated media + font extensions too.
+const _ASSET = /\.(png|jpe?g|gif|svg|webp|bmp|tiff?|avif|css|js|mjs|json|xml|ico|pdf|woff2?|ttf|otf|eot|mp|mp[34]|mov|avi|mkv|m4[av]|webm|ogg|wav|zip|gz)$/i;
 const _PLACEHOLDER = /(example\.(com|org)|sentry\.io|wixpress|squarespace|godaddy|domain\.com|yourdomain|email\.com|company\.com)/i;
 const _GENERIC_LOCAL = /^(info|contact|hello|hi|admin|sales|support|enquir(y|ies)|office|mail|team|reception|help|no-?reply|accounts|marketing|careers|jobs|hr|press|media|bookings?|appointments?|general)$/i;
 function _stripTags(s) { return String(s || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim(); }
@@ -155,6 +163,13 @@ function parseContactsFromHtml(html, domain, page = '/') {
     const v = String(vRaw || '').toLowerCase().trim();
     if (!v || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) return;
     if (_ASSET.test(v) || _PLACEHOLDER.test(v)) return;
+    // gap-fix: reject structurally-malformed addresses the loose regex still admits (seen live: 'robert.jr.@…'
+    // trailing-dot local from "Jr."/"LL.M." name noise, '/@giselle.miami' slash local, '…-@-60-fps.mp' hyphen-led
+    // "domain" from a sliced filename). A real address has alphanumeric-bounded local + a valid domain whose labels
+    // don't start/end with a separator. Kills the asset/name-noise garbage without touching legitimate emails.
+    const _at = v.indexOf('@'); const _lp = v.slice(0, _at); const _dom = v.slice(_at + 1);
+    if (!/^[a-z0-9]/.test(_lp) || !/[a-z0-9]$/.test(_lp) || /[._%+\-]{2,}/.test(_lp)) return;   // local: alnum-bounded, no doubled separators
+    if (!/^[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/.test(_dom)) return; // domain: valid label.label form
     const person = window ? _nearbyPerson(window, v) : { name: '', role: '' };
     if (seenE.has(v)) { const e = out.emails.find(x => x.value === v); if (e && !e.name && person.name) { e.name = person.name; e.title = person.role; e.source = 'site_named'; } return; }
     seenE.add(v);
@@ -289,12 +304,19 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
     } catch (_) {}
   }
   const verifiedEmails = emails.filter(e => e.verified);
+  // gap-fix: enforce the documented per-company contact cap (CLAUDE.md "cap 4/co"). selectDecisionMaker returns
+  // ALL secondary contacts (confidence-desc), so without a cap a single company could push 10+ prospects to
+  // Mystrika. 1 primary + up to (cap-1) secondaries = `cap` total. The list is already ranked, so slicing keeps
+  // the strongest contacts. Configurable via ENRICH_CONTACT_CAP (floor 1).
+  const _CCAP = Math.max(1, parseInt(env.ENRICH_CONTACT_CAP || '4', 10));
+  const _secCap = Math.max(0, _CCAP - (dmsel.primary ? 1 : 0));
+  const _secondaryCapped = (dmsel.secondary || []).slice(0, _secCap);
   const rec = {
     domain, company: company || '', pattern,
     website: base.website || ('https://' + domain), instagram: (_social.socials.instagram && _social.socials.instagram.url) || base.instagram || '',
     socials: _social.socials || {}, firmographics: { reg_number: _firmo.reg_number || null, registration_country: _firmo.country || '', jurisdiction: _firmo.jurisdiction || '', vat_number: _firmo.vat_number || null, status: _firmo.status || '', officers: _firmo.officers || [], operating_countries: _firmo.operating_countries || [], regions: _firmo.regions || [], serves_eu: !!_firmo.serves_eu, confident_country: !!_firmo.confident_country },
     emails, decisionMakers: dms, linkedin_people: site.people.map(p => p.linkedin),
-    primary: dmsel.primary, secondary_emails: dmsel.secondary || [], decision_maker_confidence: dmsel.primary ? dmsel.primary.confidence : 0,
+    primary: dmsel.primary, secondary_emails: _secondaryCapped, decision_maker_confidence: dmsel.primary ? dmsel.primary.confidence : 0,
     counts: { emails: emails.length, verified: verifiedEmails.length, decision_makers: dms.length, guessed: emails.filter(e => e.guessed).length },
     sources: { hunter: hunter.length, serper: dmSerper.length, site_emails: site.emails.length, site_linkedin: site.people.length },
     send_ready: verifiedEmails.length > 0,

@@ -60,8 +60,16 @@ async function scrapeEmails(domain) {
         const found = r.body.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
         for (let e of found) {
           e = e.toLowerCase();
-          if (/\.(png|jpg|jpeg|gif|webp|svg|css|js)$/.test(e)) continue;       // asset false-positives
+          // gap-fix: widen the asset filter (was png|jpg|gif|webp|svg|css|js only) — a media filename with '@'
+          // (e.g. "clip-@-60fps.mp4") is captured with its trailing digit dropped by \.[a-z]{2,}, so anchor on the
+          // truncated forms too (.mp, .mp4, fonts, docs). Mirrors the enrich.js parser fix.
+          if (/\.(png|jpe?g|gif|webp|bmp|tiff?|avif|svg|css|js|mjs|json|xml|ico|pdf|woff2?|ttf|otf|eot|mp|mp[34]|mov|avi|mkv|m4[av]|webm|ogg|wav|zip|gz)$/.test(e)) continue; // asset false-positives
           if (/(example|sentry|wix|squarespace|godaddy|\.png|\.jpg)/.test(e)) continue;
+          // gap-fix: reject structurally-malformed addresses the loose regex admits (trailing-dot local from
+          // "Jr."/"LL.M." name noise, slash/hyphen-led local or domain from sliced filenames).
+          const _at = e.indexOf('@'); const _lp = e.slice(0, _at); const _dom = e.slice(_at + 1);
+          if (!/^[a-z0-9]/.test(_lp) || !/[a-z0-9]$/.test(_lp) || /[._%+\-]{2,}/.test(_lp)) continue;
+          if (!/^[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/.test(_dom)) continue;
           if (e.endsWith('@' + domain) || e.includes(domain.split('.')[0])) emails.add(e); // prefer same-domain
           else emails.add(e);
         }

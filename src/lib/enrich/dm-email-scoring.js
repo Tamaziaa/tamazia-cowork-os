@@ -64,7 +64,14 @@ function buildCandidates({ emails = [], decisionMakers = [] }) {
 function scoreCandidate(c) {
   const rw = c.generic ? 10 : roleWeight(c.title) || (c.name ? 35 : 15);
   const sw = sourceWeight(c.source);
-  const vf = c.verified ? 1.0 : (/(valid|catchall|role_valid)/i.test(c.verify_status || '') ? 0.8 : 0.55);
+  // gap-fix: the old test `/(valid|catchall|role_valid)/` matched 'invalid' as a SUBSTRING, so a KNOWN-INVALID
+  // address got the 0.8 "deliverable" confidence multiplier (vs 0.55) and could outrank a real contact for
+  // primary DM selection. Anchor on the whole status: deliverable-ish = valid/catchall/role_valid only; a
+  // confirmed-bad status (invalid/bad/disposable/no_mx/nxdomain) is DEMOTED below the neutral 0.55.
+  const _vstat = String(c.verify_status || '').trim().toLowerCase();
+  const _deliverableish = /^(valid|catchall|catch[\s_-]?all|role_valid)$/.test(_vstat);
+  const _confirmedBad = /^(invalid|bad|disposable|no_mx|nxdomain|invalid_syntax|undeliverable)$/.test(_vstat);
+  const vf = c.verified ? 1.0 : (_deliverableish ? 0.8 : (_confirmedBad ? 0.3 : 0.55));
   // 50% who-they-are, 30% how-we-found-it, 20% deliverability. Generic inboxes are capped low by rw=10.
   const confidence = Math.round((rw * 0.5 + sw * 0.3) * vf + (c.verified ? 20 : 0) * 0.2);
   return Math.max(0, Math.min(100, confidence));
