@@ -59,7 +59,7 @@ async function qualifyAdIntelLeads(limit = 25) {
     SELECT l.id::text, COALESCE(l.domain,''), COALESCE(l.sector,''), COALESCE(l.contact_email,''),
            COALESCE(l.contact_confidence::text,'0'), COALESCE(l.all_socials::text,'{}'), COALESCE(l.all_emails::text,'[]'),
            COALESCE(l.primary_email,''), COALESCE(l.decision_maker_confidence::text,'0'),
-           COALESCE(l.email_verified::text,''), COALESCE(l.verify_status,''),
+           COALESCE(l.email_verified::text,''), COALESCE(l.verify_status,''), COALESCE(l.deliverability,''),
            COALESCE(l.audit_critical::text,'0'), COALESCE(l.ai_cited::text,''), COALESCE(l.ai_visibility_gap::text,''),
            COUNT(ai.id)::text AS obs, COALESCE(string_agg(DISTINCT ai.platform, ','),'') AS platforms
     FROM leads l JOIN ad_intelligence ai ON ai.lead_id = l.id
@@ -68,9 +68,9 @@ async function qualifyAdIntelLeads(limit = 25) {
     GROUP BY l.id ORDER BY COUNT(ai.id) DESC LIMIT ${limit}`);
   if (!raw) return { scored: 0, passed: 0, queued: 0 };
   const rows = raw.split('\n').filter(Boolean).map(l => {
-    const [id, domain, sector, contact_email, cc, all_socials, all_emails, primary_email, dmc, email_verified, verify_status, audit_critical, ai_cited, ai_visibility_gap, obs, platforms] = l.split('\t');
+    const [id, domain, sector, contact_email, cc, all_socials, all_emails, primary_email, dmc, email_verified, verify_status, deliverability, audit_critical, ai_cited, ai_visibility_gap, obs, platforms] = l.split('\t');
     return { id: Number(id), domain, sector, contact_email, contact_confidence: Number(cc), all_socials, all_emails,
-             primary_email, decision_maker_confidence: Number(dmc), email_verified, verify_status,
+             primary_email, decision_maker_confidence: Number(dmc), email_verified, verify_status, deliverability,
              audit_critical: Number(audit_critical), ai_cited, ai_visibility_gap,
              scrape_stream: 'ad_intel',
              ad_intel: JSON.stringify({ observations: Number(obs), platforms: (platforms || '').split(',').filter(Boolean) }) };

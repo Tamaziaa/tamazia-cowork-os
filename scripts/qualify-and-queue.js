@@ -58,7 +58,10 @@ const num = v => (v == null || v === '' || Number.isNaN(Number(v))) ? 'NULL' : N
         // check returned 'bad'/'invalid', producing the live email_verified=true + verify_status=bad contradiction
         // (3 rows, all primary_email_verified_by='apify_verify'). This verdict IS authoritative for the primary
         // email, so a non-verified result must set the flag FALSE, not leave it stale.
-        pg(`UPDATE leads SET verify_status=${esc(vr.status)}, primary_email_verified_by=${esc(vr.provider)}, email_verified=${vr.verified ? 'TRUE' : 'FALSE'} WHERE id=${lead.id}`);
+        // verify_status overloaded -> deliverability split: vr.status is the authoritative deliverability
+        // VERDICT (good/risky/bad/invalid/...) for the primary email, so write the dedicated deliverability
+        // column alongside verify_status (retained for back-compat). Both carry the same verdict here.
+        pg(`UPDATE leads SET verify_status=${esc(vr.status)}, deliverability=${esc(vr.status)}, primary_email_verified_by=${esc(vr.provider)}, email_verified=${vr.verified ? 'TRUE' : 'FALSE'} WHERE id=${lead.id}`);
         if (/^(bad|invalid|undeliverable|no_mx|disposable)$/i.test(String(vr.status || ''))) {
           q = Object.assign({}, q, { tier: 2, tier_reason: 'apify_confirmed_bad_email' });
           console.log(`  ↓ ${lead.domain} DM confirmed-bad via ${vr.provider} (${vr.status}) -> demoted to Tier-2`);
