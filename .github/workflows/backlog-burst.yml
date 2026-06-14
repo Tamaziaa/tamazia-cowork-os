@@ -51,6 +51,7 @@ jobs:
         run: |
           set -a; source .env; set +a
           node scripts/ensure-schema.js
+          node scripts/v3/migrate-v3-schema.js || true   # guarantee requal_version + v3 cols before requalify (canonical-schema now also carries them; this is belt-and-suspenders)
           node scripts/cc2-provision.js
       - name: Re-qualify the existing pile (current Tier-1 criteria)
         run: |

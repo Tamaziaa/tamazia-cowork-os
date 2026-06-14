@@ -56,7 +56,11 @@ function main() {
     const cmd = sep >= 0 ? a.slice(sep + 1) : a.slice(2);
     if (!job || !cmd.length) { console.error('usage: heartbeat.js wrap <job> -- <command...>'); process.exit(2); }
     const id = start(job);
-    const r = spawnSync(cmd[0], cmd.slice(1), { stdio: ['inherit', 'pipe', 'pipe'], encoding: 'utf8' });
+    // maxBuffer: `wrap` pipes the child's stdout+stderr so it can tail the last lines into engine_runs.last_error.
+    // Wrapped jobs (scrapers, backlog-burst, intel-pulse, eval-audit, nightly-workers) emit verbose per-lead logs
+    // that blow Node's 1MB default -> spawnSync sets status=null (ENOBUFS) + kills the child, so a SUCCESSFUL job
+    // gets recorded as 'error', exits non-zero, and fires the failure-alert. 256MB makes the wrap output-safe.
+    const r = spawnSync(cmd[0], cmd.slice(1), { stdio: ['inherit', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stderr.write(r.stderr);
     const ok = r.status === 0;
