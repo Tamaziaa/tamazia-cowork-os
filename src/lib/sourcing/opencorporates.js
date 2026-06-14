@@ -18,9 +18,10 @@ async function searchCompanies({ q, jurisdiction, per_page = 30 }) {
       company_number: c.company_number,
       company: c.name,
       jurisdiction: c.jurisdiction_code,
-      // Precedence fix: `a || b ? x : y` parsed as `(a||b) ? x : y`, so a live company with a truthy
-      // current_status was always labelled 'inactive'. Honour current_status when present, else use the
-      // inactive flag.
+      // gap-fix: operator precedence — `c.current_status || c.inactive ? 'inactive':'active'` parsed as
+      // `(c.current_status || c.inactive) ? 'inactive':'active'`, so ANY real status string (even "Active") came
+      // out as the literal 'inactive', and only a MISSING status came out 'active'. Use the real status when
+      // present, else derive from the inactive flag.
       company_status: c.current_status || (c.inactive ? 'inactive' : 'active'),
       incorporation_date: c.incorporation_date,
       address: c.registered_address_in_full,

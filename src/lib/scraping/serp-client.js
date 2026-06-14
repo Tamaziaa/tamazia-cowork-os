@@ -6,8 +6,14 @@ const { fetchWithRetry } = require('../../skills/S008-personalisation-engine/lib
 
 function rootDomain(u) { try { return new URL(u.startsWith('http') ? u : 'https://' + u).hostname.replace(/^www\./, ''); } catch { return ''; } }
 
-// gl = country code for Google
-const GL = { UK: 'gb', UAE: 'ae', USA: 'us', France: 'fr', Spain: 'es', Germany: 'de', SG: 'sg' };
+// gl = country code for Google.
+// gap-fix: the query banks (query-calendar / serp-engine / adapters) explicitly added EU cities to fix
+// "EU was ~0.7% of leads", but these 8 served-EU countries were missing here, so Amsterdam/Dublin/Milan/
+// Rome/Brussels/Lisbon/Stockholm/Copenhagen/Vienna queries fell back to gl='gb' and returned UK-localised
+// Google results — neutralising the whole EU expansion. Map every country the banks actually query.
+const GL = { UK: 'gb', UAE: 'ae', USA: 'us', France: 'fr', Spain: 'es', Germany: 'de', SG: 'sg',
+  Netherlands: 'nl', Ireland: 'ie', Italy: 'it', Belgium: 'be', Portugal: 'pt', Sweden: 'se', Denmark: 'dk', Austria: 'at',
+  Switzerland: 'ch', Canada: 'ca', Australia: 'au', Luxembourg: 'lu', Poland: 'pl', Norway: 'no' };
 
 async function viaSerper(query, country, num = 100) {
   const key = process.env.SERPER_KEY; if (!key) return null;

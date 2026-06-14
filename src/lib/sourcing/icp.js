@@ -36,21 +36,45 @@ const EXCLUDE = /(facebook|instagram|twitter|x\.com|linkedin|youtube|tiktok|pint
 
 // Served geographies (TLD + country names). UK, UAE, USA, EU, wider Middle East.
 const GEO = {
-  tld: /\.(uk|co\.uk|ae|us|com|ie|fr|de|es|it|nl|be|pt|se|dk|fi|at|lu|sa|qa|kw|bh|om|london|law|legal|dental|clinic|homes|realty|properties|estate|finance|tax|insure|llp|group|agency)$/i,  // gap-fix: industry/geo gTLDs (cms.law, x.london, y.dental) were being rejected as out-of-geo
-  names: /(united kingdom|\buk\b|england|scotland|wales|london|manchester|birmingham|edinburgh|glasgow|leeds|bristol|uae|united arab emirates|dubai|abu dhabi|sharjah|usa|united states|new york|los angeles|miami|chicago|france|paris|lyon|spain|madrid|barcelona|germany|berlin|munich|frankfurt|ireland|dublin|netherlands|amsterdam|belgium|brussels|portugal|lisbon|italy|rome|milan|sweden|stockholm|denmark|copenhagen|finland|helsinki|austria|vienna|luxembourg|poland|warsaw|greece|athens|czechia|czech republic|prague|hungary|budapest|romania|bucharest|bulgaria|croatia|zagreb|slovenia|slovakia|estonia|tallinn|latvia|riga|lithuania|vilnius|cyprus|malta|norway|oslo|iceland|saudi|riyadh|jeddah|qatar|doha|kuwait|bahrain|oman|european union|\beu\b|europe)/i,
+  // gap-fix: industry/geo gTLDs (cms.law, x.london, y.dental) were being rejected as out-of-geo. EXTENDED with the
+  // modern gTLDs a served-geo brand commonly uses (.io/.ai/.app/.tech/.health/.care/.vc/.swiss/.eu/.global/.co)
+  // so a UK/US/EU healthtech/fintech/crypto brand with NO country field isn't dropped as out_of_served_geo.
+  tld: /\.(uk|co\.uk|ae|us|com|ie|fr|de|es|it|nl|be|pt|se|dk|fi|at|lu|sa|qa|kw|bh|om|eu|io|ai|app|tech|vc|health|care|swiss|global|london|law|legal|dental|clinic|homes|realty|properties|estate|finance|tax|insure|llp|group|agency)$/i,
+  // gap-fix: added bare \bus\b / \busa\b tokens. S028 stores jurisdiction='US' (it routes law-firms|US, healthcare|US
+  // via SEC-EDGAR/OpenCorporates) but inServedGeo({country:'US'}) returned FALSE (only 'usa'/'united states' matched),
+  // so every US lead S028 sourced was immediately gated out at _passesIcpGate. US is a served geo (CLAUDE.md).
+  names: /(united kingdom|\buk\b|england|scotland|wales|london|manchester|birmingham|edinburgh|glasgow|leeds|bristol|uae|united arab emirates|dubai|abu dhabi|sharjah|\busa?\b|united states|new york|los angeles|miami|chicago|france|paris|lyon|spain|madrid|barcelona|germany|berlin|munich|frankfurt|ireland|dublin|netherlands|amsterdam|belgium|brussels|portugal|lisbon|italy|rome|milan|sweden|stockholm|denmark|copenhagen|finland|helsinki|austria|vienna|luxembourg|poland|warsaw|greece|athens|czechia|czech republic|prague|hungary|budapest|romania|bucharest|bulgaria|croatia|zagreb|slovenia|slovakia|estonia|tallinn|latvia|riga|lithuania|vilnius|cyprus|malta|norway|oslo|iceland|saudi|riyadh|jeddah|qatar|doha|kuwait|bahrain|oman|european union|\beu\b|europe)/i,
 };
 
 // gap-fix: WORD-BOUNDARY match (was a raw substring `includes`). Short keywords false-matched inside unrelated
 // words: 'spa' (hospitality) hit "dispatch"/"espanol", 'bar' hit "barrister", 'fund' (financial) hit "refund",
 // 'ivf' hit fragments — pulling leads to a wrong sector. A keyword counts only when both neighbours are
 // non-alphanumeric (or a string edge), so multi-word phrases ("law firm", "real estate") still match verbatim.
+// gap-fix(2): allow a trailing plural 's'/'es' on an ALPHABETIC keyword. The keyword lists are singular
+// ('solicitor','accountant','surveyor','architect') but real firm names/titles use the plural ('Solicitors',
+// 'Accountants') — the strict boundary missed every one of them (the project's own icp.test expects
+// 'Streathers Solicitors London' -> law-firms). A trailing 's' is still safe against the documented
+// false-matches (dispatch/barrister/refund don't carry the keyword as a prefix immediately followed by a boundary).
 function kwHit(t, k) {
   let idx = t.indexOf(k);
   if (idx < 0) return false;
+  const alpha = /^[a-z]+$/.test(k);
   for (let from = 0; (idx = t.indexOf(k, from)) >= 0; from = idx + 1) {
     const before = idx === 0 ? '' : t.charAt(idx - 1);
-    const after = (idx + k.length >= t.length) ? '' : t.charAt(idx + k.length);
-    if ((before === '' || !/[a-z0-9]/.test(before)) && (after === '' || !/[a-z0-9]/.test(after))) return true;
+    if (!(before === '' || !/[a-z0-9]/.test(before))) continue;
+    const end = idx + k.length;
+    const after = end >= t.length ? '' : t.charAt(end);
+    if (after === '' || !/[a-z0-9]/.test(after)) return true;
+    // plural tolerance (alphabetic keywords only): keyword + 's' then a boundary ('solicitor'->'solicitors'),
+    // or keyword + 'es' then a boundary ('church'->'churches').
+    if (alpha && after === 's') {
+      const after2 = (end + 1 >= t.length) ? '' : t.charAt(end + 1);
+      if (after2 === '' || !/[a-z0-9]/.test(after2)) return true;
+    }
+    if (alpha && after === 'e' && t.charAt(end + 1) === 's') {
+      const after3 = (end + 2 >= t.length) ? '' : t.charAt(end + 2);
+      if (after3 === '' || !/[a-z0-9]/.test(after3)) return true;
+    }
   }
   return false;
 }
