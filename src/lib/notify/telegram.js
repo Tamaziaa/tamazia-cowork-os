@@ -11,7 +11,8 @@ async function send(text, opts = {}) {
   const body = { chat_id: chatId(), text, disable_web_page_preview: opts.disable_preview !== false };
   if (parse_mode) body.parse_mode = parse_mode;
   const r = await fetchWithRetry(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), timeout: 10000 });
-  return r.body ? JSON.parse(r.body) : { ok: false };
+  // Guard: Telegram can return a non-JSON body (gateway 5xx/HTML) — never let that throw the caller.
+  try { return r.body ? JSON.parse(r.body) : { ok: false }; } catch (_e) { return { ok: false, error: 'bad_json', status: r.status }; }
 }
 
 module.exports = { send };

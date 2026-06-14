@@ -19,6 +19,8 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
+// Per-provider network timeout. Without it, a stalled LLM socket hangs the whole chain (no fallover).
+const LLM_TIMEOUT_MS = Math.max(1000, Number(process.env.LLM_TIMEOUT_MS || 30000));
 function pgPath() { return path.resolve(ROOT, 'scripts', 'psql'); }
 function pg(sql) {
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
@@ -62,11 +64,15 @@ async function callCloudflare({ system, prompt, model, max_tokens, temperature, 
     temperature: typeof temperature === 'number' ? temperature : 0.2
   };
   if (json) body.response_format = { type: 'json_object' };
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS) // hung-step guard: a stalled provider must fall over, not hang the chain
+    });
+  } catch (e) { return { ok: false, latency_ms: Date.now() - t0, error: `cf_fetch_${String(e && e.name || e).slice(0,40)}` }; }
   const latency = Date.now() - t0;
   const data = await res.json().catch(() => null);
   if (!res.ok || !data?.success) return { ok: false, latency_ms: latency, error: `cf_http_${res.status}_${JSON.stringify(data?.errors||data).slice(0,200)}` };
@@ -87,11 +93,15 @@ async function callGroq({ system, prompt, model, max_tokens, temperature, json }
     temperature: typeof temperature === 'number' ? temperature : 0.2
   };
   if (json) body.response_format = { type: 'json_object' };
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+  let res;
+  try {
+    res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS) // hung-step guard: a stalled provider must fall over, not hang the chain
+    });
+  } catch (e) { return { ok: false, latency_ms: Date.now() - t0, error: `groq_fetch_${String(e && e.name || e).slice(0,40)}` }; }
   const latency = Date.now() - t0;
   const data = await res.json().catch(() => null);
   if (!res.ok) return { ok: false, latency_ms: latency, error: `groq_http_${res.status}_${JSON.stringify(data).slice(0,200)}` };
@@ -107,9 +117,13 @@ async function callGemini({ system, prompt, model, max_tokens, temperature }) {
     generationConfig: { maxOutputTokens: max_tokens || 1024, temperature: typeof temperature === 'number' ? temperature : 0.2 }
   };
   if (system) body.systemInstruction = { parts: [{ text: system }] };
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-  });
+  let res;
+  try {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS) // hung-step guard: a stalled provider must fall over, not hang the chain
+    });
+  } catch (e) { return { ok: false, latency_ms: Date.now() - t0, error: `gemini_fetch_${String(e && e.name || e).slice(0,40)}` }; }
   const latency = Date.now() - t0;
   const data = await res.json().catch(() => null);
   if (!res.ok) return { ok: false, latency_ms: latency, error: `gemini_http_${res.status}_${JSON.stringify(data).slice(0,200)}` };

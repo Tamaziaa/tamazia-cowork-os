@@ -25,7 +25,7 @@ async function q(sql) {
   if (!NEON) return { ok: false, rows: [], error: 'neon_unconfigured' };
   try {
     const host = NEON.replace(/.*@([^/]+)\/.*/, '$1');
-    const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': NEON, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: sql, params: [] }) });
+    const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': NEON, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: sql, params: [] }), signal: AbortSignal.timeout(20000) });
     if (!r.ok) return { ok: false, rows: [], error: 'http_' + r.status };
     const d = await r.json(); return { ok: true, rows: d.rows || d.results || [], error: null };
   } catch (e) { return { ok: false, rows: [], error: e.message }; }

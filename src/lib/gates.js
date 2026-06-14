@@ -6,7 +6,7 @@
 const NEON = () => process.env.NEON_URL || process.env.NEON_CONNECTION_STRING || process.env.NEON_DATABASE_URL;
 async function sql(query) {
   const u = NEON(); if (!u) return { ok: false };
-  try { const host = u.replace(/.*@([^/]+)\/.*/, '$1'); const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': u, 'Content-Type': 'application/json' }, body: JSON.stringify({ query, params: [] }) }); return { ok: r.ok }; } catch (_) { return { ok: false }; }
+  try { const host = u.replace(/.*@([^/]+)\/.*/, '$1'); const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': u, 'Content-Type': 'application/json' }, body: JSON.stringify({ query, params: [] }), signal: AbortSignal.timeout(15000) }); return { ok: r.ok }; } catch (_) { return { ok: false }; }
 }
 const esc = s => String(s == null ? '' : s).replace(/'/g, "''");
 

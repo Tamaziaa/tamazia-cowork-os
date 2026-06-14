@@ -74,13 +74,18 @@ function main() {
     // Wrapped jobs (scrapers, backlog-burst, intel-pulse, eval-audit, nightly-workers) emit verbose per-lead logs
     // that blow Node's 1MB default -> spawnSync sets status=null (ENOBUFS) + kills the child, so a SUCCESSFUL job
     // gets recorded as 'error', exits non-zero, and fires the failure-alert. 256MB makes the wrap output-safe.
-    const r = spawnSync(cmd[0], cmd.slice(1), { stdio: ['inherit', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+    // Hung-step guard: ALSO bound the wrapped command so a hung child (stuck network call, dead socket) can
+    // never wedge the wrap past the workflow timeout — we close the heartbeat row as 'error' instead.
+    // Default 20min (under the tightest wrapper workflow timeout); override with HEARTBEAT_WRAP_TIMEOUT_MS.
+    const wrapTimeout = Math.max(0, Number(process.env.HEARTBEAT_WRAP_TIMEOUT_MS || 1200000)) || undefined;
+    const r = spawnSync(cmd[0], cmd.slice(1), { stdio: ['inherit', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: wrapTimeout, killSignal: 'SIGKILL' });
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stderr.write(r.stderr);
-    const ok = r.status === 0;
-    const tail = ok ? null : (((r.stdout || '') + (r.stderr || '')).split('\n').filter(Boolean).slice(-3).join(' | ') || ('exit ' + r.status));
+    const timedOut = r.error && (r.error.code === 'ETIMEDOUT' || r.signal === 'SIGKILL');
+    const ok = r.status === 0 && !timedOut;
+    const tail = ok ? null : (timedOut ? `timeout after ${wrapTimeout}ms` : (((r.stdout || '') + (r.stderr || '')).split('\n').filter(Boolean).slice(-3).join(' | ') || ('exit ' + r.status)));
     finish(id, ok ? 'ok' : 'error', null, ok ? 0 : 1, tail);
-    process.exit(r.status == null ? 1 : r.status);
+    process.exit(timedOut ? 124 : (r.status == null ? 1 : r.status));
   }
   console.error('usage: heartbeat.js start|finish|wrap');
   process.exit(2);

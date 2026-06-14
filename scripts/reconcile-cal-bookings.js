@@ -80,14 +80,14 @@ async function listBookingRecords(prefix, cap) {
     u.searchParams.set('prefix', prefix);
     u.searchParams.set('limit', '1000');
     if (cursor) u.searchParams.set('cursor', cursor);
-    const r = await fetch(u, { headers: cfHeaders() });
+    const r = await fetch(u, { headers: cfHeaders(), signal: AbortSignal.timeout(20000) }); // bound each KV page so the nightly job can't hang
     if (!r.ok) { throw new Error(`KV list HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`); }
     const j = await r.json();
     if (!j.success) { throw new Error('KV list error: ' + JSON.stringify(j.errors || j).slice(0, 200)); }
     for (const k of (j.result || [])) {
       if (records.length >= cap) return records;
       const name = k.name;
-      const vr = await fetch(`${CF_API}/accounts/${CF_ACCOUNT}/storage/kv/namespaces/${KV_NAMESPACE}/values/${encodeURIComponent(name)}`, { headers: cfHeaders() });
+      const vr = await fetch(`${CF_API}/accounts/${CF_ACCOUNT}/storage/kv/namespaces/${KV_NAMESPACE}/values/${encodeURIComponent(name)}`, { headers: cfHeaders(), signal: AbortSignal.timeout(15000) });
       if (!vr.ok) continue;                 // skip a single unreadable key, keep going
       const txt = await vr.text();
       let rec; try { rec = JSON.parse(txt); } catch (_e) { continue; }   // skip non-JSON / index keys
