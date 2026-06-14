@@ -7,8 +7,14 @@ on:
     - cron: "*/30 * * * *"
   workflow_dispatch: {}
 
+# SERIALISE with the heavy DB writers (backlog-burst / v3-rerun / nightly-workers all use this
+# same group). Before this, engine-cycle had its own group and ran CONCURRENTLY with v3-rerun /
+# backlog-burst — so requalify-all-leads.js could re-tier (icp_tier / quality_fit / lifecycle_stage)
+# the very leads this cycle's qualify->enqueue->mint was reading, producing status='touch_N_queued'
+# rows whose lifecycle_stage had been flipped to pending_approval/rejected underneath them.
+# cancel-in-progress:false => a 30-min cycle simply queues behind a long burst rather than racing it.
 concurrency:
-  group: engine-cycle
+  group: engine-db-work
   cancel-in-progress: false
 
 jobs:

@@ -21,7 +21,7 @@ on:
         default: '16'
 
 concurrency:
-  group: engine-db-work          # serialise with the engine cycle / backlog-burst so queue_rank never corrupts
+  group: engine-db-work          # serialise with engine-cycle + backlog-burst + nightly-workers: requalify-all-leads.js rewrites icp_tier/quality_fit/lifecycle_stage on the SAME rows the engine cycle's qualify->enqueue->mint reads. (queue_rank, the old justification, is an unused all-NULL column — the real shared write target is the tier/lifecycle trio.)
   cancel-in-progress: false
 
 jobs:
