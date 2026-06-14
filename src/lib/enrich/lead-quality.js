@@ -131,10 +131,19 @@ function visibleText(html) {
 function kwHit(text, kw) {
   let idx = text.indexOf(kw);
   if (idx < 0) return false;
+  // gap-fix: plural tolerance for ALPHABETIC keywords only (keyword + 's'/'es' then a boundary), so singular
+  // grid keywords ('solicitor','dentist','accountant','surveyor') still match their plural forms in real copy
+  // ('solicitors','dentists'). Restricting to /^[a-z]+$/ keeps the literal '+'/'&'/'-'/digit keywords
+  // ('k-12','f&b','web3','nad+') matching verbatim, as the boundary fix intends.
+  const alpha = /^[a-z]+$/.test(kw);
   for (let from = 0; (idx = text.indexOf(kw, from)) >= 0; from = idx + 1) {
     const before = idx === 0 ? '' : text.charAt(idx - 1);
-    const after = (idx + kw.length >= text.length) ? '' : text.charAt(idx + kw.length);
-    if ((before === '' || !/[a-z0-9]/.test(before)) && (after === '' || !/[a-z0-9]/.test(after))) return true;
+    if (!(before === '' || !/[a-z0-9]/.test(before))) continue;
+    const end = idx + kw.length;
+    const after = end >= text.length ? '' : text.charAt(end);
+    if (after === '' || !/[a-z0-9]/.test(after)) return true;
+    if (alpha && after === 's') { const a2 = (end + 1 >= text.length) ? '' : text.charAt(end + 1); if (a2 === '' || !/[a-z0-9]/.test(a2)) return true; }
+    if (alpha && after === 'e' && text.charAt(end + 1) === 's') { const a3 = (end + 2 >= text.length) ? '' : text.charAt(end + 2); if (a3 === '' || !/[a-z0-9]/.test(a3)) return true; }
   }
   return false;
 }
@@ -160,12 +169,12 @@ function classifySectorV3(lead) {
   // beauty as HC (not WF), restaurants as HO (not FB) — corrupting sector_code + the per-sector campaign routing.
   const hintCode = HINT_TO_CODE[hintRaw] || HINT_TO_CODE[normSector(hintRaw)] || null;
 
-  let best = null, bestHits = 0, second = 0;
+  let best = null, bestHits = 0, second = 0, bestKwHits = 0;
   for (const sec of GRID_INDEX) {
-    let hits = 0;
-    for (const kw of sec.keywords) { if (kw && kwHit(text, kw)) hits++; }
-    if (hintCode && sec.code === hintCode) hits += 1; // the hint is one extra agreeing signal
-    if (hits > bestHits) { second = bestHits; bestHits = hits; best = sec; }
+    let kw = 0;
+    for (const k of sec.keywords) { if (k && kwHit(text, k)) kw++; }
+    const hits = kw + ((hintCode && sec.code === hintCode) ? 1 : 0); // the hint is one extra agreeing signal
+    if (hits > bestHits) { second = bestHits; bestHits = hits; best = sec; bestKwHits = kw; } // track keyword-only hits of the winner
     else if (hits > second) { second = hits; }
   }
 
@@ -181,12 +190,17 @@ function classifySectorV3(lead) {
   }
   const sub_sector_code = (subHits > 0 && subBest && subBest.code) ? subBest.code : null; // gap-fix: no misleading default sub-sector when nothing matched
 
-  // Confidence band. Two signals agree = hint code matches the keyword winner.
-  const hintAgrees = !!(hintCode && best.code === hintCode);
+  // Confidence band. "Two signals agree" must be TWO INDEPENDENT signals: the hint code AND at least one real
+  // keyword hit in the resolved text.
+  // gap-fix: previously `hintAgrees` alone conferred 'strong', but a sector hint with ZERO keyword evidence makes
+  // the +1 hint bump its own sole winner (bestHits=1, hintAgrees=true) -> a junk/mislabeled lead ('X', sector
+  // 'law-firms', empty site) scored sector_confidence='strong' = full 35/35 sector_fit. Require >=1 keyword hit for
+  // the hint to count as corroboration; a hint-ONLY match is at most 'weak' (route to review), matching the comment.
+  const hintAgrees = !!(hintCode && best.code === hintCode && bestKwHits >= 1);
   let sector_confidence;
-  if (bestHits >= 3 || (bestHits - second) >= 2 || hintAgrees) sector_confidence = 'strong';
-  else if (bestHits >= 2) sector_confidence = 'probable';
-  else sector_confidence = 'weak'; // exactly one plausible hit -> review, never reject
+  if (bestKwHits >= 3 || (bestHits - second) >= 2 || hintAgrees) sector_confidence = 'strong';
+  else if (bestKwHits >= 2) sector_confidence = 'probable';
+  else sector_confidence = 'weak'; // exactly one plausible hit (or hint-only) -> review, never reject
   return { sector_code: best.code, sub_sector_code, sector_confidence };
 }
 

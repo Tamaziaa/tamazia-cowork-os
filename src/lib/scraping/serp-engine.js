@@ -133,11 +133,15 @@ async function scrapeSector(sector, { target = 50, queryCap = 40 } = {}) {
   const run = pg(`INSERT INTO scrape_runs (sector, stream) VALUES (${esc(sector)}, 'both') RETURNING id`);
   // SMART CALENDAR: pull the freshest (never-run / stalest) queries for this sector today
   const qlist = pickTodaysQueries(sector, queryCap).map(x => ({ q: x.query, country: x.country, sector }));
+  let lastError = null, errCount = 0;
   for (const item of qlist) {
     if (found >= target || queries >= queryCap) break;
     const r = await search(item.q, item.country, 100);
     queries++;
-    if (r.error) { return { sector, error: r.error, queries }; }
+    // gap-fix: a SINGLE transient query error (429 / momentary empty SERP) used to `return {error}` and abandon
+    // the ENTIRE sector for the cycle, discarding any leads already found and skipping every remaining query.
+    // Instead, skip just this query and keep going; only surface an error if EVERY query failed (found 0).
+    if (r.error) { lastError = r.error; errCount++; await new Promise(z => setTimeout(z, 400)); continue; }
     let leadsThisQuery = 0;
     // SPONSORED stream (ads) — auto-approved ad-runners
     for (const a of (r.ads || [])) {
@@ -161,7 +165,12 @@ async function scrapeSector(sector, { target = 50, queryCap = 40 } = {}) {
     await new Promise(z => setTimeout(z, 400));
   }
   pg(`UPDATE scrape_runs SET queries_run=${queries}, leads_found=${found}, dupes_skipped=${dupes}, aggregators_skipped=${aggr}, finished_at=NOW() WHERE id=${run}`);
-  return { sector, found, queries, dupes, aggregators_skipped: aggr };
+  const out = { sector, found, queries, dupes, aggregators_skipped: aggr };
+  // Only report an error if the whole sector produced nothing AND every attempted query errored (a real outage),
+  // so a partial run that found leads despite some transient errors is reported as a success with what it got.
+  if (found === 0 && errCount > 0 && errCount === queries) { out.error = lastError; }
+  else if (errCount > 0) { out.query_errors = errCount; }
+  return out;
 }
 
 /** Count how many leads a sector already sourced TODAY (per-sector idempotency / fairness). */

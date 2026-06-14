@@ -30,12 +30,21 @@ async function ddgSearch(query) {
   return results;
 }
 
+// gap-fix: WORD-BOUNDARY token match (was raw `t.includes(name)`). A short first/last name ('Al','Jo','Ed','Bo')
+// substring-matched inside unrelated words in the title/snippet ('Also','Job','Editor','Board'), inflating the
+// score and producing false-positive LinkedIn matches — which then feed channel_linkedin_ready and the Tier-1
+// contact gate (LinkedIn is a Tier-1 requirement). A name must appear as a whole word to count.
+function hasWord(haystack, needle) {
+  const n = String(needle || '').toLowerCase().trim();
+  if (!n) return false;
+  return new RegExp('(?:^|[^a-z0-9])' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[^a-z0-9]|$)', 'i').test(haystack);
+}
 function scoreCandidate({ first, last, company, jurisdiction }, candidate) {
   let score = 0;
   const t = (candidate.title + ' ' + candidate.snippet).toLowerCase();
-  if (first && t.includes(String(first).toLowerCase())) score += 25;
-  if (last && t.includes(String(last).toLowerCase())) score += 35;
-  if (company && t.includes(String(company).toLowerCase())) score += 25;
+  if (first && hasWord(t, first)) score += 25;
+  if (last && hasWord(t, last)) score += 35;
+  if (company && hasWord(t, company)) score += 25;
   // URL pattern match for linkedin.com/in/
   if (candidate.url && /linkedin\.com\/in\//i.test(candidate.url)) score += 10;
   if (jurisdiction) {
@@ -64,7 +73,7 @@ async function findProfile({ first, last, company, jurisdiction }) {
   };
 }
 
-module.exports = { findProfile, ddgSearch };
+module.exports = { findProfile, ddgSearch, hasWord };
 
 if (require.main === module) {
   (async () => {

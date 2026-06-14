@@ -5,7 +5,12 @@ const http = require('http');
 //   -> SearXNG (self-hosted, UNLIMITED, env.SEARXNG_URL) -> Brave API (free 2k/mo, env.BRAVE_API_KEY)
 //   -> DuckDuckGo HTML (no key). serp-client then falls back to SERPER/SerpApi.
 const { fetchWithRetry, getCached, writeCache } = require('../../skills/S008-personalisation-engine/lib/http.js');
-const GL = { UK: 'gb', UAE: 'ae', AE: 'ae', USA: 'us', US: 'us', France: 'fr', Spain: 'es', Germany: 'de', DE: 'de', SG: 'sg' };
+// gap-fix: mirror serp-client's GL map — the served-EU countries the query banks target (Netherlands/Ireland/
+// Italy/Belgium/Portugal/Sweden/Denmark/Austria + others) were missing, so those city queries fell back to
+// gl='gb' and returned UK-localised results, neutralising the EU expansion.
+const GL = { UK: 'gb', UAE: 'ae', AE: 'ae', USA: 'us', US: 'us', France: 'fr', Spain: 'es', Germany: 'de', DE: 'de', SG: 'sg',
+  Netherlands: 'nl', Ireland: 'ie', Italy: 'it', Belgium: 'be', Portugal: 'pt', Sweden: 'se', Denmark: 'dk', Austria: 'at',
+  Switzerland: 'ch', Canada: 'ca', Australia: 'au', Luxembourg: 'lu', Poland: 'pl', Norway: 'no' };
 function rootDomain(u) { try { return new URL(u.startsWith('http') ? u : 'https://' + u).hostname.replace(/^www\./, ''); } catch { return ''; } }
 
 function parseSearxng(json) {

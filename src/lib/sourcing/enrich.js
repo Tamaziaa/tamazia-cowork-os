@@ -65,6 +65,10 @@ function applyPattern(pattern, first, last, domain) {
   const fi = f[0] || '', li = l[0] || '';
   const m = { 'first.last': `${f}.${l}`, 'firstlast': `${f}${l}`, 'flast': `${fi}${l}`, 'f.last': `${fi}.${l}`, 'first': `${f}`, 'first_last': `${f}_${l}`, 'lastf': `${l}${fi}`, 'first.l': `${f}.${li}` };
   const lp = m[pattern]; if (!lp || (pattern !== 'first' && !l)) return null;
+  // gap-fix: reject a 1-char local part (e.g. applyPattern('first','A',…) -> 'a@domain', or 'flast' with an empty
+  // last name -> 'b@domain'). Register/Serper officer names that are initials-only produced these single-letter
+  // guessed DM addresses, which are almost never real inboxes and pollute the email pool / DM selection.
+  if (lp.replace(/[^a-z0-9]/g, '').length < 2) return null;
   const email = `${lp}@${domain}`; return SYNTAX.test(email) ? email : null;
 }
 
