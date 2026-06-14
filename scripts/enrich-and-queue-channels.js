@@ -60,6 +60,12 @@ function instagramTouch0({ company }) {
     const fn = best ? best.first_name : '';
     const ln = best ? best.last_name : '';
     const title = best ? best.position : '';
+    // bug-fix(round-5): the scorer's contact-quality signal reads contact_name (lead-quality.js dmName =
+    // decision_maker_name||contact_name||dm_name||full_name) and NEVER first_name/last_name. This live enrich path
+    // wrote fn/ln but left contact_name NULL, so a named DM found by the waterfall was INVISIBLE to qualify —
+    // depressing contact_quality_score and the named-DM count (64 leads sit with first/last set but contact_name
+    // empty, 55 of them Tier-1/2). Compose contact_name from a real first+last so the found person actually counts.
+    const cn = (fn && ln) ? `${fn} ${ln}`.replace(/\s+/g, ' ').trim() : '';
     const igHandle = r.instagram ? r.instagram.replace(/.*instagram\.com\//, '').replace(/\/$/, '') : '';
     // Persist EVERYTHING found: all emails (named, scored) + all socials
     const allEmails = JSON.stringify(contacts);
@@ -69,6 +75,7 @@ function instagramTouch0({ company }) {
         contact_email=CASE WHEN ${esc(email)}='' THEN contact_email ELSE ${esc(email)} END,
         first_name=CASE WHEN ${esc(fn)}='' THEN first_name ELSE ${esc(fn)} END,
         last_name=CASE WHEN ${esc(ln)}='' THEN last_name ELSE ${esc(ln)} END,
+        contact_name=CASE WHEN ${esc(cn)}='' THEN contact_name ELSE ${esc(cn)} END,
         title=CASE WHEN ${esc(title)}='' THEN title ELSE ${esc(title)} END,
         linkedin_url=${esc(r.linkedin)}, instagram_handle=${esc(igHandle)}, best_channel=${esc(r.best_channel)},
         lifecycle_stage=CASE WHEN lifecycle_stage IN ('sourced','enriched') THEN 'enriched' ELSE lifecycle_stage END, updated_at=NOW()
