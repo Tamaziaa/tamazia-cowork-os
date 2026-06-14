@@ -42,7 +42,14 @@ function generateCandidates({ first, last, domain }) {
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(dom)) return out;
   for (let i = 0; i < COMMON_PATTERNS.length; i++) {
     const local = buildLocalPart(COMMON_PATTERNS[i], first, last);
-    if (!local || local.length < 2) continue;
+    // gap-fix: a single-name/initial input left a dangling separator in two-part patterns ('{first}.{last}'
+    // with an empty last -> 'a.', '{first}_{last}' -> 'a_', '{first}-{last}' -> 'a-'). length<2 passed those
+    // through ('a.' is length 2), leaking syntactically-malformed / non-deliverable locals into the pool.
+    // Require >=2 ALPHANUMERIC chars and a clean (non-leading/trailing/doubled-separator) local, matching the
+    // stricter check enrich.js applyPattern already uses.
+    if (!local) continue;
+    if (local.replace(/[^a-z0-9]/g, '').length < 2) continue;
+    if (/^[._\-]|[._\-]$|[._\-]{2,}/.test(local)) continue;
     const email = `${local}@${dom}`;
     if (seen.has(email)) continue;
     seen.add(email);

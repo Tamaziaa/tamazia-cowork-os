@@ -15,6 +15,22 @@ function pg(sql) {
   try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; }
 }
 function pgEsc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
+// gap-fix: validate an LLM/scraped email before it becomes a stored contact. Returns the normalised address
+// or null. Rejects non-strings, bad syntax, disposable + placeholder domains, and structurally-malformed
+// local/domain parts (trailing-dot, leading separator, doubled separators, hyphen-led labels).
+const _S060_DISPOSABLE = new Set(['mailinator.com', 'guerrillamail.com', '10minutemail.com', 'tempmail.com', 'yopmail.com', 'trashmail.com', 'sharklasers.com', 'temp-mail.org', 'getnada.com', 'maildrop.cc', 'dispostable.com']);
+const _S060_PLACEHOLDER = /(example\.(com|org|net)|yourdomain|yourcompany|your-?email|email\.com|domain\.com|company\.com|sentry\.io|wixpress|squarespace|godaddy)/i;
+function validEmail(raw) {
+  if (typeof raw !== 'string') return null;
+  const e = raw.toLowerCase().trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)) return null;
+  if (_S060_PLACEHOLDER.test(e)) return null;
+  const at = e.indexOf('@'); const lp = e.slice(0, at); const dom = e.slice(at + 1);
+  if (_S060_DISPOSABLE.has(dom)) return null;
+  if (!/^[a-z0-9]/.test(lp) || !/[a-z0-9]$/.test(lp) || /[._%+\-]{2,}/.test(lp)) return null;
+  if (!/^[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/.test(dom)) return null;
+  return e;
+}
 
 // Fast website lookup via DuckDuckGo for company → website discovery
 async function findDomain(company) {
@@ -90,11 +106,18 @@ ${body}`,
           updates.push(`title=${pgEsc(d.principal_contact.title)}`);
           summary.changes.push({ contact: `${d.principal_contact.first_name} ${d.principal_contact.last_name} · ${d.principal_contact.title}` });
         }
-        if (d.direct_emails && d.direct_emails[0]) {
-          updates.push(`email=${pgEsc(d.direct_emails[0])}`);
+        // gap-fix: the LLM-extracted address was written to leads.email UNVALIDATED at a hard-coded 0.85
+        // confidence. Gemini hallucinates/echoes placeholder + malformed addresses (e.g. 'name@domain.com',
+        // 'your@email.com', trailing-dot or sliced-filename junk), which then become "contacts". Validate
+        // syntax + structure + reject disposable/placeholder before persisting; skip the write otherwise.
+        const _em = validEmail(d.direct_emails && d.direct_emails[0]);
+        if (_em) {
+          updates.push(`email=${pgEsc(_em)}`);
           updates.push(`email_source='website_extracted'`);
           updates.push(`email_confidence=0.85`);
-          summary.changes.push({ email: d.direct_emails[0] });
+          summary.changes.push({ email: _em });
+        } else if (d.direct_emails && d.direct_emails[0]) {
+          summary.changes.push({ email_rejected: String(d.direct_emails[0]).slice(0, 80) });
         }
         if (d.linkedin_company_url) {
           updates.push(`linkedin_url=${pgEsc(d.linkedin_company_url)}`);
