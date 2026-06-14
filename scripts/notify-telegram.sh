@@ -31,7 +31,7 @@ if ! echo "${TELEGRAM_CHAT_ID:-}" | grep -qE '^-?[0-9]+$'; then
   exit 3
 fi
 
-curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+curl -s --max-time 15 -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
   -d "chat_id=${TELEGRAM_CHAT_ID}" \
   --data-urlencode "text=${MESSAGE}" \
   -d "parse_mode=Markdown" | jq -e '.ok == true' > /dev/null

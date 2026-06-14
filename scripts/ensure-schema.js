@@ -30,6 +30,7 @@ async function sql(query) {
       method: 'POST',
       headers: { 'Neon-Connection-String': NEON, 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, params: [] }),
+      signal: AbortSignal.timeout(20000), // hung-step guard: never block the cycle on a stalled Neon HTTP socket
     });
     if (!r.ok) { let m = ''; try { m = (await r.json()).message || ''; } catch (_) {} return { ok: false, rows: [], error: 'http_' + r.status + (m ? ':' + m : '') }; }
     const d = await r.json();

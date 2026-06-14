@@ -56,13 +56,18 @@ function main() {
     const cmd = sep >= 0 ? a.slice(sep + 1) : a.slice(2);
     if (!job || !cmd.length) { console.error('usage: heartbeat.js wrap <job> -- <command...>'); process.exit(2); }
     const id = start(job);
-    const r = spawnSync(cmd[0], cmd.slice(1), { stdio: ['inherit', 'pipe', 'pipe'], encoding: 'utf8' });
+    // Hung-step guard: bound the wrapped command so a hung child (stuck network call, dead socket) can
+    // never wedge the wrap past the workflow timeout — we close the heartbeat row as 'error' instead.
+    // Default 20min (under the tightest wrapper workflow timeout); override with HEARTBEAT_WRAP_TIMEOUT_MS.
+    const wrapTimeout = Math.max(0, Number(process.env.HEARTBEAT_WRAP_TIMEOUT_MS || 1200000)) || undefined;
+    const r = spawnSync(cmd[0], cmd.slice(1), { stdio: ['inherit', 'pipe', 'pipe'], encoding: 'utf8', timeout: wrapTimeout, killSignal: 'SIGKILL' });
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stderr.write(r.stderr);
-    const ok = r.status === 0;
-    const tail = ok ? null : (((r.stdout || '') + (r.stderr || '')).split('\n').filter(Boolean).slice(-3).join(' | ') || ('exit ' + r.status));
+    const timedOut = r.error && (r.error.code === 'ETIMEDOUT' || r.signal === 'SIGKILL');
+    const ok = r.status === 0 && !timedOut;
+    const tail = ok ? null : (timedOut ? `timeout after ${wrapTimeout}ms` : (((r.stdout || '') + (r.stderr || '')).split('\n').filter(Boolean).slice(-3).join(' | ') || ('exit ' + r.status)));
     finish(id, ok ? 'ok' : 'error', null, ok ? 0 : 1, tail);
-    process.exit(r.status == null ? 1 : r.status);
+    process.exit(timedOut ? 124 : (r.status == null ? 1 : r.status));
   }
   console.error('usage: heartbeat.js start|finish|wrap');
   process.exit(2);

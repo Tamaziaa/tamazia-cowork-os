@@ -27,7 +27,7 @@ check_http() {
   local EXPECTED_STATUS="$2"
   local CONTENT_MATCH="${3:-}"
   local RESPONSE STATUS BODY
-  RESPONSE=$(curl -s -w "\n%{http_code}" "${URL}")
+  RESPONSE=$(curl -s --max-time 20 -w "\n%{http_code}" "${URL}")
   STATUS=$(echo "${RESPONSE}" | tail -1)
   BODY=$(echo "${RESPONSE}" | sed '$d')
   [ "${STATUS}" = "${EXPECTED_STATUS}" ] || return 1
@@ -57,7 +57,7 @@ check_n8n() {
   local WORKFLOW_ID="$1"
   local MAX_AGE_HOURS="${2:-24}"
   local RESPONSE LAST_RUN LAST_TS NOW AGE_HOURS
-  RESPONSE=$(curl -s -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
+  RESPONSE=$(curl -s --max-time 20 -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
     "${N8N_URL}/api/v1/executions?workflowId=${WORKFLOW_ID}&limit=1&status=success")
   LAST_RUN=$(echo "${RESPONSE}" | jq -r '.data[0].startedAt // empty')
   [ -n "${LAST_RUN}" ] || return 1
@@ -74,35 +74,35 @@ check_api_key() {
   local SERVICE="$1"
   case "${SERVICE}" in
     hunter)
-      curl -s "https://api.hunter.io/v2/account?api_key=${HUNTER_API_KEY:-${HUNTER_KEY:-}}" \
+      curl -s --max-time 20 "https://api.hunter.io/v2/account?api_key=${HUNTER_API_KEY:-${HUNTER_KEY:-}}" \
         | jq -e '.data.requests.searches.available > 0' > /dev/null ;;
     apollo)
-      curl -s -X POST "https://api.apollo.io/v1/auth/health" \
+      curl -s --max-time 20 -X POST "https://api.apollo.io/v1/auth/health" \
         -H "X-Api-Key: ${APOLLO_API_KEY:-${APOLLO_KEY:-}}" | jq -e '.status == "ok"' > /dev/null ;;
     neverbounce)
-      curl -s "https://api.neverbounce.com/v4/account/info?key=${NEVERBOUNCE_KEY:-}" \
+      curl -s --max-time 20 "https://api.neverbounce.com/v4/account/info?key=${NEVERBOUNCE_KEY:-}" \
         | jq -e '.credits_info.paid_credits_remaining >= 0' > /dev/null ;;
     cloudflare)
-      curl -s -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN:-}" \
+      curl -s --max-time 20 -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN:-}" \
         "https://api.cloudflare.com/client/v4/user/tokens/verify" \
         | jq -e '.success == true' > /dev/null ;;
     groq)
-      curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
+      curl -s --max-time 20 -X POST "https://api.groq.com/openai/v1/chat/completions" \
         -H "Authorization: Bearer ${GROQ_API_KEY:-}" \
         -H "Content-Type: application/json" \
         -d '{"model":"llama-3.1-8b-instant","messages":[{"role":"user","content":"ping"}],"max_tokens":2}' \
         | jq -e '.choices[0].message.content' > /dev/null ;;
     gemini)
-      curl -s "https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY:-}" \
+      curl -s --max-time 20 "https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY:-}" \
         | jq -e '.models[0].name' > /dev/null ;;
     calcom)
-      curl -s -H "Authorization: Bearer ${CALCOM_API_KEY:-}" \
+      curl -s --max-time 20 -H "Authorization: Bearer ${CALCOM_API_KEY:-}" \
         "https://api.cal.com/v2/me" | jq -e '.data.id' > /dev/null ;;
     slack)
-      curl -s -H "Authorization: Bearer ${SLACK_BOT_TOKEN:-}" \
+      curl -s --max-time 20 -H "Authorization: Bearer ${SLACK_BOT_TOKEN:-}" \
         "https://slack.com/api/auth.test" | jq -e '.ok == true' > /dev/null ;;
     telegram)
-      curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN:-}/getMe" | jq -e '.ok == true' > /dev/null ;;
+      curl -s --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN:-}/getMe" | jq -e '.ok == true' > /dev/null ;;
     *) echo "Unknown service: ${SERVICE}" >&2; return 2 ;;
   esac
 }
