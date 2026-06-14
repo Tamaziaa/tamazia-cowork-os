@@ -47,8 +47,12 @@ async function mintOne(row) {
     // Bind the URL to the lead — set ONCE and never overwrite. A lead that already has an audit_url may
     // already be in an active campaign; a new hash would 404 in the recipient's inbox. Re-mints only ever
     // fill leads that don't yet have a URL (the enqueue selects exactly those).
+    // F1 FIX: also persist audit_slug + audit_hash (the other mint path, verify-audits.js, already does this).
+    // reconcile.js's orphan-audit cleaner is gated on `audit_slug IS NOT NULL` — a lead minted here with only
+    // audit_url set was INVISIBLE to that cleaner, so a dead audit_pages row would never clear the URL and a
+    // 404 link could reach the send path. Set them in the SAME guarded UPDATE so they stay consistent + set-once.
     if (row.lead_id) {
-      pg(`UPDATE leads SET audit_url='${q(r.signed_url)}', audit_url_minted_at=now()
+      pg(`UPDATE leads SET audit_url='${q(r.signed_url)}', audit_slug='${q(r.slug)}', audit_hash='${q(r.hash)}', audit_url_minted_at=now()
           WHERE id=${row.lead_id} AND (audit_url IS NULL OR audit_url='');`);
     }
     console.log('  OK ' + row.domain + ' -> ' + r.slug + '/' + r.hash + ' (fw:' + (r.applicable_frameworks || []).length + ' pts:' + (r.pointers || []).length + ')');
