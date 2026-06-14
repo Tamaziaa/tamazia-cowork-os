@@ -724,6 +724,7 @@ CREATE TABLE IF NOT EXISTS leads (
   aggressive_source boolean DEFAULT false,
   scrape_stream text,
   verify_status text,
+  deliverability text,
   scraped_at timestamptz,
   scrape_query text,
   all_emails jsonb,
@@ -1935,6 +1936,10 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS aggressive_selected boolean DEFAULT f
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS aggressive_source boolean DEFAULT false;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS scrape_stream text;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS verify_status text;
+-- deliverability: dedicated email-deliverability VERDICT (good/valid/risky/bad/...), split out of the
+-- overloaded verify_status (which also carried workflow states pending/approved). Additive; verify_status
+-- is retained for back-compat. Single source of truth = src/lib/enrich/verify-status.js deliverabilityOf().
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS deliverability text;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS scraped_at timestamptz;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS scrape_query text;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS all_emails jsonb;
