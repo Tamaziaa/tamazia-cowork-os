@@ -8,7 +8,7 @@ const ROOT = path.resolve(__dirname, '..');
 (() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
 const { execFileSync } = require('child_process');
 const { runDaily, SECTORS } = require(path.join(ROOT, 'src', 'lib', 'scraping', 'serp-engine.js'));
-const { hasKey } = require(path.join(ROOT, 'src', 'lib', 'scraping', 'serp-client.js'));
+const { hasKey, hasSerp } = require(path.join(ROOT, 'src', 'lib', 'scraping', 'serp-client.js'));
 const { bankStats } = require(path.join(ROOT, 'src', 'lib', 'scraping', 'query-calendar.js'));
 
 function notify(text) {
@@ -17,7 +17,9 @@ function notify(text) {
 }
 
 (async () => {
-  if (!hasKey()) { console.log('[serp-scrape] no SERP key set — skipping (add SERPER_KEY to .env to activate).'); process.exit(0); }
+  // free-first: run if a paid key OR a configured free SERP provider (SearXNG/Brave/Apify) is available, so a
+  // missing/exhausted SERPER_KEY does not silently kill the wide scrape when free SearXNG is set up.
+  if (!hasSerp()) { console.log('[serp-scrape] no SERP provider set — skipping (add SEARXNG_URL or SERPER_KEY to .env to activate).'); process.exit(0); }
   const perSector = Number(process.argv[2] || 50);
   // PER-SECTOR FAIRNESS + IDEMPOTENCY: the daily target is perSector PER sector across all canonical
   // sectors in SECTORS (not a flat perSector*10 global cap that a noisy sector could exhaust before
