@@ -9,6 +9,12 @@ on:
   workflow_dispatch: {}
 permissions:
   contents: write
+
+# Single-flight: this commits + pushes docs/PIPELINE-STATE.md to main. Two concurrent runs (push-trigger +
+# cron + dispatch can all coincide) would race the git push to main; serialise so only one writes at a time.
+concurrency:
+  group: gen-state
+  cancel-in-progress: false
 jobs:
   gen-state:
     runs-on: ubuntu-latest

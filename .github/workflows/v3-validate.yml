@@ -42,7 +42,9 @@ jobs:
           REQUAL_VERSION: ${{ inputs.version }}
         run: |
           set -a; source .env; set +a
-          node scripts/requalify-all-leads.js ${{ inputs.batch }}
+          # Heartbeat so the engine-cycle race guard (heartbeat.js active-writer) sees this re-tier as a live
+          # writer and skips its tier/lifecycle steps while it runs.
+          node scripts/heartbeat.js wrap v3-validate -- node scripts/requalify-all-leads.js ${{ inputs.batch }}
       - name: Show what the gap-fixed scorer produced (this batch only)
         env:
           REQUAL_VERSION: ${{ inputs.version }}

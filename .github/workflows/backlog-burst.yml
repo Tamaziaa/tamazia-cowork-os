@@ -56,7 +56,10 @@ jobs:
       - name: Re-qualify the existing pile (current Tier-1 criteria)
         run: |
           set -a; source .env; set +a
-          node scripts/requalify-all-leads.js ${{ inputs.requalify }}   || true
+          # Heartbeat the re-tier pass too (the advance step below is already wrapped). Keeps backlog-burst visible
+          # to the engine-cycle race guard (heartbeat.js active-writer) during requalify, which rewrites the same
+          # tier/lifecycle columns the cycle's qualify->mint seam touches.
+          node scripts/heartbeat.js wrap backlog-burst -- node scripts/requalify-all-leads.js ${{ inputs.requalify }} || true
       - name: Advance the backlog (no-send)
         run: |
           set -a; source .env; set +a

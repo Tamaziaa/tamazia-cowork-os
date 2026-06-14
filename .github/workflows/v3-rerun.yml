@@ -51,10 +51,14 @@ jobs:
       - name: Phase 3 - re-tier all leads to 1/2/3 + canonical sectors (no-send)
         run: |
           set -a; source .env; set +a
+          # Heartbeat the whole re-tier window so the engine-cycle race guard (heartbeat.js active-writer) sees
+          # v3-rerun as a live heavy writer and skips its qualify/enqueue/mint/render steps while this runs.
+          HB=$(node scripts/heartbeat.js start v3-rerun 2>/dev/null || echo "")
           for i in $(seq 1 ${{ inputs.passes }}); do
             echo "=== requalify pass $i / ${{ inputs.passes }} ==="
             node scripts/requalify-all-leads.js ${{ inputs.batch }} || true
           done
+          node scripts/heartbeat.js finish "$HB" ok 2>/dev/null || true
       - name: Funnel summary (tiers + canonical sectors + names)
         run: |
           set -a; source .env; set +a
