@@ -17,6 +17,20 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
 {
   echo "===== ENGINE CYCLE $(TS) ====="
   set -a; source .env 2>/dev/null; set +a
+  # O7 [A81] pg8000 PREFLIGHT: every DB read/write in the cycle goes through scripts/psql -> pg8000.native. If
+  # pg8000 is missing (a bad runner image / a failed pip install) EVERY pg() silently returns '' and its caller's
+  # catch swallows it -> the whole cycle "succeeds" while writing nothing, and observability goes dark (heartbeats,
+  # health, metrics all stop). Probe it ONCE at cycle start and fire an immediate alert if absent, so a silent
+  # blackout is impossible. Non-fatal (the cycle still proceeds; the alert is the point). notify-event = the shared
+  # Slack+Telegram orchestrator (same as check-stuck-jobs.js), with a raw curl fallback so the alarm is never lost.
+  if ! python3 -c "import pg8000.native" >/dev/null 2>&1; then
+    echo "[$(TS)] 🔴 PREFLIGHT FAIL: pg8000 not importable — ALL DB writes this cycle will silently no-op (observability blackout). Alerting."
+    # notify-event accepts booking|reply|stuck; 'stuck' is the engine-down channel (Slack #all-tamazia + Telegram).
+    node scripts/notify-event.js stuck "engine-cycle preflight: pg8000 is NOT importable on the runner. Every DB write silently no-ops (heartbeats/health/metrics go dark). Fix: pip install -r requirements.txt." 2>/dev/null \
+      || { [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && curl -s --max-time 15 -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" -d chat_id="$TELEGRAM_CHAT_ID" -d text="🔴 engine-cycle: pg8000 missing, DB writes silently no-op (observability blackout)" >/dev/null || true; }
+  else
+    echo "[$(TS)] preflight ok: pg8000 importable"
+  fi
   HB_ID=$(node scripts/heartbeat.js start engine-cycle 2>/dev/null || echo "")   # A2: open a per-cycle heartbeat row in engine_runs
   # GLOBAL STALE-REAPER (race-guard hardening). MUST run BEFORE the active-writer check below. heartbeat.js has a
   # per-job reaper, but it only fires on that SAME job's next start — so a heavy writer that CRASHES and never

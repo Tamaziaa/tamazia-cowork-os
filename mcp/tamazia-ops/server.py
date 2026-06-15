@@ -324,11 +324,19 @@ def engine_health() -> str:
         out.append("Engines: cannot read engine_runs (Neon unreachable: " + str(e) + ").")
 
     # Stuck checks from system_health.
+    # O2 [A13/A42]: `stuck_*` is reserved for ENGINE LIVENESS (check-stuck-jobs.js writes category='liveness',
+    # one key per job: stuck_engine-cycle, stuck_mystrika, ...). The DATA metric "leads overdue in cadence" is a
+    # different thing (health-check.js writes it with category='data'); it should NOT show up as an engine being
+    # "stuck". Filter to category='liveness' so a data backlog never masquerades as a dead engine. (We also accept
+    # a future renamed data_stuck_leads key by simply not matching it here.) The data metric still surfaces on the
+    # Health tab under its own category.
     q_stuck = """
         SELECT check_key, status, COALESCE(detail,'') AS detail,
                COALESCE(metric::text,'') AS metric
         FROM system_health
         WHERE check_key LIKE 'stuck_%'
+          AND COALESCE(category,'') <> 'data'
+          AND check_key <> 'stuck_leads'
         ORDER BY (status='fail') DESC, check_key
     """
     try:
