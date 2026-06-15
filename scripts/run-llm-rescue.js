@@ -3,8 +3,10 @@
 // Thin CLI for the LLM-RESCUE generation worker (src/lib/llm-rescue.js). Cost-capped, free-model-first, gated on
 // the LLM_QA_ENABLED kill switch (default OFF). Writes ADVISORY qa_* columns only — never icp_tier/send state.
 // Usage:
-//   LLM_QA_ENABLED=1 node scripts/run-llm-rescue.js --max 15 [--cohort missing_linkedin] [--dry] [--force]
+//   LLM_QA_ENABLED=1 node scripts/run-llm-rescue.js --max 15 [--cohort missing_linkedin] [--dry] [--force] [--run-cost-cap-micro N]
 //   (no env / LLM_QA_ENABLED unset -> prints the kill-switch notice and exits 0, so a cycle step is a safe no-op)
+//   (--run-cost-cap-micro = optional per-run cost ceiling in micro-USD, on top of the agency daily budget; the old
+//    --token-cap flag was phantom and has been removed.)
 const path = require('path');
 const fs = require('fs');
 const ROOT = path.resolve(__dirname, '..');
@@ -21,6 +23,7 @@ const has = (n) => process.argv.includes('--' + n);
     dry: has('dry'),
     force: has('force'),
     recheckHours: parseInt(arg('recheck-hours', '168'), 10),
+    runCostCapMicro: parseInt(arg('run-cost-cap-micro', '0'), 10),
   });
   if (out.skipped) { console.log('[llm-rescue] ' + out.reason); return; }
   if (!out.ok) { console.log('[llm-rescue] error: ' + (out.error || 'unknown')); return; }
