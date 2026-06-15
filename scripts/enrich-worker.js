@@ -61,6 +61,28 @@ async function enrichOne(row) {
   const secondary = rec.secondary_emails || [];
   const socials = rec.socials || {};
   const liUrl = (socials.linkedin && (socials.linkedin.url || socials.linkedin)) || (rec.linkedin_people && rec.linkedin_people[0]) || '';
+  // P2-3: keep UP TO 3 LinkedIn-identified people for multi-threading (not just the first URL). Pull named
+  // decision-makers that carry a personal /in/ LinkedIn URL first (best for a 1:1 approach), then top up from
+  // any remaining personal LinkedIn URLs found on the site. De-dupe by URL, cap at 3, store as decision_makers
+  // jsonb [{name,title,linkedin,source}]. This is additive — the legacy single linkedin_url is still written.
+  const liNames = (() => {
+    const out = []; const seen = new Set();
+    const isPersonal = (u) => /linkedin\.com\/in\//i.test(String(u || ''));
+    for (const d of (rec.decisionMakers || [])) {
+      if (out.length >= 3) break;
+      const u = d.linkedin || '';
+      if (!isPersonal(u) || seen.has(u.toLowerCase())) continue;
+      seen.add(u.toLowerCase());
+      out.push({ name: d.name || [d.first_name, d.last_name].filter(Boolean).join(' '), title: d.title || '', linkedin: u, source: d.source || 'enrich' });
+    }
+    for (const u of (rec.linkedin_people || [])) {
+      if (out.length >= 3) break;
+      if (!isPersonal(u) || seen.has(String(u).toLowerCase())) continue;
+      seen.add(String(u).toLowerCase());
+      out.push({ name: '', title: '', linkedin: u, source: 'site' });
+    }
+    return out;
+  })();
   if (DRY) {
     console.log(`  DRY ${row.domain} -> primary=${primary ? primary.email + ' (' + primary.role + ', conf ' + primary.confidence + (primary.verified ? ', verified' : '') + ')' : 'none'} +${secondary.length} secondary`);
     return;
@@ -81,8 +103,11 @@ async function enrichOne(row) {
     sets.push(`contact_email=${q(primary.email)}`, `contact_name=${q(primary.name)}`, `title=${q(primary.role)}`, `contact_confidence=${Number(primary.confidence || 0)}`);
   }
   if (liUrl) sets.push(`linkedin_url=${q(liUrl)}`);
+  // P2-3: store up-to-3 LinkedIn contacts for multi-threading. Only write when we found at least one (never
+  // clobber a previously-found set with an empty array).
+  if (liNames.length) { sets.push(`decision_makers=${jb(liNames)}`, `channel_linkedin_ready=${liNames.length ? 'TRUE' : 'FALSE'}`); }
   pg(`UPDATE leads SET ${sets.join(', ')} WHERE id=${row.id};`);
-  console.log(`  OK ${row.domain} -> ${primary ? primary.email + ' [' + (primary.role || '?') + '] conf=' + primary.confidence + (primary.verified ? ' ✓' : '') : 'no DM'} (+${secondary.length} cc, ${(rec.counts || {}).emails || 0} emails)`);
+  console.log(`  OK ${row.domain} -> ${primary ? primary.email + ' [' + (primary.role || '?') + '] conf=' + primary.confidence + (primary.verified ? ' ✓' : '') : 'no DM'} (+${secondary.length} cc, ${(rec.counts || {}).emails || 0} emails, ${liNames.length} LI)`);
 }
 
 async function drainOnce(lim) {

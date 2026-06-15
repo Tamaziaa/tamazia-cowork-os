@@ -18,6 +18,8 @@ const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 (() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
 const { scoreLead, PASS } = require(path.join(ROOT, 'src', 'lib', 'enrich', 'lead-quality.js'));
+const { entityNeedsConsent, classifyEntityType } = require(path.join(ROOT, 'src', 'lib', 'sourcing', 'icp.js'));
+const governor = require(path.join(ROOT, 'src', 'lib', 'governor.js'));
 // maxBuffer: the eligible SELECT does `to_jsonb(l)` over the full 124-col leads row × LIMIT (engine cycle uses
 // 12, backlog-burst uses 300). 300 fat rows of JSON overflow Node's 1MB execFileSync default -> ENOBUFS throws.
 // 256MB covers any realistic batch.
@@ -29,6 +31,11 @@ const num = v => (v == null || v === '' || Number.isNaN(Number(v))) ? 'NULL' : N
   const limit = Number(process.argv[2] || 12);
   // additive guard: provider column for the verification that promoted a lead (idempotent, safe)
   try { pg(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS primary_email_verified_by text`); } catch (_e) {}
+  // P2-1a additive guard: consent_required gate (P2 OWNS this column). P2-1b: governor release stamp.
+  // Both are idempotent IF NOT EXISTS and NULL/false-safe so the qualifier runs identically pre- and
+  // post-provision by the coordinator. (canonical-schema.json/.sql carry the authoritative DDL.)
+  try { pg(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS consent_required boolean DEFAULT false`); } catch (_e) {}
+  try { pg(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS governor_released_at timestamptz`); } catch (_e) {}
   // Eligible: ANY un-scored lead with a domain (enriched first). scoreLead IS the quality gate — it tiers every
   // lead (T1 auto / T2 approval / T3 reject), so organic_top100 backlog no longer needs verify_status='approved'.
   const raw = pg(`
@@ -40,10 +47,32 @@ const num = v => (v == null || v === '' || Number.isNaN(Number(v))) ? 'NULL' : N
   if (!raw) { console.log('[qualify] no eligible leads to score.'); return; }
   const leads = raw.split('\n').filter(Boolean).map(j => { try { return JSON.parse(j); } catch (_e) { return null; } }).filter(Boolean);
 
-  let t1 = 0, t2 = 0, t3 = 0, queued = 0;
+  let t1 = 0, t2 = 0, t3 = 0, queued = 0, released = 0, govHeld = 0, consentExcluded = 0;
   for (const lead of leads) {
     let q;
     try { q = await scoreLead(lead); } catch (e) { console.log(`  ${lead.domain} score err: ${e.message}`); continue; }
+    // ---- P2-1a ENTITY-TYPE GATE (runs BEFORE tier routing) -----------------------------------------
+    // PECR/UK-GDPR: cold B2B email is defensible to corporate subscribers (companies + LLPs) but NOT to
+    // individual subscribers (sole traders + ordinary partnerships) without consent. We classify from the
+    // persisted entity_type (Companies House company_type, set at source) and fall back to a name heuristic.
+    // A consent-required entity is FLAGGED (consent_required=TRUE) and EXCLUDED from the cold path: it can
+    // never be Tier-1/auto-send. It is parked at lifecycle='consent_required' (a held state, not rejected —
+    // it is reachable later via a consented channel). This is a hard gate, evaluated independent of score.
+    let entityBucket = lead.entity_type ? classifyEntityType(lead.entity_type)
+      : classifyEntityType(lead.company || '', { asName: true });
+    const needsConsent = entityNeedsConsent(entityBucket);
+    if (needsConsent) {
+      pg(`UPDATE leads SET consent_required=TRUE, entity_type=COALESCE(entity_type, ${esc(entityBucket)}),
+          quality_score=${q.score}, quality_fit=FALSE, icp_tier=2,
+          quality_layers=${esc(JSON.stringify(q.layers))}::jsonb, quality_scored_at=NOW(),
+          personalisation_pointers = COALESCE(personalisation_pointers,'{}'::jsonb) || ${esc(JSON.stringify({ consent_required: true, entity_type: entityBucket, gate: 'P2-1a_entity_type' }))}::jsonb,
+          lifecycle_stage='consent_required' WHERE id=${lead.id}`);
+      console.log(`  ⛔ ${String(lead.domain || '').padEnd(30)} entity=${entityBucket} -> consent_required (excluded from cold path)`);
+      consentExcluded++;
+      continue;
+    }
+    // Persist the (corporate) entity bucket when we positively classified one, so it stops being NULL.
+    if (entityBucket === 'company' && !lead.entity_type) { try { pg(`UPDATE leads SET entity_type='company' WHERE id=${lead.id} AND entity_type IS NULL`); } catch (_e) {} }
     // TIER-1 SAFETY NET (Apify email-verify, paid Starter, cost-governed): the deterministic 5-filter gate already
     // proved the DM email deliverable-shaped, so Tier-1 is earned WITHOUT a verify. We spend ONE paid check only on
     // the small Tier-1 set as a last line of defence — and it can ONLY DEMOTE: a 'bad'/'invalid' SMTP verdict pulls
@@ -91,11 +120,24 @@ const num = v => (v == null || v === '' || Number.isNaN(Number(v))) ? 'NULL' : N
         lifecycle_stage='${stage}' WHERE id=${lead.id}`);
     if (tier === 1) {
       t1++;
-      // Tier-1 auto-send cadence: only when a clean Touch-0 draft exists (no unfilled {token} or [Name]).
-      const hasDraft = pg(`SELECT 1 FROM outreach_drafts WHERE lead_id=${lead.id} AND draft_metadata->>'touch'='0' AND send_status='pending' AND draft_body !~ '\\{[a-zA-Z_]+\\}' AND draft_body !~ '\\[[A-Za-z ]+\\]' LIMIT 1`);
-      if (hasDraft) { pg(`UPDATE leads SET status='touch_0_queued', next_touch_date=CURRENT_DATE WHERE id=${lead.id}`); queued++; }
+      // ---- P2-1b GOVERNOR (per-sector round-robin Tier-1 release) -------------------------------------
+      // A fresh Tier-1 lead is only RELEASED to the email-ready set if today's total (100) and this sector's
+      // fair lane (10x10) both have room (reset 00:00 UK). If the governor holds it, the lead stays qualified
+      // (it is picked up by the nightly governor sweep / next day) but is NOT queued for send today. This is
+      // the QUALIFIED→email-ready gate the prompt requires; the actual send is still gated by send-pacing.js.
+      let gov = { ok: false, reason: 'governor_unavailable' };
+      try { gov = governor.canReleaseLead({ sector_code: q.sector_code }); } catch (_e) {}
+      if (gov.ok) {
+        try { pg(`UPDATE leads SET governor_released_at=NOW() WHERE id=${lead.id} AND governor_released_at IS NULL`); } catch (_e) {}
+        released++;
+        // Tier-1 auto-send cadence: only when a clean Touch-0 draft exists (no unfilled {token} or [Name]).
+        const hasDraft = pg(`SELECT 1 FROM outreach_drafts WHERE lead_id=${lead.id} AND draft_metadata->>'touch'='0' AND send_status='pending' AND draft_body !~ '\\{[a-zA-Z_]+\\}' AND draft_body !~ '\\[[A-Za-z ]+\\]' LIMIT 1`);
+        if (hasDraft) { pg(`UPDATE leads SET status='touch_0_queued', next_touch_date=CURRENT_DATE WHERE id=${lead.id}`); queued++; }
+      } else {
+        govHeld++;
+      }
     } else if (tier === 2) { t2++; } else { t3++; }
     console.log(`  ${String(lead.domain || '').padEnd(30)} score=${q.score} tier=${tier}${tier === 1 ? ' [FIT·auto]' : tier === 2 ? ' [approve]' : ' [reject]'}`);
   }
-  console.log(`[qualify] scored ${leads.length} · Tier1(auto) ${t1} · Tier2(approval) ${t2} · Tier3(reject) ${t3} · queued-for-send ${queued}`);
+  console.log(`[qualify] scored ${leads.length} · Tier1(auto) ${t1} · Tier2(approval) ${t2} · Tier3(reject) ${t3} · consent-excluded ${consentExcluded} · gov-released ${released} · gov-held ${govHeld} · queued-for-send ${queued}`);
 })().catch(e => { console.error('[qualify] FATAL', e.message); process.exit(1); });

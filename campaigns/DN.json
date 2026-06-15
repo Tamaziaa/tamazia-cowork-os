@@ -1,0 +1,126 @@
+{
+  "_README": "P2-5 cold cadence for Dental (DN). Sending is OFF (SEND_ENABLED). Touches 0-2 from the founder-reviewed draft; 3-4 are compliant nudges. Every touch appends _footer.txt at send (footer carries the founder-blocked company number / ICO / registered address + visible {{unsubscribe_url}} + provenance line; List-Unsubscribe headers set by relay-router.js).",
+  "sector_code": "DN",
+  "sector_name": "Dental",
+  "regulator_framework": "GDC standards, CQC registration, published-pricing requirement, UK-GDPR",
+  "footer": "_footer.txt",
+  "signature": [
+    "Aman Pareek",
+    "Founder, Tamazia",
+    "LLM in International Business Law, King's College London"
+  ],
+  "provenance_line": "How we found you: public registers, your website and business directories. Details: {{privacy_notice_url}}.",
+  "touches": [
+    {
+      "touch": 0,
+      "name": "soft intro + free audit offer",
+      "subject": "{{company}} and dental compliance",
+      "body": [
+        "Hi {{first_name}},",
+        "",
+        "I review dental websites against GDC standards, CQC registration, published-pricing requirement, UK-GDPR before anything else, and one item on {{company}}'s site stood out: [no clear, published price list, which the GDC expects patients to be able to find]. If you market online, you are regulated, so the same page that wins you work is the page the regulator can read.",
+        "",
+        "I have put together a short, free compliance and visibility audit of your site. No cost, nothing to install.",
+        "",
+        "Would it help if I sent you the two-line summary of what I found?",
+        "",
+        "If you are not the right person for this, who on your team owns the website and marketing? Happy to be pointed their way."
+      ],
+      "asks": {
+        "soft": "want the two-line summary of what I found?",
+        "meeting": null
+      },
+      "regulated_line": true,
+      "right_person": true
+    },
+    {
+      "touch": 1,
+      "name": "audit value / a specific gap",
+      "interval_days": 3,
+      "subject": "Your compliance and visibility scan, {{company}}",
+      "body": [
+        "Hi {{first_name}},",
+        "",
+        "Following up with the scan itself. I built {{company}} a short audit page that walks through what I found: {{audit_url}}.",
+        "",
+        "The headline item is {{finding}}, measured against {{clause}}. For dental the recurring one is missing or unclear pricing, so this is a common and fixable gap rather than a criticism. The page also covers two SEO and AI-visibility points, because regulated content only helps if prospects can actually find it.",
+        "",
+        "It is yours to keep whether or not we ever speak. If you would like me to walk you through it, I keep a small number of 1:1 slots and would happily talk you through the fixes myself.",
+        "",
+        "If someone else handles the website, please feel free to forward this to them."
+      ],
+      "asks": {
+        "soft": "want me to walk you through it?",
+        "meeting": "a 1:1 walkthrough of the fixes"
+      },
+      "regulated_line": false,
+      "right_person": true,
+      "requires_audit_url": true
+    },
+    {
+      "touch": 2,
+      "name": "gentle nudge + the 1:1 meeting ask",
+      "interval_days": 7,
+      "subject": "Worth 20 minutes, {{company}}?",
+      "body": [
+        "Hi {{first_name}},",
+        "",
+        "I will leave it here so I am not cluttering your inbox. The compliance and visibility audit I made for {{company}} stays live at {{audit_url}} for whenever it is useful.",
+        "",
+        "If the gap is worth fixing properly, the simplest next step is a 20-minute 1:1 with me. No pitch deck, just your site on a screen and the fixes in order of patient-information compliance first and new-patient growth second. You can grab a time here: {{calendar_link}}.",
+        "",
+        "And if this is not your area, a quick note on who to speak to would mean a lot."
+      ],
+      "asks": {
+        "soft": "a quick note on who to speak to",
+        "meeting": "a 20-minute 1:1 with me ({{calendar_link}})"
+      },
+      "regulated_line": false,
+      "right_person": true
+    },
+    {
+      "touch": 3,
+      "name": "nudge: switch challenge",
+      "interval_days": 12,
+      "subject": "One question on {{company}}'s last report",
+      "body": [
+        "Hi {{first_name}},",
+        "",
+        "One direct question and then I will stop. Has the missing or unclear pricing on {{company}}'s site been reviewed and signed off this quarter?",
+        "",
+        "If yes, apologies for the noise. If no, the audit I built has the fix, ordered by patient-information compliance first and new-patient growth second: {{audit_url}}.",
+        "",
+        "It is worth comparing line by line against the last report your current agency delivered. If you market online, you are regulated, and most generalist agencies do not read your pages the way a regulator does.",
+        "",
+        "If this sits with a colleague, a quick pointer to the right person would be appreciated."
+      ],
+      "asks": {
+        "soft": "has this been reviewed and signed off this quarter?",
+        "meeting": "compare it against your last agency report on a 20-minute call ({{calendar_link}})"
+      },
+      "regulated_line": true,
+      "right_person": true
+    },
+    {
+      "touch": 4,
+      "name": "nudge: breakup",
+      "interval_days": 19,
+      "subject": "Closing the file on {{company}}",
+      "body": [
+        "Hi {{first_name}},",
+        "",
+        "Closing the file so I am not crowding your inbox. The compliance and visibility audit I made for {{company}} stays live at {{audit_url}} for 180 days, yours whether or not we ever speak.",
+        "",
+        "If the missing or unclear pricing finding ever lands on the team's desk, the audit has the fix, or my calendar is here for a 20-minute 1:1: {{calendar_link}}.",
+        "",
+        "And if I have been writing to the wrong person, a quick pointer to whoever owns the website would be a real help."
+      ],
+      "asks": {
+        "soft": "a quick pointer to whoever owns the website",
+        "meeting": "a 20-minute 1:1 ({{calendar_link}})"
+      },
+      "regulated_line": false,
+      "right_person": true
+    }
+  ]
+}

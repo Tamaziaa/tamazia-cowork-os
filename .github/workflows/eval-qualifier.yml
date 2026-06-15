@@ -1,0 +1,38 @@
+name: Qualifier eval gate (tier agreement >= 90%)
+# P2-2 · Blocks merge when the qualifier's tier decision drifts from the hand-labelled eval set
+# (eval/qualifier.json). Runs the PURE decideTier() over the captured signals — deterministic + offline, so it
+# is a stable required check on every PR. A live-scoreLead spot-check runs too (informational, never gates).
+on:
+  pull_request:
+    paths:
+      - 'src/lib/enrich/lead-quality.js'
+      - 'src/lib/sourcing/icp.js'
+      - 'scripts/qualify-and-queue.js'
+      - 'scripts/eval-qualifier.js'
+      - 'eval/qualifier.json'
+      - 'campaigns/**'
+      - 'scripts/validate-campaigns.js'
+  workflow_dispatch: {}
+  schedule:
+    - cron: '15 5 * * 1'   # weekly Monday 05:15 (alongside the audit eval)
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install deps
+        run: npm install --omit=dev || npm install || true
+      - name: Campaign compliance check (P2-5; fails build on any non-compliant template)
+        run: node scripts/validate-campaigns.js
+      - name: Qualifier eval (deterministic decideTier; fails build when agreement < 90%)
+        run: node scripts/eval-qualifier.js
+      - name: Live scoreLead spot-check (informational; never fails the gate)
+        if: ${{ always() }}
+        continue-on-error: true
+        run: |
+          if [ -n "${{ secrets.ENV_B64 }}" ]; then echo "${{ secrets.ENV_B64 }}" | base64 -d > .env; fi
+          node scripts/eval-qualifier.js --live || true
