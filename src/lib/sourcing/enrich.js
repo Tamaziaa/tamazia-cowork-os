@@ -233,24 +233,15 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
   for (const e of hunter) if (DM.test(e.position || '')) dms.push({ name: e.name, first_name: e.first_name, last_name: e.last_name, title: e.position, email: e.value, linkedin: e.linkedin || '', source: 'hunter' });
   const seen = new Set(dms.map(d => (d.name || '').toLowerCase()));
   for (const d of dmSerper) { const k = (d.name || '').toLowerCase(); if (d.name && !seen.has(k)) { seen.add(k); const guess = pattern ? applyPattern(pattern, d.first_name, d.last_name, domain) : null; dms.push({ name: d.name, first_name: d.first_name, last_name: d.last_name, title: d.title, email: guess || '', email_guessed: !!guess, linkedin: d.linkedin, source: 'serper' }); if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: d.name, position: d.title, type: 'personal', source: 'pattern', guessed: true }; } }
-  // Companies House officers = authoritative decision-makers (£0, official register). Generate candidate emails
-  // via the firm's detected pattern, else default to the most-common B2B form first.last@domain.
-  // JURISDICTION GATE: Companies House is the UK-ONLY registry. Querying it by name for a non-UK firm returns
-  // an unrelated UK officer (beta bug: the same person was guessed onto 8 different US firms). Only query when
-  // the lead is plausibly UK — by domain TLD (.uk) or firmographics country/jurisdiction.
-  const _isUK = /\.uk$/i.test(domain) || /\b(gb|uk|united kingdom|england|scotland|wales|northern ireland)\b/i.test(String(_firmo.country || '') + ' ' + String(_firmo.jurisdiction || ''));
-  try {
-    if (!_isUK) throw new Error('non-UK lead — skip Companies House (avoids cross-jurisdiction false match)');
-    const _ch = require('./companies-house.js');
-    const _chRes = await _ch.findDecisionMakers({ company: company || domain.split('.')[0], domain });
-    for (const o of (_chRes.officers || [])) {
-      const k = (o.name || '').toLowerCase(); if (!o.name || seen.has(k)) continue; seen.add(k);
-      const parts = o.name.trim().split(/\s+/); const first = parts[0] || ''; const last = parts.length > 1 ? parts[parts.length - 1] : '';
-      const guess = guessOfficerEmail(pattern, first, last, domain);
-      dms.push({ name: o.name, first_name: first, last_name: last, title: o.role || 'Director', email: guess, email_guessed: !!guess, linkedin: '', source: 'companies_house', ch_url: _chRes.ch_url || '' });
-      if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: o.name, position: o.role || 'Director', type: 'personal', source: 'companies_house_pattern', guessed: true };
-    }
-  } catch (_) {}
+  // Companies House officers — REG-NUMBER MATCH ONLY (Q1, B13/B14/B23). The companies-house.js findDecisionMakers()
+  // path is a NAME/keyword SEARCH (searchByKeyword(company|domain) -> rank by token overlap -> pick top hit), which
+  // binds ONE officer onto EVERY firm whose name shares a sector keyword: live, "Altaf Husain Yunus Bhai Patel"
+  // was written onto 20 different "...law" domains, and 19 .ae leads carried UK officers. The keyword TLD/country
+  // gate alone did not stop it (a .com UK-immigration firm still keyword-matched an unrelated officer). REMOVED.
+  // The ONLY authoritative CH officer path is firmographics.js: it reads the company-registration NUMBER the firm
+  // legally displays on its OWN site, then calls CH /company/{reg}/officers — an exact-company match, gated to
+  // jurisdiction==='gb'. Those officers are merged into dms[] below from _firmo.officers (no name-search, no
+  // cross-binding). Net effect: a CH officer is only ever attached when it provably belongs to THIS firm.
   // Regulator registers (SRA / FCA / CQC) name the role-holders who carry the regulatory liability — the
   // near-free decision-maker backbone for this niche. Name → firm email pattern → candidate address (guessed).
   try {
@@ -264,6 +255,18 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
       if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: o.name, position: o.role || '', type: 'personal', source: 'register_pattern', guessed: true };
     }
   } catch (_) {}
+  // Companies House officers via the REG-NUMBER match (firmographics.js, jurisdiction==='gb' only) — the SAFE,
+  // exact-company CH path (replaces the removed name-search above). Same pattern-guess treatment as a register
+  // officer, but a guessed email is only minted when the firm's OWN email pattern was detected (no blind
+  // first.last default for CH, which previously leaked malformed/wrong locals); else the named DM stands with
+  // no email. Runs BEFORE the verify loop so a guessed CH-DM email is verified like any other.
+  for (const o of (_firmo.officers || [])) {
+    const k = (o.name || '').toLowerCase(); if (!o.name || seen.has(k)) continue; seen.add(k);
+    const parts = o.name.trim().split(/\s+/); const first = parts[0] || ''; const last = parts.length > 1 ? parts[parts.length - 1] : '';
+    const guess = pattern ? applyPattern(pattern, first, last, domain) : '';
+    dms.push({ name: o.name, first_name: first, last_name: last, title: o.role || 'Officer', email: guess || '', email_guessed: !!guess, linkedin: '', source: 'companies_house' });
+    if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: o.name, position: o.role || 'Officer', type: 'personal', source: 'companies_house_pattern', guessed: true };
+  }
   // Website-named people with a decision-maker role = the strongest DM signal (founder's primary source).
   for (const e of site.emails) {
     if (e.name && e.title && DM.test(e.title)) {
@@ -283,8 +286,7 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
     for (const e of _ordered.slice(0, _VCAP)) { const v = await verifyFree(e.value, env); e.verified = v.verified; e.verify_status = v.status; e.verify_provider = v.provider; e.role = v.role; }
   }
   for (const d of dms) if (d.email) { const e = emails.find(x => x.value === d.email); if (e) d.verified = !!e.verified; }
-  // Phase C: registry officers are decision-makers too
-  for (const o of (_firmo.officers || [])) { const k = (o.name || '').toLowerCase(); if (o.name && !seen.has(k)) { seen.add(k); dms.push({ name: o.name, title: o.role || 'Officer', email: '', linkedin: '', source: 'companies_house' }); } }
+  // (Phase C registry officers are merged ABOVE, pre-verify, via the reg-number firmographics path — Q1.)
   // Pick THE decision-maker's email (primary) + rank the rest as secondary cc/bcc contacts.
   let dmsel = { primary: null, secondary: [] };
   try { dmsel = require('../enrich/dm-email-scoring.js').selectDecisionMaker({ emails, decisionMakers: dms }); } catch (_) {}
