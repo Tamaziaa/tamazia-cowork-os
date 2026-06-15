@@ -71,7 +71,7 @@ jobs:
             node scripts/qualify-and-queue.js ${{ inputs.qualify }}       || true
             node scripts/enqueue-leads.js ${{ inputs.mint }}             || true
             node scripts/mint-worker.js --once                            || true
-          '
+          ' || true   # outer guard: a heartbeat-wrap timeout (exit 124 on a large burst, e.g. verify=400) must NOT fail this best-effort no-send drain — partial progress is kept (matches the requalify step's guard)
       - name: Funnel summary
         run: |
           set -a; source .env; set +a
