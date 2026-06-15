@@ -1,0 +1,32 @@
+{
+  "_README": "WS3 audit-gap regression fixture. The Layer-3 Claude safeguard, when it finds a minted audit MISSING a law that should apply (or carrying a wrong one), writes the gap to engine_gap_fixes (via src/lib/gap-ledger.js), the engine is fixed at one of three surfaces (see ops/WS3-EDIT-SURFACES.md), and a NEW entry is appended HERE to lock the fix so the gap never reappears. scripts/eval-audit-gaps.mjs recomputes the EXPECTED laws for each entry via src/lib/compliance/jurisdiction-router.js routeForMarkets() and FAILS CI (exit 1) if any expect_laws is absent or any forbid_laws is present. Per-entry schema: { domain, sector, country, expect_laws:[framework_short...], expect_errors:[type...], forbid_laws:[framework_short...], note }. expect_laws/forbid_laws are asserted DETERMINISTICALLY against the router (offline, no network). expect_errors is DOCUMENTARY only — live-error detection runs in the (non-deterministic, network-bound) scanner src/skills/S008-personalisation-engine/scanners/compliance.js and is therefore NOT gated here, mirroring how eval-qualifier.js gates the pure decideTier() and never the live scoreLead().",
+  "_generated": "2026-06-15 — seeded with one known-good self-test (UK law-firm) derived from routeForMarkets({country:'UK',sector:'law-firms'}); proves the harness green on a currently-correct audit.",
+  "threshold": "all (every entry must pass; the loop only appends entries it has already fixed)",
+  "fixtures": [
+    {
+      "domain": "macfarlanes.com",
+      "sector": "law-firms",
+      "country": "UK",
+      "expect_laws": [
+        "UK_SRA_COC",
+        "UK_EQUALITY_2010",
+        "UK_GDPR_A13",
+        "UK_PECR",
+        "UK_ICO_COOKIES",
+        "UK_DPA_2018",
+        "UK_DMCC_2024",
+        "UK_COMPANIES_ACT",
+        "GOOGLE_EEAT"
+      ],
+      "forbid_laws": [
+        "US_FTC",
+        "US_CPRA",
+        "EU_GDPR",
+        "EU_EPRIVACY",
+        "UAE_PDPL"
+      ],
+      "expect_errors": [],
+      "note": "SELF-TEST (known-good): a UK-registered law firm with no operating markets. routeForMarkets must attach the SRA code of conduct + Equality Act (sector core), the universal-UK privacy/cookies/DMCC/Companies-Act stack, and always-on GOOGLE_EEAT — and must NOT attach US or EU or UAE law (the firm operates only in the UK). This entry proves the harness goes green on a currently-correct audit. expect_errors empty by design: live-page error detection is not gated offline."
+    }
+  ]
+}
