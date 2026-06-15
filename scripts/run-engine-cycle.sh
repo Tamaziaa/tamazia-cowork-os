@@ -33,7 +33,8 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
   run "node src/skills/S065-touch-scheduler/scripts/send-due.js"        # send window (gated)
   run "node scripts/run-serp-scrape.js 50"                              # wide SERP scrape (skips if no key)
   run '[ "${SOURCING_ENABLED:-1}" = "1" ] && node src/skills/S028-sourcing-orchestrator/scripts/run.js || echo "S028 sourcing disabled"'  # S028 10-source orchestrator (CH/SEC/OC/OSM) -> fresh leads
-  run "node scripts/enrich-and-queue-channels.js 8"                     # enrich 8 leads: find website + emails + socials (waterfall) — also covers name->domain resolution
+  run "node scripts/enrich-and-queue-channels.js 8"                     # thin waterfall: website + emails + socials + best_channel + LinkedIn/Instagram Touch-0 channel-queue
+  run "node scripts/enrich-worker.js --once --max 8"                    # RICH DM enrichment (enrichCompany: Companies House officers + SRA/FCA/CQC registers + site-named DM + selectDecisionMaker -> primary_email/decision_maker_confidence/secondary cc). Free-DIY; Apify stays OFF unless APIFY_ENABLE (client fail-closes on the $29 cap). Back-fills the thin path's no-DM leads — the contact-depth fix.
   run "node scripts/run-deep-research-batch.js 6"                       # S063 deep research: site scrape + news + brand pointers + Touch 0 (feeds personalisation + audit)
   run "node scripts/verify-contacts.js 25"                              # FREE email verify (Hunter+DIY, £0) → verify_status/contact_confidence
   run "node scripts/dedupe-leads.js"                                    # suppress duplicate-domain leads (non-destructive)
