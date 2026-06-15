@@ -34,14 +34,17 @@ jobs:
       - name: Reconcile + recycle (Neon <-> Mystrika <-> cal <-> audits, then recycle)
         run: |
           set -a; source .env; set +a
-          # One heartbeat spanning BOTH steps: recycle.js re-tiers leads back to lifecycle_stage='qualified', and
+          # One heartbeat spanning the bundle: recycle.js re-tiers leads back to lifecycle_stage='qualified', and
           # reconcile.js flips leads to 'booked' — both write the tier/lifecycle columns the engine cycle's seam
-          # reads. Wrapping the pair keeps nightly-workers visible to the engine-cycle race guard (heartbeat.js
+          # reads. Wrapping them keeps nightly-workers visible to the engine-cycle race guard (heartbeat.js
           # active-writer) for its whole DB-write window, so the cycle skips its racy steps throughout.
+          # P5 [X2/X8]: governor-release.js was REMOVED from this bundle — it now runs as its OWN engine-cycle
+          # step every 30 min (scripts/run-engine-cycle.sh), so it no longer depends on this single 60-min job
+          # that was timing out (which is why governor_released_at was 0 on every lead). verify-audits.js likewise
+          # runs as its own cycle step now. This bundle keeps only the genuinely-nightly reconcile/recycle/scorecard.
           node scripts/heartbeat.js wrap nightly-workers -- bash -c '
             node scripts/reconcile.js || true
             node scripts/recycle.js   || true
-            node scripts/governor-release.js || true
             node scripts/scorecard-nightly.js || true
           '
       - name: Compute nightly metrics (per-source + per-pipeline deliverability/cost -> metrics table)
