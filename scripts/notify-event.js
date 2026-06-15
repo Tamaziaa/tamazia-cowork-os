@@ -18,6 +18,13 @@ try { for (const l of fs.readFileSync(path.join(ROOT, '.env'), 'utf8').split('\n
 const TG = { booking: '📅', reply: '✉️', stuck: '🛑' };
 const SL = { booking: ':calendar:', reply: ':email:', stuck: ':rotating_light:' };
 
+// Telegram legacy Markdown (parse_mode:'Markdown') 400-REJECTS a whole message containing an unbalanced or
+// misused _ * [ ` — and the reply/booking callers embed arbitrary user content (sender, subject, company), e.g.
+// a subject "Re: your_offer [URGENT]" or an address "jane_doe@firm.com". A rejected message is swallowed by the
+// catch in postTelegram, so the alert would be SILENTLY DROPPED — the exact important-only event we must not lose.
+// Escape those four metachars in the user-supplied body only (the bold header we add ourselves stays intact).
+const tgEscape = s => String(s == null ? '' : s).replace(/([_*`[])/g, '\\$1');
+
 async function postSlack(text) { const tok = ENV.SLACK_BOT_TOKEN; if (!tok) return; try { await fetch('https://slack.com/api/chat.postMessage', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ channel: '#all-tamazia', text }), signal: AbortSignal.timeout(12000) }); } catch (_e) {} }
 async function postTelegram(text) { const tok = ENV.TELEGRAM_BOT_TOKEN, chat = ENV.TELEGRAM_CHAT_ID; if (!tok || !chat) return; try { await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text, parse_mode: 'Markdown' }), signal: AbortSignal.timeout(12000) }); } catch (_e) {} }
 
@@ -27,7 +34,7 @@ async function main() {
   if (msg === '-' || msg == null) { try { msg = fs.readFileSync(0, 'utf8').trim(); } catch (_e) { msg = ''; } }
   if (!['booking', 'reply', 'stuck'].includes(kind) || !msg) { console.error('usage: notify-event.js booking|reply|stuck "message"'); process.exit(2); }
   await postSlack(`${SL[kind]} *${kind.toUpperCase()}* · ${msg}`);
-  await postTelegram(`${TG[kind]} *${kind.toUpperCase()}*\n${msg}`);
+  await postTelegram(`${TG[kind]} *${kind.toUpperCase()}*\n${tgEscape(msg)}`);
   console.log(`[notify-event] ${kind} sent`);
 }
 
