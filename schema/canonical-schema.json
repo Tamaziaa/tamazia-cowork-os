@@ -3804,6 +3804,20 @@
         "notnull": false,
         "identity": false
       },
+      "consent_required": {
+        "type": "boolean",
+        "default": "false",
+        "notnull": false,
+        "identity": false,
+        "_p2_note": "P2-1a: TRUE for sole-traders/ordinary-partnerships (individual subscribers). Excluded from the cold path; reachable only via a consented channel. Owned by BUILD STREAM P2."
+      },
+      "governor_released_at": {
+        "type": "timestamptz",
+        "default": null,
+        "notnull": false,
+        "identity": false,
+        "_p2_note": "P2-1b: timestamp a Tier-1 lead was released to the email-ready set by the per-sector round-robin governor (100/day total, 10x10 per-sector, reset 00:00 UK)."
+      },
       "generic_address": {
         "type": "boolean",
         "default": "false",

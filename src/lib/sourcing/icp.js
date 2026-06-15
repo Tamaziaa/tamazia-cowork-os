@@ -96,6 +96,65 @@ function classifySector(text) {
 
 function isExcluded(domain) { return EXCLUDE.test(String(domain || '')); }
 
+// ---- P2-1a ENTITY-TYPE GATE (compliant cold-outreach scope) -----------------------------------
+// UK PECR/UK-GDPR: B2B legitimate-interest cold email is defensible to *corporate subscribers*
+// (limited companies, LLPs, PLCs — a "corporate body"). Sole traders and ordinary partnerships are
+// treated as *individual subscribers*, so cold email to them needs prior consent. The cold path must
+// therefore EXCLUDE sole-traders + partnerships (flag consent_required=TRUE) and pass only companies.
+//
+// Companies House `company_type` value → bucket. CH does NOT register sole traders, so a sole-trader
+// only appears via non-CH sources (OSM/SERP) and is detected by name heuristics (no Ltd/LLP/PLC suffix
+// + a "trading as"/personal-name shape) OR an explicit entity_type the source supplied. classifyEntityType
+// folds every known CH type + the heuristic markers onto one of: 'company' | 'partnership' | 'sole_trader' | 'other'.
+const _CH_COMPANY_TYPES = new Set([
+  'ltd', 'plc', 'private-limited-guarant-nsc', 'private-limited-guarant-nsc-limited-exemption',
+  'private-unlimited', 'private-unlimited-nsc', 'private-limited-shares-section-30-exemption',
+  'old-public-company', 'public-limited-company', 'community-interest-company', 'charitable-incorporated-organisation',
+  'industrial-and-provident-society', 'registered-society-non-jurisdictional', 'royal-charter',
+  'oversea-company', 'uk-establishment', 'european-public-limited-liability-company-se', 'ukeig',
+  'limited', 'company', 'corporation', 'inc', 'incorporated', 'gmbh', 'ag', 'sa', 'srl', 'bv', 'llc', 'pllc', 'pc',
+]);
+const _CH_PARTNERSHIP_TYPES = new Set([
+  'llp', 'limited-liability-partnership', 'limited-partnership', 'scottish-partnership',
+  'scottish-limited-partnership', 'partnership', 'general-partnership',
+]);
+const _CH_SOLE_TYPES = new Set(['sole-trader', 'sole-proprietor', 'sole-proprietorship', 'individual', 'self-employed']);
+
+// Heuristic: does a bare company NAME look like a registered company / LLP (corporate) vs a person/sole trader?
+// NB: 'partners'/'associates' are deliberately NOT in the corporate suffix — "& Partners" signals an
+// ORDINARY partnership (individual subscriber), which _PARTNERSHIP_NAME catches first.
+const _CORP_SUFFIX = /\b(ltd|limited|plc|llp|l\.l\.p|inc|incorporated|corp|corporation|llc|pllc|gmbh|\bag\b|s\.?a\b|srl|b\.?v|pty|company|co\.?$|group|holdings|chambers|solicitors|& co|and co)\b/i;
+// '& partners' / 'and partners' don't sit on a \b before '&', so match them without a leading boundary.
+const _PARTNERSHIP_NAME = /(\b(?:llp|limited liability partnership|limited partnership|partnership)\b|(?:&|\band)\s+partners\b)/i;
+
+// LLP/limited-partnership = a corporate body for PECR purposes (limited liability) → cold OK. An ORDINARY
+// (general) partnership and a sole trader are individual subscribers → consent required.
+function classifyEntityType(companyTypeOrName, opts = {}) {
+  const raw = String(companyTypeOrName || '').toLowerCase().trim();
+  if (!raw) return 'unknown';
+  // Exact CH-type match first (most reliable).
+  if (_CH_SOLE_TYPES.has(raw)) return 'sole_trader';
+  if (_CH_PARTNERSHIP_TYPES.has(raw)) return raw.includes('llp') || raw.includes('limited') ? 'company' : 'partnership';
+  if (_CH_COMPANY_TYPES.has(raw)) return 'company';
+  // Not a recognised CH type token → treat the string as a NAME and use suffix heuristics (covers OSM/SERP
+  // leads that carry no CH type). Multi-token strings ('john smith plumbing', 'acme ltd') are names.
+  if (opts.asName || /[\s-]/.test(raw)) {
+    if (/\b(llp|limited liability partnership|limited partnership)\b/i.test(raw)) return 'company';   // LLP/LP = limited liability → corporate
+    if (_PARTNERSHIP_NAME.test(raw)) return 'partnership';                                            // ordinary partnership → individual
+    if (_CORP_SUFFIX.test(raw)) return 'company';
+  }
+  return 'other';
+}
+
+// THE GATE: TRUE = this entity is an individual subscriber (sole trader / ordinary partnership) and must
+// NOT be cold-emailed without consent. Companies + LLPs return FALSE. Unknown returns FALSE (don't block on
+// unknown — the qualifier only sets consent_required when it has POSITIVE evidence of sole-trader/partnership).
+function entityNeedsConsent(entityType) {
+  const b = (entityType === 'company' || entityType === 'partnership' || entityType === 'sole_trader' || entityType === 'other' || entityType === 'unknown')
+    ? entityType : classifyEntityType(entityType);
+  return b === 'sole_trader' || b === 'partnership';
+}
+
 function inServedGeo({ country, domain }) {
   if (country && GEO.names.test(country)) return true;
   if (domain && GEO.tld.test(domain)) return true;
@@ -159,4 +218,4 @@ function scoreICP(sig) {
   return { fit, tier, score, band, reasons };
 }
 
-module.exports = { SECTORS, classifySector, isExcluded, inServedGeo, preFilter, scoreICP, normSector };
+module.exports = { SECTORS, classifySector, isExcluded, inServedGeo, preFilter, scoreICP, normSector, classifyEntityType, entityNeedsConsent };
