@@ -46,15 +46,26 @@ function isConsentRequired(lead) {
   } catch (_e) { return false; }
 }
 
-// Promote a lead to a tier, writing the SAME columns qualify-and-queue.js writes for an accepted lead. Tier-1 ->
-// quality_fit=TRUE + lifecycle='qualified' (+ governor release attempt); Tier-2 -> pending_approval. Reuses the
-// canonical scoreLead result `q` so component columns stay consistent with the deterministic path.
+// Promote a lead to a tier. Tier-1 -> quality_fit=TRUE + lifecycle='qualified' (+ governor release attempt);
+// Tier-2 -> pending_approval.
+//
+// L1 FIX: `q` here is a rescue.retierWith() result = { inputs, tier, tier_reason } (decideTier output), NOT a full
+// scoreLead() result. It has NO top-level total_score / sector_fit_score / need_signal_score / contact_quality_score
+// / completeness_score / score fields (those live nested in q.inputs, or do not exist). The old code read them off
+// the wrong shape, so num(undefined)=0 zeroed EVERY component + quality_score=GREATEST(existing,0) on every promoted
+// lead — corrupting the score-of-record AND breaking re-tier idempotency (a re-tier then saw total_score=0<62 and
+// could not re-pass Tier-1). A rescue candidate ALREADY carries a valid persisted total_score (it scored >=62), so
+// the correct, simplest fix is to PRESERVE the existing persisted scores: we set ONLY icp_tier, quality_fit, the
+// tier metadata pointers, lifecycle, and (additively) backfill a rescue-classified sector_code when one is missing.
+// We never overwrite total_score / the four component columns / quality_score.
 function promote(lead, tier, q, sourceNote) {
   const stage = tier === 1 ? 'qualified' : tier === 2 ? 'pending_approval' : 'rejected';
+  const inputs = (q && q.inputs) || {};
+  const foundSector = inputs.sector_code || null;   // a rescue-classified sector (was NULL) — additive backfill only
   const pointers = { review_promoted: true, review_source: sourceNote, tier, tier_reason: (q && q.tier_reason) || 'human_accept' };
-  const compSets = q ? `total_score=${num(q.total_score != null ? q.total_score : q.score)}, sector_code=COALESCE(NULLIF(sector_code,''),${esc(q.sector_code)}), sector_fit_score=${num(q.sector_fit_score)}, need_signal_score=${num(q.need_signal_score)}, contact_quality_score=${num(q.contact_quality_score)}, completeness_score=${num(q.completeness_score)},` : '';
-  const sql = `UPDATE leads SET icp_tier=${tier}, quality_fit=${tier === 1 ? 'TRUE' : 'FALSE'}, ${compSets}
-      ${q ? `quality_score=GREATEST(COALESCE(quality_score,0), ${num(q.score)}),` : ''}
+  // sector_code: backfill ONLY when currently blank (never clobber an existing sector); leave all SCORE columns intact.
+  const sectorSet = foundSector ? `sector_code=COALESCE(NULLIF(sector_code,''),${esc(foundSector)}),` : '';
+  const sql = `UPDATE leads SET icp_tier=${tier}, quality_fit=${tier === 1 ? 'TRUE' : 'FALSE'}, ${sectorSet}
       personalisation_pointers = COALESCE(personalisation_pointers,'{}'::jsonb) || ${esc(JSON.stringify(pointers))}::jsonb,
       lifecycle_stage='${stage}', reviewed_at=NOW()
       WHERE id=${Number(lead.id)}`;
@@ -64,7 +75,7 @@ function promote(lead, tier, q, sourceNote) {
   // the nightly sweep. SEND remains OFF; this only makes it governor-release ELIGIBLE.
   if (tier === 1 && governor) {
     let gov = { ok: false };
-    try { gov = governor.canReleaseLead({ sector_code: (q && q.sector_code) || lead.sector_code }); } catch (_e) {}
+    try { gov = governor.canReleaseLead({ sector_code: foundSector || lead.sector_code }); } catch (_e) {}
     if (gov.ok) { try { pg(`UPDATE leads SET governor_released_at=NOW() WHERE id=${Number(lead.id)} AND governor_released_at IS NULL`); } catch (_e) {} }
   }
   return sql;
