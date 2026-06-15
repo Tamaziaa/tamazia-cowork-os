@@ -72,7 +72,28 @@ function withFooter(body) {
   if (core.includes(PRIVACY_NOTICE_URL)) return core;   // already footered (defensive)
   return core + '\n\n' + f;
 }
-module.exports = { greet, firstOf, okStatus, complianceFooter, withFooter };
+// T1-B03 FAIL-CLOSED FOOTER/PLACEHOLDER GUARD. The canonical Art-14 footer (complianceFooter) deliberately
+// LEAVES the founder-blocked {{reg_address}}/{{company_number}}/{{ico_number}} tokens unfilled (the values were
+// never provided), and a rendered touch body can in theory also carry an un-substituted {{...}} merge token. A
+// live cold email must NEVER ship literal braces — that is a broken, non-compliant footer (and a visible quality
+// failure). This returns the FIRST unfilled `{{ ... }}` token found in a string (after the footer is appended),
+// or '' if the text is clean. The push uses it to BLOCK (skip + log) any prospect whose final wire body still
+// contains a placeholder, so a missing value fails closed (the lead is held) instead of sending raw braces.
+// Mystrika's own merge tokens ({{ sender }}, {{ unsubscribe }}) are filled by Mystrika at its send time and are
+// EXPECTED on the wire we hand it, so they are explicitly allow-listed and never count as "unfilled".
+const MYSTRIKA_MERGE_TOKENS = new Set(['sender', 'unsubscribe', 'first_name', 'firstname', 'company', 'unsubscribe_link']);
+function unfilledPlaceholder(text) {
+  const s = String(text || '');
+  const re = /\{\{\s*([\w.\-]*)\s*\}\}/g;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const tok = String(m[1] || '').toLowerCase();
+    if (MYSTRIKA_MERGE_TOKENS.has(tok)) continue;   // Mystrika fills these at its send time — expected, not unfilled
+    return m[0];                                    // a genuinely unfilled {{...}} token — fail closed
+  }
+  return '';
+}
+module.exports = { greet, firstOf, okStatus, complianceFooter, withFooter, unfilledPlaceholder };
 if (require.main === module) (async()=>{
   if (!M._hasKey()) { console.log('No MYSTRIKA_API_KEY.'); return; }
   if (!NEON) { console.log('No NEON_URL'); return; }
@@ -222,6 +243,26 @@ if (require.main === module) (async()=>{
     const dropped = prospects.length - kept.length;
     if (dropped) console.log('touch-1 guard: dropped '+dropped+'/'+prospects.length+' prospects; '+kept.length+' verified domain<->slug');
     else console.log('touch-1 guard: all '+prospects.length+' prospects passed domain<->slug assertion');
+    prospects.length = 0; prospects.push(...kept);
+  }
+  // T1-B03 FAIL-CLOSED FOOTER GUARD: assert NO prospect's wire bodies (subject + every touch body, footer already
+  // appended) still carry an unfilled {{...}} placeholder. The founder-blocked footer values
+  // ({{reg_address}}/{{company_number}}/{{ico_number}}) are deliberately left unfilled, so without this a live send
+  // would print literal braces = a broken, non-compliant Art-14 footer. Fail CLOSED: skip + log the offending lead
+  // (its primary stays mystrika_pushed=FALSE so it is reconsidered once the value is provided) rather than ship
+  // raw braces. Mystrika's own merge tokens ({{ sender }}/{{ unsubscribe }}) are allow-listed (filled by Mystrika).
+  {
+    const kept = [];
+    for (const p of prospects) {
+      const fields = [p.touch0_subject, p.touch0_body, p.touch1_body, p.touch2_body, p.touch3_body];
+      let bad = '';
+      for (const f of fields) { bad = unfilledPlaceholder(f); if (bad) break; }
+      if (bad) { console.log('  SKIP (footer guard): footer placeholders unfilled, blocked — '+p.email+' ('+(p.company||p.domain||'?')+') token='+bad); continue; }
+      kept.push(p);
+    }
+    const dropped = prospects.length - kept.length;
+    if (dropped) console.log('footer guard: dropped '+dropped+'/'+prospects.length+' prospects with unfilled {{...}} placeholders (fail-closed); '+kept.length+' clean');
+    else console.log('footer guard: all '+prospects.length+' prospects clean (no unfilled placeholders)');
     prospects.length = 0; prospects.push(...kept);
   }
   // group by sector campaign
