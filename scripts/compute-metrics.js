@@ -79,9 +79,15 @@ function ensure() {
 
 // A send is "bounced" if it has a bounced_at, OR its delivery_status/status mentions a bounce, OR a
 // bounce_events row points at it (send_id). Attribution: the send's lead via lead_id first, else recipient email.
+// DISTINCT ON (se.id): the OR-join (lead_id, else recipient-email) can match MORE THAN ONE lead per send when an
+// email is shared across leads (live: placeholder emails like user@domain.com appear 80+ times). Without the
+// DISTINCT a single send would fan out into N rows and be counted under every matched source — inflating
+// sent/bounced/replied. We pin each send to exactly one lead (lowest id, lead_id-match preferred via the ORDER BY)
+// so one send = one row. (Today lead_id is NULL + recipients match nothing, so this is a no-op now and a correctness
+// guarantee the moment attribution starts working.)
 const SQL_PER_SOURCE = `
 WITH s AS (
-  SELECT se.id,
+  SELECT DISTINCT ON (se.id) se.id,
          (se.bounced_at IS NOT NULL
             OR COALESCE(se.delivery_status,'') ILIKE '%bounce%'
             OR COALESCE(se.status,'')          ILIKE '%bounce%'
@@ -94,6 +100,7 @@ WITH s AS (
     OR (se.lead_id IS NULL
         AND lower(COALESCE(NULLIF(se.recipient,''),'~none~')) = lower(COALESCE(l.email, l.contact_email, l.primary_email, '~no~')))
   WHERE se.sent_at IS NOT NULL
+  ORDER BY se.id, (l.id = se.lead_id) DESC NULLS LAST, l.id
 ),
 reps AS (
   SELECT COALESCE(l.source, l.acquisition_channel, '(unknown)') AS src, COUNT(*) AS replied
@@ -124,9 +131,11 @@ GROUP BY s.src, lc.leads, lc.cost_gbp
 ORDER BY sent DESC, s.src`;
 
 // Per-pipeline = per-sector. Sector from the send's stamped sector, falling back to the matched lead's sector.
+// DISTINCT ON (se.id): same anti-fan-out guard as SQL_PER_SOURCE (a send whose recipient email is shared across
+// leads would otherwise be counted under every matched sector). One send = one row, lead_id-match preferred.
 const SQL_PER_PIPELINE = `
 WITH s AS (
-  SELECT se.id,
+  SELECT DISTINCT ON (se.id) se.id,
          COALESCE(NULLIF(se.sector,''), l.sector, '(unknown)') AS pipeline,
          (se.bounced_at IS NOT NULL
             OR COALESCE(se.delivery_status,'') ILIKE '%bounce%'
@@ -139,6 +148,7 @@ WITH s AS (
     OR (se.lead_id IS NULL
         AND lower(COALESCE(NULLIF(se.recipient,''),'~none~')) = lower(COALESCE(l.email, l.contact_email, l.primary_email, '~no~')))
   WHERE se.sent_at IS NOT NULL
+  ORDER BY se.id, (l.id = se.lead_id) DESC NULLS LAST, l.id
 )
 SELECT pipeline,
        COUNT(*)                          AS sent,
