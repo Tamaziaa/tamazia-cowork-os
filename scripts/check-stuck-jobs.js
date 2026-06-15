@@ -66,8 +66,11 @@ async function main() {
     // Liveness = time since the last SUCCESSFUL COMPLETION, not the last start. The old
     // MAX(COALESCE(finished_at,started_at)) counted an open 'running' row as "alive", so a job that starts every
     // cycle but is killed before finish() (the engine-cycle zombie pattern) looked healthy forever and never
-    // alarmed. We now measure off finished_at of a genuinely-completed run; 'running'/'killed'/'error' don't count.
-    const raw = pg(`SELECT EXTRACT(EPOCH FROM (now()-MAX(finished_at)))/60 FROM engine_runs WHERE job=${esc(job)} AND finished_at IS NOT NULL AND COALESCE(status,'') NOT IN ('killed','error')`);
+    // alarmed. We now measure off finished_at of a genuinely-completed run; 'running'/'killed'/'error'/'stale'
+    // don't count. 'stale' is critical: reap-stale-runs.js / heartbeat.js force-close a crashed 'running' row to
+    // status='stale' WITH finished_at=now(); without excluding it, a job that only ever gets reaped (crashes every
+    // run, never finishes clean) would show a fresh finished_at and NEVER alarm — the exact zombie this guards.
+    const raw = pg(`SELECT EXTRACT(EPOCH FROM (now()-MAX(finished_at)))/60 FROM engine_runs WHERE job=${esc(job)} AND finished_at IS NOT NULL AND COALESCE(status,'') NOT IN ('killed','error','stale')`);
     if (raw == null || raw === '') continue; // never completed a clean run -> not flagged (no false alarm on a fresh table)
     const m = Number(raw.split('\n')[0]);
     if (!isFinite(m)) continue;
