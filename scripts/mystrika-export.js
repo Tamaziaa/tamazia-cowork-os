@@ -4,12 +4,15 @@
 //
 // Two ways to personalise in Mystrika (both shipped in the CSV):
 //   A) FOOLPROOF (recommended): use the fully-rendered, gated bodies. Per campaign step set:
-//        Subject: {{ touch0_subject }}   Body: {{ touch0_body }}  then a new line  {{ sender }}
+//        Subject: {{ touch0_subject }}   Body: {{ touch0_body }}   (do NOT add a separate {{ sender }} line)
 //      Step 2 -> touch1_*, Step 3 -> touch2_*, Step 4 -> touch3_* (leave the follow-up Subjects blank to thread).
-//      The body is already curated, ranking-aware, gated and dash-free; the only Mystrika token is {{ sender }}
-//      (the sending alias's name), kept OUTSIDE the body so a single-pass merge can never leave a nested tag.
+//      P8: each body now ENDS WITH the canonical Art-14 compliance footer (it carries the {{ sender }} signature
+//      line + Founder/credential + Tamazia Ltd entity + ICO/company/address placeholders + the "how we found you"
+//      provenance + a visible {{ unsubscribe }} link). The body is self-contained, so {{ sender }} must NOT be
+//      added as its own step line (the footer already includes it) — that would double the name.
 //   B) DATA columns: build your own Mystrika prose with {{ rank_insight }}, {{ keyword_1 }}:{{ position_1 }},
 //      {{ competitor_1 }}, {{ audit_url }}, {{ city }}, {{ company }}, {{ first_name }}, {{ sender }}.
+//      (Manual prose must still carry the footer — copy it from src/templates/email/footer.txt.)
 // Mystrika maps every CSV column header to a {{ header }} variable; {{ recipient }} {{ fname }} {{ lname }}
 // {{ fullname }} {{ sender }} are Mystrika's built-ins.
 //
@@ -31,8 +34,46 @@ function csv(v) { const s = v == null ? '' : String(v); return '"' + s.replace(/
 let _nd = (x) => x; try { _nd = require(path.resolve(__dirname, '..', 'src', 'lib', 'gates.js')).noDashes; } catch (_) {}
 function _pos(k) { return k && k.my_position ? '#' + k.my_position : 'outside the top 100'; }
 function dec(b) { try { return Buffer.from(b || '', 'base64').toString('utf8'); } catch (_) { return ''; } }
-// strip the signature token (+ any preceding blank lines); the Mystrika template appends {{ sender }} as its own line
-function body(b) { return _nd(dec(b).replace(/\n*__SIGNATURE__\s*$/,'').trim()); }
+
+// P8 [X22/X23/X24/B5] CANONICAL Art-14 FOOTER for the Mystrika path. mystrika-export STRIPPED __SIGNATURE__ and
+// shipped NO footer (non-compliant). We now append the SAME canonical compliance footer used by send-due.js
+// (source: src/templates/email/footer.txt, == campaigns/_footer.txt): the block ABOVE the '----' doc separator,
+// minus its leading bare-name line. {{privacy_notice_url}} is filled; {{unsubscribe_url}} -> {{ unsubscribe }}
+// (Mystrika's own merge token, so each inbox gets a working unsubscribe link) with the reply-fallback already in
+// the copy; {{eu_rep_line}} dropped (UK/UAE). Founder-blocked {{company_number}}/{{ico_number}}/{{reg_address}}
+// stay as placeholders. SEND is OFF (SEND_ENABLED) so nothing renders live.
+const PRIVACY_NOTICE_URL = 'https://tamazia.co.uk/legal/cold-outreach-privacy-notice/';
+let _footerCache = null;
+function complianceFooter() {
+  if (_footerCache == null) {
+    try {
+      const raw = fs.readFileSync(path.join(ROOT, 'src', 'templates', 'email', 'footer.txt'), 'utf8');
+      const live = raw.split(/^-{10,}\s*$/m)[0].replace(/\s+$/, '');   // content above the doc separator
+      // For the Mystrika path the body is self-contained, so the leading bare-name line BECOMES the signature:
+      // replace it with Mystrika's {{ sender }} merge token (the warmed inbox display name). No separate sender
+      // step is needed (and adding one would double the name). privacy URL filled; unsubscribe -> Mystrika's own
+      // {{ unsubscribe }} one-click token; EU rep line dropped (UK/UAE); founder-blocked {{...}} left as-is.
+      const lines = live.split('\n');
+      let i = 0; while (i < lines.length && lines[i].trim() === '') i++;
+      if (i < lines.length) lines[i] = '{{ sender }}';
+      _footerCache = _nd(lines.join('\n').replace(/^\n+/, '')
+        .replace(/\{\{\s*privacy_notice_url\s*\}\}/g, PRIVACY_NOTICE_URL)
+        .replace(/\{\{\s*unsubscribe_url\s*\}\}/g, '{{ unsubscribe }}')
+        .replace(/\{\{\s*eu_rep_line\s*\}\}\n?/g, ''));
+    } catch (_e) { _footerCache = ''; }
+  }
+  return _footerCache;
+}
+// Strip the __SIGNATURE__ token, then APPEND the canonical Art-14 footer (self-contained: it carries the
+// {{ sender }} signature line + Founder/credential + Tamazia Ltd entity + provenance + visible unsubscribe).
+// The body column is therefore complete — the Mystrika campaign step needs only Body: {{ touchN_body }} (do NOT
+// add a separate {{ sender }} line; the footer already includes it).
+function body(b) {
+  const core = _nd(dec(b).replace(/\n*__SIGNATURE__\s*$/, '').trim());
+  if (!core) return core;
+  const f = complianceFooter();
+  return f ? (core + '\n\n' + f) : core;
+}
 function subj(b) { return _nd(dec(b).replace(/[\t\r\n]+/g,' ').trim()); }
 
 const HEADERS = ['email','first_name','last_name','company','website','sector','audit_url','finding','linkedin','instagram','rank_insight','keyword_1','position_1','competitor_1','keyword_2','position_2','keyword_3','position_3','blog_title','city','touch0_subject','touch0_body','touch1_subject','touch1_body','touch2_subject','touch2_body','touch3_subject','touch3_body'];

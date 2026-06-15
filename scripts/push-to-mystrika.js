@@ -62,6 +62,11 @@ if (require.main === module) (async()=>{
       FROM outreach_drafts od WHERE od.lead_id=l.id AND od.channel='email') d ON TRUE
     WHERE l.quality_fit=TRUE AND COALESCE(l.lifecycle_stage,'')='qualified' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal')
       AND COALESCE(l.audit_verified,FALSE)=TRUE AND COALESCE(l.audit_url,'') <> '' AND COALESCE(l.contact_email,l.email,'') <> '' AND COALESCE(l.mystrika_pushed,FALSE)=FALSE
+      -- P6 [X9] GOVERNOR GATE: only push leads the governor has RELEASED today (per-sector 10x10 round-robin,
+      -- 100/day Tier-1, reset 00:00 UK). Until now the governor cap was decorative (push ignored it, so 0/0
+      -- released leads were respected). governor-release.js now runs as an engine-cycle step (P5), so the chain
+      -- is qualify -> governor-release -> push. NULL = not released yet = held (the intended throttle).
+      AND l.governor_released_at IS NOT NULL
       -- verify_status overloaded -> deliverability split (verify_status branch): gate on the dedicated
       -- deliverability VERDICT, falling back to verify_status when deliverability is not yet populated
       -- (backfill-safe: old rows that only have verify_status are still guarded; rows with deliverability use it).
@@ -211,6 +216,9 @@ if (require.main === module) (async()=>{
   // Mark a LEAD pushed once ANY of its prospects (primary OR secondary) went out, OR its DM email was already
   // sent via a colliding lead this run. Prevents re-selecting + re-sending the same secondaries next run.
   const pushedPrimaries = [...new Set([...pushedProspects.map(p=>p.lead_primary).filter(Boolean), ...coveredPrimaries])];
-  if (pushedPrimaries.length) { const emails = pushedPrimaries.map(e=>"'"+String(e).replace(/'/g,"''")+"'").join(','); pg(`UPDATE leads SET mystrika_pushed=TRUE, mystrika_pushed_at=NOW() WHERE lower(COALESCE(NULLIF(primary_email,''),NULLIF(contact_email,''),email)) IN (${emails})`); }
+  // P3 [X12]: stamp first_contacted_at when a lead is first handed to Mystrika (the push enqueues touch-0, so this
+  // IS its first contact). COALESCE so a re-push / recycle never overwrites the original date. recycle.js parks
+  // no-reply leads at first_contacted_at + NOREPLY_DAYS, so without this the park step is dead (live: 0 stamped).
+  if (pushedPrimaries.length) { const emails = pushedPrimaries.map(e=>"'"+String(e).replace(/'/g,"''")+"'").join(','); pg(`UPDATE leads SET mystrika_pushed=TRUE, mystrika_pushed_at=NOW(), first_contacted_at=COALESCE(first_contacted_at, NOW()) WHERE lower(COALESCE(NULLIF(primary_email,''),NULLIF(contact_email,''),email)) IN (${emails})`); }
   console.log('pushed '+pushedProspects.length+' prospects ('+pushedProspects.filter(p=>p.is_primary).length+' primary + '+pushedProspects.filter(p=>!p.is_primary).length+' secondary); marked '+pushedPrimaries.length+' leads mystrika_pushed=TRUE');
 })().catch(e=>{ console.error('push error (non-fatal):',e.message); process.exit(0); });

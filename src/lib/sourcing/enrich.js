@@ -50,12 +50,30 @@ async function hasMX(domain) {
 
 // ---- email-pattern inference (the Hunter-killer) ----
 const SYNTAX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Q6 (B17): decode HTML entities + ASCII-FOLD (NFKD) a NAME token BEFORE it becomes an email local part.
+// Officer/Serper names arrive HTML-encoded ("Jos&eacute;", "O&#39;Brien") and accented ("José", "Müller",
+// "Nuñez"). The old `toLowerCase().replace(/[^a-z]/g,'')` DROPPED every accented letter rather than folding it
+// ("José"->"jos", "Müller"->"mller", "Nuñez"->"nuez"), minting wrong/dead locals. NFKD splits an accented glyph
+// into base+combining mark, then we strip the marks (é -> e), matching what find-every-email.js buildLocalPart
+// already does. Named numeric/hex entities are decoded first so "&eacute;" folds the same as a literal "é".
+const _NAMED_ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', eacute: 'é', egrave: 'è', agrave: 'à', ccedil: 'ç', uuml: 'ü', ouml: 'ö', auml: 'ä', ntilde: 'ñ', oslash: 'ø', aring: 'å', szlig: 'ß' };
+function _decodeEntities(s) {
+  return String(s == null ? '' : s)
+    .replace(/&#x([0-9a-f]+);/gi, (_m, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch (_e) { return _m; } })
+    .replace(/&#(\d+);/g, (_m, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch (_e) { return _m; } })
+    .replace(/&([a-z0-9]+);/gi, (m, n) => (Object.prototype.hasOwnProperty.call(_NAMED_ENT, n.toLowerCase()) ? _NAMED_ENT[n.toLowerCase()] : m));
+}
+// decode entities -> NFKD ASCII-fold -> lowercase -> keep [a-z0-9] only. Returns the email-safe token.
+function _foldName(s) {
+  return _decodeEntities(s).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
 function detectPattern(knownEmails, domain) {
   // From any email whose local part we can map to a first/last name, infer the firm's pattern.
   for (const e of knownEmails) {
     if (!e.first_name || !e.last_name || !e.value) continue;
     const lp = e.value.split('@')[0].toLowerCase();
-    const f = e.first_name.toLowerCase(), l = e.last_name.toLowerCase();
+    const f = _foldName(e.first_name), l = _foldName(e.last_name);
+    if (!f || !l) continue;
     const fi = f[0], li = l[0];
     const map = { [`${f}.${l}`]: 'first.last', [`${f}${l}`]: 'firstlast', [`${fi}${l}`]: 'flast', [`${fi}.${l}`]: 'f.last', [`${f}`]: 'first', [`${f}_${l}`]: 'first_last', [`${l}${fi}`]: 'lastf', [`${f}.${li}`]: 'first.l' };
     if (map[lp]) return map[lp];
@@ -64,7 +82,7 @@ function detectPattern(knownEmails, domain) {
 }
 function applyPattern(pattern, first, last, domain) {
   if (!first || !pattern) return null;
-  const f = first.toLowerCase().replace(/[^a-z]/g, ''), l = (last || '').toLowerCase().replace(/[^a-z]/g, '');
+  const f = _foldName(first), l = _foldName(last);
   const fi = f[0] || '', li = l[0] || '';
   const m = { 'first.last': `${f}.${l}`, 'firstlast': `${f}${l}`, 'flast': `${fi}${l}`, 'f.last': `${fi}.${l}`, 'first': `${f}`, 'first_last': `${f}_${l}`, 'lastf': `${l}${fi}`, 'first.l': `${f}.${li}` };
   const lp = m[pattern]; if (!lp || (pattern !== 'first' && !l)) return null;
@@ -134,8 +152,31 @@ async function serperDecisionMakers(company, key) {
 // landed video filenames in the email pool (seen live: an 'aerial-twilight-footage…mp' "email"). Cover the
 // bare/letter-truncated media + font extensions too.
 const _ASSET = /\.(png|jpe?g|gif|svg|webp|bmp|tiff?|avif|css|js|mjs|json|xml|ico|pdf|woff2?|ttf|otf|eot|mp|mp[34]|mov|avi|mkv|m4[av]|webm|ogg|wav|zip|gz)$/i;
-const _PLACEHOLDER = /(example\.(com|org)|sentry\.io|wixpress|squarespace|godaddy|domain\.com|yourdomain|email\.com|company\.com)/i;
+// Q3 (B18): template/placeholder addresses that website builders (Wix, Squarespace, GoDaddy, generic CMS demos)
+// ship in their starter copy and that 951 leads stored as a PRIMARY email. Two arms, tested against the whole
+// `local@domain`:
+//   (a) template LOCAL part — the demo "fill me in" recipient. Anchored at the start + an '@' boundary so it
+//       fires even on a REAL firm domain (live: email@mcewanfraserlegal.co.uk, user@<realdomain>, your@email.com,
+//       you@company.com, name@…, yourname@…, johndoe@…). Does NOT match legitimate locals that merely START with
+//       these words (username.smith@, emailyhassan@) because the '@' anchor requires the whole local to equal it.
+//   (b) template DOMAIN — the demo placeholder host (example.com, mysite.com [Wix], yourdomain/mydomain, domain.com,
+//       email.com, company.com, website.com, sample.com, host.com, address.com, work.com, test.com, sentry.io).
+const _PLACEHOLDER_LOCAL = /^(?:user|users|you|your|youremail|your-email|youremailaddress|name|yourname|firstname|lastname|first-?name|last-?name|email|emailaddress|username|johndoe|john-?doe|janedoe|jane-?doe|joebloggs|joe-?bloggs|example|sample|test|demo|noname|fullname)@/i;
+const _PLACEHOLDER_DOMAIN = /@(?:example\.(?:com|org|net)|mysite\.com|yoursite\.com|website\.com|yourdomain\.[a-z.]+|mydomain\.[a-z.]+|domain\.com|email\.com|company\.com|companyname\.com|sample\.com|host\.com|address\.com|work\.com|test\.com|acme\.com|sentry\.io|wixpress\.com|squarespace\.com|godaddy\.com)$/i;
+const _PLACEHOLDER = new RegExp(`(?:${_PLACEHOLDER_LOCAL.source})|(?:${_PLACEHOLDER_DOMAIN.source})|(?:wixpress|squarespace|godaddy|yourdomain)`, 'i');
+// Q4 (B33/B21/B22): use the ONE canonical role/generic-inbox set (lead-quality._ROLE) so a generic inbox is
+// recognised identically everywhere. The local regex is kept ONLY as a fail-open fallback if lead-quality (which
+// pulls the sector grid) can't load in this context. The canonical set is the broader one (adds feedback,
+// reservations, membership, editorial, events, customerservice, referrals, … — the inboxes that were leaking a
+// fabricated "named DM" like feedback@->"Feedback We").
 const _GENERIC_LOCAL = /^(info|contact|hello|hi|admin|sales|support|enquir(y|ies)|office|mail|team|reception|help|no-?reply|accounts|marketing|careers|jobs|hr|press|media|bookings?|appointments?|general)$/i;
+let _isRoleLocalCanonical = null;
+try { _isRoleLocalCanonical = require('../enrich/lead-quality.js').isRoleLocal; } catch (_e) {}
+function _isGenericLocal(localPart) {
+  const lp0 = String(localPart || '').split('@')[0];
+  if (_isRoleLocalCanonical) { try { if (_isRoleLocalCanonical(lp0)) return true; } catch (_e) {} }
+  return _GENERIC_LOCAL.test(lp0) || _GENERIC_LOCAL.test(lp0.replace(/[._\-+].*$/, ''));
+}
 function _stripTags(s) { return String(s || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim(); }
 // Words that are titles/labels, not part of a person's name — a name candidate stops at the first of these.
 const _NAME_STOP = /^(Managing|Senior|Junior|Associate|Partner|Partners|Director|Directors|Manager|Practice|Clinic|Office|Operations|Head|Chief|Executive|Officer|Founder|Co|Owner|Principal|Solicitor|Solicitors|Barrister|Surveyor|Accountant|Lawyer|Lawyers|Consultant|Adviser|Advisor|General|Sales|Marketing|Business|Development|Commercial|Email|Contact|Tel|Telephone|Phone|Mobile|Fax|Our|The|Meet|Team|About|Reach|Call|Address|Registered|Company|Ltd|Limited|LLP)$/;
@@ -147,7 +188,7 @@ function _cleanName(raw) {
 const _NAME_RE = /\b[A-Z][a-z'’\-]{1,}\s+[A-Z][a-z'’.\-]{1,}\b/g; // two consecutive capitalized words
 function _nearbyPerson(window, email) {
   const lp0 = email.split('@')[0];
-  if (_GENERIC_LOCAL.test(lp0)) return { name: '', role: '' }; // generic inbox → never attribute a person
+  if (_isGenericLocal(lp0)) return { name: '', role: '' }; // generic/role inbox → never attribute a person (Q4)
   const text = _stripTags(window);
   const near = text.slice(-90); // role + fallback name must be CLOSE to the email (avoid bleeding across cards)
   let role = ''; let mm; const rg = new RegExp(DM.source, 'gi'); while ((mm = rg.exec(near))) role = mm[0];
@@ -191,10 +232,11 @@ function parseContactsFromHtml(html, domain, page = '/') {
   return out;
 }
 async function scrapeSiteContacts(domain) {
-  const out = { emails: [], people: [] };
+  const out = { emails: [], people: [], homeHtml: '' };   // Q2: keep the homepage HTML for resolveName (zero extra fetch)
   const seenE = new Set(), seenP = new Set();
   for (const pth of ['', '/team', '/about', '/about-us', '/contact', '/contact-us', '/our-team', '/people', '/our-people', '/staff', '/meet-the-team', '/leadership', '/partners', '/management']) {
     const html = await getText('https://' + domain + pth, 12000); if (!html) continue;
+    if (pth === '' && !out.homeHtml) out.homeHtml = html;   // first successful page (homepage) carries JSON-LD/og/footer name signals
     const part = parseContactsFromHtml(html, domain, pth || '/');
     for (const e of part.emails) { if (seenE.has(e.value)) { const cur = out.emails.find(x => x.value === e.value); if (cur && !cur.name && e.name) { cur.name = e.name; cur.title = e.title; cur.source = 'site_named'; } } else { seenE.add(e.value); out.emails.push(e); } }
     for (const p of part.people) { if (!seenP.has(p.linkedin)) { seenP.add(p.linkedin); out.people.push(p); } }
@@ -218,7 +260,7 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
   const [hunter, dmSerper, site] = await Promise.all([
     Promise.resolve((base.contacts || []).map(c => ({ value: (c.email || '').toLowerCase(), first_name: c.first_name || '', last_name: c.last_name || '', name: [c.first_name, c.last_name].filter(Boolean).join(' '), position: c.position || '', type: c.type || '', confidence: c.confidence || 0, linkedin: '', source: 'waterfall' }))),
     serperDecisionMakers(company || domain.split('.')[0], env.SERPER_KEY),
-    scrapeSiteContacts(domain).then(s => ({ emails: s.emails || [], people: [...(base.linkedin ? [{ linkedin: base.linkedin }] : []), ...(s.people || [])] })).catch(() => ({ emails: [], people: base.linkedin ? [{ linkedin: base.linkedin }] : [] })),
+    scrapeSiteContacts(domain).then(s => ({ emails: s.emails || [], people: [...(base.linkedin ? [{ linkedin: base.linkedin }] : []), ...(s.people || [])], homeHtml: s.homeHtml || '' })).catch(() => ({ emails: [], people: base.linkedin ? [{ linkedin: base.linkedin }] : [], homeHtml: '' })),
   ]);
   // known emails (with names where available) → infer the firm pattern
   const known = [...hunter];
@@ -233,24 +275,15 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
   for (const e of hunter) if (DM.test(e.position || '')) dms.push({ name: e.name, first_name: e.first_name, last_name: e.last_name, title: e.position, email: e.value, linkedin: e.linkedin || '', source: 'hunter' });
   const seen = new Set(dms.map(d => (d.name || '').toLowerCase()));
   for (const d of dmSerper) { const k = (d.name || '').toLowerCase(); if (d.name && !seen.has(k)) { seen.add(k); const guess = pattern ? applyPattern(pattern, d.first_name, d.last_name, domain) : null; dms.push({ name: d.name, first_name: d.first_name, last_name: d.last_name, title: d.title, email: guess || '', email_guessed: !!guess, linkedin: d.linkedin, source: 'serper' }); if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: d.name, position: d.title, type: 'personal', source: 'pattern', guessed: true }; } }
-  // Companies House officers = authoritative decision-makers (£0, official register). Generate candidate emails
-  // via the firm's detected pattern, else default to the most-common B2B form first.last@domain.
-  // JURISDICTION GATE: Companies House is the UK-ONLY registry. Querying it by name for a non-UK firm returns
-  // an unrelated UK officer (beta bug: the same person was guessed onto 8 different US firms). Only query when
-  // the lead is plausibly UK — by domain TLD (.uk) or firmographics country/jurisdiction.
-  const _isUK = /\.uk$/i.test(domain) || /\b(gb|uk|united kingdom|england|scotland|wales|northern ireland)\b/i.test(String(_firmo.country || '') + ' ' + String(_firmo.jurisdiction || ''));
-  try {
-    if (!_isUK) throw new Error('non-UK lead — skip Companies House (avoids cross-jurisdiction false match)');
-    const _ch = require('./companies-house.js');
-    const _chRes = await _ch.findDecisionMakers({ company: company || domain.split('.')[0], domain });
-    for (const o of (_chRes.officers || [])) {
-      const k = (o.name || '').toLowerCase(); if (!o.name || seen.has(k)) continue; seen.add(k);
-      const parts = o.name.trim().split(/\s+/); const first = parts[0] || ''; const last = parts.length > 1 ? parts[parts.length - 1] : '';
-      const guess = guessOfficerEmail(pattern, first, last, domain);
-      dms.push({ name: o.name, first_name: first, last_name: last, title: o.role || 'Director', email: guess, email_guessed: !!guess, linkedin: '', source: 'companies_house', ch_url: _chRes.ch_url || '' });
-      if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: o.name, position: o.role || 'Director', type: 'personal', source: 'companies_house_pattern', guessed: true };
-    }
-  } catch (_) {}
+  // Companies House officers — REG-NUMBER MATCH ONLY (Q1, B13/B14/B23). The companies-house.js findDecisionMakers()
+  // path is a NAME/keyword SEARCH (searchByKeyword(company|domain) -> rank by token overlap -> pick top hit), which
+  // binds ONE officer onto EVERY firm whose name shares a sector keyword: live, "Altaf Husain Yunus Bhai Patel"
+  // was written onto 20 different "...law" domains, and 19 .ae leads carried UK officers. The keyword TLD/country
+  // gate alone did not stop it (a .com UK-immigration firm still keyword-matched an unrelated officer). REMOVED.
+  // The ONLY authoritative CH officer path is firmographics.js: it reads the company-registration NUMBER the firm
+  // legally displays on its OWN site, then calls CH /company/{reg}/officers — an exact-company match, gated to
+  // jurisdiction==='gb'. Those officers are merged into dms[] below from _firmo.officers (no name-search, no
+  // cross-binding). Net effect: a CH officer is only ever attached when it provably belongs to THIS firm.
   // Regulator registers (SRA / FCA / CQC) name the role-holders who carry the regulatory liability — the
   // near-free decision-maker backbone for this niche. Name → firm email pattern → candidate address (guessed).
   try {
@@ -264,6 +297,18 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
       if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: o.name, position: o.role || '', type: 'personal', source: 'register_pattern', guessed: true };
     }
   } catch (_) {}
+  // Companies House officers via the REG-NUMBER match (firmographics.js, jurisdiction==='gb' only) — the SAFE,
+  // exact-company CH path (replaces the removed name-search above). Same pattern-guess treatment as a register
+  // officer, but a guessed email is only minted when the firm's OWN email pattern was detected (no blind
+  // first.last default for CH, which previously leaked malformed/wrong locals); else the named DM stands with
+  // no email. Runs BEFORE the verify loop so a guessed CH-DM email is verified like any other.
+  for (const o of (_firmo.officers || [])) {
+    const k = (o.name || '').toLowerCase(); if (!o.name || seen.has(k)) continue; seen.add(k);
+    const parts = o.name.trim().split(/\s+/); const first = parts[0] || ''; const last = parts.length > 1 ? parts[parts.length - 1] : '';
+    const guess = pattern ? applyPattern(pattern, first, last, domain) : '';
+    dms.push({ name: o.name, first_name: first, last_name: last, title: o.role || 'Officer', email: guess || '', email_guessed: !!guess, linkedin: '', source: 'companies_house' });
+    if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: o.name, position: o.role || 'Officer', type: 'personal', source: 'companies_house_pattern', guessed: true };
+  }
   // Website-named people with a decision-maker role = the strongest DM signal (founder's primary source).
   for (const e of site.emails) {
     if (e.name && e.title && DM.test(e.title)) {
@@ -283,8 +328,7 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
     for (const e of _ordered.slice(0, _VCAP)) { const v = await verifyFree(e.value, env); e.verified = v.verified; e.verify_status = v.status; e.verify_provider = v.provider; e.role = v.role; }
   }
   for (const d of dms) if (d.email) { const e = emails.find(x => x.value === d.email); if (e) d.verified = !!e.verified; }
-  // Phase C: registry officers are decision-makers too
-  for (const o of (_firmo.officers || [])) { const k = (o.name || '').toLowerCase(); if (o.name && !seen.has(k)) { seen.add(k); dms.push({ name: o.name, title: o.role || 'Officer', email: '', linkedin: '', source: 'companies_house' }); } }
+  // (Phase C registry officers are merged ABOVE, pre-verify, via the reg-number firmographics path — Q1.)
   // Pick THE decision-maker's email (primary) + rank the rest as secondary cc/bcc contacts.
   let dmsel = { primary: null, secondary: [] };
   try { dmsel = require('../enrich/dm-email-scoring.js').selectDecisionMaker({ emails, decisionMakers: dms }); } catch (_) {}
@@ -320,8 +364,22 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
   const _CCAP = Math.max(1, parseInt(env.ENRICH_CONTACT_CAP || '4', 10));
   const _secCap = Math.max(0, _CCAP - (dmsel.primary ? 1 : 0));
   const _secondaryCapped = (dmsel.secondary || []).slice(0, _secCap);
+  // Q2 (B45/B54): RESOLVE the company name (and legal_name) before persisting. ~51% of leads carry a junk SERP
+  // title as `company` ("How much will a UK Immigration Lawyer cost me?", "20 Best Places to Buy a House …",
+  // "Family Solicitors in London - Brookman"). resolveName mines the homepage HTML we already fetched (JSON-LD ->
+  // og:site_name -> footer © -> <title>) for the real trading name, falls back to free Companies House (UK) /
+  // SearXNG, and REJECTS listicle/question/geo-descriptive titles via normaliseName (it returns name_status
+  // 'unverified' and keeps the best raw rather than fabricating). Serper is NOT used here (tier defaults to 3 —
+  // paid SERP stays gated to the small Tier-1/2 set), so this is a £0 add on the homepage HTML already in hand.
+  let _resolvedCompany = company || '', _legalName = null, _nameStatus = 'raw', _nameSource = 'raw';
+  try {
+    const { resolveName } = require('./resolve-name.js');
+    const rn = await resolveName({ domain, html: site.homeHtml || '', sector, raw: company || '' });
+    if (rn && rn.company) { _resolvedCompany = rn.company; _nameStatus = rn.name_status || 'resolved'; _nameSource = rn.name_source || 'resolve'; }
+    if (rn && rn.legal_name) _legalName = rn.legal_name;
+  } catch (_) {}
   const rec = {
-    domain, company: company || '', pattern,
+    domain, company: _resolvedCompany || company || '', company_raw: company || '', legal_name: _legalName, name_status: _nameStatus, name_source: _nameSource, pattern,
     website: base.website || ('https://' + domain), instagram: (_social.socials.instagram && _social.socials.instagram.url) || base.instagram || '',
     socials: _social.socials || {}, firmographics: { reg_number: _firmo.reg_number || null, registration_country: _firmo.country || '', jurisdiction: _firmo.jurisdiction || '', vat_number: _firmo.vat_number || null, status: _firmo.status || '', officers: _firmo.officers || [], operating_countries: _firmo.operating_countries || [], regions: _firmo.regions || [], serves_eu: !!_firmo.serves_eu, confident_country: !!_firmo.confident_country },
     emails, decisionMakers: dms, linkedin_people: site.people.map(p => p.linkedin),

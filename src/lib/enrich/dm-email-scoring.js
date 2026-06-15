@@ -36,8 +36,17 @@ const SOURCE_WEIGHTS = {
 };
 function sourceWeight(source) { return SOURCE_WEIGHTS[String(source || '').toLowerCase()] != null ? SOURCE_WEIGHTS[String(source || '').toLowerCase()] : 30; }
 
+// Q4 (B33/B21/B22): share the ONE canonical role/generic-inbox set (lead-quality._ROLE). The local regex stays as
+// a fail-open fallback only. Without this, a generic inbox NOT in this thinner list (feedback@, reservations@,
+// membership@, editorial@ …) was scored as a named contact and could be picked as the PRIMARY decision-maker.
 const GENERIC_LOCAL = /^(info|contact|hello|hi|admin|sales|support|enquir(y|ies)|office|mail|team|reception|help|no-?reply|accounts|marketing|careers|jobs|hr|press|media|bookings?|appointments?)$/i;
-const isGeneric = (email) => GENERIC_LOCAL.test(String(email || '').split('@')[0] || '');
+let _isRoleLocalCanonical = null;
+try { _isRoleLocalCanonical = require('./lead-quality.js').isRoleLocal; } catch (_e) {}
+const isGeneric = (email) => {
+  const lp0 = String(email || '').split('@')[0] || '';
+  if (_isRoleLocalCanonical) { try { if (_isRoleLocalCanonical(lp0)) return true; } catch (_e) {} }
+  return GENERIC_LOCAL.test(lp0) || GENERIC_LOCAL.test(lp0.replace(/[._\-+].*$/, ''));
+};
 const norm = (e) => String(e || '').trim().toLowerCase();
 
 // Build a flat candidate list from the enrichment record's emails[] + decisionMakers[].

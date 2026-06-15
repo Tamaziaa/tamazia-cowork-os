@@ -26,10 +26,15 @@ const DM_CONF_MIN = Number(process.env.DM_CONF_MIN || 75);                      
 const TIER1_MIN = Number(process.env.TIER1_MIN || 62);   // gap-fix: a regulated firm with no ads tops ~69; 70 was unreachable
 const BAR_MIN = Number(process.env.BAR_MIN || 45);
 
-// Sector truth comes from sourcing/icp.js (single source). SERVED = any of the 8 launch verticals (buyer floor,
-// Tier-2-eligible). REGULATED = the subset with a structural compliance liability (Tier-1 core; law/health/
-// finance/real-estate/education). Hospitality, F&B, automotive, professional are SERVED-not-regulated → they can
-// only reach Tier 2 (approval), never auto-send. ALIAS folds legacy sector strings onto the canonical keys.
+// Sector truth comes from sourcing/icp.js (single source). SERVED = any of the 8 launch verticals (buyer floor).
+// REGULATED = the icp.js subset with a structural compliance liability (law/health/finance/real-estate/education);
+// it adds the +12 need-signal weight but it is NOT a Tier-1 gate.
+// Q7 (B36, founder-decided): the ACTUAL Tier-1 gate in decideTier() is the canonical-grid `is_priority` flag (+
+// score + a reachable named DM), NOT the icp `regulated` flag. Hospitality (HO) and F&B (FB) are is_priority=true
+// in sector-grid.json AND carry regulators[] (so sectorRegulated=true), so they ALREADY reach Tier-1 on merit —
+// the founder's steer "let them come in tier 1 if they are good". This comment previously claimed hospitality/F&B
+// "can only reach Tier 2" — that was stale and contradicted both decideTier() and the founder; corrected, no logic
+// change (the consent/entity gate from Q5 still applies to every tier). ALIAS folds legacy sector strings to canon.
 const { SECTORS } = require('../sourcing/icp.js');
 const SERVED = new Set(Object.keys(SECTORS));
 const REGULATED = new Set(Object.entries(SECTORS).filter(([, v]) => v.regulated).map(([k]) => k));
@@ -456,7 +461,15 @@ async function scoreLead(lead) {
   };
 }
 
-module.exports = { scoreLead, decideTier, PASS, REGULATED, TIER1_MIN, BAR_MIN };
+// Q4 (B33/B21/B22): _ROLE is the ONE canonical generic/role-inbox local-part set. Export it (+ a helper) so the
+// enrich path (enrich.js _nearbyPerson, dm-email-scoring.js isGeneric) shares THIS exact set instead of keeping
+// thinner divergent copies that let feedback@/reservations@/membership@ etc. be treated as a named decision-maker.
+// isRoleLocal folds the same way emailGate does (strip a trailing .tag/_tag so 'bookings.london' == 'bookings').
+function isRoleLocal(localPart) {
+  const lp = String(localPart || '').toLowerCase().split('@')[0];
+  return _ROLE.has(lp) || _ROLE.has(lp.replace(/[._\-+].*$/, ''));
+}
+module.exports = { scoreLead, decideTier, PASS, REGULATED, TIER1_MIN, BAR_MIN, _ROLE, isRoleLocal };
 
 if (require.main === module) {
   (async () => {

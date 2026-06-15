@@ -54,8 +54,8 @@ async function searchByKeywordPublic(keyword, opts = {}) {
       results.push({
         company_number,
         company,
-        company_status: 'unknown',
-        company_type: 'ltd',
+        company_status: null,
+        company_type: null,
         date_of_creation: m[3] || null,
         address: null,
         sic_codes: [],
@@ -137,23 +137,11 @@ async function getOfficers(company_number, opts = {}) {
   }
   return out;
 }
-// Convenience: company name/domain -> active decision-makers (search best match -> officers).
-async function findDecisionMakers({ company, domain, items = 8 } = {}) {
-  const kw = company || (domain || '').replace(/\.(co\.uk|com|org|net|uk).*$/, '').replace(/[-_]/g, ' ');
-  if (!kw) return { company_number: null, officers: [] };
-  const hits = await searchByKeyword(kw, { items_per_page: 5 });
-  // prefer an active company whose name shares a token with the query
-  const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ');
-  const qToks = new Set(norm(kw).split(/\s+/).filter(t => t.length > 2));
-  const ranked = hits.filter(h => h.company_number).sort((a, b) => {
-    const score = h => norm(h.company).split(/\s+/).filter(t => qToks.has(t)).length + (/(llp|solicitors|limited|ltd)/i.test(h.company) ? 0.5 : 0);
-    return score(b) - score(a);
-  });
-  const top = ranked[0]; if (!top) return { company_number: null, officers: [] };
-  const officers = await getOfficers(top.company_number, { items });
-  return { company_number: top.company_number, company: top.company, ch_url: top.ch_url, officers };
-}
-module.exports = { searchByKeyword, getCompany, getOfficers, findDecisionMakers, hasApiKey };
+// findDecisionMakers (name/keyword cross-bind) REMOVED (Q1, B13/B14/B23): it searched CH by
+// company|domain keyword and bound the top-ranked officer onto every firm in a sector, fabricating
+// decision-makers (one person on 20 firms) and leaking UK officers onto non-UK firms. Officers now
+// come only from the reg-number-matched path in enrich.js.
+module.exports = { searchByKeyword, getCompany, getOfficers, hasApiKey };
 
 if (require.main === module) {
   (async () => {

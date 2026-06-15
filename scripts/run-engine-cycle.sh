@@ -17,6 +17,20 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
 {
   echo "===== ENGINE CYCLE $(TS) ====="
   set -a; source .env 2>/dev/null; set +a
+  # O7 [A81] pg8000 PREFLIGHT: every DB read/write in the cycle goes through scripts/psql -> pg8000.native. If
+  # pg8000 is missing (a bad runner image / a failed pip install) EVERY pg() silently returns '' and its caller's
+  # catch swallows it -> the whole cycle "succeeds" while writing nothing, and observability goes dark (heartbeats,
+  # health, metrics all stop). Probe it ONCE at cycle start and fire an immediate alert if absent, so a silent
+  # blackout is impossible. Non-fatal (the cycle still proceeds; the alert is the point). notify-event = the shared
+  # Slack+Telegram orchestrator (same as check-stuck-jobs.js), with a raw curl fallback so the alarm is never lost.
+  if ! python3 -c "import pg8000.native" >/dev/null 2>&1; then
+    echo "[$(TS)] 🔴 PREFLIGHT FAIL: pg8000 not importable — ALL DB writes this cycle will silently no-op (observability blackout). Alerting."
+    # notify-event accepts booking|reply|stuck; 'stuck' is the engine-down channel (Slack #all-tamazia + Telegram).
+    node scripts/notify-event.js stuck "engine-cycle preflight: pg8000 is NOT importable on the runner. Every DB write silently no-ops (heartbeats/health/metrics go dark). Fix: pip install -r requirements.txt." 2>/dev/null \
+      || { [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && curl -s --max-time 15 -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" -d chat_id="$TELEGRAM_CHAT_ID" -d text="🔴 engine-cycle: pg8000 missing, DB writes silently no-op (observability blackout)" >/dev/null || true; }
+  else
+    echo "[$(TS)] preflight ok: pg8000 importable"
+  fi
   HB_ID=$(node scripts/heartbeat.js start engine-cycle 2>/dev/null || echo "")   # A2: open a per-cycle heartbeat row in engine_runs
   # GLOBAL STALE-REAPER (race-guard hardening). MUST run BEFORE the active-writer check below. heartbeat.js has a
   # per-job reaper, but it only fires on that SAME job's next start — so a heavy writer that CRASHES and never
@@ -57,8 +71,21 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
     QUALIFY_OUT="$(TMO 'node scripts/qualify-and-queue.js 12' 2>&1)"; echo "$QUALIFY_OUT" | tail -3
     PROCESSED="$(printf '%s\n' "$QUALIFY_OUT" | sed -n 's/.*\[qualify\] scored \([0-9]\{1,\}\).*/\1/p' | tail -1)"; PROCESSED="${PROCESSED:-0}"
   fi
+  # GOVERNOR RELEASE (P5 [X2/X8]): release today's Tier-1 email-ready batch (100/day, 10x10 per-sector
+  # round-robin, reset 00:00 UK). This used to live ONLY inside nightly-workers' single bundled bash -c, which
+  # times out and barely ran -> governor_released_at was NULL on every lead (0 released) and the governor was
+  # decorative. It is now its OWN cycle step (per-step STEP_TIMEOUT cap, own log line) so it runs every cycle.
+  # Read-mostly: the only write is governor_released_at on the chosen leads. RACE-GUARDED — it reads the same
+  # qualified/tier rows the heavy re-tier writers rewrite, so skip when one is live. SEND stays OFF.
+  run_guarded "node scripts/governor-release.js"
   run_guarded "node scripts/enqueue-leads.js 500"                      # MINT seam (1/2): enqueue qualified, not-yet-minted leads into minting_queue
   run_guarded "node scripts/mint-worker.js --once"                     # MINT seam (2/2): drain the queue -> build audit_pages -> set leads.audit_url (the Touch-1 link). REPLACES the never-existed build-audit-pages.js
+  # VERIFY AUDITS (P5 [X2/X8]): confirm each FIT+qualified lead's audit_url is a real, minted, signed, LIVE (200)
+  # audit; self-heal (re-mint) the broken/missing ones, then set audit_verified (24h TTL). This was NOT a cycle
+  # step at all (only require()d by other scripts), so audit_verified stuck at ~35 and the push/export gate (which
+  # requires audit_verified=TRUE) was starved. Now its own step. Bounded mint cap (6) so it never runs long; the
+  # per-step STEP_TIMEOUT is the hard cap. Race-guarded (touches qualified rows). SEND stays OFF.
+  run_guarded "node scripts/verify-audits.js 6"
   # render-touches writes ONLY outreach_drafts (+ leads.status/next_touch_date/updated_at) — it does NOT touch the
   # re-tier trio (icp_tier/quality_fit/lifecycle_stage/sector_code) the heavy writers contend for, so it CANNOT
   # race them. It was previously run_guarded and got STARVED whenever a writer ran (infra round: 75 qualified+minted
