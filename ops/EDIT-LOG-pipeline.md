@@ -52,4 +52,3 @@
 
 ## Only-my-files confirmation
 All 16 changed files are within the exclusive set (or the explicitly-allowed "workflow files you add heartbeats/crons to" / the required edit log). NONE of the ENG-A files were touched (enrich.js, lead-quality.js, icp.js, dm-*.js, adapters.js, resolve-name.js, qualify-and-queue.js, firmographics.js, find-every-email.js). Neon writes are ADDITIVE only (no rename/drop). SEND remains OFF (`SEND_ENABLED` master gate untouched); the send-path fixes are correct for WHEN the founder flips it and do not send now. Catch-all gate kept STRICT.
-</invoke>
