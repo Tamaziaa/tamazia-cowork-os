@@ -432,7 +432,13 @@ async function rescueLead(lead, cohort) {
   if (found.sector_code) foundBits.push(`sector ${found.sector_code}`);
   let reason;
   let qa_status, review_status = null, suggested_tier = base.tier;
-  if (flippedTo1 && Object.keys(found).length) {
+  if ((base && base.error) || (after && after.error)) {
+    // L12: a re-tier THREW (e.g. emailGate DNS timeout) — retierWith returns {tier:99,error}. Do NOT fold this into
+    // 'explained' (which means "definitively can't be lifted" and is parked from re-processing). Surface a DISTINCT,
+    // NON-terminal status so the next wave RETRIES it; never auto-promote/route-to-human on an errored re-tier.
+    qa_status = 'retier_error'; suggested_tier = base && base.tier && base.tier !== 99 ? base.tier : null;
+    reason = `Re-tier error (transient): ${(after && after.error) || (base && base.error)}. Will retry next wave.`;
+  } else if (flippedTo1 && Object.keys(found).length) {
     suggested_tier = 1;
     reason = `Found ${foundBits.join(', ')} → deterministic gate re-passes Tier-1.`;
     if (confidence >= AUTO_PROMOTE_MIN_CONF) { qa_status = 'rescued'; review_status = 'auto_promote'; reason += ' High confidence: auto-promote (gate-verified).'; }
@@ -506,8 +512,13 @@ async function runWave({ max = 15, cohort = null, dry = false, force = false, re
         ${freshGuard}
       ORDER BY COALESCE(quality_score,0) DESC NULLS LAST, id DESC
       LIMIT ${remaining}`;
-    let rows = [];
-    try { rows = pgJson(sql).split('\n').filter(Boolean).map(s => JSON.parse(s)); } catch (e) { results.push({ cohort: cname, error: e.message }); continue; }
+    let raw;
+    try { raw = pgJson(sql); } catch (e) { results.push({ cohort: cname, error: e.message }); continue; }
+    // L12: parse rows PER-ROW. A single malformed to_jsonb line (NUL byte / a row whose JSON psql truncates at the
+    // 256MB buffer) used to throw inside the .map() — OUTSIDE the per-lead try — aborting the WHOLE cohort and losing
+    // the rest of that batch. Parse each row in its own try; skip + log a bad row and keep processing the cohort.
+    const rows = [];
+    for (const s of raw.split('\n')) { if (!s) continue; try { rows.push(JSON.parse(s)); } catch (e) { results.push({ cohort: cname, error: 'malformed_row: ' + e.message }); } }
     if (!rows.length) continue;
     for (const lead of rows) {
       if (remaining <= 0) break;

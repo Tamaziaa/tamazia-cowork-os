@@ -58,21 +58,30 @@ function isConsentRequired(lead) {
 // the correct, simplest fix is to PRESERVE the existing persisted scores: we set ONLY icp_tier, quality_fit, the
 // tier metadata pointers, lifecycle, and (additively) backfill a rescue-classified sector_code when one is missing.
 // We never overwrite total_score / the four component columns / quality_score.
-function promote(lead, tier, q, sourceNote) {
+//
+// L11 FIX: the promotion and the review_status='applied_*' verdict stamp must commit ATOMICALLY. Previously promote()
+// ran the tier UPDATE and the CALLER ran a SECOND pg() for the verdict stamp; the shim opens a fresh connection per
+// call (no shared txn), so a crash between the two left a lead promoted but still review_status='auto_promote'/'accepted'
+// — the next run re-promoted it. We now fold the caller's verdict-stamp SET clauses (`extraSets`) into the SAME single
+// UPDATE so the tier change and the verdict transition land together (one statement, one connection = one commit).
+function promote(lead, tier, q, sourceNote, extraSets) {
   const stage = tier === 1 ? 'qualified' : tier === 2 ? 'pending_approval' : 'rejected';
   const inputs = (q && q.inputs) || {};
   const foundSector = inputs.sector_code || null;   // a rescue-classified sector (was NULL) — additive backfill only
   const pointers = { review_promoted: true, review_source: sourceNote, tier, tier_reason: (q && q.tier_reason) || 'human_accept' };
   // sector_code: backfill ONLY when currently blank (never clobber an existing sector); leave all SCORE columns intact.
   const sectorSet = foundSector ? `sector_code=COALESCE(NULLIF(sector_code,''),${esc(foundSector)}),` : '';
+  const stamp = Array.isArray(extraSets) && extraSets.length ? (', ' + extraSets.join(', ')) : '';
   const sql = `UPDATE leads SET icp_tier=${tier}, quality_fit=${tier === 1 ? 'TRUE' : 'FALSE'}, ${sectorSet}
       personalisation_pointers = COALESCE(personalisation_pointers,'{}'::jsonb) || ${esc(JSON.stringify(pointers))}::jsonb,
-      lifecycle_stage='${stage}', reviewed_at=NOW()
+      lifecycle_stage='${stage}', reviewed_at=NOW()${stamp}
       WHERE id=${Number(lead.id)}`;
   if (DRY) return sql;
   pg(sql);
   // Tier-1: attempt a governor release (per-sector round-robin, 100/day). If held, the lead stays qualified for
-  // the nightly sweep. SEND remains OFF; this only makes it governor-release ELIGIBLE.
+  // the nightly sweep. SEND remains OFF; this only makes it governor-release ELIGIBLE. (Idempotent: guarded by
+  // governor_released_at IS NULL, so a crash after the atomic promote/stamp and before this just leaves the lead
+  // qualified-but-unreleased for the nightly sweep — never a re-promote.)
   if (tier === 1 && governor) {
     let gov = { ok: false };
     try { gov = governor.canReleaseLead({ sector_code: foundSector || lead.sector_code }); } catch (_e) {}
@@ -96,9 +105,11 @@ async function applyOne(lead) {
     }
     const after = await rescue.retierWith(lead, found);
     if (after && after.tier === 1) {
-      const sql = promote(lead, 1, after, 'auto_promote_gate_verified');
-      const fin = DRY ? sql : (pg(`UPDATE leads SET review_status='applied_auto_promote', reviewed_by=COALESCE(reviewed_by,'llm_auto'), qa_status='confirmed' WHERE id=${Number(lead.id)}`), sql);
-      return { id: lead.id, action: 'promoted_tier1_auto', after_tier: 1, sql: fin };
+      // L11: stamp the verdict transition in the SAME atomic UPDATE as the promotion (was a separate pg() call).
+      const sql = promote(lead, 1, after, 'auto_promote_gate_verified', [
+        `review_status='applied_auto_promote'`, `reviewed_by=COALESCE(reviewed_by,'llm_auto')`, `qa_status='confirmed'`,
+      ]);
+      return { id: lead.id, action: 'promoted_tier1_auto', after_tier: 1, sql };
     }
     // gate did NOT re-pass -> do not promote automatically; hand to a human.
     const sql = `UPDATE leads SET review_status='unreviewed', qa_reason=${esc('Auto-promote declined: deterministic gate did not re-pass Tier-1 with found data (now tier ' + (after && after.tier) + '). Human review.')}, reviewed_at=NOW() WHERE id=${Number(lead.id)}`;
@@ -117,9 +128,11 @@ async function applyOne(lead) {
     // Re-run the gate to populate the component columns consistently, but a human Accept promotes regardless of the
     // gate's tier (the human is the authority for COMMERCIAL tier; the consent gate above is the only hard block).
     const q = await rescue.retierWith(lead, found);
-    const sql = promote(lead, wantTier, q, 'human_accept');
-    const fin = DRY ? sql : (pg(`UPDATE leads SET review_status='applied_accepted', reviewed_by=COALESCE(reviewed_by,'human') WHERE id=${Number(lead.id)}`), sql);
-    return { id: lead.id, action: 'promoted_human', after_tier: wantTier, sql: fin };
+    // L11: stamp the verdict transition in the SAME atomic UPDATE as the promotion (was a separate pg() call).
+    const sql = promote(lead, wantTier, q, 'human_accept', [
+      `review_status='applied_accepted'`, `reviewed_by=COALESCE(reviewed_by,'human')`,
+    ]);
+    return { id: lead.id, action: 'promoted_human', after_tier: wantTier, sql };
   }
 
   // ---- NEEDS_INFO: stamp the note as an enrich hint + reset lifecycle so enrich/qualify/rescue re-run. ----
@@ -151,8 +164,13 @@ async function applyOne(lead) {
       WHERE lower(COALESCE(l.review_status,'')) IN ('auto_promote','accepted','needs_info','rejected')
       ORDER BY (lower(l.review_status)='auto_promote') DESC, COALESCE(l.qa_confidence,0) DESC, l.id DESC
       LIMIT ${Math.max(1, max)}`;
-  let rows = [];
-  try { rows = pg(sql).split('\n').filter(Boolean).map(s => JSON.parse(s)); } catch (e) { console.log('[apply-review] query error: ' + e.message); return; }
+  let raw;
+  try { raw = pg(sql); } catch (e) { console.log('[apply-review] query error: ' + e.message); return; }
+  // L12: parse rows PER-ROW. A single malformed to_jsonb line (NUL byte / truncated) must skip+log, not abort the
+  // whole batch (the old `.map(JSON.parse)` threw and lost every actionable lead behind one bad row).
+  const rows = []; let skipped = 0;
+  for (const s of raw.split('\n')) { if (!s) continue; try { rows.push(JSON.parse(s)); } catch (e) { skipped++; console.log('[apply-review] skipped malformed row: ' + e.message); } }
+  if (skipped) console.log(`[apply-review] skipped ${skipped} malformed row(s) (continuing).`);
   if (!rows.length) { console.log('[apply-review] nothing to apply (no actionable review_status).'); return; }
   const counts = {};
   for (const lead of rows) {
