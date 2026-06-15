@@ -192,6 +192,10 @@ function releaseToday({ dryRun = false } = {}) {
   // visible (release is NOT gated on it — that would deadlock; see SEND_SAFE_SQL / pushReadiness notes).
   const readiness = dryRun ? null : pushReadiness();
   if (readiness) console.log(`[governor] push-readiness: ${readiness.released_pushable}/${readiness.released} released leads are push-eligible now (audit-verified + Touch-0 draft); ${readiness.awaiting_audit_or_draft} awaiting mint/render`);
+  // R5 ANNOTATION: the cockpit/MCP `email_ready` mirrors the push gate (governor_released_at IS NOT NULL), so it
+  // reads the TRUE push-eligible set — which is 0 until the governor releases, NOT a fault. Make that explicit in
+  // the log so an operator never reads a low/zero email_ready as a break (the old higher number was the lie).
+  if (readiness && readiness.released_pushable === 0) console.log(`[governor] note: email_ready reflects the REAL push-eligible set (governor-released + audit-verified + draft). ${readiness.released === 0 ? '0 because nothing is released yet' : readiness.released + ' released but none minted/drafted yet'} — expected, not a fault.`);
   return { released, by_sector: byForSector, uk_day: snap.uk_day, daily_total: snap.daily_total, remaining_after: Math.max(0, snap.remaining - released), push_readiness: readiness };
 }
 

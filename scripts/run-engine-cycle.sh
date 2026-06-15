@@ -97,9 +97,16 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
   # round-robin, reset 00:00 UK). This used to live ONLY inside nightly-workers' single bundled bash -c, which
   # times out and barely ran -> governor_released_at was NULL on every lead (0 released) and the governor was
   # decorative. It is now its OWN cycle step (per-step STEP_TIMEOUT cap, own log line) so it runs every cycle.
-  # Read-mostly: the only write is governor_released_at on the chosen leads. RACE-GUARDED — it reads the same
-  # qualified/tier rows the heavy re-tier writers rewrite, so skip when one is live. SEND stays OFF.
-  run_guarded "node scripts/governor-release.js"
+  # Read-mostly: the only write is governor_released_at on the chosen leads.
+  # R4 FIX — DE-GUARDED (was run_guarded). A heavy re-tier writer (v3-rerun up to the 360-min TTL) holds the
+  # in-script WRITER_ACTIVE flag for its whole run, so a run_guarded governor-release was SKIPPED across many
+  # consecutive 30-min cycles -> permanent starvation (governor_released_at stays NULL -> the entire push tail is
+  # dormant). governor-release writes ONLY governor_released_at — NOT the re-tier trio (icp_tier/quality_fit/
+  # lifecycle_stage/sector_code) the writers contend for — and the push (push-to-mystrika.js) INDEPENDENTLY
+  # re-checks quality_fit=TRUE AND lifecycle_stage='qualified' at send time, so a release that a concurrent writer
+  # later demotes simply never passes the push gate (self-correcting, harmless). This is the SAME rationale that
+  # de-guarded render-touches below. So it runs EVERY cycle and can never be starved. SEND stays OFF.
+  run "node scripts/governor-release.js"
   run_guarded "node scripts/enqueue-leads.js 500"                      # MINT seam (1/2): enqueue qualified, not-yet-minted leads into minting_queue
   run_guarded "node scripts/mint-worker.js --once"                     # MINT seam (2/2): drain the queue -> build audit_pages -> set leads.audit_url (the Touch-1 link). REPLACES the never-existed build-audit-pages.js
   # VERIFY AUDITS (P5 [X2/X8]): confirm each FIT+qualified lead's audit_url is a real, minted, signed, LIVE (200)
