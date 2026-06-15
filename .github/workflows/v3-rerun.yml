@@ -19,6 +19,9 @@ on:
       passes:
         description: 'requalify passes (7679/500 ~= 16 for full coverage; idempotent so over-running is safe)'
         default: '16'
+      requal_version:
+        description: 'REQUAL_VERSION tag (default: use value already in .env)'
+        default: ''
 
 concurrency:
   group: engine-db-work          # serialise with engine-cycle + backlog-burst + nightly-workers: requalify-all-leads.js rewrites icp_tier/quality_fit/lifecycle_stage on the SAME rows the engine cycle's qualify->enqueue->mint reads. (queue_rank, the old justification, is an unused all-NULL column — the real shared write target is the tier/lifecycle trio.)
@@ -51,6 +54,7 @@ jobs:
       - name: Phase 3 - re-tier all leads to 1/2/3 + canonical sectors (no-send)
         run: |
           set -a; source .env; set +a
+          if [ -n "${{ inputs.requal_version }}" ]; then export REQUAL_VERSION="${{ inputs.requal_version }}"; fi
           # Heartbeat the whole re-tier window so the engine-cycle race guard (heartbeat.js active-writer) sees
           # v3-rerun as a live heavy writer and skips its qualify/enqueue/mint/render steps while this runs.
           HB=$(node scripts/heartbeat.js start v3-rerun 2>/dev/null || echo "")
