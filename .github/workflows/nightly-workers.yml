@@ -42,3 +42,11 @@ jobs:
             node scripts/reconcile.js || true
             node scripts/recycle.js   || true
           '
+      - name: Compute nightly metrics (per-source + per-pipeline deliverability/cost -> metrics table)
+        run: |
+          set -a; source .env; set +a
+          # P3-5: aggregate sends/bounce_events/inbound_emails/lead_sources/leads into the `metrics` table,
+          # idempotent per metric_date. Read-mostly (only writes the metrics table, not lead tier columns) so it
+          # is NOT a re-tier writer and gets its OWN heartbeat job name (not nightly-workers / not guarded).
+          # Fail-open by construction; the || true is belt-and-braces so a metrics hiccup never reds the workflow.
+          node scripts/heartbeat.js wrap compute-metrics -- node scripts/compute-metrics.js || true
