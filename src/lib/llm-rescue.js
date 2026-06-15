@@ -58,19 +58,25 @@ function isEnabled() { return /^(1|true|yes|on)$/i.test(String(process.env.LLM_Q
 // "Only re-run on lead change" (design guardrail): we skip leads checked within RECHECK_HOURS unless --force.
 // ------------------------------------------------------------------------------------------------------------
 const TIER1_MIN = lq.TIER1_MIN || 62;
+// LinkedIn can live in EITHER contact_linkedin OR all_socials->linkedin (the enricher writes the latter). The
+// deterministic gate's hasLinkedin reads both, so the cohort predicates must check both — otherwise we burn LLM
+// calls "finding" a LinkedIn that is already present in socials (the eval surfaced exactly this). NO_LI = true when
+// neither carries a linkedin.com URL.
+const NO_LI = `COALESCE(contact_linkedin,'') = '' AND COALESCE(all_socials->'linkedin'->>'url', all_socials->>'linkedin', '') = ''`;
+const HAS_LI = `(COALESCE(contact_linkedin,'') <> '' OR COALESCE(all_socials->'linkedin'->>'url', all_socials->>'linkedin', '') <> '')`;
 const COHORT_SQL = {
   // 1. highest yield: score-cleared, has named DM + email, MISSING ONLY linkedin (~935; ~80% findable).
   missing_linkedin: `icp_tier=2 AND COALESCE(quality_score,0) >= ${TIER1_MIN}
       AND COALESCE(contact_name,'') <> '' AND COALESCE(NULLIF(contact_email,''), primary_email, '') <> ''
-      AND COALESCE(contact_linkedin,'') = '' AND COALESCE(sector_code,'') <> ''`,
+      AND ${NO_LI} AND COALESCE(sector_code,'') <> ''`,
   // 2. score-cleared, has email + linkedin, MISSING the named DM (~799).
   missing_dm: `icp_tier=2 AND COALESCE(quality_score,0) >= ${TIER1_MIN}
       AND COALESCE(contact_name,'') = '' AND COALESCE(NULLIF(contact_email,''), primary_email, '') <> ''
-      AND COALESCE(contact_linkedin,'') <> '' AND COALESCE(sector_code,'') <> ''`,
+      AND ${HAS_LI} AND COALESCE(sector_code,'') <> ''`,
   // 3. score-cleared, has email, MISSING BOTH dm-name AND linkedin (~938; two finds).
   missing_both: `icp_tier=2 AND COALESCE(quality_score,0) >= ${TIER1_MIN}
       AND COALESCE(contact_name,'') = '' AND COALESCE(NULLIF(contact_email,''), primary_email, '') <> ''
-      AND COALESCE(contact_linkedin,'') = '' AND COALESCE(sector_code,'') <> ''`,
+      AND ${NO_LI} AND COALESCE(sector_code,'') <> ''`,
   // 4. NULL sector_code (cannot be priority) — classify, then the re-tier decides (~2,464).
   classify_sector: `(COALESCE(sector_code,'') = '') AND COALESCE(icp_tier,2) IN (2,3)`,
   // 5. score-cleared priority, NO email at all — discover a deliverable own-domain DM email (~1,510; lower hit).
@@ -89,6 +95,23 @@ function nameParts(full) {
   const parts = t.split(' ');
   return { first: parts[0] || '', last: parts.length > 1 ? parts[parts.length - 1] : '' };
 }
+// Is a stored contact_name actually an individual PERSON (not a role/company/software/listicle string)? The eval
+// surfaced junk DM names ("Open Dental", "Grand Central", "Construction Inquiries", "Pricing Plans") that, left
+// unchecked, coincidentally token-matched a LinkedIn slug and drove a WRONG high-confidence auto-promote. A rescue
+// that keys on a found DM↔LinkedIn match must first trust the DM is a person — else the find is meaningless. This
+// is the same shape as the fact-check's person test (kept local so the rescue is self-contained). 2+ tokens, no
+// role/company words, no digits, not all-caps acronym.
+const _NONPERSON = /(team|office|reception|enquir|admin|support|info|sales|marketing|\bhr\b|department|secretary|public relations|customer|service|desk|clinic|practice|partners|associates|chambers|group|\bltd\b|limited|llp|plc|inc\b|company|\bco\b|central|station|dental|medical|aesthetic|construction|pricing|plans|enquiries|software|systems|solutions|management|advisory|capital|holdings|consulting|estate|agents|clinics?)/i;
+function looksLikePerson(name) {
+  const n = String(name || '').trim();
+  if (!n) return false;
+  const toks = n.split(/\s+/);
+  if (toks.length < 2 || toks.length > 5) return false;        // a person is 2-5 name tokens
+  if (/\d/.test(n)) return false;                               // no digits
+  if (_NONPERSON.test(n)) return false;                         // role/company/software words
+  if (n === n.toUpperCase() && n.length > 4) return false;      // ALL-CAPS = acronym/brand
+  return true;
+}
 function jurisdictionOf(lead) {
   const j = String(lead.jurisdiction || lead.country || '').trim().toUpperCase();
   if (/GB|UK|UNITED KINGDOM|ENGLAND|WALES|SCOTLAND/.test(j)) return 'UK';
@@ -99,37 +122,42 @@ function jurisdictionOf(lead) {
   return 'UK';
 }
 
-// Re-tier a lead with the CANONICAL scorer. We mutate a COPY of the lead with the found signal folded in, then run
-// the real scoreLead() (which re-fetches the site and re-derives EVERY signal incl. hasLinkedin/cleanNamedDM). This
-// guarantees a promotion is the deterministic gate's own verdict, not ours. Returns the full scoreLead result.
+// Re-tier a lead with the CANONICAL deterministic gate, against the score it was ALREADY tiered on PLUS the found
+// signal. We fold the found data into a COPY of the lead, derive decideTier's inputs from the PERSISTED columns via
+// lq.tierInputsFromPersisted() (NOT a live re-fetch — a fresh scoreLead() re-derives total_score from the current
+// page, which diverges from the stored score the lead was qualified on, so it is the wrong re-tier mechanism for
+// rescue), then call the PURE lq.decideTier(). This isolates the rescue variable: it answers "does the existing
+// lead, with ONLY this missing piece added, now pass the same gate?" The gate keeps the final say — we never relax
+// it; we only supply the public signal it was waiting on. Returns the decideTier verdict {tier, tier_reason}.
 async function retierWith(lead, found) {
   const copy = JSON.parse(JSON.stringify(lead || {}));
-  // fold a found LinkedIn URL into all_socials.linkedin (scoreLead's hasLinkedin reads socials.linkedin OR an in-page
-  // linkedin.com/(company|in) URL). Also mirror onto contact_linkedin for downstream consistency.
+  // fold a found LinkedIn URL into all_socials.linkedin (tierInputsFromPersisted's hasLinkedin reads
+  // socials.linkedin {url} OR contact_linkedin). Mirror onto contact_linkedin too.
   if (found && found.linkedin_url) {
-    const socials = asObj(copy.all_socials); socials.linkedin = found.linkedin_url; copy.all_socials = socials;
+    const socials = asObj(copy.all_socials); socials.linkedin = { url: found.linkedin_url }; copy.all_socials = socials;
     copy.contact_linkedin = found.linkedin_url;
   }
-  // fold a found named DM (name + role) into the fields scoreLead/decideTier read for namedDMRole.
+  // fold a found named DM (name + role) into the fields decideTier reads for namedDMRole. A found DM only counts
+  // toward Tier-1 once there is a clean own-domain email for them; raising the confidence makes hasNamed true.
   if (found && found.dm_name) {
     copy.contact_name = found.dm_name; copy.decision_maker_name = found.dm_name;
     if (found.dm_role) { copy.contact_title = found.dm_role; copy.decision_maker_title = found.dm_role; }
-    // a found DM only counts toward Tier-1 if there is a clean own-domain email for them; if the rescue ALSO found
-    // an email, fold it in as the primary so emailGate can validate it (cleanNamedDM).
     copy.decision_maker_confidence = Math.max(Number(copy.decision_maker_confidence || 0), 60);
     copy.contact_confidence = Math.max(Number(copy.contact_confidence || 0), 60);
   }
   if (found && found.email) {
     copy.primary_email = found.email; copy.contact_email = found.email;
     copy.decision_maker_confidence = Math.max(Number(copy.decision_maker_confidence || 0), 60);
-    if (found.email_verified) copy.email_verified = true;
+    // a free MX/SMTP-verified found email clears catchAllUnverified; an unverified pattern guess does NOT.
+    if (found.email_verified) { copy.email_verified = true; copy.deliverability = 'good'; }
   }
   if (found && found.sector_code) {
-    // scoreLead classifies sector from name + website text; a found sector is folded via the legacy hint the
-    // classifier falls back to (lead.sector) so a confident classification can lift it into the priority gate.
+    // a confident sector classification is folded onto BOTH sector_code (primary grid lookup) and the legacy hint
+    // (lead.sector, the HINT_TO_CODE fallback) so it can lift the lead into the priority gate.
     copy.sector = found.sector_code; copy.sector_code = found.sector_code;
   }
-  try { return await lq.scoreLead(copy); } catch (e) { return { tier: 99, error: e.message }; }
+  try { const inputs = await lq.tierInputsFromPersisted(copy); return Object.assign({ inputs }, lq.decideTier(inputs)); }
+  catch (e) { return { tier: 99, error: e.message }; }
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -154,35 +182,111 @@ async function llmJson({ system, prompt, role = 'classify', max_tokens = 400, le
   return { ok: true, obj, error: null, cost_usd_micro: r.cost_usd_micro || 0, model: r.provider + '/' + r.model };
 }
 
-// LINKEDIN via SERP TITLES ONLY. The LLM forms the query + DISAMBIGUATES which result url/title is the right
-// person; linkedin.com is NEVER fetched. We hand the model the SERP result list (title + url + snippet domain) and
+// Decode HTML entities + strip a trailing listicle/marketing tail from a company string so the SERP query is clean
+// (the eval surfaced '&amp;' breaking the query, and listicle titles like 'Best Dental Clinic in Dubai' returning
+// nothing). Keeps the leading brandable tokens; never fabricates.
+function cleanCompanyForQuery(company) {
+  let c = String(company || '')
+    .replace(/&amp;/gi, '&').replace(/&#0?38;/g, '&').replace(/&quot;/gi, '"').replace(/&#0?39;|&apos;/gi, "'").replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  // drop a leading SEO prefix ('Home - ', 'Welcome to ') and a trailing pipe/dash tagline.
+  c = c.replace(/^(home|welcome to|home page|homepage)\s*[-|:–]\s*/i, '').split(/\s*[|]\s*/)[0].trim();
+  return c;
+}
+// Build a human-readable label from a linkedin /in/ or /company/ URL slug when the SERP gives no title (Apify's
+// Google parser returns title-less rows). 'charles-burns-30883825' -> 'charles burns'. Lets the LLM + the
+// deterministic surname check still work off the URL — we read the URL the SERP already returned, never fetch it.
+function labelFromLinkedinUrl(url) {
+  const m = String(url || '').match(/linkedin\.com\/(?:in|company)\/([^\/?#]+)/i);
+  if (!m) return '';
+  return decodeURIComponent(m[1]).replace(/-?\d+[a-z0-9]*$/i, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// LINKEDIN via SERP TITLES + URL SLUGS ONLY. The LLM forms the query + DISAMBIGUATES which result is the right
+// person; linkedin.com is NEVER fetched. We hand the model the SERP result list (title OR url-slug label + url) and
 // ask it to pick the single best linkedin.com/in or /company URL for THIS firm + person, with a confidence.
 async function findLinkedinViaSerp({ company, dm_name, dm_role, domain, jurisdiction }, costRef) {
   const { first, last } = nameParts(dm_name);
+  const coClean = cleanCompanyForQuery(company);
   // query forms the existing compliant finder uses: site-restricted to linkedin.com profiles/company pages.
   const q = dm_name
-    ? `site:linkedin.com/in ${dm_name} ${company || ''} ${dm_role || ''}`.trim()
-    : `site:linkedin.com/company ${company || ''} ${(domain || '').replace(/^www\./, '')}`.trim();
+    ? `site:linkedin.com/in ${dm_name} ${coClean || ''} ${dm_role || ''}`.trim()
+    : `site:linkedin.com/company ${coClean || ''} ${(domain || '').replace(/^www\./, '')}`.trim();
   let serp = null;
   try { serp = await freeSerp.search(q, jurisdiction || 'UK', 12); } catch (_e) {}
   const organic = (serp && serp.organic) || [];
-  // keep only linkedin.com result URLs (titles read, page never fetched)
+  // keep only linkedin.com result URLs (titles + url-slug labels read, page never fetched). When a row has no
+  // title (Apify Google parser), synthesise a label from the URL slug so disambiguation still has signal.
   const liResults = organic.filter(r => /(^|\.)linkedin\.com\/(in|company)\//i.test(String(r.url || ''))).slice(0, 8)
-    .map(r => ({ title: r.title || '', url: r.url }));
+    .map(r => { const title = r.title || ''; return { title: title || labelFromLinkedinUrl(r.url), url: r.url, _fromSlug: !title }; });
   if (!liResults.length) return { found: false, reason: 'no_linkedin_serp_result', provider: serp && serp.provider };
-  // LLM disambiguation (cheap classify). Strict JSON: pick the best matching URL or none.
-  const sys = 'You match a UK/UAE business to its correct LinkedIn URL using ONLY the supplied search-result titles and URLs. You never invent a URL. Return strict JSON only.';
-  const prompt = `Company: ${company || '(unknown)'}\nWebsite: ${domain || '(unknown)'}\nPerson: ${dm_name || '(company page wanted)'}${dm_role ? ' — ' + dm_role : ''}\n\nSearch results (title | url):\n${liResults.map((r, i) => `${i + 1}. ${r.title} | ${r.url}`).join('\n')}\n\nPick the ONE result that is genuinely this ${dm_name ? 'person at this company' : "company's official LinkedIn page"}. If none clearly matches, choose none.\nReturn JSON: {"index": <1-based result number or 0 if none>, "confidence": <0-100>, "why": "<short>"}`;
+
+  // DETERMINISTIC name-match per result FIRST (robust to the title-less Apify Google rows the eval surfaced: it
+  // returns URLs only, so the URL SLUG carries the signal). Mirrors the existing compliant linkedin-finder scoring:
+  // surname (whole-word/slug) is the strongest signal, then first name, then a company token. We read the title +
+  // the URL slug the SERP already returned — linkedin.com is never fetched. A high deterministic score (clear
+  // surname+first match) is trustworthy on its own; an ambiguous one is handed to the LLM to disambiguate.
+  // PERSON GUARD: a /in/ rescue is only meaningful if the stored DM is actually a person. If it is not (junk like
+  // "Open Dental" / "Grand Central"), a slug token-match is coincidental — never treat it as a confident find. We
+  // still let the LLM look (it may find the company page), but the deterministic surname fast-path is disabled and
+  // any result is capped to human-review confidence. This is the eval's key correctness fix.
+  const dmIsPerson = !!dm_name && looksLikePerson(dm_name);
+  const tok = (s) => String(s || '').toLowerCase();
+  const inText = (hay, needle) => needle && needle.length >= 3 && new RegExp('(?:^|[^a-z0-9])' + needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[^a-z0-9]|$)', 'i').test(hay);
+  const coTokens = cleanCompanyForQuery(company).toLowerCase().split(/\s+/).filter(w => w.length >= 4 && !/^(the|and|ltd|llp|clinic|dental|group|practice|associates|partners|aesthetics?|estate|agents?|company|limited)$/.test(w));
+  // jurisdiction TLD on the linkedin host (uk./au./zw./www.) — a mismatch (e.g. zw. for a UK firm) is a doubt signal.
+  const jcc = ({ UK: 'uk', US: 'us', UAE: 'ae' })[jurisdiction || 'UK'] || '';
+  const scored = liResults.map((r) => {
+    const hay = tok(r.title + ' ' + r.url);
+    const hasLast = dmIsPerson && inText(hay, tok(last));
+    let s = 0;
+    if (dmIsPerson) { if (hasLast) s += 55; if (inText(hay, tok(first))) s += 30; }
+    if (coTokens.some(c => hay.includes(c))) s += 20;
+    if (/linkedin\.com\/in\//i.test(r.url)) s += 5;
+    // jurisdiction penalty: a foreign-TLD linkedin host (other than the neutral www./global) for a UK/UAE firm.
+    const hostCc = (String(r.url).match(/https?:\/\/([a-z]{2})\.linkedin\.com/i) || [, ''])[1].toLowerCase();
+    if (jcc && hostCc && hostCc !== jcc && hostCc !== 'www') s -= 20;
+    return { ...r, _score: s, _hasLast: hasLast };
+  }).sort((a, b) => b._score - a._score);
+  const top = scored[0];
+  const secondScore = scored[1] ? scored[1]._score : 0;
+
+  // STRONG deterministic match: requires the DM be a PERSON, the SURNAME specifically present (a company-token or
+  // first-name-only match is NOT enough), and a clear lead over the runner-up. Trust it WITHOUT an LLM call.
+  if (dmIsPerson && top._hasLast && top._score >= 85 && top._score - secondScore >= 25) {
+    return { found: true, linkedin_url: top.url, confidence: Math.min(90, top._score), model: 'serp_slug_match', reason: 'deterministic surname match in result (person verified, jurisdiction ok)', provider: serp && serp.provider };
+  }
+
+  // Otherwise LLM disambiguation (cheap classify) over the scored candidates. Strict JSON. The prompt FORCES a low
+  // score on a weak match (the eval showed an 8B model otherwise returns 80 while its own reasoning notes a
+  // mismatch). A deterministic sanity cap backstops the model's calibration below.
+  const sys = 'You match a UK/UAE business to its correct LinkedIn URL using ONLY the supplied result labels and URLs (a label may be derived from the URL slug, e.g. "charles-burns-123" -> "charles burns"). You never invent a URL. Be STRICT: if the person\'s surname does not clearly appear in the chosen label or URL, the match is weak -> LOW confidence (<50). Return strict JSON only.';
+  const prompt = `Company: ${company || '(unknown)'}\nWebsite: ${domain || '(unknown)'}\nPerson: ${dm_name || '(company page wanted)'}${dm_role ? ' — ' + dm_role : ''}\n\nResults (label | url):\n${scored.map((r, i) => `${i + 1}. ${r.title || '(slug)'} | ${r.url}`).join('\n')}\n\nPick the ONE result that is genuinely this ${dm_name ? 'person (surname must match)' : "company's official page"}. If none clearly matches, choose 0. HIGH (>=75) only on a clear surname match; LOW (<50) if uncertain.\nReturn JSON: {"index": <1-based or 0>, "confidence": <0-100>, "why": "<short>"}`;
   const r = await llmJson({ system: sys, prompt, role: 'classify', max_tokens: 200 });
   if (costRef) costRef.cost += (r.cost_usd_micro || 0);
   if (!r.ok || !r.obj) {
-    // LLM unavailable / unparseable -> deterministic fallback: take rank-1 linkedin result at a guarded low conf.
-    return { found: true, linkedin_url: liResults[0].url, confidence: 45, model: r.model || 'serp_rank1', reason: 'serp_rank1_no_llm', provider: serp && serp.provider };
+    // LLM unavailable -> fall back to the deterministic top ONLY if the DM is a person AND the surname matched.
+    // Capped below the auto-promote bar so a no-LLM result can only ever reach human review.
+    if (dmIsPerson && top._hasLast && top._score >= 55) return { found: true, linkedin_url: top.url, confidence: Math.min(50, top._score), model: r.model || 'serp_slug_match', reason: 'deterministic surname match (no LLM)', provider: serp && serp.provider };
+    return { found: false, reason: 'no_confident_match_no_llm', model: r.model, provider: serp && serp.provider };
   }
   const idx = Number(r.obj.index || 0);
-  if (!idx || idx < 1 || idx > liResults.length) return { found: false, reason: 'llm_no_match', model: r.model, provider: serp && serp.provider };
-  const conf = Math.max(0, Math.min(100, Number(r.obj.confidence || 0)));
-  return { found: true, linkedin_url: liResults[idx - 1].url, confidence: conf, model: r.model, reason: r.obj.why || 'serp_title_match', provider: serp && serp.provider };
+  if (!idx || idx < 1 || idx > scored.length) return { found: false, reason: 'llm_no_match', model: r.model, provider: serp && serp.provider };
+  const chosen = scored[idx - 1];
+  let conf = Math.max(0, Math.min(100, Number(r.obj.confidence || 0)));
+  // DETERMINISTIC SANITY CAPS (backstop the model's calibration):
+  //  - non-person DM (junk contact_name): the find cannot be trusted as a DM↔LinkedIn match -> cap to human review.
+  //  - /in/ pick must contain the surname in its label/URL; else cap below the trust band.
+  //  - foreign-jurisdiction host (e.g. zw. for a UK firm): a real doubt — cap to human review even if the name matches.
+  const ct = tok(chosen.title + ' ' + chosen.url);
+  const chosenHostCc = (String(chosen.url).match(/https?:\/\/([a-z]{2})\.linkedin\.com/i) || [, ''])[1].toLowerCase();
+  const foreignHost = !!(jcc && chosenHostCc && chosenHostCc !== jcc && chosenHostCc !== 'www');
+  if (!dmIsPerson) conf = Math.min(conf, 40);
+  if (dmIsPerson) { const ls = tok(last); if (ls && ls.length >= 3 && !ct.includes(ls)) conf = Math.min(conf, 45); }
+  if (chosen._score < 55) conf = Math.min(conf, 45);                              // weak deterministic support -> human review
+  if (foreignHost) conf = Math.min(conf, 45);                                     // jurisdiction mismatch -> human review
+  if (dmIsPerson && chosen._hasLast && !foreignHost && chosen._score >= 85) conf = Math.max(conf, Math.min(90, chosen._score)); // strong signal lifts a timid model
+  return { found: true, linkedin_url: chosen.url, confidence: conf, model: r.model, reason: (r.obj.why || 'serp slug/title match') + (foreignHost ? ' [foreign-TLD, review]' : ''), provider: serp && serp.provider };
 }
 
 // NAMED DECISION-MAKER via the existing right-person sources: Companies-House officers (reg-number path only — the
@@ -273,7 +377,8 @@ async function rescueLead(lead, cohort) {
   const base = await retierWith(lead, {});
   const haveDM = !!String(lead.contact_name || lead.decision_maker_name || '').trim();
   const haveEmail = !!String(lead.contact_email || lead.primary_email || '').trim();
-  const haveLi = !!String(lead.contact_linkedin || '').trim() || !!asObj(lead.all_socials).linkedin;
+  const _liSocial = asObj(lead.all_socials).linkedin;
+  const haveLi = !!String(lead.contact_linkedin || '').trim() || !!(_liSocial && (_liSocial.url || _liSocial));
   const haveSector = !!String(lead.sector_code || '').trim();
 
   // 0) sector classify first if missing (it gates everything else — an unclassified lead can never be priority).
