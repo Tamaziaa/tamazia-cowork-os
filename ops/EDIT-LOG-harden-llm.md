@@ -20,3 +20,11 @@ LLM stays default-OFF (`LLM_QA_ENABLED`). SEND OFF. Audit engine OFF-LIMITS. Liv
 - Fix: PRESERVE persisted scores. Drop compSets + the quality_score overwrite entirely. Set ONLY icp_tier, quality_fit, tier-metadata pointers, lifecycle, reviewed_at; additively backfill sector_code from `q.inputs.sector_code` ONLY when currently blank. Governor release sector now reads `q.inputs.sector_code`.
 - Syntax: jsc PASS (ReferenceError on require = parsed clean).
 - Proof: /tmp jsc harness — OLD emits `total_score=0, sector_fit_score=0, need_signal_score=0, contact_quality_score=0, completeness_score=0, quality_score=GREATEST(...,0)`; NEW touches NO score column (asserted regex over generated SQL), only `sector_code=COALESCE(NULLIF(sector_code,''),'LS')`.
+- Commit: fc5bfdd. Pushed.
+
+### L2 🟠 — unverified pattern-guessed email could reach auto-promote confidence
+- File: src/lib/llm-rescue.js:332-344 (`findEmailFor`).
+- Cause: `confidence = verified ? max(conf,80) : conf`. find-every-email pattern #0 has confidence_prior=1.0 (=>conf 100); with SMTP blocked (default, LLM_QA_SMTP_PROBE unset) verified=false so an UNVERIFIED guess kept conf up to 100, which via the min-of-confs aggregation could hit AUTO_PROMOTE_MIN_CONF=75 and auto-promote a guessed address into the cold path.
+- Fix: cap unverified confidence to `AUTO_PROMOTE_MIN_CONF - 1` (74) so a guess can only ever reach human review (>=40), never auto-promote. Verified emails unaffected (floor 80). reason pattern_only -> pattern_only_unverified_capped.
+- Syntax: jsc PASS. Module loads clean under harness (const referenced at call-time, no TDZ).
+- Proof: /tmp jsc harness — prior 1.0/0.95/0.5 unverified -> 74/74/50 (all <75, none auto-promotable, all >=40 reach review); 1.0 verified -> 100, 0.3 verified -> 80 (unaffected).

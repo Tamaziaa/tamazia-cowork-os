@@ -340,7 +340,15 @@ async function findEmailFor({ dm_name, domain }) {
   // optional free MX/SMTP verify of the top candidate
   let verified = false;
   if (freeVerify && best.email) { try { const v = await freeVerify.verifyEmail(best.email, { allowUnknown: true }); verified = !!(v && (v.deliverable || v.status === 'valid')); } catch (_e) {} }
-  return { found: conf >= 40, email: best.email, email_verified: verified, confidence: verified ? Math.max(conf, 80) : conf, reason: verified ? 'pattern_mx_verified' : 'pattern_only', model: 'find-every-email' };
+  // L2 FIX: a pattern-GUESSED, UNVERIFIED email must never reach the auto-promote confidence bar. find-every-email's
+  // top pattern carries confidence_prior up to 1.0 (=> conf up to 100); with SMTP blocked (the default in Actions —
+  // LLM_QA_SMTP_PROBE unset) email_verified stays false, so without this cap a clean-shaped guess at a non-catch-all
+  // MX-live regulated+established firm could flip tier1Contact and auto-promote a guessed address into the cold path.
+  // Cap unverified confidence BELOW AUTO_PROMOTE_MIN_CONF so a guess can only ever reach human review (>=40), never
+  // auto-promote. A real MX/SMTP-verified hit (verified=true) is unaffected and still floors at 80.
+  const UNVERIFIED_CONF_CAP = Math.max(0, AUTO_PROMOTE_MIN_CONF - 1);   // e.g. 74 when the bar is 75
+  const confidence = verified ? Math.max(conf, 80) : Math.min(conf, UNVERIFIED_CONF_CAP);
+  return { found: conf >= 40, email: best.email, email_verified: verified, confidence, reason: verified ? 'pattern_mx_verified' : 'pattern_only_unverified_capped', model: 'find-every-email' };
 }
 
 // SECTOR CLASSIFY via the LLM over name + any website_intel text. Strict JSON to one of the canonical priority codes.
