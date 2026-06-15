@@ -64,3 +64,10 @@ Syntax tool: `jsc <file>` — ReferenceError on require/module after a CLEAN par
 - **adapters.js note:** the SERP-title `company` originates in `src/lib/sourcing/sources/adapters.js` (e.g. `(o.title||'').split(/[|\-–·]/)[0]`). Cleaning belongs at enrich-time where HTML is available, not in adapters (no HTML there) — adapters left unchanged by design.
 - **legal_name backfill:** forward-fill happens on every enrich; a one-shot historical backfill of `legal_name` would require Companies House calls per lead (a worker run), flagged for Claude-Code rather than executed here (read-only Neon).
 - **Syntax:** `jsc` PASS on enrich.js, resolve-name.js, enrich-worker.js.
+
+### Q7 [B36 — founder-decided] — hospitality/F&B Tier-1 reachable on merit (CONFIRM; comment-only)
+- **File:** `src/lib/enrich/lead-quality.js` — comment correction only, NO logic change.
+- **Finding:** the real Tier-1 gate in `decideTier()` is the canonical-grid `is_priority` flag (+ score >= TIER1_MIN + a reachable named DM), NOT the icp `regulated` flag. In `config/sector-grid.json` both HO (hospitality) and FB (F&B) are `is_priority=true` AND carry regulators[] (so `sectorRegulated=true`). So they ALREADY reach Tier-1 on merit — no cap exists in code.
+- **Stale comment fixed:** lines 29-32 claimed "Hospitality, F&B … can only reach Tier 2 (approval), never auto-send" — contradicting both `decideTier()` and the founder's B36 decision. Rewrote it to state the truth (is_priority gate, B36 desired) so nobody re-introduces a Tier-2 cap. The consent/entity gate (Q5) still applies to every tier.
+- **Proof (jsc decideTier):** `hospitality GOOD (verified DM+LI, score 80) -> tier 1`; `hospitality clean named DM, established -> tier 1`; `f&b GOOD -> tier 1`; `hospitality role-inbox only (score 50) -> tier 2` (a contact-quality demotion, NOT a sector cap).
+- **Syntax:** `jsc lead-quality.js` PASS.
