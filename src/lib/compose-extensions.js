@@ -141,6 +141,10 @@ function buildUnsubscribeUrl({ lead_id, email, send_id }) {
 
 function verifyUnsubscribeUrl(url) {
   const secret = process.env.TAMAZIA_HMAC_SECRET || 'NOT_CONFIGURED';
+  // FAIL-CLOSED on a missing secret (see note in S025 verifySignedUrl): the 'NOT_CONFIGURED' fallback is a
+  // public, in-source constant, so honouring it would let anyone forge an unsubscribe (or, since this is the
+  // opt-out token, spoof opt-outs). Refuse rather than validate against a guessable key.
+  if (secret === 'NOT_CONFIGURED') return { ok: false, reason: 'hmac_secret_not_configured' };
   try {
     const u = new URL(url);
     const l = u.searchParams.get('l');
@@ -149,7 +153,10 @@ function verifyUnsubscribeUrl(url) {
     const x = u.searchParams.get('x');
     const sig = u.searchParams.get('sig') || '';
     const expected = crypto.createHmac('sha256', secret).update(`${l}|${e}|${s}|${x}`).digest('hex').slice(0, 32);
-    if (sig !== expected) return { ok: false, reason: 'sig_mismatch' };
+    // constant-time compare (avoid a timing side-channel); reject unequal lengths before the crypto compare.
+    const _a = Buffer.from(String(sig || ''), 'utf8'); const _b = Buffer.from(String(expected || ''), 'utf8');
+    const _eq = _a.length === _b.length && (() => { try { return crypto.timingSafeEqual(_a, _b); } catch (_e) { return false; } })();
+    if (!_eq) return { ok: false, reason: 'sig_mismatch' };
     if (Number(x) < Math.floor(Date.now() / 1000)) return { ok: false, reason: 'expired' };
     return { ok: true, lead_id: Number(l), email: e, send_id: Number(s), exp: Number(x) };
   } catch (_e) { return { ok: false, reason: 'parse_error' }; }
