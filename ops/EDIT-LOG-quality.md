@@ -22,3 +22,10 @@ Syntax tool: `jsc <file>` — ReferenceError on require/module after a CLEAN par
 - **Why this kills the bug:** a CH officer can no longer be attached unless the reg number on THIS firm's site resolves to it. "Altaf … Patel on 20 law domains" + the 19 `.ae`/`.com` UK-officer leaks came exclusively through the name-search; that call no longer exists.
 - **companies-house.js note:** the `findDecisionMakers` name-search function still exists in `companies-house.js` (NOT in my exclusive file set, left untouched). It simply has no caller in the agency enrich path now. Flagged for the owner of that file to delete or repurpose.
 - **Syntax:** `jsc enrich.js` → `ReferenceError: require` after clean parse = PASS. Grep confirms zero live refs to `findDecisionMakers`/`_ch`/`companies-house.js` (only the explanatory comment).
+
+### Q3 [B18] — expand placeholder-email denylist
+- **File:** `src/lib/sourcing/enrich.js` (`_PLACEHOLDER`, applied in `addEmail`/`parseContactsFromHtml`)
+- **Before:** `/(example\.(com|org)|sentry\.io|wixpress|squarespace|godaddy|domain\.com|yourdomain|email\.com|company\.com)/i` — missed `mysite.com` (Wix `example@mysite.com`, 26 leads), and missed ALL template LOCAL parts (`user@`, `you@`, `your@`, `name@`, `email@`, `yourname@`, `johndoe@`).
+- **After:** two-arm regex — (a) `_PLACEHOLDER_LOCAL` anchored `^…@` template recipients; (b) `_PLACEHOLDER_DOMAIN` placeholder hosts incl. `mysite.com`, `website.com`, `host.com`, `sample.com`, `address.com`, `work.com`, `test.com`, `mydomain.*`, `yoursite.com`, `companyname.com`. Combined into one `_PLACEHOLDER` (same name, same call site).
+- **Proof:** jsc harness over the 19 live offenders → all 19 BLOCKED (incl. `email@mcewanfraserlegal.co.uk` = template local on a REAL domain). 10 legit emails incl. trap cases (`username.jones@`, `emailyhassan@`, `testa.fonseca@`, `nameer.khan@`) → all PASS (the `@` anchor means only the WHOLE local matching a template word is blocked, not a prefix). 0 false positives.
+- **Syntax:** `jsc enrich.js` → PASS.

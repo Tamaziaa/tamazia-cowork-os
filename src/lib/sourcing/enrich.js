@@ -134,7 +134,18 @@ async function serperDecisionMakers(company, key) {
 // landed video filenames in the email pool (seen live: an 'aerial-twilight-footage…mp' "email"). Cover the
 // bare/letter-truncated media + font extensions too.
 const _ASSET = /\.(png|jpe?g|gif|svg|webp|bmp|tiff?|avif|css|js|mjs|json|xml|ico|pdf|woff2?|ttf|otf|eot|mp|mp[34]|mov|avi|mkv|m4[av]|webm|ogg|wav|zip|gz)$/i;
-const _PLACEHOLDER = /(example\.(com|org)|sentry\.io|wixpress|squarespace|godaddy|domain\.com|yourdomain|email\.com|company\.com)/i;
+// Q3 (B18): template/placeholder addresses that website builders (Wix, Squarespace, GoDaddy, generic CMS demos)
+// ship in their starter copy and that 951 leads stored as a PRIMARY email. Two arms, tested against the whole
+// `local@domain`:
+//   (a) template LOCAL part — the demo "fill me in" recipient. Anchored at the start + an '@' boundary so it
+//       fires even on a REAL firm domain (live: email@mcewanfraserlegal.co.uk, user@<realdomain>, your@email.com,
+//       you@company.com, name@…, yourname@…, johndoe@…). Does NOT match legitimate locals that merely START with
+//       these words (username.smith@, emailyhassan@) because the '@' anchor requires the whole local to equal it.
+//   (b) template DOMAIN — the demo placeholder host (example.com, mysite.com [Wix], yourdomain/mydomain, domain.com,
+//       email.com, company.com, website.com, sample.com, host.com, address.com, work.com, test.com, sentry.io).
+const _PLACEHOLDER_LOCAL = /^(?:user|users|you|your|youremail|your-email|youremailaddress|name|yourname|firstname|lastname|first-?name|last-?name|email|emailaddress|username|johndoe|john-?doe|janedoe|jane-?doe|joebloggs|joe-?bloggs|example|sample|test|demo|noname|fullname)@/i;
+const _PLACEHOLDER_DOMAIN = /@(?:example\.(?:com|org|net)|mysite\.com|yoursite\.com|website\.com|yourdomain\.[a-z.]+|mydomain\.[a-z.]+|domain\.com|email\.com|company\.com|companyname\.com|sample\.com|host\.com|address\.com|work\.com|test\.com|acme\.com|sentry\.io|wixpress\.com|squarespace\.com|godaddy\.com)$/i;
+const _PLACEHOLDER = new RegExp(`(?:${_PLACEHOLDER_LOCAL.source})|(?:${_PLACEHOLDER_DOMAIN.source})|(?:wixpress|squarespace|godaddy|yourdomain)`, 'i');
 const _GENERIC_LOCAL = /^(info|contact|hello|hi|admin|sales|support|enquir(y|ies)|office|mail|team|reception|help|no-?reply|accounts|marketing|careers|jobs|hr|press|media|bookings?|appointments?|general)$/i;
 function _stripTags(s) { return String(s || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim(); }
 // Words that are titles/labels, not part of a person's name — a name candidate stops at the first of these.
