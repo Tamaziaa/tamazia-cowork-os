@@ -342,9 +342,13 @@ def todays_bookings() -> str:
                COALESCE(event_type,'')         AS event_type,
                COALESCE(status,'')             AS status
         FROM cal_bookings
-        WHERE start_at::date = (NOW() AT TIME ZONE 'UTC')::date
+        WHERE (start_at AT TIME ZONE 'UTC')::date = (NOW() AT TIME ZONE 'UTC')::date
         ORDER BY start_at
     """
+    # Both sides forced to UTC: `start_at::date` alone uses the SESSION timezone, while the RHS already forces
+    # UTC, so under any non-UTC session tz a booking near midnight would land in the wrong day. The session is
+    # GMT today (so this is a no-op now), but pinning both sides to UTC makes the "today (UTC)" contract hold
+    # regardless of the connection's tz.
     try:
         rows = neon(q)
     except NeonError as e:
