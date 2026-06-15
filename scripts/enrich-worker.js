@@ -4,9 +4,10 @@
 // runs the website-first DIY waterfall (enrichCompany) with the cost-governed Apify escalation on served
 // verticals, then persists THE decision-maker (primary_email/role/source/confidence) + the secondary cc/bcc
 // contacts + verification, so the qualify step can tier them. Multi-worker-safe (FOR UPDATE SKIP LOCKED).
-//   node scripts/enrich-worker.js          # loop forever
-//   node scripts/enrich-worker.js --once   # drain to empty, then exit
-//   node scripts/enrich-worker.js --dry    # claim + enrich + print, NO DB write
+//   node scripts/enrich-worker.js                 # loop forever (pm2)
+//   node scripts/enrich-worker.js --once          # drain to empty, then exit
+//   node scripts/enrich-worker.js --once --max 8  # enrich UP TO 8 then exit (the engine-cycle bounded mode)
+//   node scripts/enrich-worker.js --dry           # claim + enrich + print, NO DB write
 // Env: ENRICH_CONCURRENCY (default 6), ENRICH_IDLE_MS (20000), APIFY_ENABLE, APIFY_MONTHLY_CAP_USD
 const { execFileSync } = require('child_process');
 const path = require('path');
@@ -26,10 +27,16 @@ const CONC = Math.max(1, parseInt(process.env.ENRICH_CONCURRENCY || '6', 10));
 const IDLE = Math.max(1000, parseInt(process.env.ENRICH_IDLE_MS || '20000', 10));
 const ONCE = process.argv.includes('--once');
 const DRY = process.argv.includes('--dry');
+// bounded mode for the engine cycle — cap TOTAL leads enriched per run so a single cycle step never tries to
+// drain the whole backlog (thousands) and overrun. `--max N` or a positional N (0 = unbounded, the pm2 default).
+const MAX = (() => { const i = process.argv.indexOf('--max'); if (i >= 0 && /^\d+$/.test(process.argv[i + 1] || '')) return parseInt(process.argv[i + 1], 10); const pos = process.argv.slice(2).find((a) => /^\d+$/.test(a)); return pos ? parseInt(pos, 10) : 0; })();
+// Apify (paid, $29-capped) escalation stays OFF unless APIFY_ENABLE is set; make it explicit at the call site
+// too (the apify client already fail-closes on the env + the monthly cap; this avoids even attempting the call).
+const APIFY_ON = /^(1|true|yes|on)$/i.test(process.env.APIFY_ENABLE || '');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Atomically claim un-enriched leads. Setting enriched_at NOW() marks them taken so other workers skip.
-function claimBatch() {
+function claimBatch(lim) {
   const sql = `UPDATE leads SET enriched_at = NOW()
     WHERE id IN (
       SELECT id FROM leads
@@ -37,7 +44,7 @@ function claimBatch() {
         AND COALESCE(status,'') NOT IN ('duplicate','suppressed','dnc','bounced')
         AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal')
       ORDER BY priority_score DESC NULLS LAST, id DESC
-      LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
+      LIMIT ${lim} FOR UPDATE SKIP LOCKED)
     RETURNING id, regexp_replace(COALESCE(domain,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(sector,''),'[\t\r\n]+',' ','g');`;
   const out = (pg(sql) || '').trim();
   if (!out) return [];
@@ -48,7 +55,7 @@ async function enrichOne(row) {
   const served = !!SECTORS[String(row.sector || '').toLowerCase()];
   let rec;
   try {
-    rec = await enrichCompany({ domain: row.domain, company: row.company, sector: row.sector, env: process.env, verify: true, useCache: true, apify: served });
+    rec = await enrichCompany({ domain: row.domain, company: row.company, sector: row.sector, env: process.env, verify: true, useCache: true, apify: APIFY_ON && served });
   } catch (e) { console.log('  ERR ' + row.domain + ' ' + String(e.message || e).slice(0, 100)); return; }
   const primary = rec.primary || null;
   const secondary = rec.secondary_emails || [];
@@ -78,8 +85,8 @@ async function enrichOne(row) {
   console.log(`  OK ${row.domain} -> ${primary ? primary.email + ' [' + (primary.role || '?') + '] conf=' + primary.confidence + (primary.verified ? ' ✓' : '') : 'no DM'} (+${secondary.length} cc, ${(rec.counts || {}).emails || 0} emails)`);
 }
 
-async function drainOnce() {
-  const batch = claimBatch();
+async function drainOnce(lim) {
+  const batch = claimBatch(lim);
   if (!batch.length) return 0;
   await Promise.all(batch.map(enrichOne));
   return batch.length;
@@ -90,8 +97,10 @@ async function drainOnce() {
   console.log(`[enrich-worker] start conc=${CONC} idle=${IDLE}ms once=${ONCE} dry=${DRY} apify=${/^(1|true|yes|on)$/i.test(process.env.APIFY_ENABLE || '') ? 'on(cap $' + (process.env.APIFY_MONTHLY_CAP_USD || 29) + ')' : 'off'}`);
   let total = 0;
   for (;;) {
+    const lim = MAX ? Math.min(CONC, MAX - total) : CONC;
+    if (lim <= 0) { console.log('[enrich-worker] reached --max ' + MAX + '; done. total=' + total); break; }
     let n = 0;
-    try { n = await drainOnce(); } catch (e) { console.error('[enrich-worker] drain error (continue):', String(e.message || e).slice(0, 120)); }
+    try { n = await drainOnce(lim); } catch (e) { console.error('[enrich-worker] drain error (continue):', String(e.message || e).slice(0, 120)); }
     total += n;
     if (n > 0) { console.log(`[enrich-worker] batch=${n} total=${total}`); continue; }
     if (ONCE) { console.log('[enrich-worker] nothing to enrich; done. total=' + total); break; }
