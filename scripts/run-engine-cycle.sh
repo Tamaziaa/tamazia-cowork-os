@@ -18,13 +18,22 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
   echo "===== ENGINE CYCLE $(TS) ====="
   set -a; source .env 2>/dev/null; set +a
   HB_ID=$(node scripts/heartbeat.js start engine-cycle 2>/dev/null || echo "")   # A2: open a per-cycle heartbeat row in engine_runs
+  # GLOBAL STALE-REAPER (race-guard hardening). MUST run BEFORE the active-writer check below. heartbeat.js has a
+  # per-job reaper, but it only fires on that SAME job's next start — so a heavy writer that CRASHES and never
+  # restarts leaves a 'running' engine_runs row that blocks the seam for the whole writer TTL (~12 cycles). This
+  # force-closes ANY 'running' row older than the writer TTL (status='stale'), regardless of job, so a crashed
+  # writer can never wedge the cycle forever. Time-gated to the SAME TTL the guard uses, so it can never close a
+  # writer the guard still trusts. Fail-open. See scripts/reap-stale-runs.js.
+  run "node scripts/reap-stale-runs.js"
   # RACE GUARD (replaces workflow-level serialisation; engine-cycle now has its OWN concurrency group so it never
   # self-cancels). The heavy re-tier writers (v3-rerun/v3-validate/backlog-burst/nightly-workers) rewrite
-  # icp_tier/quality_fit/lifecycle_stage/sector_code on the same rows the qualify->enqueue->mint->render seam
-  # touches. If one is live, we SKIP only those race-sensitive steps this cycle (everything else still runs).
+  # icp_tier/quality_fit/lifecycle_stage/sector_code on the same rows the qualify->enqueue->mint seam touches.
+  # If one is live, we SKIP only those race-sensitive steps this cycle (everything else still runs).
+  # NOTE: render-touches is NO LONGER guarded — it writes only outreach_drafts + leads.status/next_touch_date
+  # (never the re-tier trio icp_tier/quality_fit/lifecycle_stage/sector_code), so it does not race the writers.
   # Fail-open: empty => no writer => normal cycle. See scripts/heartbeat.js activeWriter().
   WRITER_ACTIVE="$(node scripts/heartbeat.js active-writer 2>/dev/null || echo "")"
-  if [ -n "$WRITER_ACTIVE" ]; then echo "[$(TS)] RACE-GUARD: heavy writer '$WRITER_ACTIVE' is running — SKIPPING qualify/enqueue/mint/render this cycle (re-tier race protection)"; fi
+  if [ -n "$WRITER_ACTIVE" ]; then echo "[$(TS)] RACE-GUARD: heavy writer '$WRITER_ACTIVE' is running — SKIPPING qualify/enqueue/mint this cycle (re-tier race protection; render-touches still runs, it writes no re-tier columns)"; fi
   # Guard wrapper for the race-sensitive steps: run the step only when no heavy writer holds the re-tier rows.
   run_guarded() { if [ -n "$WRITER_ACTIVE" ]; then echo "[$(TS)] >> SKIP (writer '$WRITER_ACTIVE' active): $1"; echo "[$(TS)] done: $1"; else run "$1"; fi; }
   run "node scripts/ensure-schema.js"                                   # SELF-HEALING SCHEMA: auto-provision missing tables/columns (additive, fail-open) BEFORE any DB work
@@ -50,7 +59,12 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
   fi
   run_guarded "node scripts/enqueue-leads.js 500"                      # MINT seam (1/2): enqueue qualified, not-yet-minted leads into minting_queue
   run_guarded "node scripts/mint-worker.js --once"                     # MINT seam (2/2): drain the queue -> build audit_pages -> set leads.audit_url (the Touch-1 link). REPLACES the never-existed build-audit-pages.js
-  run_guarded "node scripts/render-touches.js 10"                      # S064 render 7 touches for qualified leads (the seam: qualify -> render -> send)
+  # render-touches writes ONLY outreach_drafts (+ leads.status/next_touch_date/updated_at) — it does NOT touch the
+  # re-tier trio (icp_tier/quality_fit/lifecycle_stage/sector_code) the heavy writers contend for, so it CANNOT
+  # race them. It was previously run_guarded and got STARVED whenever a writer ran (infra round: 75 qualified+minted
+  # leads with no draft). De-guarded -> runs EVERY cycle (never starved). Batch raised 10 -> 30 (RENDER_BATCH-tunable)
+  # to clear the draft backlog faster; render is cheap (no external send, idempotent delete+reinsert per touch).
+  run "node scripts/render-touches.js ${RENDER_BATCH:-30}"             # S064 render Touch 0-3 for qualified leads (the seam: qualify -> render -> send). UNGUARDED (no re-tier write).
   run "node src/skills/S016-alias-health-monitor/scripts/monitor.js"    # S016 alias health: per-alias metrics + auto-pause on bounce/complaint
   run "node src/skills/S019-engagement-tracker/scripts/track.js --scan-reengagement"  # S019 re-engagement scan over audit-page events
   run "node scripts/health-check.js"                                    # self-diagnostic: 30 adverse-scenario probes → system_health
