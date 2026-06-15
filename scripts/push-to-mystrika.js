@@ -98,7 +98,7 @@ if (require.main === module) (async()=>{
   if (!M._hasKey()) { console.log('No MYSTRIKA_API_KEY.'); return; }
   if (!NEON) { console.log('No NEON_URL'); return; }
   // A4a resilience guards — idempotent, ADDITIVE-ONLY (mirrors verify-audits.js's audit_verified guard).
-  for (const ddl of ['ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversion_tier text','ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversion_score numeric','ALTER TABLE leads ADD COLUMN IF NOT EXISTS hiring_signal text','ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed boolean DEFAULT false','ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed_at timestamptz']) { try { pg(ddl); } catch(_){} }
+  for (const ddl of ['ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversion_tier text','ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversion_score numeric','ALTER TABLE leads ADD COLUMN IF NOT EXISTS hiring_signal text','ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed boolean DEFAULT false','ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed_at timestamptz','ALTER TABLE leads ADD COLUMN IF NOT EXISTS claude_cleared boolean DEFAULT false','ALTER TABLE leads ADD COLUMN IF NOT EXISTS claude_lead_cleared boolean DEFAULT false','ALTER TABLE leads ADD COLUMN IF NOT EXISTS claude_audit_cleared boolean DEFAULT false','ALTER TABLE leads ADD COLUMN IF NOT EXISTS claude_touch_cleared boolean DEFAULT false']) { try { pg(ddl); } catch(_){} }
   const forceCampaign = arg('campaign', process.env.MYSTRIKA_CAMPAIGN_ID || '');
   // Build sector -> campaign map from the live campaigns ("Tamazia | Law Firms" etc.) for auto-routing.
   let nameToId = {};
@@ -150,6 +150,11 @@ if (require.main === module) (async()=>{
       -- released leads were respected). governor-release.js now runs as an engine-cycle step (P5), so the chain
       -- is qualify -> governor-release -> push. NULL = not released yet = held (the intended throttle).
       AND l.governor_released_at IS NOT NULL
+      -- LAYER-3 CLAUDE CLEARANCE GATE: nothing pushes until the Claude safeguard session has independently
+      -- verified the lead, its minted audit (vs the real laws/site-errors/competitors), and its copy, and set
+      -- claude_cleared=TRUE. Default FALSE => held. This is additive and downstream of every gate above; it is
+      -- the final per-lead safeguard beneath the global SEND_ENABLED master gate. See migrations/2026-06-15-claude-layer.sql.
+      AND COALESCE(l.claude_cleared,FALSE)=TRUE
       -- verify_status overloaded -> deliverability split (verify_status branch): gate on the dedicated
       -- deliverability VERDICT, falling back to verify_status when deliverability is not yet populated
       -- (backfill-safe: old rows that only have verify_status are still guarded; rows with deliverability use it).
