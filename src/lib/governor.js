@@ -50,6 +50,24 @@ function releaseOrder() { return [...prioritySectors(), UNSECTORED_LANE]; }
 
 const DAILY_TOTAL = () => Number(process.env.GOVERNOR_DAILY_TIER1 || 100);
 
+// T1-B01 — STRUCTURAL "never-pushable" exclusions, applied at RELEASE time so the daily cap is not spent on a
+// lead the push (push-to-mystrika.js) will silently drop. CRITICAL ORDER NOTE: the engine cycle runs
+// governor-release BEFORE enqueue->mint->verify-audits->render, so a lead is NOT yet audit-verified or drafted
+// when it is released — requiring audit_verified/draft here would DEADLOCK (a lead can never become verified
+// without first being released to be minted). So we DO NOT gate on those. We DO gate on the exclusions that are
+// fully knowable at release time and never depend on the downstream mint/render: a replier, a lead whose own
+// status is suppressed/dnc/bounced/duplicate, a confirmed-bad deliverability verdict, an excluded lead_type, and
+// the canonical opt-out (suppression) registry. These mirror the push's WHERE clause exactly, so releasing a lead
+// that clears them means the cap is spent only on leads that CAN ship once the audit/draft catch up. Throughput
+// of the audit/draft tail itself is the separate 2,000/day mint pipeline (NOT in this base) — documented, not
+// gated here. SQL fragment shared by availableBySector + releaseToday (alias-free, valid in either context).
+const SEND_SAFE_SQL = `
+      AND COALESCE(replied,FALSE)=FALSE
+      AND COALESCE(status,'') NOT IN ('suppressed','dnc','bounced','duplicate')
+      AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal')
+      AND COALESCE(NULLIF(deliverability,''), verify_status, '') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable')
+      AND NOT EXISTS (SELECT 1 FROM suppression sup WHERE lower(sup.email) = lower(COALESCE(NULLIF(primary_email,''), NULLIF(contact_email,''), email)) AND (sup.expires_at IS NULL OR sup.expires_at > NOW()))`;
+
 // Current date in Europe/London (handles BST/GMT) as YYYY-MM-DD, so the "reset 00:00 UK" boundary is correct
 // regardless of the server's UTC clock.
 function ukToday(d = new Date()) {
@@ -99,15 +117,34 @@ function availableBySector(order) {
       AND COALESCE(lifecycle_stage,'') = 'qualified'
       AND COALESCE(consent_required, FALSE) = FALSE
       AND COALESCE(NULLIF(contact_email,''), email, '') <> ''
-      AND governor_released_at IS NULL
+      AND governor_released_at IS NULL${SEND_SAFE_SQL}
     GROUP BY 1`);
   const out = {};
   for (const line of (raw || '').split('\n').filter(Boolean)) { const [lane, n] = line.split('\t'); out[lane] = Number(n) || 0; }
   return out;
 }
 
-// Snapshot for dashboards / dry-run: today's released count, remaining budget, per-sector availability + plan.
-// `order` is the FULL release order (priority sectors + the UNSECTORED lane) so the plan can never strand a lead.
+// T1-B01 VISIBILITY — released-vs-actually-pushable. The governor releases on what is knowable at release time
+// (quality + send-safety), but the push ALSO requires audit_verified + audit_url + a rendered Touch-0 draft, which
+// are produced by the DOWNSTREAM mint/verify/render steps AFTER release. This reports, over all released leads,
+// how many are actually push-eligible right now (and the gap), so the throughput lag of that tail is never silent
+// — without ever gating release on it (which would deadlock). The gap shrinks as mint/render catch up; a large
+// persistent gap means the mint/render tail (the separate 2,000/day mint pipeline) is the bottleneck, not release.
+function pushReadiness() {
+  const r = pg(`
+    SELECT
+      COUNT(*) FILTER (WHERE governor_released_at IS NOT NULL)::int AS released,
+      COUNT(*) FILTER (WHERE governor_released_at IS NOT NULL AND COALESCE(audit_verified,FALSE)=TRUE AND COALESCE(audit_url,'')<>'')::int AS released_audit_verified,
+      COUNT(*) FILTER (WHERE governor_released_at IS NOT NULL AND COALESCE(audit_verified,FALSE)=TRUE AND COALESCE(audit_url,'')<>''
+        AND EXISTS (SELECT 1 FROM outreach_drafts od WHERE od.lead_id=leads.id AND od.channel='email' AND od.draft_metadata->>'touch'='0' AND COALESCE(od.draft_body,'')<>''))::int AS released_pushable
+    FROM leads`);
+  const [released, releasedAuditVerified, releasedPushable] = String(r || '0\t0\t0').split('\t').map(n => Number(n) || 0);
+  return { released, released_audit_verified: releasedAuditVerified, released_pushable: releasedPushable, awaiting_audit_or_draft: Math.max(0, released - releasedPushable) };
+}
+
+// Snapshot for dashboards / dry-run: today's released count, remaining budget, per-sector availability + plan,
+// plus the released-vs-pushable readiness (T1-B01). `order` is the FULL release order (priority sectors + the
+// UNSECTORED lane) so the plan can never strand a lead.
 function snapshot() {
   const order = releaseOrder();
   const total = DAILY_TOTAL();
@@ -115,7 +152,7 @@ function snapshot() {
   const remaining = Math.max(0, total - released);
   const available = availableBySector(order);
   const plan = allocateRoundRobin(remaining, available, order);
-  return { uk_day: ukToday(), daily_total: total, released_today: released, remaining, available, plan, order };
+  return { uk_day: ukToday(), daily_total: total, released_today: released, remaining, available, plan, order, push_readiness: pushReadiness() };
 }
 
 // RELEASE: mark up to `remaining` Tier-1 leads governor_released_at=NOW(), dealt round-robin across sectors.
@@ -142,7 +179,7 @@ function releaseToday({ dryRun = false } = {}) {
       WHERE quality_fit = TRUE AND COALESCE(lifecycle_stage,'')='qualified'
         AND COALESCE(consent_required,FALSE)=FALSE
         AND COALESCE(NULLIF(contact_email,''), email,'') <> ''
-        AND governor_released_at IS NULL
+        AND governor_released_at IS NULL${SEND_SAFE_SQL}
         AND ${laneClause}
       ORDER BY COALESCE(quality_score,0) DESC, id ASC
       LIMIT ${want}`).split('\n').filter(Boolean);
@@ -151,7 +188,11 @@ function releaseToday({ dryRun = false } = {}) {
     byForSector[sc] = ids.length;
     released += ids.length;
   }
-  return { released, by_sector: byForSector, uk_day: snap.uk_day, daily_total: snap.daily_total, remaining_after: Math.max(0, snap.remaining - released) };
+  // T1-B01: surface the released-vs-actually-pushable gap after the sweep so the downstream mint/render lag is
+  // visible (release is NOT gated on it — that would deadlock; see SEND_SAFE_SQL / pushReadiness notes).
+  const readiness = dryRun ? null : pushReadiness();
+  if (readiness) console.log(`[governor] push-readiness: ${readiness.released_pushable}/${readiness.released} released leads are push-eligible now (audit-verified + Touch-0 draft); ${readiness.awaiting_audit_or_draft} awaiting mint/render`);
+  return { released, by_sector: byForSector, uk_day: snap.uk_day, daily_total: snap.daily_total, remaining_after: Math.max(0, snap.remaining - released), push_readiness: readiness };
 }
 
 // May THIS lead be released right now? Used inline by qualify-and-queue when a fresh lead scores Tier-1.
@@ -179,7 +220,7 @@ function canReleaseLead({ sector_code } = {}) {
   return { ok: true, lane, sector_released: sectorReleased, per_sector_cap: perSectorCap, total_released: released };
 }
 
-module.exports = { prioritySectors, allocateRoundRobin, snapshot, releaseToday, canReleaseLead, releasedTodayCount, availableBySector, ukToday, DAILY_TOTAL };
+module.exports = { prioritySectors, releaseOrder, allocateRoundRobin, snapshot, releaseToday, canReleaseLead, releasedTodayCount, availableBySector, pushReadiness, ukToday, DAILY_TOTAL, UNSECTORED_LANE };
 
 // CLI: `node src/lib/governor.js` prints a snapshot; `--release` releases; `--dry-run` plans only.
 if (require.main === module) {
