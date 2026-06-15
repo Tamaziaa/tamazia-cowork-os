@@ -46,7 +46,7 @@ function addColumnDDL(table, col, meta) {
 }
 
 async function main() {
-  const out = { mode: CHECK ? 'check' : 'apply', missing_tables: [], missing_columns: [], created: 0, added: 0, errors: [] };
+  const out = { mode: CHECK ? 'check' : 'apply', missing_tables: [], missing_columns: [], created: 0, added: 0, indexed: 0, errors: [] };
   if (!NEON) { console.error('[ensure-schema] NEON connection string not set — skipping (fail-open)'); process.exit(0); }
   if (!fs.existsSync(SPEC)) { console.error('[ensure-schema] spec missing: ' + SPEC); process.exit(0); }
   const spec = JSON.parse(fs.readFileSync(SPEC, 'utf8'));
@@ -84,9 +84,21 @@ async function main() {
     const r = await sql(addColumnDDL(t, col, spec[t].columns[col]));
     if (r.ok) out.added++; else out.errors.push('addcol ' + tc + ': ' + r.error);
   }
-  const healed = out.created + out.added;
+  // Indexes (additive). Each spec[t].indexes entry is a full `CREATE [UNIQUE] INDEX IF NOT EXISTS ...`
+  // statement, so re-running is a no-op (never drops, never rebuilds). We always issue them — `IF NOT EXISTS`
+  // makes this idempotent and cheap, and it covers the case where the table exists but the index does not
+  // (e.g. the partial unique index on leads(lower(domain)) that closes the dup-domain TOCTOU). Fail-open per
+  // statement: a partial-unique index that would conflict with live dup rows just logs an error and the rest proceed.
+  for (const [t, def] of Object.entries(spec)) {
+    if (!Array.isArray(def.indexes) || !liveTables.has(t)) continue;
+    for (const ddl of def.indexes) {
+      const r = await sql(ddl);
+      if (r.ok) out.indexed = (out.indexed || 0) + 1; else out.errors.push('index ' + t + ': ' + r.error);
+    }
+  }
+  const healed = out.created + out.added + (out.indexed || 0);
   console.log(JSON.stringify({ ...out, healed }));
-  if (healed > 0) console.log(`[ensure-schema] auto-healed: +${out.created} table(s), +${out.added} column(s)`);
+  if (healed > 0) console.log(`[ensure-schema] auto-healed: +${out.created} table(s), +${out.added} column(s), +${out.indexed || 0} index(es)`);
   else console.log('[ensure-schema] schema already in sync — no changes');
   // optional notify on heal or error (reuses a webhook if present; fail-open)
   if ((healed > 0 || out.errors.length) && process.env.SLACK_WEBHOOK_URL) {
