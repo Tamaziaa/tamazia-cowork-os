@@ -28,3 +28,13 @@ LLM stays default-OFF (`LLM_QA_ENABLED`). SEND OFF. Audit engine OFF-LIMITS. Liv
 - Fix: cap unverified confidence to `AUTO_PROMOTE_MIN_CONF - 1` (74) so a guess can only ever reach human review (>=40), never auto-promote. Verified emails unaffected (floor 80). reason pattern_only -> pattern_only_unverified_capped.
 - Syntax: jsc PASS. Module loads clean under harness (const referenced at call-time, no TDZ).
 - Proof: /tmp jsc harness — prior 1.0/0.95/0.5 unverified -> 74/74/50 (all <75, none auto-promotable, all >=40 reach review); 1.0 verified -> 100, 0.3 verified -> 80 (unaffected).
+- Commit: 6c53b15. Pushed.
+
+### L3 🟠 — tierInputsFromPersisted servedSector divergence + fixture test
+- Files: src/lib/enrich/lead-quality.js:510 (helper ONLY); NEW eval/retier-persisted.js.
+- Cause: `servedSector = SERVED.has(normSector(lead.sector)) || isPrioritySector` widened freeProviderDM (Tier-2 path) vs scoreLead's `SERVED.has(sector)`. A gmail-only lead in a priority-but-not-SERVED sector (e.g. AE) re-tiered to Tier-2 under the persisted seam but Tier-3 under canonical scoreLead+decideTier (when sub-floor score).
+- Fix: drop `|| isPrioritySector` so the persisted seam matches scoreLead exactly. scoreLead + decideTier kept BYTE-IDENTICAL (diff = the one servedSector line + 4 comment lines, all inside tierInputsFromPersisted; verified `git diff e4dee6e` touches no scoreLead/decideTier line).
+- Fixture test (eval/retier-persisted.js): 5 representative persisted leads + an L3-invariant assertion. Asserts (a) each lands its expected tier under the persisted seam, (b) the persisted seam == scoreLead's own verdict when fed the same score (seamEquiv), (c) the L3 regression lead has freeProviderDM=false AND Tier-3. Runs under node (CI) and jsc.
+- Syntax: jsc PASS (helper + test). Proof: harness run — 6/6 PASS; the regression lead goes T2(old-sim, freeProviderDM=true) -> T3(fixed, freeProviderDM=false), isolating the flag fix at score 38; seamEquiv=true on all rows.
+- eval-qualifier RE-CONFIRMED 50/50 = 100% after the change.
+- DEFERRAL: wiring eval/retier-persisted.js into .github/workflows/eval-qualifier.yml is OUT of my exclusive-file scope (workflow not in my list) — flag for coordinator; test is runnable standalone `node eval/retier-persisted.js` (exit 1 on mismatch).

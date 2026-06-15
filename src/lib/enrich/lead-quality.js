@@ -507,7 +507,11 @@ async function tierInputsFromPersisted(lead) {
   const _rawVerdict = String((lead.deliverability != null && String(lead.deliverability).trim() !== '') ? lead.deliverability : (lead.verify_status || '')).trim();
   const confirmedBad = _deliv === 'bad';
   const catchAllUnverified = (_deliv === 'deliverable' || /^unknown$/i.test(_rawVerdict)) && !dmEmailVerified;
-  const servedSector = SERVED.has(normSector(lead.sector)) || isPrioritySector;
+  // L3 FIX: align servedSector EXACTLY to scoreLead (line ~305: `SERVED.has(sector)`, sector = normSector(lead.sector)).
+  // The previous `|| isPrioritySector` widened freeProviderDM (a Tier-2 path) here vs the canonical scorer: a gmail-only
+  // lead in a priority-but-not-SERVED sector re-tiered to Tier-2 under this persisted path but would be Tier-3 under a
+  // real scoreLead+decideTier. Dropping the widening makes the re-tier seam match the canonical gate for freeProviderDM.
+  const servedSector = SERVED.has(normSector(lead.sector));
   const freeProviderDM = dmAny && dmGate.reason === 'free_provider' && servedSector;
 
   // LinkedIn from persisted socials / contact_linkedin (the rescue folds a found URL into all_socials.linkedin).
