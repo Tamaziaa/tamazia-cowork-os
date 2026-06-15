@@ -138,7 +138,13 @@ Q_EMAIL_READY = (
     "SELECT COUNT(*) FROM leads l WHERE l.status LIKE 'touch_%_queued' "
     "AND COALESCE(NULLIF(l.email,''),l.contact_email,'')<>'' "
     "AND COALESCE(acquisition_channel,'') NOT ILIKE '%test%' "
-    "AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal')"
+    "AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal') "
+    # Must match gen-state.js EXACTLY (this file claims VERBATIM): a lead is only
+    # email-ready if it ALSO has a pending email outreach_draft. Dropping this clause
+    # over-reported email-ready vs PIPELINE-STATE.md whenever a queued lead had no
+    # pending draft (draft sent/pruned). Same count today (32), correct going forward.
+    "AND EXISTS (SELECT 1 FROM outreach_drafts od WHERE od.lead_id=l.id "
+    "AND od.send_status='pending' AND od.channel='email')"
 )
 Q_SENT = "SELECT COUNT(*) FROM sends"
 Q_REPLIED = "SELECT COUNT(*) FROM inbound_emails WHERE matched_lead_id IS NOT NULL"
@@ -336,9 +342,13 @@ def todays_bookings() -> str:
                COALESCE(event_type,'')         AS event_type,
                COALESCE(status,'')             AS status
         FROM cal_bookings
-        WHERE start_at::date = (NOW() AT TIME ZONE 'UTC')::date
+        WHERE (start_at AT TIME ZONE 'UTC')::date = (NOW() AT TIME ZONE 'UTC')::date
         ORDER BY start_at
     """
+    # Both sides forced to UTC: `start_at::date` alone uses the SESSION timezone, while the RHS already forces
+    # UTC, so under any non-UTC session tz a booking near midnight would land in the wrong day. The session is
+    # GMT today (so this is a no-op now), but pinning both sides to UTC makes the "today (UTC)" contract hold
+    # regardless of the connection's tz.
     try:
         rows = neon(q)
     except NeonError as e:
