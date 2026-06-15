@@ -678,6 +678,8 @@ CREATE TABLE IF NOT EXISTS leads (
   jurisdiction varchar(50),
   entity_type varchar(50),
   consent_documented boolean DEFAULT false,
+  consent_required boolean DEFAULT false,
+  governor_released_at timestamptz,
   generic_address boolean DEFAULT false,
   enriched_at timestamp,
   email_source varchar(50),
@@ -1890,6 +1892,11 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS imported_at timestamp DEFAULT now();
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS jurisdiction varchar(50);
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS entity_type varchar(50);
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS consent_documented boolean DEFAULT false;
+-- P2-1a: consent_required gate (sole-trader/ordinary-partnership = individual subscriber, excluded from cold path).
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS consent_required boolean DEFAULT false;
+-- P2-1b: governor release stamp (per-sector round-robin Tier-1 governor; 100/day, 10x10, reset 00:00 UK).
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS governor_released_at timestamptz;
+CREATE INDEX IF NOT EXISTS idx_leads_governor_released ON leads (governor_released_at) WHERE governor_released_at IS NOT NULL;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS generic_address boolean DEFAULT false;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS enriched_at timestamp;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS email_source varchar(50);
@@ -2408,3 +2415,14 @@ ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT n
 -- NULL/empty domains. Verified safe live: 0 conflicting groups under this predicate.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_domain_active_unique ON leads (lower(domain)) WHERE COALESCE(status,'') <> 'duplicate' AND COALESCE(domain,'') <> '';
 ALTER TABLE minting_queue ADD COLUMN IF NOT EXISTS claimed_at timestamptz;
+
+-- P2-4: NocoDB view = the latest scorecard row per scraper (scorecard-nightly.js writes one row/scraper/night).
+-- DISTINCT ON keeps only the freshest sampled_at per scraper_source; red_flag computed from the thresholds.
+CREATE OR REPLACE VIEW v_scraper_scorecard_latest AS
+SELECT DISTINCT ON (scraper_source)
+  scraper_source, sampled_at, sample_n,
+  valid_email_pct, named_contact_pct, sector_match_pct, linkedin_id_pct, duplicate_pct, tier1_pct, cost_per_lead,
+  verdict,
+  (valid_email_pct < 60 OR sector_match_pct < 70) AS red_flag
+FROM scraper_scorecard
+ORDER BY scraper_source, sampled_at DESC;

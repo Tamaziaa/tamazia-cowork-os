@@ -66,7 +66,18 @@ async function upsertLead(rec) {
   }
   const exists = pg(`SELECT id FROM leads WHERE LOWER(company)=${pgEsc(rec.company.toLowerCase())}${domainClause} LIMIT 1`);
   if (exists) return { existed: true, id: Number(exists) };
-  const sql = `INSERT INTO leads (company, domain, sector, jurisdiction, city, email, phone, source, source_query, source_payload_hash, source_raw, status, imported_at, created_at, updated_at, priority_score) VALUES (${pgEsc(rec.company)}, ${pgEsc(rec.domain)}, ${pgEsc(rec.sector)}, ${pgEsc(rec.jurisdiction || 'UK')}, ${pgEsc(rec.city)}, ${pgEsc(rec.email)}, ${pgEsc(rec.phone)}, ${pgEsc(rec.source)}, ${pgEsc(rec.source_query)}, ${pgEsc(crypto.createHash('sha256').update(rec.company + (rec.domain||'')).digest('hex').slice(0,16))}, ${pgEsc(JSON.stringify(rec))}::jsonb, 'new', NOW(), NOW(), NOW(), 50) RETURNING id`;
+  // P2-1a: persist the Companies House entity type so the qualifier's entity-type gate can run. CH search
+  // returns `company_type` (ltd/llp/plc/...) and we classify it to a stable bucket; sole-traders/partnerships
+  // get flagged consent_required downstream in qualify-and-queue.js. Falls back to a name heuristic when the
+  // source carries no explicit type (OSM/SERP). entity_type is additive and NULL-safe for non-CH sources.
+  let _entityType = null;
+  try {
+    const { classifyEntityType } = require('./icp.js');
+    _entityType = rec.entity_type
+      || (rec.company_type ? classifyEntityType(rec.company_type) : classifyEntityType(rec.company, { asName: true }));
+    if (_entityType === 'unknown' || _entityType === 'other') _entityType = null; // only store positive classifications
+  } catch (_e) {}
+  const sql = `INSERT INTO leads (company, domain, sector, jurisdiction, city, email, phone, source, source_query, entity_type, source_payload_hash, source_raw, status, imported_at, created_at, updated_at, priority_score) VALUES (${pgEsc(rec.company)}, ${pgEsc(rec.domain)}, ${pgEsc(rec.sector)}, ${pgEsc(rec.jurisdiction || 'UK')}, ${pgEsc(rec.city)}, ${pgEsc(rec.email)}, ${pgEsc(rec.phone)}, ${pgEsc(rec.source)}, ${pgEsc(rec.source_query)}, ${pgEsc(_entityType)}, ${pgEsc(crypto.createHash('sha256').update(rec.company + (rec.domain||'')).digest('hex').slice(0,16))}, ${pgEsc(JSON.stringify(rec))}::jsonb, 'new', NOW(), NOW(), NOW(), 50) RETURNING id`;
   // Unique-violation safe: a dup-domain race past the SELECT above raises 23505 from the partial unique
   // index — treat as "already exists, skip" (existed), never a crash.
   const r = pgInsert(sql);
@@ -85,7 +96,9 @@ async function sourceCH({ daily_target = 600 } = {}) {
         summary.queries_run++;
         if (results.length === 0) break;
         for (const r of results) {
-          const u = await upsertLead({ company: r.company, sector, source: 'companies_house_uk', source_query: term, jurisdiction: 'UK' });
+          // P2-1a: carry the CH company_type through so entity_type is persisted (companies pass; sole-trader/
+          // partnership get consent_required in the qualifier and are excluded from the cold path).
+          const u = await upsertLead({ company: r.company, sector, source: 'companies_house_uk', source_query: term, jurisdiction: 'UK', company_type: r.company_type });
           if (u.inserted) summary.inserted++;
           else if (u.existed) summary.existed++;
           if (summary.inserted >= daily_target) break outer;

@@ -19,6 +19,10 @@ const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 (() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
 const { scoreLead } = require(path.join(ROOT, 'src', 'lib', 'enrich', 'lead-quality.js'));
+// P2-1a entity-type gate (mirror of qualify-and-queue.js): the backlog re-scorer must apply the SAME
+// PECR consent gate, otherwise a sole-trader/ordinary-partnership lead re-scored here could reach Tier-1
+// (quality_fit=TRUE, lifecycle='qualified') and leak into the cold path that the qualifier protects.
+const { entityNeedsConsent, classifyEntityType } = require(path.join(ROOT, 'src', 'lib', 'sourcing', 'icp.js'));
 // maxBuffer: the eligible SELECT does `to_jsonb(l)` over the full 124-col leads row × LIMIT (called with 500
 // by v3-rerun / backlog-burst). Node's 1MB execFileSync default overflows -> ENOBUFS throws -> the whole pass
 // dies silently. 256MB covers any realistic batch of fat lead rows.
@@ -45,6 +49,9 @@ async function scoreWithRetry(lead, n = 2) {
   const limit = Number(process.argv[2] || 300);
   // Reversible pre-run snapshot of the prior tiering — so any re-tier can be rolled back (QA mandate).
   pg(`CREATE TABLE IF NOT EXISTS requalify_backup_v3 (id bigint, lifecycle_stage text, icp_tier int, quality_score int, quality_fit boolean, requal_version text, snap_at timestamptz DEFAULT now())`);
+  // P2-1a additive guard: consent_required gate column (idempotent, NULL/false-safe). Mirrors qualify-and-queue.js
+  // so the re-scorer behaves identically pre- and post-provision (canonical-schema.{json,sql} carry the DDL).
+  try { pg(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS consent_required boolean DEFAULT false`); } catch (_e) {}
   const raw = pg(`
     SELECT to_jsonb(l) FROM leads l
     WHERE COALESCE(l.domain,'') <> ''
@@ -87,6 +94,26 @@ async function scoreWithRetry(lead, n = 2) {
       // the unreachable-wasGood set neared the batch size; ~6.7k of 7.7k eligible leads are wasGood).
       pg(`UPDATE leads SET quality_scored_at=NOW() WHERE id=${lead.id}`);
       console.log(`  ${String(lead.domain || '').padEnd(30)} weak/unreachable scan -> KEPT at tier ${lead.icp_tier} (transient-safe, deferred)`); skipped++; continue;
+    }
+    // ---- P2-1a ENTITY-TYPE GATE (runs BEFORE tier routing; mirror of qualify-and-queue.js) -------------
+    // PECR/UK-GDPR: cold B2B email is defensible to corporate subscribers (companies + LLPs) but NOT to
+    // individual subscribers (sole traders + ordinary partnerships). Without this gate, the backlog re-scorer
+    // would route such a lead to Tier-1 (quality_fit=TRUE, lifecycle='qualified') and leak it into the cold
+    // path. Classify from the persisted entity_type, fall back to a name heuristic; a consent-required entity
+    // is flagged (consent_required=TRUE, quality_fit=FALSE) and parked at lifecycle='consent_required'.
+    const _entityBucket = lead.entity_type ? classifyEntityType(lead.entity_type)
+      : classifyEntityType(lead.company || '', { asName: true });
+    if (entityNeedsConsent(_entityBucket)) {
+      pg(`INSERT INTO requalify_backup_v3 (id,lifecycle_stage,icp_tier,quality_score,quality_fit,requal_version)
+          SELECT id,lifecycle_stage,icp_tier,quality_score,quality_fit,${esc(REQUAL_VERSION)} FROM leads
+          WHERE id=${lead.id} AND NOT EXISTS (SELECT 1 FROM requalify_backup_v3 b WHERE b.id=${lead.id} AND b.requal_version=${esc(REQUAL_VERSION)})`);
+      pg(`UPDATE leads SET consent_required=TRUE, entity_type=COALESCE(entity_type, ${esc(_entityBucket)}),
+          quality_score=${q.score}, quality_fit=FALSE, icp_tier=2,
+          quality_layers=${esc(JSON.stringify(q.layers))}::jsonb, quality_scored_at=NOW(), requal_version=${esc(REQUAL_VERSION)},
+          personalisation_pointers = COALESCE(personalisation_pointers,'{}'::jsonb) || ${esc(JSON.stringify({ consent_required: true, entity_type: _entityBucket, gate: 'P2-1a_entity_type', requalified: true }))}::jsonb,
+          lifecycle_stage='consent_required' WHERE id=${lead.id}`);
+      console.log(`  ⛔ ${String(lead.domain || '').padEnd(30)} entity=${_entityBucket} -> consent_required (excluded from cold path)`);
+      skipped++; continue;
     }
     const tier = q.tier || 3;                                   // catch-all: anything that fits no tier -> Tier 3
     // Tier 2 AND Tier 3 stay ALIVE (the deep queue). The re-run never writes 'rejected': per V3 only the four

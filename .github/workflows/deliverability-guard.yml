@@ -1,0 +1,28 @@
+name: Deliverability guard (weekly SPF/DKIM/DMARC + Postmaster)
+# P2-7 · Weekly DNS check of every sending domain (SPF/DKIM/DMARC alignment + Google Postmaster connection).
+# Flags any misconfigured domain to the daily digest + a realtime alert. Read-only DNS over HTTPS.
+on:
+  schedule:
+    - cron: '20 6 * * 1'   # weekly Monday 06:20 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: engine-db-work
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install deps
+        run: npm install --omit=dev || npm install || true
+      - name: Materialise .env from secret
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Run deliverability guard (alerts on any SPF/DKIM/DMARC/Postmaster gap)
+        run: |
+          set -a; source .env; set +a
+          node scripts/heartbeat.js wrap deliverability-guard -- node scripts/deliverability-guard.js || node scripts/deliverability-guard.js || true

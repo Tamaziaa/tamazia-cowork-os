@@ -1,0 +1,50 @@
+{
+  "_README": "Shared cadence + compliance metadata for the per-sector campaigns (P2-5). Sending is OFF (SEND_ENABLED master gate). Founder-blocked values are template variables filled at send time.",
+  "version": "v1-2026-06-15",
+  "source_copy": "Tamazia-Remix/campaigns/touch-copy-top10.md (founder-reviewed draft)",
+  "priority_sectors": ["LS", "HC", "AE", "DN", "FS", "RE", "HO", "FB", "ED", "PB"],
+  "cadence": {
+    "touches": 5,
+    "interval_days_from_touch0": [0, 3, 7, 12, 19],
+    "_note": "Touch 0 immediate; +3, +7, +12, +19 days. Full 7-touch plan in the draft is 0/3/7/12/19/28/40; this cadence ships the first 5 (0/1/2 + 2 nudges) per the P2-5 scope. Saturday is skipped by the scheduler (send-pacing.sendingPausedToday)."
+  },
+  "credential_line": "LLM in International Business Law, King's College London",
+  "signature_name": "Aman Pareek",
+  "signature_title": "Founder, Tamazia",
+  "merge_fields": {
+    "{{first_name}}": "recipient first name (per lead)",
+    "{{company}}": "recipient company (per lead)",
+    "{{city}}": "recipient city (per lead)",
+    "{{audit_url}}": "minted /audit/<slug> link, HMAC per recipient (touch 1+)",
+    "{{finding}}": "ONE real detection from website-intel.js on the prospect's own site",
+    "{{clause}}": "the regulator clause the finding is measured against",
+    "{{calendar_link}}": "live Cal.com 1:1 strategy-call link",
+    "{{sender_name}}": "warmed Mystrika inbox display name"
+  },
+  "founder_blocked_vars": {
+    "{{company_number}}": "⛔ UK Companies House number (filled at send)",
+    "{{ico_number}}": "⛔ ICO data-controller registration number (filled at send)",
+    "{{reg_address}}": "⛔ Tamazia Ltd registered postal address, England & Wales (filled at send)"
+  },
+  "footer_vars": {
+    "{{unsubscribe_url}}": "signed one-click unsubscribe link (visible body link + List-Unsubscribe header)",
+    "{{eu_rep_line}}": "EU Article 27 representative line (EU recipients only; empty for UK/UAE)",
+    "{{framework_version}}": "latest framework_versions row"
+  },
+  "provenance_line": "How we found you: public registers, your website and business directories. Details: {{privacy_notice_url}}.",
+  "headers": {
+    "List-Unsubscribe": "set by relay-router.js (mailto + RFC-8058 one-click when UNSUB_ENDPOINT live)",
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click (when UNSUB_ENDPOINT live)"
+  },
+  "compliance_rails": [
+    "No em dashes, no hyphen-as-pause.",
+    "No fake scarcity / countdowns / invented deadlines (UK DMCCA 2024).",
+    "The audit is genuinely free to the cold recipient (value, not bait).",
+    "No client names; anonymised sector descriptors only.",
+    "No invented metrics; only published regulator statistics, else omit.",
+    "Every shipped finding must be a real detection on the prospect's own site.",
+    "Two asks per touch (soft + 1:1 meeting). Meeting is with the founder, never 'the team'.",
+    "Right-person ask in every touch. Credential line in every signature.",
+    "Sends only from warmed Mystrika inboxes, never tamazia.co.uk. SEND_ENABLED OFF until the founder flips it."
+  ]
+}

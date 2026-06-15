@@ -33,7 +33,9 @@ function pickDueDrafts() {
   // 'pending_approval' or 'rejected' (this divergence is already present in the live data). Selecting on
   // status alone would auto-send a lead another workflow has since demoted. Require the lifecycle_stage to
   // still be a sendable one so the two vocabularies must AGREE before any mail goes out.
-  const sql = `SELECT l.id::text, l.company, COALESCE(NULLIF(l.email,''), l.contact_email, '') AS email, l.status, COALESCE(l.next_touch_date::text, '') AS next FROM leads l WHERE l.status LIKE 'touch_%_queued' AND COALESCE(l.lifecycle_stage,'') NOT IN ('pending_approval','rejected','duplicate','parked','suppressed') AND COALESCE(NULLIF(l.email,''), l.contact_email, '') <> '' AND (l.next_touch_date IS NULL OR l.next_touch_date <= CURRENT_DATE) AND COALESCE(l.replied, FALSE) = FALSE AND COALESCE(l.acquisition_channel,'') NOT ILIKE '%test%' AND COALESCE(l.acquisition_channel,'') NOT ILIKE '%seed%' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal') AND NOT EXISTS (SELECT 1 FROM email_sequence_state ess WHERE ess.lead_id = l.id AND ess.status IN ('unsubscribed','bounced','manually_handled','opted_out','replied','completed','nurture_complete')) AND NOT EXISTS (SELECT 1 FROM inbound_emails ie WHERE ie.matched_lead_id = l.id AND ie.classification IN ('OPT_OUT','BOUNCE','UNSUBSCRIBE')) AND NOT EXISTS (SELECT 1 FROM suppression sup WHERE lower(sup.email) = lower(COALESCE(NULLIF(l.email,''), l.contact_email)) AND (sup.expires_at IS NULL OR sup.expires_at > NOW())) LIMIT 50`;
+  // P2-1a CONSENT GATE (legal line): never cold-send to a lead flagged consent_required (sole-trader/
+  // ordinary-partnership = individual subscriber under PECR). COALESCE so rows predating the column still send.
+  const sql = `SELECT l.id::text, l.company, COALESCE(NULLIF(l.email,''), l.contact_email, '') AS email, l.status, COALESCE(l.next_touch_date::text, '') AS next FROM leads l WHERE l.status LIKE 'touch_%_queued' AND COALESCE(l.lifecycle_stage,'') NOT IN ('pending_approval','rejected','duplicate','parked','suppressed','consent_required') AND COALESCE(l.consent_required, FALSE) = FALSE AND COALESCE(NULLIF(l.email,''), l.contact_email, '') <> '' AND (l.next_touch_date IS NULL OR l.next_touch_date <= CURRENT_DATE) AND COALESCE(l.replied, FALSE) = FALSE AND COALESCE(l.acquisition_channel,'') NOT ILIKE '%test%' AND COALESCE(l.acquisition_channel,'') NOT ILIKE '%seed%' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal') AND NOT EXISTS (SELECT 1 FROM email_sequence_state ess WHERE ess.lead_id = l.id AND ess.status IN ('unsubscribed','bounced','manually_handled','opted_out','replied','completed','nurture_complete')) AND NOT EXISTS (SELECT 1 FROM inbound_emails ie WHERE ie.matched_lead_id = l.id AND ie.classification IN ('OPT_OUT','BOUNCE','UNSUBSCRIBE')) AND NOT EXISTS (SELECT 1 FROM suppression sup WHERE lower(sup.email) = lower(COALESCE(NULLIF(l.email,''), l.contact_email)) AND (sup.expires_at IS NULL OR sup.expires_at > NOW())) LIMIT 50`;
   const raw = pg(sql);
   if (!raw) return [];
   return raw.split('\n').filter(Boolean).map(l => { const [id, company, email, status, next] = l.split('\t'); return { id: Number(id), company, email, status, next_touch_date: next }; });
@@ -176,6 +178,22 @@ async function processLead(lead) {
 }
 
 async function run() {
+  // SEND_ENABLED MASTER GATE (P2): cold sending is OFF unless SEND_ENABLED is explicitly truthy. This is the
+  // top-level switch the founder flips to go live; until then nothing is sent regardless of queue state. It
+  // sits ABOVE the kill-switch (system_state.paused) so the default posture is "off" even with no DB row.
+  if (!/^(1|true|yes|on)$/i.test(process.env.SEND_ENABLED || '')) {
+    console.log('HALT: SEND_ENABLED is not set — cold sending is OFF (master gate). No mail sent.');
+    return [{ halted: true, reason: 'send_disabled' }];
+  }
+  // SATURDAY PAUSE (P2-5): no cold sends on Saturday (UK day). Env SEND_SATURDAY_PAUSE=0 disables.
+  try {
+    const { sendingPausedToday } = require('../../../lib/send-pacing.js');
+    const sp = sendingPausedToday();
+    if (sp.paused) { console.log(`HALT: ${sp.reason} — no cold sends today.`); return [{ halted: true, reason: sp.reason }]; }
+  } catch (_e) {}
+  // RANDOMISED HOURLY JITTER (P2-5): small random delay so the every-30-min cron does not fire at a fixed
+  // second each cycle (a robotic cadence is a spam signal). Skipped in fast/test runs via SEND_JITTER_MAX_S=0.
+  try { const { startupJitter } = require('../../../lib/send-pacing.js'); const j = await startupJitter(); if (j) console.log(`  jitter · delayed ${(j / 1000).toFixed(0)}s before run`); } catch (_e) {}
   // MANUAL SEND PAUSE (kill-switch): system_state.paused='true' halts ALL sending immediately.
   // Used to hold the queue while a human approves the first real email, or to stop sends instantly.
   try {
