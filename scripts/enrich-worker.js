@@ -100,7 +100,16 @@ async function enrichOne(row) {
   ];
   // Only set the legacy single-contact fields when we actually found a primary (never clobber a good value with null).
   if (primary && primary.email) {
-    sets.push(`contact_email=${q(primary.email)}`, `contact_name=${q(primary.name)}`, `title=${q(primary.role)}`, `contact_confidence=${Number(primary.confidence || 0)}`);
+    sets.push(`contact_email=${q(primary.email)}`, `contact_confidence=${Number(primary.confidence || 0)}`);
+    // Q4 (B33/B21/B22): NEVER overwrite contact_name/title with an empty string. The previous code always wrote
+    // contact_name=q(primary.name); when the primary is a role inbox (info@/feedback@) with no person attached,
+    // primary.name='' and q('') = '' (NOT null), so it BLANKED any name a prior enrichment had found. Only write
+    // these when we actually have a non-empty value; otherwise leave the existing value (COALESCE keeps the old
+    // contact_name, which is also why we no longer derive a name from a role inbox at all — see enrich.js Q4).
+    const _nm = String((primary.name || '')).trim();
+    const _ro = String((primary.role || '')).trim();
+    if (_nm) sets.push(`contact_name=${q(_nm)}`);
+    if (_ro) sets.push(`title=${q(_ro)}`);
   }
   if (liUrl) sets.push(`linkedin_url=${q(liUrl)}`);
   // P2-3: store up-to-3 LinkedIn contacts for multi-threading. Only write when we found at least one (never

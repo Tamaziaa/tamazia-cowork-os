@@ -456,7 +456,15 @@ async function scoreLead(lead) {
   };
 }
 
-module.exports = { scoreLead, decideTier, PASS, REGULATED, TIER1_MIN, BAR_MIN };
+// Q4 (B33/B21/B22): _ROLE is the ONE canonical generic/role-inbox local-part set. Export it (+ a helper) so the
+// enrich path (enrich.js _nearbyPerson, dm-email-scoring.js isGeneric) shares THIS exact set instead of keeping
+// thinner divergent copies that let feedback@/reservations@/membership@ etc. be treated as a named decision-maker.
+// isRoleLocal folds the same way emailGate does (strip a trailing .tag/_tag so 'bookings.london' == 'bookings').
+function isRoleLocal(localPart) {
+  const lp = String(localPart || '').toLowerCase().split('@')[0];
+  return _ROLE.has(lp) || _ROLE.has(lp.replace(/[._\-+].*$/, ''));
+}
+module.exports = { scoreLead, decideTier, PASS, REGULATED, TIER1_MIN, BAR_MIN, _ROLE, isRoleLocal };
 
 if (require.main === module) {
   (async () => {

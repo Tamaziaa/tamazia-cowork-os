@@ -37,3 +37,12 @@ Syntax tool: `jsc <file>` — ReferenceError on require/module after a CLEAN par
 - **Proof (jsc):** `José/Núñez -> jose.nunez@`, `Jos&eacute;/M&uuml;ller -> jose.muller@`, `O&#39;Brien/Smith -> obrien.smith@`, `Renée/Zoë -> renee.zoe@`, plain `Aman/Pareek -> aman.pareek@` unchanged. Old behaviour for comparison: `José.Núñez -> jos.nez` (lost letters); new: `jose.nunez`.
 - **company_type='ltd' hardcode:** NOT in my files. It lives only in `src/lib/sourcing/companies-house.js:58` (`searchByKeywordPublic`), which is outside my exclusive set — NOTED here, not edited. (The two `company_type` hits in icp.js/qualify-and-queue.js are comments only.)
 - **Syntax:** `jsc enrich.js` → PASS.
+
+### Q4 [B33/B21/B22] — role inbox never becomes a named DM; ONE canonical role set; never blank contact_name
+- **Files:** `src/lib/enrich/lead-quality.js`, `src/lib/sourcing/enrich.js`, `src/lib/enrich/dm-email-scoring.js`, `scripts/enrich-worker.js`
+- **Canonical set:** `lead-quality.js` now EXPORTS `_ROLE` + `isRoleLocal(localPart)` (folds a trailing `.tag/_tag`, e.g. `bookings.london`==`bookings`). This is the single source.
+- **enrich.js:** `_nearbyPerson` previously gated on a LOCAL thin `_GENERIC_LOCAL` regex that omitted feedback/reservations/membership/editorial/events/customerservice/referrals — so those inboxes got a fabricated person from surrounding text (live: `feedback@onemedical.com` -> contact_name "Feedback We"). Now gates on `_isGenericLocal` which uses the canonical `isRoleLocal` (regex kept as fail-open fallback only).
+- **dm-email-scoring.js:** `isGeneric` (used to cap a generic inbox's role-weight + keep it out of PRIMARY selection) now also consults the canonical set, so a broad role inbox can no longer be scored/picked as the primary named DM.
+- **enrich-worker.js:** line 103 always wrote `contact_name=q(primary.name)` whenever a primary email existed; `q('')`=`''` (NOT null), so a role-inbox primary BLANKED a previously-found real name. Now only writes `contact_name`/`title` when the value is non-empty (existing value preserved otherwise).
+- **Proof (jsc):** `isRoleLocal` → all 11 role inboxes (feedback, reservations, membership, editorial, events, customerservice, referrals, `bookings.london`, info, pr, admissions) = ROLE; all 6 person locals (sarah.jones, altaf.patel, j.smith, peter.maguire, aman, renee.zoe) = NOT role. No circular require (lead-quality requires neither enrich.js nor dm-email-scoring.js).
+- **Syntax:** `jsc` PASS on all four files.

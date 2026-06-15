@@ -164,7 +164,19 @@ const _ASSET = /\.(png|jpe?g|gif|svg|webp|bmp|tiff?|avif|css|js|mjs|json|xml|ico
 const _PLACEHOLDER_LOCAL = /^(?:user|users|you|your|youremail|your-email|youremailaddress|name|yourname|firstname|lastname|first-?name|last-?name|email|emailaddress|username|johndoe|john-?doe|janedoe|jane-?doe|joebloggs|joe-?bloggs|example|sample|test|demo|noname|fullname)@/i;
 const _PLACEHOLDER_DOMAIN = /@(?:example\.(?:com|org|net)|mysite\.com|yoursite\.com|website\.com|yourdomain\.[a-z.]+|mydomain\.[a-z.]+|domain\.com|email\.com|company\.com|companyname\.com|sample\.com|host\.com|address\.com|work\.com|test\.com|acme\.com|sentry\.io|wixpress\.com|squarespace\.com|godaddy\.com)$/i;
 const _PLACEHOLDER = new RegExp(`(?:${_PLACEHOLDER_LOCAL.source})|(?:${_PLACEHOLDER_DOMAIN.source})|(?:wixpress|squarespace|godaddy|yourdomain)`, 'i');
+// Q4 (B33/B21/B22): use the ONE canonical role/generic-inbox set (lead-quality._ROLE) so a generic inbox is
+// recognised identically everywhere. The local regex is kept ONLY as a fail-open fallback if lead-quality (which
+// pulls the sector grid) can't load in this context. The canonical set is the broader one (adds feedback,
+// reservations, membership, editorial, events, customerservice, referrals, … — the inboxes that were leaking a
+// fabricated "named DM" like feedback@->"Feedback We").
 const _GENERIC_LOCAL = /^(info|contact|hello|hi|admin|sales|support|enquir(y|ies)|office|mail|team|reception|help|no-?reply|accounts|marketing|careers|jobs|hr|press|media|bookings?|appointments?|general)$/i;
+let _isRoleLocalCanonical = null;
+try { _isRoleLocalCanonical = require('../enrich/lead-quality.js').isRoleLocal; } catch (_e) {}
+function _isGenericLocal(localPart) {
+  const lp0 = String(localPart || '').split('@')[0];
+  if (_isRoleLocalCanonical) { try { if (_isRoleLocalCanonical(lp0)) return true; } catch (_e) {} }
+  return _GENERIC_LOCAL.test(lp0) || _GENERIC_LOCAL.test(lp0.replace(/[._\-+].*$/, ''));
+}
 function _stripTags(s) { return String(s || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim(); }
 // Words that are titles/labels, not part of a person's name — a name candidate stops at the first of these.
 const _NAME_STOP = /^(Managing|Senior|Junior|Associate|Partner|Partners|Director|Directors|Manager|Practice|Clinic|Office|Operations|Head|Chief|Executive|Officer|Founder|Co|Owner|Principal|Solicitor|Solicitors|Barrister|Surveyor|Accountant|Lawyer|Lawyers|Consultant|Adviser|Advisor|General|Sales|Marketing|Business|Development|Commercial|Email|Contact|Tel|Telephone|Phone|Mobile|Fax|Our|The|Meet|Team|About|Reach|Call|Address|Registered|Company|Ltd|Limited|LLP)$/;
@@ -176,7 +188,7 @@ function _cleanName(raw) {
 const _NAME_RE = /\b[A-Z][a-z'’\-]{1,}\s+[A-Z][a-z'’.\-]{1,}\b/g; // two consecutive capitalized words
 function _nearbyPerson(window, email) {
   const lp0 = email.split('@')[0];
-  if (_GENERIC_LOCAL.test(lp0)) return { name: '', role: '' }; // generic inbox → never attribute a person
+  if (_isGenericLocal(lp0)) return { name: '', role: '' }; // generic/role inbox → never attribute a person (Q4)
   const text = _stripTags(window);
   const near = text.slice(-90); // role + fallback name must be CLOSE to the email (avoid bleeding across cards)
   let role = ''; let mm; const rg = new RegExp(DM.source, 'gi'); while ((mm = rg.exec(near))) role = mm[0];
