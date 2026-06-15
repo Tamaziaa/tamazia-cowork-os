@@ -1,0 +1,16 @@
+Aman Pareek
+Founder, Tamazia
+LLM in International Business Law, King's College London
+
+Tamazia Ltd, registered in England and Wales. {{reg_address}}.
+Company number: {{company_number}} | ICO Registration: {{ico_number}}
+{{eu_rep_line}}
+
+How we found you: public registers, your website and business directories. Details: {{privacy_notice_url}}.
+You are receiving this because of a legitimate business interest in your firm's online compliance.
+Unsubscribe: {{unsubscribe_url}} (or reply "unsubscribe" and I will remove you and not contact you again).
+
+---
+Canonical render: src/templates/email/footer.{txt,html}. Founder-blocked vars (⛔ {{company_number}},
+{{ico_number}}, {{reg_address}}) are filled at send time. Sending is OFF (SEND_ENABLED) so nothing renders live.
+List-Unsubscribe + List-Unsubscribe-Post headers are emitted by src/lib/notify/relay-router.js.
