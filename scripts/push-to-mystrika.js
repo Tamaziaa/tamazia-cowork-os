@@ -5,7 +5,9 @@
 // Usage: MYSTRIKA_API_KEY=... node scripts/push-to-mystrika.js --campaign <campaign_id> [--max 200] [--dry]
 const { execFileSync } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const M = require(path.resolve(__dirname, '..', 'src', 'lib', 'mystrika', 'client.js'));
+const ROOT = path.resolve(__dirname, '..');
 const { conversionScore, SEND_TIERS } = require(path.resolve(__dirname, '..', 'src', 'lib', 'sourcing', 'conversion.js'));
 const { isVerifiedStatus, deliverabilityOf } = require(path.resolve(__dirname, '..', 'src', 'lib', 'enrich', 'verify-status.js'));
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
@@ -26,7 +28,51 @@ const firstOf = (n)=> String(n||'').trim().split(/\s+/)[0] || '';
 // at string start (no /m) so only the opening greeting is ever touched.
 const greet = (body, first)=> !body ? body : body.replace(/^([ \t]*)((?:Hi|Hello|Dear|Hey)\s+)?([A-Z][\w'’\-]*(?:[ \t]+[A-Z][\w'’\-]*){0,2})([ \t]*,)(?=[ \t]*(?:\r?\n|$))/, (m,ws,sal,_n,c)=> ws + (sal||'') + (first || 'there') + c);
 const okStatus = (s)=> /valid|risky|catchall|catch-all|role_valid|accept|deliverable|ok/i.test(String(s||''));
-module.exports = { greet, firstOf, okStatus };
+
+// B-1 FIX [LLM-RESCUE COMMIT 1]: CANONICAL Art-14 FOOTER for the LIVE Mystrika push path.
+// push-to-mystrika.js is what mystrika.yml (action=push) runs, and it pushed the RAW outreach_drafts bodies that
+// render.js:179 deliberately builds WITHOUT a footer ("injected at send"). The footer therefore only ever reached
+// the OFF native relay (send-due.js) and the UNUSED CSV export (mystrika-export.js) — so cold mail sent through the
+// brain would have shipped with NO provenance / NO unsubscribe / NO {{privacy_notice_url}} = non-compliant (UK PECR
+// / Art-14). This ports the EXACT, proven Mystrika footer logic from mystrika-export.js (single source of truth =
+// src/templates/email/footer.txt, == campaigns/_footer.txt): the block ABOVE the '----' doc separator, with the
+// leading bare-name line replaced by Mystrika's {{ sender }} merge token (the warmed inbox display name), the
+// privacy URL filled, {{unsubscribe_url}} -> Mystrika's own {{ unsubscribe }} one-click token (reply-fallback is
+// already in the copy), and the EU rep line dropped (UK/UAE). Founder-blocked {{company_number}}/{{ico_number}}/
+// {{reg_address}} stay as placeholders so nothing is fabricated. SEND is OFF (no live render) until the founder
+// flips it; this only makes the body the push WOULD send compliant. Cached; fail-soft (missing file -> no footer,
+// never blocks). _nd strips em-dashes/hyphen-pauses to match the house style the other paths use.
+const PRIVACY_NOTICE_URL = 'https://tamazia.co.uk/legal/cold-outreach-privacy-notice/';
+let _nd = (x)=>x; try { _nd = require(path.resolve(ROOT, 'src', 'lib', 'gates.js')).noDashes; } catch(_) {}
+let _footerCache = null;
+function complianceFooter() {
+  if (_footerCache == null) {
+    try {
+      const raw = fs.readFileSync(path.join(ROOT, 'src', 'templates', 'email', 'footer.txt'), 'utf8');
+      const live = raw.split(/^-{10,}\s*$/m)[0].replace(/\s+$/, '');   // content above the doc separator
+      const lines = live.split('\n');
+      let i = 0; while (i < lines.length && lines[i].trim() === '') i++;
+      if (i < lines.length) lines[i] = '{{ sender }}';                 // leading bare-name line -> Mystrika sender token
+      _footerCache = _nd(lines.join('\n').replace(/^\n+/, '')
+        .replace(/\{\{\s*privacy_notice_url\s*\}\}/g, PRIVACY_NOTICE_URL)
+        .replace(/\{\{\s*unsubscribe_url\s*\}\}/g, '{{ unsubscribe }}')
+        .replace(/\{\{\s*eu_rep_line\s*\}\}\n?/g, ''));
+    } catch (_e) { _footerCache = ''; }
+  }
+  return _footerCache;
+}
+// Append the canonical footer to a rendered touch body. Strips any trailing __SIGNATURE__ token first (the footer
+// carries the {{ sender }} signature line itself, so a separate sender step would double the name). Empty body in
+// -> empty out (the existing t0-body guard already skips those). Idempotent: never double-appends the footer.
+function withFooter(body) {
+  const core = _nd(String(body||'').replace(/\n*__SIGNATURE__\s*$/, '').trim());
+  if (!core) return core;
+  const f = complianceFooter();
+  if (!f) return core;
+  if (core.includes(PRIVACY_NOTICE_URL)) return core;   // already footered (defensive)
+  return core + '\n\n' + f;
+}
+module.exports = { greet, firstOf, okStatus, complianceFooter, withFooter };
 if (require.main === module) (async()=>{
   if (!M._hasKey()) { console.log('No MYSTRIKA_API_KEY.'); return; }
   if (!NEON) { console.log('No NEON_URL'); return; }
@@ -142,10 +188,14 @@ if (require.main === module) (async()=>{
       if (!rc.email || seenGlobal.has(rc.email)) continue; seenGlobal.add(rc.email);
       if (suppressed.has(rc.email)) continue;   // belt-and-suspenders: never push an opted-out address
       const first = firstOf(rc.name);
+      // B-1 FIX: append the canonical Art-14 footer to EVERY rendered touch body so the LIVE Mystrika wire carries
+      // provenance + the {{ unsubscribe }} one-click token + {{privacy_notice_url}}. The greeting swap (secondary
+      // recipients) runs on the CORE body first; the footer is appended after so its {{ sender }} line is never
+      // mangled by the name swap. Touch-0 keeps the same shape (primary = un-greet-swapped, secondary = swapped).
       prospects.push({ email: rc.email, name: rc.name||name||'there', company, domain, sector, audit_url: audit, top_finding: finding, city,
         rank_insight: ri, hiring_signal: hiring, conversion_tier: conv.tier, conversion_score: conv.score,
-        touch0_subject: b64d(t0s), touch0_body: rc.isPrimary ? t0body : greet(t0body, first),
-        touch1_body: rc.isPrimary ? b64d(t1b) : greet(b64d(t1b), first), touch2_body: rc.isPrimary ? b64d(t2b) : greet(b64d(t2b), first), touch3_body: rc.isPrimary ? b64d(t3b) : greet(b64d(t3b), first),
+        touch0_subject: b64d(t0s), touch0_body: withFooter(rc.isPrimary ? t0body : greet(t0body, first)),
+        touch1_body: withFooter(rc.isPrimary ? b64d(t1b) : greet(b64d(t1b), first)), touch2_body: withFooter(rc.isPrimary ? b64d(t2b) : greet(b64d(t2b), first)), touch3_body: withFooter(rc.isPrimary ? b64d(t3b) : greet(b64d(t3b), first)),
         is_primary: rc.isPrimary, lead_primary: pe, lead_id: Number(leadId) || null });
     }
   }
