@@ -15,7 +15,11 @@ let _tg = null; try { _tg = require('../../../lib/notify/telegram.js'); } catch 
 function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return null; try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; } }
 function pgEsc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
 
-const CADENCE_DAYS = [0, 5, 10, 20]; // business days from Touch 0
+// P7: cadence aligned to the founder-reviewed campaign copy (campaigns/_meta.json
+// interval_days_from_touch0 = [0,3,7,12,19]). We ship the first 4 touches (0-3), so the gaps are
+// touch0->1 = 3d, 1->2 = 4d, 2->3 = 5d. (Touch 4, the +19d breakup, is deferred until the scheduler
+// carries a 5th touch — see S064 render.js renderAll() DEFERRED note.) SEND_GAP env knobs unchanged.
+const CADENCE_DAYS = [0, 3, 7, 12]; // days from Touch 0, matching campaigns/_meta.json
 
 function pickDueDrafts() {
   // Find leads ready for next touch
