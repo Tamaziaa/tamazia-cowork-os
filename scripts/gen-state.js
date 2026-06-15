@@ -26,18 +26,28 @@ function main() {
   const scored = one(`SELECT COUNT(*) FROM leads WHERE quality_score IS NOT NULL`);
   const qualified = one(`SELECT COUNT(*) FROM leads WHERE lifecycle_stage='qualified'`);
   const fit = one(`SELECT COUNT(*) FROM leads WHERE COALESCE(quality_fit,FALSE)=TRUE`);
-  const emailReady = one(`SELECT COUNT(*) FROM leads l WHERE l.status LIKE 'touch_%_queued' AND COALESCE(NULLIF(l.email,''),l.contact_email,'')<>'' AND COALESCE(acquisition_channel,'') NOT ILIKE '%test%' AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal') AND EXISTS (SELECT 1 FROM outreach_drafts od WHERE od.lead_id=l.id AND od.send_status='pending' AND od.channel='email')`);
-  const sent = one(`SELECT COUNT(*) FROM sends`);
-  const replied = one(`SELECT COUNT(*) FROM inbound_emails WHERE matched_lead_id IS NOT NULL`);
-  const booked = one(`SELECT COUNT(*) FROM cal_bookings`);
+  // O5/O6 [A20/X3/A51]: email-ready MIRRORS the real push WHERE clause in scripts/push-to-mystrika.js (the gate
+  // that decides what is actually sendable), NOT a looser touch_%_queued + pending-draft proxy (which reported 32
+  // vs the true 25). Kept verbatim in sync with the MCP's Q_EMAIL_READY. Catch-all stays STRICT (founder policy).
+  const emailReady = one(`SELECT COUNT(*) FROM leads l WHERE l.quality_fit=TRUE AND COALESCE(l.lifecycle_stage,'')='qualified' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal') AND COALESCE(l.audit_verified,FALSE)=TRUE AND COALESCE(l.audit_url,'')<>'' AND COALESCE(l.contact_email,l.email,'')<>'' AND COALESCE(l.mystrika_pushed,FALSE)=FALSE AND COALESCE(NULLIF(l.deliverability,''),l.verify_status,'') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable') AND COALESCE(l.replied,FALSE)=FALSE AND COALESCE(l.status,'') NOT IN ('suppressed','dnc','bounced','duplicate') AND l.governor_released_at IS NOT NULL`);
+  // P2/P4 [A21/X10]: exclude the warmup pool (sends.lead_id NULL) from "sent" — only attributed lead-directed sends count.
+  const sent = one(`SELECT COUNT(*) FROM sends WHERE lead_id IS NOT NULL`);
+  // P4 [A33/A40]: standardise on matched_lead_id; exclude STOP/opt-out + bounce inbound (suppression/deliverability, not replies).
+  const replied = one(`SELECT COUNT(*) FROM inbound_emails WHERE matched_lead_id IS NOT NULL AND COALESCE(stop_keyword_detected,FALSE)=FALSE AND COALESCE(bounce_detected,FALSE)=FALSE`);
+  // P4 [X21]: only count bookings that still stand (exclude cancelled/rejected/no-show).
+  const booked = one(`SELECT COUNT(*) FROM cal_bookings WHERE COALESCE(status,'') NOT IN ('cancelled','canceled','rejected','declined','no_show','no-show')`);
   const health = one(`SELECT metric FROM system_health WHERE check_key='_overall'`);
+  // O4 [A1/A61/A64]: surface how STALE the health number is. A health % that was last computed days ago is
+  // misleading (it looks live). Show the age of the _overall row's checked_at so a frozen health-check is visible.
+  const healthAgeMin = one(`SELECT ROUND(EXTRACT(EPOCH FROM (now()-checked_at))/60)::int FROM system_health WHERE check_key='_overall'`);
   const engines = many(`SELECT job||'~~'||to_char(MAX(COALESCE(finished_at,started_at)),'YYYY-MM-DD HH24:MI')||'~~'||COALESCE((array_agg(status ORDER BY started_at DESC))[1],'?') FROM engine_runs GROUP BY job ORDER BY MAX(COALESCE(finished_at,started_at)) DESC`);
   const flags = many(`SELECT check_key||' — '||COALESCE(detail,'') FROM system_health WHERE status='fail' AND check_key<>'_overall' ORDER BY check_key`);
 
   const L = [];
   L.push('# PIPELINE-STATE.md (auto-generated)', '');
   L.push('> Live Neon snapshot, regenerated post-merge to main + daily by `.github/workflows/gen-state.yml`. Do not edit by hand. `Tamazia-Remix/STATE.md` links here for live numbers.', '');
-  L.push(`**Generated:** ${now} · **Health:** ${v(health)}%`, '');
+  const healthAge = healthAgeMin == null ? 'never computed' : (Number(healthAgeMin) < 90 ? `${healthAgeMin}m ago` : `${Math.round(Number(healthAgeMin) / 60)}h ago — STALE`);
+  L.push(`**Generated:** ${now} · **Health:** ${v(health)}% (checked ${healthAge})`, '');
   L.push('## Funnel', '', '| Stage | Count |', '|---|---|');
   L.push(`| Sourced (leads) | ${v(leads)} |`);
   L.push(`| Quality-scored | ${v(scored)} |`);

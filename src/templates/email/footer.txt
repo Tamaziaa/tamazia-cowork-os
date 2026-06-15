@@ -1,16 +1,23 @@
-{{alias_first_name}} · Tamazia
-
 Aman Pareek
-International Business Lawyer
 Founder, Tamazia
-Tamazia Ltd, C1, Barking Wharf Square, Barking, IG11 7ZQ
-London, United Kingdom
-Company number: {{company_number}} | ICO Registration: {{ico_number}}
+International Business Lawyer (LLM, King's College London)
+
+Tamazia Ltd, registered in England and Wales. {{reg_address}}.
+Company number: {{company_number}} | ICO registration: {{ico_number}}
 {{eu_rep_line}}
+This Regulatory Signal Scan is powered by Tamazia. Frameworks are trained on publicly available regulatory sources by AI and reviewed by Aman Pareek, International Business Lawyer. It identifies publicly visible signals only, is not legal advice, and is not a substitute for review by qualified counsel.
 
-This Regulatory Signal Scan is powered by Tamazia.
-Frameworks are trained on publicly available regulatory sources by AI and reviewed by Aman Pareek, International Business Lawyer.
-Framework version: {{framework_version}} | Last review: {{framework_review_date}}
-This scan identifies publicly visible signals only. It is not legal advice and is not a substitute for review by qualified counsel in your jurisdiction. Recommendations should be confirmed with your legal advisor before action.
+How we found you: public registers, your website and business directories. Full details: {{privacy_notice_url}}.
+You are receiving this because of a legitimate business interest in your firm's online compliance and visibility.
+Unsubscribe: {{unsubscribe_url}} (or reply "unsubscribe" and I will remove you and never contact you again).
 
-Unsubscribe: {{unsubscribe_url}}
+----------------------------------------------------------------------
+CANONICAL Art-14 cold-outreach footer (single source of truth). Both send paths inject this:
+  - src/skills/S065-touch-scheduler/scripts/send-due.js (our relay)
+  - scripts/mystrika-export.js + scripts/push-to-mystrika.js (Mystrika)
+campaigns/_footer.txt is kept byte-identical to this file.
+Filled AT SEND time: {{privacy_notice_url}} -> https://tamazia.co.uk/legal/cold-outreach-privacy-notice/ ;
+{{unsubscribe_url}} -> signed one-click link ; {{eu_rep_line}} -> EU Art-27 rep (EU recipients only, else empty).
+FOUNDER-BLOCKED placeholders, left as {{...}} until provided: {{company_number}} {{ico_number}} {{reg_address}}.
+List-Unsubscribe + List-Unsubscribe-Post headers are emitted by src/lib/notify/relay-router.js.
+Sending is OFF (SEND_ENABLED master gate) so nothing renders live until the founder flips it.

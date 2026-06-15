@@ -4,8 +4,40 @@
 // Suppresses if lead.replied=true.
 
 const path = require('path');
+const fs = require('fs');
 const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+
+// P8 [X22/X23/X24/B5] CANONICAL Art-14 FOOTER. Both send paths inject the same compliant footer (provenance +
+// visible unsubscribe + {{privacy_notice_url}} + ICO/company/address placeholders). Source of truth =
+// src/templates/email/footer.txt (campaigns/_footer.txt is byte-identical). We take the live block ABOVE the
+// '----' doc separator, drop its leading bare-name line (the signature name is the __SIGNATURE__ token), fill the
+// privacy-notice + unsubscribe URLs, and LEAVE the founder-blocked {{...}} placeholders (company/ICO/address) so
+// nothing fabricated ships. EU rep line is empty for UK/UAE. Cached. Fail-soft: missing file -> no footer (never
+// blocks a send). The List-Unsubscribe headers are set separately by relay-router.js.
+const PRIVACY_NOTICE_URL = 'https://tamazia.co.uk/legal/cold-outreach-privacy-notice/';
+let _footerCache = null;
+function complianceFooter({ to, from } = {}) {
+  if (_footerCache == null) {
+    try {
+      const raw = fs.readFileSync(path.join(ROOT, 'src', 'templates', 'email', 'footer.txt'), 'utf8');
+      const live = raw.split(/^-{10,}\s*$/m)[0].replace(/\s+$/, '');   // content above the doc separator
+      const lines = live.split('\n');
+      // drop the leading bare-name line (first non-empty line) — that name is the per-send signature token.
+      let i = 0; while (i < lines.length && lines[i].trim() === '') i++; if (i < lines.length) lines.splice(i, 1);
+      _footerCache = lines.join('\n').replace(/^\n+/, '');
+    } catch (_e) { _footerCache = ''; }
+  }
+  if (!_footerCache) return '';
+  const unsubEndpoint = process.env.UNSUB_ENDPOINT || '';
+  const unsubUrl = (unsubEndpoint && to) ? `${unsubEndpoint}?e=${encodeURIComponent(to)}${from ? '&f=' + encodeURIComponent(from) : ''}` : '';
+  return _footerCache
+    .replace(/\{\{\s*privacy_notice_url\s*\}\}/g, PRIVACY_NOTICE_URL)
+    // visible unsubscribe: signed endpoint link when configured, else the reply-"unsubscribe" instruction the
+    // footer already states stands alone (never leave an unfilled brace on the wire).
+    .replace(/\{\{\s*unsubscribe_url\s*\}\}/g, unsubUrl || 'reply "unsubscribe"')
+    .replace(/\{\{\s*eu_rep_line\s*\}\}\n?/g, '');   // UK/UAE: no EU Art-27 rep line
+}
 const { send: routerSend } = require('../../../lib/notify/relay-router.js');
 const { pickSendAlias, markUsed, remainingCapacityToday } = require('../../../lib/alias-rotator.js');
 const { lint } = require('../../../lib/notify/content-linter.js');
@@ -15,7 +47,11 @@ let _tg = null; try { _tg = require('../../../lib/notify/telegram.js'); } catch 
 function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return null; try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; } }
 function pgEsc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
 
-const CADENCE_DAYS = [0, 5, 10, 20]; // business days from Touch 0
+// P7: cadence aligned to the founder-reviewed campaign copy (campaigns/_meta.json
+// interval_days_from_touch0 = [0,3,7,12,19]). We ship the first 4 touches (0-3), so the gaps are
+// touch0->1 = 3d, 1->2 = 4d, 2->3 = 5d. (Touch 4, the +19d breakup, is deferred until the scheduler
+// carries a 5th touch — see S064 render.js renderAll() DEFERRED note.) SEND_GAP env knobs unchanged.
+const CADENCE_DAYS = [0, 3, 7, 12]; // days from Touch 0, matching campaigns/_meta.json
 
 function pickDueDrafts() {
   // Find leads ready for next touch
@@ -143,7 +179,13 @@ async function processLead(lead) {
   // and scrub any stray dash one last time before the wire.
   let _nd = (x) => x; try { _nd = require('../../../lib/gates.js').noDashes; } catch (_) {}
   const sigName = alias.first_name || (alias.persona_name || '').split(' ')[0] || 'Aman';
-  const sendBody = _nd(String(draft.body).replace(/__SIGNATURE__/g, sigName));
+  // P8: __SIGNATURE__ -> the sender's name FOLLOWED BY the canonical Art-14 compliance footer (Founder/credential
+  // + Tamazia Ltd entity + ICO/company/address placeholders + "how we found you" provenance + visible unsubscribe).
+  // Was: just the name (no footer at all -> non-compliant cold mail). Footer is appended AFTER the spam-lint gate
+  // above, so its founder-blocked {{...}} placeholders never trip the gate. SEND is OFF regardless.
+  const _footer = complianceFooter({ to: lead.email, from: alias.email });
+  const _sig = _footer ? (sigName + '\n\n' + _footer) : sigName;
+  const sendBody = _nd(String(draft.body).replace(/__SIGNATURE__/g, _sig));
   const sendSubject = _nd(String(draft.subject));
   // Send via the multi-relay router (routes by alias.relay, fails over, enforces daily caps)
   const result = await routerSend({ to: lead.email, from: alias.email, from_name: fromName, subject: sendSubject, text: sendBody, relay: alias.relay });
@@ -167,6 +209,12 @@ async function processLead(lead) {
   } else {
     console.log(`  WARN: lead ${JSON.stringify(lead.id)} has no integer id — skipped sends log row (would orphan reporting)`);
   }
+  // P3 [X12] FIRST-CONTACT STAMP: on the FIRST touch (touch 0) record first_contacted_at=NOW() if not already
+  // set. recycle.js parks no-reply leads at first_contacted_at + RECYCLE_NOREPLY_DAYS, but nothing wrote the
+  // column (live: 0 rows), so the park step was dead and no lead ever recycled. COALESCE-guard so a re-send /
+  // out-of-order touch never moves the original contact date. Additive column, NULL-safe. (SEND OFF; correct
+  // for when the founder flips it.)
+  if (touch === 0) pg(`UPDATE leads SET first_contacted_at = COALESCE(first_contacted_at, NOW()) WHERE id = ${lead.id}`);
   // Advance lead status + schedule next touch
   if (touch < 3) {
     const days = CADENCE_DAYS[touch + 1] - CADENCE_DAYS[touch];
