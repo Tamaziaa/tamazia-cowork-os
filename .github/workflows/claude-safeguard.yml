@@ -1,0 +1,121 @@
+name: claude-safeguard (Layer-3 twice-daily lead clearance)
+# ============================================================================================================
+# WS4 — the Layer-3 "Claude safeguard". Fires TWICE DAILY (morning + night). Pulls the ~50 released-but-uncleared
+# leads NEAREST to send and, for each, the Claude review (a) verifies the lead info + tries to make it Tier-1,
+# (b) checks the minted audit vs reality (real laws / live site errors / real competitors), (c) verifies the 5
+# touches, then sets the leads.claude_* clearance flags. claude_cleared=TRUE is the final per-lead send gate
+# beneath the global SEND_ENABLED master gate (which this workflow does NOT touch — SEND stays OFF).
+#
+# WHO DOES THE REASONING: the per-lead reasoning + the per-lead clearance calls
+# (scripts/claude-safeguard-batch.js --clear-lead/--clear-audit/--clear-touch/--finalize) + any engine-fix PR are
+# performed by the CLAUDE CODE ACTION step below — a dedicated Claude Code session, NOT this YAML and NOT any
+# script. scripts/claude-safeguard-batch.js is only the thin hands: it pulls the queue and records what the
+# session decides.
+#
+# ZERO PAID API (hard rule): the Claude reasoning runs on a SUBSCRIPTION OAuth token only
+# (secrets.CLAUDE_CODE_OAUTH_TOKEN — a Claude subscription token, NOT an Anthropic/OpenAI API key). This workflow
+# NEVER passes an API key to any model. If the OAuth secret is ABSENT, the Claude step is skipped and the job
+# DEGRADES GRACEFULLY: it still runs `--pull` and posts the work queue to the log + the heartbeat, so the run is
+# useful and observably £0 — it can never silently bill an API.
+#
+#   >>> FOUNDER ACTION REQUIRED (one-time, £0): add the repo secret CLAUDE_CODE_OAUTH_TOKEN.
+#       Generate it from a Claude subscription (Claude Code: `claude setup-token`). It is a SUBSCRIPTION OAuth
+#       token, NOT an API key — no per-call billing. Until it is set, this workflow runs in pull-and-log mode.
+#
+# Neon writes are limited to leads.claude_* (additive). Heartbeat-wrapped (engine_runs) so engine_health / the
+# tamazia-ops MCP / the stuck-job detector can see it. Shares the engine-db-work concurrency group so a clearance
+# run never overlaps a heavy re-tier writer rewriting the same rows.
+# ============================================================================================================
+on:
+  schedule:
+    - cron: "0 6,21 * * *"   # 06:00 + 21:00 UTC — morning + night clearance waves
+  workflow_dispatch:
+    inputs:
+      batch_max:
+        description: "Max released-but-uncleared leads to pull this run"
+        required: false
+        default: "50"
+      dry:
+        description: "Dry run (print SQL, write nothing)"
+        required: false
+        default: "false"
+permissions:
+  contents: write
+  pull-requests: write
+
+# Share the heavy-DB-work group: a clearance wave must never overlap a v3-rerun / backlog-burst / nightly-workers
+# writer that rewrites icp_tier / quality_fit / lifecycle on the same leads. cancel-in-progress:false so a wave
+# queues behind a writer rather than being cancelled.
+concurrency:
+  group: engine-db-work
+  cancel-in-progress: false
+jobs:
+  safeguard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: npm install --no-audit --no-fund || npm install || true
+      - run: python -m pip install --quiet -r requirements.txt
+      - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+
+      # 1) Pull the work queue (read-only SELECT) and emit it as the work list. Always runs — this is the £0
+      #    pull-and-log floor that holds even when no OAuth token is set. Heartbeat-wrapped for engine_runs.
+      - name: Pull clearance queue (nearest-to-send first)
+        id: queue
+        env:
+          BATCH_MAX: ${{ github.event.inputs.batch_max || '50' }}
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          echo "## Claude safeguard — clearance queue ($(date -u +%FT%TZ))" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          node scripts/heartbeat.js wrap claude-safeguard -- \
+            node scripts/claude-safeguard-batch.js --pull "$BATCH_MAX" | tee -a "$GITHUB_STEP_SUMMARY" \
+            || node scripts/claude-safeguard-batch.js --pull "$BATCH_MAX" | tee -a "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # 2) THE CLAUDE REVIEW. A dedicated Claude Code session does the reasoning + the per-lead clearance calls
+      #    (--clear-lead/--clear-audit/--clear-touch/--finalize via the batch tool) + opens any engine-fix PR.
+      #    GATED on the OAuth token: if secrets.CLAUDE_CODE_OAUTH_TOKEN is unset, this step is SKIPPED and the job
+      #    ends after the pull (degrade-to-log). The token is a Claude SUBSCRIPTION token, NOT an API key (£0).
+      #    Lowest model (claude_args --model) keeps the subscription footprint minimal.
+      - name: Claude review + clearance (subscription OAuth, ZERO paid API)
+        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        uses: anthropics/claude-code-action@v1
+        with:
+          # SUBSCRIPTION OAuth token ONLY — never anthropic_api_key. If this is empty the step above already
+          # skipped this whole step (see the `if:` guard), so the job degrades to pull-and-log and never bills.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Lowest model — batched twice-daily clearance does not need a frontier model.
+          claude_args: "--model claude-3-5-haiku-latest"
+          prompt: |
+            You are the Tamazia Layer-3 Claude safeguard. SEND is OFF; you only make leads ELIGIBLE.
+            A batch id is "${{ github.run_id }}". The dry flag is "${{ github.event.inputs.dry || 'false' }}".
+
+            1. Pull the queue (nearest-to-send first):
+               `node scripts/claude-safeguard-batch.js --pull ${{ github.event.inputs.batch_max || '50' }} --batch ${{ github.run_id }}`
+               Each JSON line has: lead_ref, id, domain, sector, country, audit_url, contact_email, touches[].
+
+            2. For EACH lead, reason (no paid API — use your own judgement + reading the audit_url page / site):
+               a. LEAD INFO: verify the company/contact/sector are real and correct. Try to make it Tier-1 (find
+                  the missing public signal). Record with: `--clear-lead <id> --batch ${{ github.run_id }} --note '{"lead":"..."}'`
+                  ONLY if the lead checks out.
+               b. AUDIT: open audit_url and check the minted audit reflects REALITY — real laws cited, the live-site
+                  errors actually exist, the named competitors are real. Record with: `--clear-audit <id> --batch ${{ github.run_id }} --note '{"audit":"..."}'`
+                  ONLY if the audit is sound.
+               c. TOUCHES: read the 5 touch bodies; verify they are accurate, compliant (no fake scarcity, correct
+                  claims), and match the audit. Record with: `--clear-touch <id> --batch ${{ github.run_id }} --note '{"touch":"..."}'`
+                  ONLY if the copy is clean.
+               d. FINALIZE: `--finalize <id> --batch ${{ github.run_id }}` — sets claude_cleared = all three sub-flags.
+                  A lead only becomes send-eligible when all three pass.
+
+            3. If you find a SYSTEMIC engine gap (a class of bug behind a failed check, not a one-off lead), append
+               it to ops/CLAUDE-GAP-LEDGER.md (one section per gap: gap, root-cause, the fix, the fixture that locks
+               it) and open a PR with the fix. Do NOT edit the off-limits Neon table families. Additive only.
+
+            Add `--dry` to every batch command if the dry flag above is "true".
+            The batch tool writes ONLY leads.claude_* columns. Touch nothing else.
