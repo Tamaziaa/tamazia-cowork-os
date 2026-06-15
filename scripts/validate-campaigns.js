@@ -31,6 +31,12 @@ for (const v of ['{{company_number}}', '{{ico_number}}', '{{reg_address}}', UNSU
   if (!footer.includes(v)) err('_footer.txt', 'missing required variable ' + v);
 }
 if (!/how we found you/i.test(footer)) err('_footer.txt', 'missing provenance line ("How we found you...")');
+// B-fix: the footer is appended to EVERY touch at send, so it must clear the same copy-rails as the bodies.
+// Strip the trailing "--- Canonical render..." maintainer note (after the '---' separator) before linting so
+// an instructional hyphen in the note is not mistaken for hyphen-as-pause in the shipped copy.
+const footerCopy = footer.split(/^---\s*$/m)[0];
+if (FORBIDDEN_DASH.test(footerCopy)) err('_footer.txt', 'contains an em/en dash or hyphen-as-pause (ships on every touch)');
+if (FAKE_SCARCITY.test(footerCopy)) err('_footer.txt', 'contains fake-scarcity / urgency language (DMCCA 2024)');
 
 // ---- per-sector campaigns ----
 const files = fs.readdirSync(DIR).filter(f => /^[A-Z]{2}\.json$/.test(f));
