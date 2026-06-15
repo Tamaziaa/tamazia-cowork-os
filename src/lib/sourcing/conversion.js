@@ -20,8 +20,25 @@ function conversionScore(s) {
   if (s.ad_runner) { v += 4; why.push('ad-runner'); }
   v = Math.max(0, Math.min(100, v));
   let tier = v >= 70 ? 'A' : v >= 50 ? 'B' : 'C';
-  // gap-fix: a catch-all/deliverable-only lead (no hard-verified email) never auto-sends at top priority — cap at Tier B.
-  if (!s.has_verified_email && s.has_deliverable_email && tier === 'A') { tier = 'B'; why.push('catch-all email — capped at B'); }
+  // CATCH-ALL POLICY (compliance-led, deliverability-safe, REVERSIBLE — CLAUDE.md: "catch-all = do-not-send").
+  // A catch-all / deliverable-only lead has has_deliverable_email=true but has_verified_email=false: the MX accepts
+  // mail but no real mailbox was hard-confirmed, so the address is RISKY. While we are warming brand-new sending
+  // domains, auto-sending to risky addresses raises bounce + spam-complaint rates and burns the new domains'
+  // reputation — exactly the opposite of what a compliance-led UK agency wants. So by DEFAULT we DO NOT auto-send
+  // these: cap them at Tier C, which excludes them from SEND_TIERS (auto-send) while keeping them fully QUALIFIED
+  // and reachable via the manual approval queue (icp_tier / qualification are untouched — only AUTO-send is gated).
+  // REVERSIBLE: set SEND_CATCHALL=1 once the domains are warmed to restore the prior Tier-B (auto-send) behaviour.
+  // Hard-verified emails (Tier A/B) are never affected by this flag.
+  const SEND_CATCHALL = /^(1|true|yes|on)$/i.test(String(process.env.SEND_CATCHALL || '').trim());
+  if (!s.has_verified_email && s.has_deliverable_email) {
+    if (SEND_CATCHALL) {
+      // Domains warmed: keep the prior behaviour — catch-all never auto-sends at TOP priority, cap at Tier B.
+      if (tier === 'A') { tier = 'B'; why.push('catch-all email — capped at B (SEND_CATCHALL on)'); }
+    } else {
+      // DEFAULT: catch-all is excluded from auto-send — cap at Tier C (stays qualified for manual approval).
+      if (tier === 'A' || tier === 'B') { tier = 'C'; why.push('catch-all email — held for manual approval (SEND_CATCHALL off)'); }
+    }
+  }
   return { tier, score: v, emailable: true, why };
 }
 // Send-order helper: A first, then B; C never auto-emailed (nurture/social only).
