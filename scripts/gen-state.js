@@ -37,13 +37,17 @@ function main() {
   // P4 [X21]: only count bookings that still stand (exclude cancelled/rejected/no-show).
   const booked = one(`SELECT COUNT(*) FROM cal_bookings WHERE COALESCE(status,'') NOT IN ('cancelled','canceled','rejected','declined','no_show','no-show')`);
   const health = one(`SELECT metric FROM system_health WHERE check_key='_overall'`);
+  // O4 [A1/A61/A64]: surface how STALE the health number is. A health % that was last computed days ago is
+  // misleading (it looks live). Show the age of the _overall row's checked_at so a frozen health-check is visible.
+  const healthAgeMin = one(`SELECT ROUND(EXTRACT(EPOCH FROM (now()-checked_at))/60)::int FROM system_health WHERE check_key='_overall'`);
   const engines = many(`SELECT job||'~~'||to_char(MAX(COALESCE(finished_at,started_at)),'YYYY-MM-DD HH24:MI')||'~~'||COALESCE((array_agg(status ORDER BY started_at DESC))[1],'?') FROM engine_runs GROUP BY job ORDER BY MAX(COALESCE(finished_at,started_at)) DESC`);
   const flags = many(`SELECT check_key||' — '||COALESCE(detail,'') FROM system_health WHERE status='fail' AND check_key<>'_overall' ORDER BY check_key`);
 
   const L = [];
   L.push('# PIPELINE-STATE.md (auto-generated)', '');
   L.push('> Live Neon snapshot, regenerated post-merge to main + daily by `.github/workflows/gen-state.yml`. Do not edit by hand. `Tamazia-Remix/STATE.md` links here for live numbers.', '');
-  L.push(`**Generated:** ${now} · **Health:** ${v(health)}%`, '');
+  const healthAge = healthAgeMin == null ? 'never computed' : (Number(healthAgeMin) < 90 ? `${healthAgeMin}m ago` : `${Math.round(Number(healthAgeMin) / 60)}h ago — STALE`);
+  L.push(`**Generated:** ${now} · **Health:** ${v(health)}% (checked ${healthAge})`, '');
   L.push('## Funnel', '', '| Stage | Count |', '|---|---|');
   L.push(`| Sourced (leads) | ${v(leads)} |`);
   L.push(`| Quality-scored | ${v(scored)} |`);

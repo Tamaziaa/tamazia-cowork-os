@@ -323,6 +323,22 @@ def engine_health() -> str:
     except NeonError as e:
         out.append("Engines: cannot read engine_runs (Neon unreachable: " + str(e) + ").")
 
+    # O4 [A1/A61/A64]: stamp how stale the health surface is. A health snapshot last written days ago looks live
+    # on the Health tab; surface the age of system_health's most-recent checked_at so a frozen health-check / a
+    # dark cycle is obvious here too. Fail-soft.
+    try:
+        age = _scalar(
+            "SELECT ROUND(EXTRACT(EPOCH FROM (now()-MAX(checked_at)))/60)::int "
+            "FROM system_health",
+            default=None,
+        )
+        if age is not None and str(age) != "":
+            a = int(_num(age))
+            label = (str(a) + "m ago") if a < 90 else (str(round(a / 60)) + "h ago (STALE)")
+            out.append("Health surface last computed: " + label + ".")
+    except NeonError:
+        pass
+
     # Stuck checks from system_health.
     # O2 [A13/A42]: `stuck_*` is reserved for ENGINE LIVENESS (check-stuck-jobs.js writes category='liveness',
     # one key per job: stuck_engine-cycle, stuck_mystrika, ...). The DATA metric "leads overdue in cadence" is a

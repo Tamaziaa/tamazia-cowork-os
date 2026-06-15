@@ -34,6 +34,7 @@ const CADENCE = {
   'daily-digest': 1440,
   'neon-guard': 1440,
   'nightly-workers': 1440,
+  'gen-state': 1440,              // O4: daily 06:00 + on push to main (heartbeat-wrapped in gen-state.yml)
   'compute-metrics': 1440,        // O1 [A12]: nightly (heartbeat-wrapped in nightly-workers.yml)
   'deliverability-guard': 10080,  // O1 [A12]: weekly Monday (heartbeat-wrapped in deliverability-guard.yml)
   // NOTE: backlog-burst, v3-rerun, remint-audits, source-leads are workflow_dispatch-only (no cron), so they have
