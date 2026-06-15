@@ -110,10 +110,26 @@ if (require.main === module) (async()=>{
   // silently dropped at the byCamp grouping (e.g. ~50 live 'financial-services' FIT leads routed nowhere).
   // Aliases mirror src/lib/enrich/lead-quality.js + src/lib/sourcing/icp.js so routing speaks the same vocab.
   const SECTOR_CAMPAIGN = { 'law-firms':'law firms','legal':'law firms','healthcare':'healthcare','dental':'healthcare','medical':'healthcare','beauty-wellness':'healthcare','aesthetics':'healthcare','real-estate':'real estate','property':'real estate','hospitality':'f&b','restaurants':'f&b','financial':'financial','finance':'financial','financial-services':'financial','insurance':'financial','education':'education','automotive':'automotive','professional':'professional','professional-services':'professional','ecommerce':'e-commerce','ecommerce-retail':'e-commerce' };
+  // R3 routing fallback: a Tier-1 lead with a NULL / unmapped sector now reaches the push (the governor releases
+  // it via the UNSECTORED lane), so it must have somewhere to go or it would be silently dropped at the byCamp
+  // grouping (re-stranding the exact leads R3 unblocks). Resolve order: --campaign / MYSTRIKA_CAMPAIGN_ID force,
+  // then the sector->campaign map, then an explicit MYSTRIKA_DEFAULT_CAMPAIGN_ID (env: a generic/cross-sector
+  // campaign id or a campaign NAME substring). If none resolves, the lead is HELD (skipped + counted), never
+  // mis-routed into an arbitrary sector campaign. SEND is OFF.
+  const DEFAULT_CAMPAIGN = process.env.MYSTRIKA_DEFAULT_CAMPAIGN_ID || '';
+  const resolveByName = (want) => { for (const [nm,id] of Object.entries(nameToId)) { if (want && nm.includes(want)) return id; } return null; };
   const campaignFor = (sector) => {
     if (forceCampaign) return forceCampaign;
     const want = SECTOR_CAMPAIGN[String(sector||'').toLowerCase()] || '';
-    for (const [nm,id] of Object.entries(nameToId)) { if (want && nm.includes(want)) return id; }
+    const byMap = resolveByName(want);
+    if (byMap) return byMap;
+    if (DEFAULT_CAMPAIGN) {
+      // accept either a raw campaign id present in the live list, or a name substring to look up.
+      if (Object.values(nameToId).some(id => String(id) === String(DEFAULT_CAMPAIGN))) return DEFAULT_CAMPAIGN;
+      const byDefaultName = resolveByName(String(DEFAULT_CAMPAIGN).toLowerCase());
+      if (byDefaultName) return byDefaultName;
+      return DEFAULT_CAMPAIGN;   // trust the env value as an id of last resort
+    }
     return null;
   };
   const limit = parseInt(arg('max','200'),10);
@@ -267,7 +283,16 @@ if (require.main === module) (async()=>{
   }
   // group by sector campaign
   const byCamp = {};
-  for (const p of prospects) { const cid = campaignFor(p.sector); if (!cid) { continue; } (byCamp[cid] = byCamp[cid] || []).push(p); }
+  let unrouted = 0; const unroutedSectors = {};
+  for (const p of prospects) {
+    const cid = campaignFor(p.sector);
+    if (!cid) { unrouted++; const k = String(p.sector||'(null)'); unroutedSectors[k] = (unroutedSectors[k]||0)+1; continue; }
+    (byCamp[cid] = byCamp[cid] || []).push(p);
+  }
+  // VISIBILITY (R3 / T1-B01): make the released-vs-actually-routable gap loud. A prospect that survives every gate
+  // but has no campaign (unmapped/NULL sector and no MYSTRIKA_DEFAULT_CAMPAIGN_ID) is HELD here — surface it so the
+  // waste is never silent. Set MYSTRIKA_DEFAULT_CAMPAIGN_ID to route unsectored leads, or classify their sector.
+  if (unrouted) console.log('  UNROUTED: '+unrouted+' prospect(s) held — no campaign for sector(s) '+JSON.stringify(unroutedSectors)+' (set MYSTRIKA_DEFAULT_CAMPAIGN_ID or classify sector_code)');
   const totalRouted = Object.values(byCamp).reduce((a,x)=>a+x.length,0);
   prospects.sort((a,b)=>(b.conversion_score||0)-(a.conversion_score||0));  // SEND BEST FIRST
   const tierA=prospects.filter(p=>p.conversion_tier==='A').length;

@@ -34,6 +34,20 @@ function prioritySectors() {
   return ['LS', 'HC', 'AE', 'DN', 'FS', 'RE', 'HO', 'FB', 'ED', 'PB']; // fallback = the documented top 10
 }
 
+// R3 FIX — UNSECTORED LANE. The release sweep used to deal slots ONLY to the priority sectors, so a Tier-1 lead
+// with a NULL (or non-priority) sector_code could NEVER be released — and since the push gate (P6) hard-requires
+// governor_released_at IS NOT NULL, those leads could never be pushed either (a permanent leak; pre-fix push
+// ignored the governor, so they shipped). Live: 21 of the 614 Tier-1 (the qualified-fit pool) have NULL
+// sector_code. This sentinel adds a dedicated "unsectored" lane to the round-robin so those leads get a fair
+// share of the daily cap and can reach the email-ready set. The sentinel is NOT a real sector_code (double
+// underscores) so it can never collide with a grid code; releaseToday() maps it to the SQL predicate
+// "sector_code IS NULL OR sector_code NOT IN (priority)". Appended LAST so the priority sectors keep first claim.
+const UNSECTORED_LANE = '__UNSECTORED__';
+
+// The full release order = the priority sectors PLUS the unsectored lane. This is what the round-robin deals over
+// and what availableBySector()/releaseToday() iterate, so no qualified Tier-1 lead is structurally unreachable.
+function releaseOrder() { return [...prioritySectors(), UNSECTORED_LANE]; }
+
 const DAILY_TOTAL = () => Number(process.env.GOVERNOR_DAILY_TIER1 || 100);
 
 // Current date in Europe/London (handles BST/GMT) as YYYY-MM-DD, so the "reset 00:00 UK" boundary is correct
@@ -69,28 +83,33 @@ function releasedTodayCount() {
   return r ? Number(r) : 0;
 }
 
-// Per-sector counts of Tier-1 leads that are QUALIFIED, have an email, are NOT consent_required, and have
-// NOT yet been released today. This is the candidate pool the round-robin deals from.
+// Per-lane counts of Tier-1 leads that are QUALIFIED, have an email, are NOT consent_required, and have NOT yet
+// been released today. This is the candidate pool the round-robin deals from. `order` is the FULL release order
+// (priority sectors + the UNSECTORED lane). A lead lands in its priority sector_code bucket; any lead whose
+// sector_code is NULL or not a priority code is bucketed into UNSECTORED_LANE (R3 — so it can never be stranded).
 function availableBySector(order) {
-  const inList = order.map(esc).join(',');
+  const priority = order.filter(s => s !== UNSECTORED_LANE);
+  const inList = priority.map(esc).join(',');
+  // CASE maps each candidate to its lane: a priority sector_code -> that code; anything else (NULL or
+  // non-priority) -> the unsectored sentinel. Counting on the lane key keeps the round-robin allocation correct.
   const raw = pg(`
-    SELECT COALESCE(sector_code,'?') sc, COUNT(*)::int n
+    SELECT CASE WHEN COALESCE(sector_code,'') IN (${inList}) THEN sector_code ELSE ${esc(UNSECTORED_LANE)} END AS lane, COUNT(*)::int n
     FROM leads
     WHERE quality_fit = TRUE
       AND COALESCE(lifecycle_stage,'') = 'qualified'
       AND COALESCE(consent_required, FALSE) = FALSE
       AND COALESCE(NULLIF(contact_email,''), email, '') <> ''
       AND governor_released_at IS NULL
-      AND COALESCE(sector_code,'?') IN (${inList})
     GROUP BY 1`);
   const out = {};
-  for (const line of (raw || '').split('\n').filter(Boolean)) { const [sc, n] = line.split('\t'); out[sc] = Number(n) || 0; }
+  for (const line of (raw || '').split('\n').filter(Boolean)) { const [lane, n] = line.split('\t'); out[lane] = Number(n) || 0; }
   return out;
 }
 
 // Snapshot for dashboards / dry-run: today's released count, remaining budget, per-sector availability + plan.
+// `order` is the FULL release order (priority sectors + the UNSECTORED lane) so the plan can never strand a lead.
 function snapshot() {
-  const order = prioritySectors();
+  const order = releaseOrder();
   const total = DAILY_TOTAL();
   const released = releasedTodayCount();
   const remaining = Math.max(0, total - released);
@@ -106,18 +125,25 @@ function releaseToday({ dryRun = false } = {}) {
   if (snap.remaining <= 0) return { released: 0, by_sector: {}, reason: 'daily_cap_reached', uk_day: snap.uk_day, daily_total: snap.daily_total };
   const byForSector = {};
   let released = 0;
+  const priority = snap.order.filter(s => s !== UNSECTORED_LANE);
+  const priorityInList = priority.map(esc).join(',');
   for (const sc of snap.order) {
     const want = snap.plan[sc] || 0;
     if (want <= 0) continue;
     if (dryRun) { byForSector[sc] = want; released += want; continue; }
-    // Release the `want` oldest-highest-scoring qualified Tier-1 leads in this sector.
+    // The lane predicate: a real priority sector matches its own code; the UNSECTORED lane matches every lead
+    // whose sector_code is NULL or not a priority code (R3 — these are otherwise unreachable by the sweep/push).
+    const laneClause = sc === UNSECTORED_LANE
+      ? `(sector_code IS NULL OR COALESCE(sector_code,'') NOT IN (${priorityInList}))`
+      : `COALESCE(sector_code,'?') = ${esc(sc)}`;
+    // Release the `want` oldest-highest-scoring qualified Tier-1 leads in this lane.
     const ids = pg(`
       SELECT id::text FROM leads
       WHERE quality_fit = TRUE AND COALESCE(lifecycle_stage,'')='qualified'
         AND COALESCE(consent_required,FALSE)=FALSE
         AND COALESCE(NULLIF(contact_email,''), email,'') <> ''
         AND governor_released_at IS NULL
-        AND COALESCE(sector_code,'?') = ${esc(sc)}
+        AND ${laneClause}
       ORDER BY COALESCE(quality_score,0) DESC, id ASC
       LIMIT ${want}`).split('\n').filter(Boolean);
     if (!ids.length) continue;
@@ -129,19 +155,28 @@ function releaseToday({ dryRun = false } = {}) {
 }
 
 // May THIS lead be released right now? Used inline by qualify-and-queue when a fresh lead scores Tier-1.
-// Respects both the total daily cap AND the per-sector share (a sector at/over its fair allocation waits).
+// Respects both the total daily cap AND the per-lane share (a lane at/over its fair allocation waits). R3: a
+// NULL/non-priority-sector lead is no longer rejected outright — it is mapped to the UNSECTORED lane and capped
+// the same way, so a freshly-qualified unsectored Tier-1 can release inline instead of being stranded.
 function canReleaseLead({ sector_code } = {}) {
-  const order = prioritySectors();
+  const order = releaseOrder();
+  const priority = order.filter(s => s !== UNSECTORED_LANE);
   const total = DAILY_TOTAL();
   const released = releasedTodayCount();
   if (released >= total) return { ok: false, reason: 'daily_cap_reached' };
-  const sc = order.includes(sector_code) ? sector_code : null;
-  if (!sc) return { ok: false, reason: 'non_priority_sector' };
-  // per-sector ceiling for the day = ceil(total / sectors) so no single sector exceeds its fair lane.
+  // Map the lead to its lane: a priority code -> itself; NULL or non-priority -> the UNSECTORED lane.
+  const lane = priority.includes(sector_code) ? sector_code : UNSECTORED_LANE;
+  // per-lane ceiling for the day = ceil(total / lanes) so no single lane exceeds its fair share.
   const perSectorCap = Math.ceil(total / order.length);
-  const sectorReleased = Number(pg(`SELECT COUNT(*)::int FROM leads WHERE governor_released_at IS NOT NULL AND (governor_released_at AT TIME ZONE 'Europe/London')::date=${esc(ukToday())} AND COALESCE(sector_code,'?')=${esc(sc)}`) || 0);
-  if (sectorReleased >= perSectorCap) return { ok: false, reason: 'sector_cap_reached', sector_released: sectorReleased, per_sector_cap: perSectorCap };
-  return { ok: true, sector_released: sectorReleased, per_sector_cap: perSectorCap, total_released: released };
+  // Count today's releases in THIS lane. The unsectored lane counts every released lead whose sector_code is
+  // NULL or not a priority code; a real sector counts only its own code.
+  const priorityInList = priority.map(esc).join(',');
+  const laneClause = lane === UNSECTORED_LANE
+    ? `(sector_code IS NULL OR COALESCE(sector_code,'') NOT IN (${priorityInList}))`
+    : `COALESCE(sector_code,'?')=${esc(lane)}`;
+  const sectorReleased = Number(pg(`SELECT COUNT(*)::int FROM leads WHERE governor_released_at IS NOT NULL AND (governor_released_at AT TIME ZONE 'Europe/London')::date=${esc(ukToday())} AND ${laneClause}`) || 0);
+  if (sectorReleased >= perSectorCap) return { ok: false, reason: 'sector_cap_reached', lane, sector_released: sectorReleased, per_sector_cap: perSectorCap };
+  return { ok: true, lane, sector_released: sectorReleased, per_sector_cap: perSectorCap, total_released: released };
 }
 
 module.exports = { prioritySectors, allocateRoundRobin, snapshot, releaseToday, canReleaseLead, releasedTodayCount, availableBySector, ukToday, DAILY_TOTAL };
