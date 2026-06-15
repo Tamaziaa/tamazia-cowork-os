@@ -29,3 +29,11 @@ Syntax tool: `jsc <file>` — ReferenceError on require/module after a CLEAN par
 - **After:** two-arm regex — (a) `_PLACEHOLDER_LOCAL` anchored `^…@` template recipients; (b) `_PLACEHOLDER_DOMAIN` placeholder hosts incl. `mysite.com`, `website.com`, `host.com`, `sample.com`, `address.com`, `work.com`, `test.com`, `mydomain.*`, `yoursite.com`, `companyname.com`. Combined into one `_PLACEHOLDER` (same name, same call site).
 - **Proof:** jsc harness over the 19 live offenders → all 19 BLOCKED (incl. `email@mcewanfraserlegal.co.uk` = template local on a REAL domain). 10 legit emails incl. trap cases (`username.jones@`, `emailyhassan@`, `testa.fonseca@`, `nameer.khan@`) → all PASS (the `@` anchor means only the WHOLE local matching a template word is blocked, not a prefix). 0 false positives.
 - **Syntax:** `jsc enrich.js` → PASS.
+
+### Q6 [B17/B7] — decode HTML entities + ASCII-fold (NFKD) name before email local part
+- **File:** `src/lib/sourcing/enrich.js` (new `_decodeEntities` + `_foldName`; used in `applyPattern` + `detectPattern`)
+- **Before:** `applyPattern` built the local with `first.toLowerCase().replace(/[^a-z]/g,'')`, which DROPPED accented letters instead of folding them: "José"->"jos", "Müller"->"mller", "Núñez"->"nuez" — minting wrong/dead inboxes. HTML-encoded names ("Jos&eacute;", "O&#39;Brien") were never decoded.
+- **After:** `_foldName` = decode entities -> `normalize('NFKD')` -> strip combining marks -> lowercase -> keep `[a-z0-9]` (the same fold `find-every-email.js buildLocalPart` already uses). Applied in both `applyPattern` (the guess) and `detectPattern` (so detection matches the same folded form).
+- **Proof (jsc):** `José/Núñez -> jose.nunez@`, `Jos&eacute;/M&uuml;ller -> jose.muller@`, `O&#39;Brien/Smith -> obrien.smith@`, `Renée/Zoë -> renee.zoe@`, plain `Aman/Pareek -> aman.pareek@` unchanged. Old behaviour for comparison: `José.Núñez -> jos.nez` (lost letters); new: `jose.nunez`.
+- **company_type='ltd' hardcode:** NOT in my files. It lives only in `src/lib/sourcing/companies-house.js:58` (`searchByKeywordPublic`), which is outside my exclusive set — NOTED here, not edited. (The two `company_type` hits in icp.js/qualify-and-queue.js are comments only.)
+- **Syntax:** `jsc enrich.js` → PASS.

@@ -50,12 +50,30 @@ async function hasMX(domain) {
 
 // ---- email-pattern inference (the Hunter-killer) ----
 const SYNTAX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Q6 (B17): decode HTML entities + ASCII-FOLD (NFKD) a NAME token BEFORE it becomes an email local part.
+// Officer/Serper names arrive HTML-encoded ("Jos&eacute;", "O&#39;Brien") and accented ("José", "Müller",
+// "Nuñez"). The old `toLowerCase().replace(/[^a-z]/g,'')` DROPPED every accented letter rather than folding it
+// ("José"->"jos", "Müller"->"mller", "Nuñez"->"nuez"), minting wrong/dead locals. NFKD splits an accented glyph
+// into base+combining mark, then we strip the marks (é -> e), matching what find-every-email.js buildLocalPart
+// already does. Named numeric/hex entities are decoded first so "&eacute;" folds the same as a literal "é".
+const _NAMED_ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', eacute: 'é', egrave: 'è', agrave: 'à', ccedil: 'ç', uuml: 'ü', ouml: 'ö', auml: 'ä', ntilde: 'ñ', oslash: 'ø', aring: 'å', szlig: 'ß' };
+function _decodeEntities(s) {
+  return String(s == null ? '' : s)
+    .replace(/&#x([0-9a-f]+);/gi, (_m, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch (_e) { return _m; } })
+    .replace(/&#(\d+);/g, (_m, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch (_e) { return _m; } })
+    .replace(/&([a-z0-9]+);/gi, (m, n) => (Object.prototype.hasOwnProperty.call(_NAMED_ENT, n.toLowerCase()) ? _NAMED_ENT[n.toLowerCase()] : m));
+}
+// decode entities -> NFKD ASCII-fold -> lowercase -> keep [a-z0-9] only. Returns the email-safe token.
+function _foldName(s) {
+  return _decodeEntities(s).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
 function detectPattern(knownEmails, domain) {
   // From any email whose local part we can map to a first/last name, infer the firm's pattern.
   for (const e of knownEmails) {
     if (!e.first_name || !e.last_name || !e.value) continue;
     const lp = e.value.split('@')[0].toLowerCase();
-    const f = e.first_name.toLowerCase(), l = e.last_name.toLowerCase();
+    const f = _foldName(e.first_name), l = _foldName(e.last_name);
+    if (!f || !l) continue;
     const fi = f[0], li = l[0];
     const map = { [`${f}.${l}`]: 'first.last', [`${f}${l}`]: 'firstlast', [`${fi}${l}`]: 'flast', [`${fi}.${l}`]: 'f.last', [`${f}`]: 'first', [`${f}_${l}`]: 'first_last', [`${l}${fi}`]: 'lastf', [`${f}.${li}`]: 'first.l' };
     if (map[lp]) return map[lp];
@@ -64,7 +82,7 @@ function detectPattern(knownEmails, domain) {
 }
 function applyPattern(pattern, first, last, domain) {
   if (!first || !pattern) return null;
-  const f = first.toLowerCase().replace(/[^a-z]/g, ''), l = (last || '').toLowerCase().replace(/[^a-z]/g, '');
+  const f = _foldName(first), l = _foldName(last);
   const fi = f[0] || '', li = l[0] || '';
   const m = { 'first.last': `${f}.${l}`, 'firstlast': `${f}${l}`, 'flast': `${fi}${l}`, 'f.last': `${fi}.${l}`, 'first': `${f}`, 'first_last': `${f}_${l}`, 'lastf': `${l}${fi}`, 'first.l': `${f}.${li}` };
   const lp = m[pattern]; if (!lp || (pattern !== 'first' && !l)) return null;
