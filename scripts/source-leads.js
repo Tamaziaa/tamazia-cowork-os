@@ -53,6 +53,12 @@ function args() {
     else if (a[i] === '--capture') o.capture = a[++i];
   }
   if (!o.sources.length) o.sources = ['serp-top'];
+  // WS5 equal-allocation cap: each source stops once it has yielded SOURCE_T1_TARGET leads that pass the
+  // Tier-1 ICP PRE-FILTER (preFilter from src/lib/sourcing/icp.js — the SAME gate run() applies; we only
+  // COUNT with it here, we don't re-score). Default 50, same target for every source = equal allocation.
+  // 0/negative disables the cap (raw --max governs). This is purely a sourcing-side stop; the qualify layer
+  // (preFilter/scoreICP/decideTier) is unchanged.
+  o.t1Target = Math.max(0, parseInt(process.env.SOURCE_T1_TARGET || '50', 10) || 0);
   return o;
 }
 // Match adapters tolerantly: callers (scrape-all.js, cron) sometimes pass underscores (serp_top,
@@ -65,17 +71,32 @@ async function gather(o) {
   let captured = null;
   if (o.capture) { try { captured = JSON.parse(require('fs').readFileSync(o.capture, 'utf8')); } catch (_) {} }
   const raws = [];
+  const target = o.t1Target || 0;             // 0 = no cap (raw --max governs)
   for (const name of o.sources) {
     const ad = adapterByName(name);
     if (!ad) { console.error(`[source ${name}] no adapter registered (known: ${Object.values(REGISTRY).map(s => s.name).join(', ')}) — skipped`); continue; }
     const before = raws.length;
     const mode = ad.mode(process.env);
+    // Collect this source's candidates first, then apply the per-source Tier-1-eligible cap so the stop is
+    // measured PER SOURCE (equal allocation), independent of what other sources produced.
+    const srcRaws = [];
     try {
-      if (captured && captured[ad.name]) raws.push(...ad.ingestCaptured(captured[ad.name]));
-      else if (captured && captured[name]) raws.push(...ad.ingestCaptured(captured[name]));
-      if (mode === 'api') raws.push(...await ad.candidates({}, process.env));
+      if (captured && captured[ad.name]) srcRaws.push(...ad.ingestCaptured(captured[ad.name]));
+      else if (captured && captured[name]) srcRaws.push(...ad.ingestCaptured(captured[name]));
+      if (mode === 'api') srcRaws.push(...await ad.candidates({}, process.env));
     } catch (e) { console.error('[source ' + name + '] ' + e.message); }
-    const got = raws.length - before;
+    // Eligibility-stop: walk this source's candidates in order and keep them until SOURCE_T1_TARGET have
+    // passed the Tier-1 ICP pre-filter (preFilter). preFilter().pass == served-sector + served-geo + real
+    // business == the Tier-1-eligible pre-gate. Once the target is reached, this source stops contributing.
+    let t1 = 0; let kept = 0;
+    for (const r of srcRaws) {
+      if (target && t1 >= target) break;        // this source has hit its equal-allocation target — stop it
+      raws.push(r); kept++;
+      let pass = false; try { pass = !!preFilter(r).pass; } catch (_) {}
+      if (pass) t1++;
+    }
+    const got = kept;
+    if (target) console.error(`[source ${ad.name}] produced=${srcRaws.length} kept=${kept} t1-eligible=${t1}/${target}${t1 >= target ? ' (cap hit)' : ''}`);
     // Explain a 0-yield chrome-mode source instead of failing silently (root cause of reddit/youtube/
     // x-ads/social-ads logging 0 every run: they need an API token or a --capture file).
     if (got === 0 && mode !== 'api') console.error(`[source ${ad.name}] mode=chrome and no --capture provided — yields 0 (set the source's API token or pass --capture).`);
@@ -97,7 +118,7 @@ async function run() {
   }
   const t0 = Date.now();
   const runId = 'src-' + Date.now().toString(36);
-  console.log(`[source-leads] sources=${o.sources.join(',')} max=${o.max} dryRun=${o.dryRun}`);
+  console.log(`[source-leads] sources=${o.sources.join(',')} max=${o.max} t1Target=${o.t1Target || 'off'} dryRun=${o.dryRun}`);
   const raws = await gather(o);
   // dedupe by domain (in-memory)
   const seen = new Set(); const cand = [];
