@@ -26,5 +26,8 @@
 | id | file:line | change | syntax | evidence |
 |---|---|---|---|---|
 | P1 [A82/X11] | `.github/workflows/match-inbound-replies.yml` | Added hourly cron (`17 * * * *`) + `engine-db-work` concurrency to the dispatch-only matcher; heartbeat-wrapped the run step (`engine_runs` job=`match-inbound-replies`). | YAML OK | 832 inbound rows, 0 matched (matcher never ran on its own). Script already self-provisions `match_method`, idempotent, no-send. |
+| P2 [A21/A83/X10] | `send-due.js:164`, `push-to-mystrika.js:203` | `sends.lead_id` stamping at send was ALREADY present in BOTH paths (verified) — both INSERT `sends` with the real `lead_id` and guard non-integer ids. No code change needed in the senders; the warmup-filter half lands in P4 (funnel readers). | jsc PASS (ReferenceError: require) | 184 sends all `lead_id` NULL today = warmup pool; real sends will attribute going forward. |
+| P3 [X12] | `send-due.js:171`, `push-to-mystrika.js:214` | Stamp `first_contacted_at=COALESCE(first_contacted_at,NOW())` on the FIRST contact: touch 0 in send-due.js, and at `mystrika_pushed=TRUE` in push (push enqueues touch-0). COALESCE so re-send/recycle never moves the original date. | jsc PASS | `first_contacted_at IS NOT NULL`=0 live; recycle.js parks on `first_contacted_at + NOREPLY_DAYS`, so the park step was dead. |
+| P6 [X9] | `push-to-mystrika.js:65` | Added `AND l.governor_released_at IS NOT NULL` to the push WHERE clause so only governor-released leads are pushed (was decorative; push ignored the cap). Chain becomes qualify -> governor-release (P5) -> push. | jsc PASS | `governor_released_at IS NOT NULL`=0 live; P5 wires governor-release into the cycle so the gate fills. SEND OFF. |
 </content>
 </invoke>

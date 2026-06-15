@@ -167,6 +167,12 @@ async function processLead(lead) {
   } else {
     console.log(`  WARN: lead ${JSON.stringify(lead.id)} has no integer id — skipped sends log row (would orphan reporting)`);
   }
+  // P3 [X12] FIRST-CONTACT STAMP: on the FIRST touch (touch 0) record first_contacted_at=NOW() if not already
+  // set. recycle.js parks no-reply leads at first_contacted_at + RECYCLE_NOREPLY_DAYS, but nothing wrote the
+  // column (live: 0 rows), so the park step was dead and no lead ever recycled. COALESCE-guard so a re-send /
+  // out-of-order touch never moves the original contact date. Additive column, NULL-safe. (SEND OFF; correct
+  // for when the founder flips it.)
+  if (touch === 0) pg(`UPDATE leads SET first_contacted_at = COALESCE(first_contacted_at, NOW()) WHERE id = ${lead.id}`);
   // Advance lead status + schedule next touch
   if (touch < 3) {
     const days = CADENCE_DAYS[touch + 1] - CADENCE_DAYS[touch];
