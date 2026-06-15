@@ -7,7 +7,7 @@ const { execFileSync } = require('child_process');
 const path = require('path');
 const M = require(path.resolve(__dirname, '..', 'src', 'lib', 'mystrika', 'client.js'));
 const { conversionScore, SEND_TIERS } = require(path.resolve(__dirname, '..', 'src', 'lib', 'sourcing', 'conversion.js'));
-const { isVerifiedStatus } = require(path.resolve(__dirname, '..', 'src', 'lib', 'enrich', 'verify-status.js'));
+const { isVerifiedStatus, deliverabilityOf } = require(path.resolve(__dirname, '..', 'src', 'lib', 'enrich', 'verify-status.js'));
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
 // maxBuffer: the push SELECT base64-encodes up to 5 rendered email bodies (t0s/t0b/t1b/t2b/t3b) per lead ×
 // LIMIT (default 200) — multi-MB of output that overflows Node's 1MB execFileSync default and throws ENOBUFS.
@@ -53,7 +53,7 @@ if (require.main === module) (async()=>{
   const raw = pg(`SELECT l.id::text, COALESCE(NULLIF(l.contact_email,''), l.email, ''), regexp_replace(COALESCE(NULLIF(trim(l.first_name||' '||COALESCE(l.last_name,'')),''), l.company,'there'),'[\\t\\r\\n]',' ','g'),
       regexp_replace(COALESCE(l.company,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.domain,''), regexp_replace(COALESCE(NULLIF(l.sector,''),NULLIF(l.sector_code,''),NULLIF(l.filter_key,''),''),'[\\t\\r\\n]',' ','g'), COALESCE(l.audit_url,''),
       regexp_replace(COALESCE(l.personalisation_pointers->>'top_finding',''),'[\\t\\r\\n]',' ','g'), regexp_replace(COALESCE(l.operating_city,''),'[\\t\\r\\n]',' ','g'),
-      regexp_replace(COALESCE(l.rank_insight_sentence,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.hiring_signal,''), COALESCE(l.fit_score,0), COALESCE(l.hot_score,0), CASE WHEN COALESCE(l.contact_linkedin,'')<>'' THEN '1' ELSE '0' END, CASE WHEN COALESCE(jsonb_array_length(l.decision_makers),0)>0 OR COALESCE(l.contact_name,'')<>'' THEN '1' ELSE '0' END, COALESCE(l.verify_status,''), COALESCE(l.email_verified::text,''),
+      regexp_replace(COALESCE(l.rank_insight_sentence,''),'[\\t\\r\\n]',' ','g'), COALESCE(l.hiring_signal,''), COALESCE(l.fit_score,0), COALESCE(l.hot_score,0), CASE WHEN COALESCE(l.contact_linkedin,'')<>'' THEN '1' ELSE '0' END, CASE WHEN COALESCE(jsonb_array_length(l.decision_makers),0)>0 OR COALESCE(l.contact_name,'')<>'' THEN '1' ELSE '0' END, COALESCE(l.verify_status,''), COALESCE(l.deliverability,''), COALESCE(l.email_verified::text,''),
       replace(encode(convert_to(COALESCE(d.t0s,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t0b,''),'UTF8'),'base64'),E'\\n',''),
       replace(encode(convert_to(COALESCE(d.t1b,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t2b,''),'UTF8'),'base64'),E'\\n',''), replace(encode(convert_to(COALESCE(d.t3b,''),'UTF8'),'base64'),E'\\n',''), COALESCE(l.primary_email,''), COALESCE(l.secondary_emails::text,'[]'), COALESCE(l.quality_score,0)
     FROM leads l LEFT JOIN LATERAL (
@@ -62,7 +62,10 @@ if (require.main === module) (async()=>{
       FROM outreach_drafts od WHERE od.lead_id=l.id AND od.channel='email') d ON TRUE
     WHERE l.quality_fit=TRUE AND COALESCE(l.lifecycle_stage,'')='qualified' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal')
       AND COALESCE(l.audit_verified,FALSE)=TRUE AND COALESCE(l.audit_url,'') <> '' AND COALESCE(l.contact_email,l.email,'') <> '' AND COALESCE(l.mystrika_pushed,FALSE)=FALSE
-      AND COALESCE(l.verify_status,'') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable')
+      -- verify_status overloaded -> deliverability split: gate on the dedicated deliverability VERDICT,
+      -- falling back to verify_status when deliverability is not yet populated (backfill-safe: old rows that
+      -- only have verify_status are still guarded; rows with deliverability use it). Excludes confirmed-bad.
+      AND COALESCE(NULLIF(l.deliverability,''), l.verify_status, '') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable')
     ORDER BY COALESCE(l.quality_score,0) DESC NULLS LAST, l.id DESC LIMIT ${limit}`);
   const rows = raw.split('\n').filter(Boolean).map(r=>r.split('\t'));
   if (!rows.length) { console.log('0 new FIT leads to push (need quality_fit + qualified + audit_verified + email + not already pushed).'); return; }
@@ -70,15 +73,20 @@ if (require.main === module) (async()=>{
   const seenGlobal = new Set();   // 1 prospect = 1 email, deduped across the whole run
   const coveredPrimaries = new Set(); // lead-primary emails whose DM was already sent via a colliding lead this run
   for (const r of rows) {
-    const [leadId,email,name,company,domain,sector,audit,finding,city,ri,hiring,fitScore,hotScore,hasLi,hasDm,verifyStatus,emailVerified,t0s,t0b,t1b,t2b,t3b,primaryEmail,secondaryJson,qualityScore]=r;
+    const [leadId,email,name,company,domain,sector,audit,finding,city,ri,hiring,fitScore,hotScore,hasLi,hasDm,verifyStatus,deliverability,emailVerified,t0s,t0b,t1b,t2b,t3b,primaryEmail,secondaryJson,qualityScore]=r;
     if (!email && !primaryEmail) continue;
     if (!audit) continue;  // touch-1 guard: never push a lead without a minted audit_url
     const t0body=b64d(t0b); if (!t0body) continue;
     // gap-fix: read the lead's REAL verification instead of hardcoding has_verified_email:true (which defeated the
     // conversion verify gate and would push unverified/bad emails). verified-good -> Tier A/B; catch-all/risky ->
     // deliverable -> Tier B; empty/pending/bad -> Tier C -> skipped (SEND_TIERS excludes C). Sending stays OFF.
-    const verified = isVerifiedStatus(verifyStatus) || (/^(t|true|1)$/i.test(emailVerified||'') && !/^(bad|invalid|undeliverable|no_mx|nxdomain|disposable)$/i.test(verifyStatus||''));
-    const deliverable = !verified && /(catch|risky|accept)/i.test(verifyStatus||'');
+    // verify_status overloaded -> deliverability split: derive via the single source of truth deliverabilityOf(),
+    // which PREFERS the dedicated deliverability column and FALLS BACK to verify_status (so this is correct for
+    // both backfilled rows and old rows that only have verify_status). email_verified still upgrades to verified
+    // unless the verdict is confirmed-bad (the helper already lets a hard-negative verdict win over the flag).
+    const _verdict = deliverabilityOf({ deliverability, verify_status: verifyStatus, email_verified: emailVerified });
+    const verified = _verdict === 'verified';
+    const deliverable = _verdict === 'deliverable';
     // bug-fix: the V3 re-tier path (requalify-all-leads.js) writes quality_score/total_score and leaves the LEGACY
     // fit_score/hot_score columns at 0 for ~all icp_tier=1 leads (609/614 live). conversionScore weights fit_score*0.35,
     // so a genuine Tier-1 (quality_score ~82) scored fit_score=0 -> conv tier 'C' -> EXCLUDED from SEND_TIERS -> every

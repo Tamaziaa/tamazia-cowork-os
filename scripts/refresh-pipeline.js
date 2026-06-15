@@ -59,7 +59,11 @@ async function main() {
   let tierRefreshed = 0;
   try {
     const rows = pg(`SELECT id::text, COALESCE(fit,FALSE)::text, COALESCE(fit_score,0), COALESCE(hot_score,0),
-        (CASE WHEN COALESCE(verify_status,'') IN ('verified','approved') OR COALESCE(contact_confidence,0) >= 0.7 THEN 1 ELSE 0 END),
+        -- verify_status overloaded -> deliverability split: prefer the dedicated deliverability VERDICT, fall
+        -- back to verify_status (backfill-safe). 'good'/'valid'/'deliverable'/'verified' = a deliverable email.
+        -- Legacy 'approved' (a WORKFLOW value, never copied into deliverability by the backfill) is still honoured
+        -- via the verify_status fallback so no currently-counted lead drops out of the cache.
+        (CASE WHEN COALESCE(NULLIF(deliverability,''), verify_status, '') IN ('good','valid','deliverable','verified','approved') OR COALESCE(contact_confidence,0) >= 0.7 THEN 1 ELSE 0 END),
         (CASE WHEN decision_makers IS NOT NULL AND decision_makers::text NOT IN ('','null','[]','{}') THEN 1 ELSE 0 END),
         (CASE WHEN COALESCE(linkedin_url, contact_linkedin, '') <> '' THEN 1 ELSE 0 END),
         COALESCE(audit_verified,FALSE)::text,

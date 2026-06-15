@@ -43,7 +43,10 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
     try { v = await verifyEmail(r.email, { smtp: useSmtp }); } catch (_e) { continue; }
     if (v.status === 'valid') valid++; else if (v.status === 'risky') risky++; else if (v.status === 'invalid') invalid++;
     const conf = v.status === 'invalid' ? 0 : (v.score || 0);
-    pg(`UPDATE leads SET verify_status=${esc(v.status)}, contact_confidence=${conf}, updated_at=NOW() WHERE id=${r.id}`);
+    // verify_status overloaded -> deliverability split: write the dedicated deliverability VERDICT alongside
+    // verify_status (kept for back-compat). v.status here is always a verdict (valid/risky/invalid/unknown),
+    // never a workflow value, so the two stay in lockstep for newly-verified rows.
+    pg(`UPDATE leads SET verify_status=${esc(v.status)}, deliverability=${esc(v.status)}, contact_confidence=${conf}, updated_at=NOW() WHERE id=${r.id}`);
     console.log(`  ${r.email.padEnd(40)} ${v.status.padEnd(8)} conf=${conf} via=${v.source}`);
   }
   console.log(`[verify] ${rows.length} checked · valid ${valid} · risky ${risky} · invalid ${invalid} · £0 (no paid credits used)`);
