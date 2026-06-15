@@ -469,7 +469,79 @@ function isRoleLocal(localPart) {
   const lp = String(localPart || '').toLowerCase().split('@')[0];
   return _ROLE.has(lp) || _ROLE.has(lp.replace(/[._\-+].*$/, ''));
 }
-module.exports = { scoreLead, decideTier, PASS, REGULATED, TIER1_MIN, BAR_MIN, _ROLE, isRoleLocal };
+
+// ============================================================================================================
+// tierInputsFromPersisted(lead) — build the decideTier() input shape from a lead's ALREADY-PERSISTED columns,
+// WITHOUT a live site fetch. Added (additive, pure) for the LLM-RESCUE worker: it must re-tier a lead against the
+// score it was ALREADY tiered on (the persisted total_score) plus a found public signal, NOT re-fetch-and-re-score
+// (a live re-fetch re-derives total_score from the current page, which diverges from the stored value the lead was
+// qualified on — so a full scoreLead() re-run is the wrong re-tier mechanism for rescue). This mirrors the SAME
+// derivation scoreLead uses to populate decideTier's inputs, but sourced from the persisted row. Sector priority/
+// regulated come from the SAME canonical GRID_INDEX (by sector_code, with the HINT_TO_CODE fallback on lead.sector);
+// contact flags come from emailGate over the persisted primary email; established/linkedin/verify from persisted
+// columns. The CALLER may fold a found signal into the lead first (e.g. set all_socials.linkedin / contact_name /
+// primary_email / sector_code), then pass it here; this function reads those folded fields. Returns the exact
+// object decideTier() consumes, so `decideTier(tierInputsFromPersisted(lead))` is the deterministic re-tier.
+async function tierInputsFromPersisted(lead) {
+  lead = lead || {};
+  const domain = String(lead.domain || '').toLowerCase().replace(/^www\./, '');
+  const sector_code = String(lead.sector_code || '').trim() || null;
+  // sector flags from the canonical grid (same lookup scoreLead does), with the legacy-hint fallback on lead.sector.
+  const _hintCode = HINT_TO_CODE[String(lead.sector || '').toLowerCase().trim()] || HINT_TO_CODE[normSector(lead.sector)] || null;
+  const matched = (sector_code ? GRID_INDEX.find((s) => s.code === sector_code) : null) || (_hintCode ? GRID_INDEX.find((s) => s.code === _hintCode) : null);
+  const isPrioritySector = !!(matched && matched.is_priority);
+  const sectorRegulated = !!(matched && matched.has_regulators);
+
+  // contact flags from the persisted primary email via the SAME emailGate filters.
+  const primaryEmail = lead.primary_email || lead.contact_email || '';
+  const dmAny = !!(primaryEmail && /@/.test(primaryEmail));
+  let dmGate = { clean: false, role: false, reason: 'none' };
+  try { if (dmAny) dmGate = await emailGate(primaryEmail, domain); } catch (_e) {}
+  const cleanNamedDM = dmGate.clean && !dmGate.role;
+  const cleanRoleDM = dmGate.clean && dmGate.role;
+
+  // deliverability verdict from persisted columns (deliverability preferred, verify_status fallback), same as scoreLead.
+  const { deliverabilityOf } = require('./verify-status.js');
+  const _deliv = deliverabilityOf(lead);
+  const dmEmailVerified = truthy(lead.email_verified) || _deliv === 'verified';
+  const _rawVerdict = String((lead.deliverability != null && String(lead.deliverability).trim() !== '') ? lead.deliverability : (lead.verify_status || '')).trim();
+  const confirmedBad = _deliv === 'bad';
+  const catchAllUnverified = (_deliv === 'deliverable' || /^unknown$/i.test(_rawVerdict)) && !dmEmailVerified;
+  const servedSector = SERVED.has(normSector(lead.sector)) || isPrioritySector;
+  const freeProviderDM = dmAny && dmGate.reason === 'free_provider' && servedSector;
+
+  // LinkedIn from persisted socials / contact_linkedin (the rescue folds a found URL into all_socials.linkedin).
+  const socials = asObj(lead.all_socials);
+  const liUrl = (socials.linkedin && (socials.linkedin.url || socials.linkedin)) || lead.contact_linkedin || '';
+  const hasLinkedin = !!(socials && socials.linkedin) || /linkedin\.com\/(company|in)\//i.test(String(liUrl));
+
+  // named-DM-role: a clean own-domain personal email + (a role-titled name OR just a named clean email), mirroring scoreLead.
+  const _ROLE_TITLES = /(founder|owner|principal|partner|director|ceo|cfo|coo|cto|cmo|president|head of|managing|proprietor|chief|md\b)/i;
+  const dmName = String(lead.decision_maker_name || lead.contact_name || lead.dm_name || lead.full_name || '').trim();
+  const dmTitle = String(lead.decision_maker_title || lead.contact_title || lead.dm_title || lead.title_role || lead.job_title || '').trim();
+  const dmConf = Math.max(Number(lead.decision_maker_confidence || 0), Number(lead.contact_confidence || 0));
+  const hasNamed = !!(primaryEmail && /@/.test(primaryEmail)) && dmConf >= 60;
+  const namedDMRole = cleanNamedDM && (_ROLE_TITLES.test(dmTitle) || (!dmTitle && (hasNamed || !!dmName)));
+  const smtpVerifiedPersonal = cleanNamedDM && dmEmailVerified;
+  const inferredEmail = cleanNamedDM && !dmEmailVerified;
+
+  // established: persisted proxies (multi-email OR a social presence OR a stored maturity hint). No live pageRefs,
+  // so use the persisted signals scoreLead's `established` reduces to (emailCount>=2 OR hasSocial).
+  const emailCount = asArr(lead.all_emails).length;
+  const hasSocial = !!(socials.linkedin || socials.instagram || socials.twitter || socials.facebook);
+  const established = emailCount >= 2 || hasSocial || Number(lead.completeness_score || 0) >= 3;
+
+  // total_score: the PERSISTED score the lead was tiered on (total_score, falling back to quality_score).
+  const total_score = Number(lead.total_score != null ? lead.total_score : (lead.quality_score != null ? lead.quality_score : 0)) || 0;
+
+  return {
+    isPrioritySector, total_score, sector_code,
+    namedDMRole, cleanNamedDM, cleanRoleDM, hasLinkedin, confirmedBad,
+    smtpVerifiedPersonal, sectorRegulated, established, catchAllUnverified, inferredEmail, freeProviderDM,
+  };
+}
+
+module.exports = { scoreLead, decideTier, tierInputsFromPersisted, PASS, REGULATED, TIER1_MIN, BAR_MIN, _ROLE, isRoleLocal };
 
 if (require.main === module) {
   (async () => {

@@ -1,0 +1,73 @@
+name: llm-rescue backlog (generation-first Tier-1 lift)
+# Drains the LLM-RESCUE backlog in larger waves than the 30-min engine cycle: find the missing PUBLIC signal
+# (LinkedIn via SERP titles / named DM via CH reg-officers / email via patterns+MX / sector classify), re-run the
+# CANONICAL deterministic gate WITH the found data, write ADVISORY qa_* columns, flag/auto-promote. Then run the
+# conservative Tier-1 fact-check (flag for human review only, NEVER demote) and apply any pending review verdicts.
+#
+# KILL SWITCH: every step is gated on LLM_QA_ENABLED (from the ENV_B64 secret). DEFAULT OFF — with it unset/0/false
+# the scripts print a no-op notice and exit 0, so this workflow is harmless on a schedule until the founder flips
+# the switch in the secret (or passes enable=1 on a manual dispatch). £0: free models first (Cloudflare/Groq/Gemini),
+# router budget cap + llm_cost_ledger, per-run lead cap. Additive Neon writes (qa_*/review_status + promotions under
+# the deterministic + consent gate). SEND stays OFF. Heartbeat-wrapped (engine_runs) so health/check-stuck see it.
+on:
+  schedule:
+    - cron: "23 2,14 * * *"   # 02:23 + 14:23 UTC (off-peak, off the top-of-hour) — two backlog waves/day
+  workflow_dispatch:
+    inputs:
+      rescue_max:
+        description: "Max non-Tier-1 leads to rescue this run"
+        required: false
+        default: "150"
+      factcheck_max:
+        description: "Max Tier-1 leads to fact-check this run"
+        required: false
+        default: "100"
+      cohort:
+        description: "Limit rescue to one cohort (blank = all, ordered by yield): missing_linkedin|missing_dm|missing_both|classify_sector|missing_email"
+        required: false
+        default: ""
+      enable:
+        description: "Force-enable for this run only (1 = run even if the secret has LLM_QA_ENABLED off)"
+        required: false
+        default: ""
+permissions:
+  contents: read
+
+# Share the heavy-DB-work group so a backlog wave never re-tiers rows while a requalify writer is live (apply-review
+# writes icp_tier on promote). cancel-in-progress:false so back-to-back waves queue rather than cancel.
+concurrency:
+  group: engine-db-work
+  cancel-in-progress: false
+jobs:
+  rescue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: npm install --no-audit --no-fund || npm install || true
+      - run: python -m pip install --quiet -r requirements.txt
+      - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: LLM-RESCUE backlog wave (generation-first; advisory writes; gate keeps final say; SEND OFF)
+        env:
+          RESCUE_MAX: ${{ github.event.inputs.rescue_max || '150' }}
+          FACTCHECK_MAX: ${{ github.event.inputs.factcheck_max || '100' }}
+          COHORT: ${{ github.event.inputs.cohort || '' }}
+          FORCE_ENABLE: ${{ github.event.inputs.enable || '' }}
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          # manual dispatch can force-enable for one run (does not change the secret).
+          if [ "$FORCE_ENABLE" = "1" ]; then export LLM_QA_ENABLED=1; fi
+          COHORT_ARG=""; if [ -n "$COHORT" ]; then COHORT_ARG="--cohort $COHORT"; fi
+          # rescue (advisory) — heartbeat-wrapped for engine_runs visibility; fail-soft.
+          node scripts/heartbeat.js wrap llm-rescue -- node scripts/run-llm-rescue.js --max "$RESCUE_MAX" $COHORT_ARG \
+            || node scripts/run-llm-rescue.js --max "$RESCUE_MAX" $COHORT_ARG || true
+          # conservative Tier-1 fact-check (flag for human review only; never demotes).
+          node scripts/heartbeat.js wrap llm-factcheck -- node scripts/run-llm-factcheck.js --max "$FACTCHECK_MAX" \
+            || node scripts/run-llm-factcheck.js --max "$FACTCHECK_MAX" || true
+          # act on any pending review verdicts (accept/auto-promote under the gate + consent; needs_info; rejected).
+          node scripts/heartbeat.js wrap apply-review -- node scripts/apply-review.js --max 500 \
+            || node scripts/apply-review.js --max 500 || true

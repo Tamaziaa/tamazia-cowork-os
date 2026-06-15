@@ -71,6 +71,28 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
     QUALIFY_OUT="$(TMO 'node scripts/qualify-and-queue.js 12' 2>&1)"; echo "$QUALIFY_OUT" | tail -3
     PROCESSED="$(printf '%s\n' "$QUALIFY_OUT" | sed -n 's/.*\[qualify\] scored \([0-9]\{1,\}\).*/\1/p' | tail -1)"; PROCESSED="${PROCESSED:-0}"
   fi
+  # ---- LLM-RESCUE + HUMAN-REVIEW LOOP (generation-first; LLM-QA-DESIGN.md) -----------------------------------
+  # KILL SWITCH: gated on LLM_QA_ENABLED (DEFAULT OFF). With it unset, run-llm-rescue.js / run-llm-factcheck.js
+  # print a no-op notice and exit 0, so these steps are harmless until the founder/cron flips the switch — nothing
+  # below spends an LLM call or writes a qa_* column until then. £0 free-first (Cloudflare/Groq/Gemini), per-run
+  # lead cap (small per cycle; the BACKLOG drains via a dedicated scheduled job, not the 30-min cycle), router
+  # budget cap + llm_cost_ledger. They WRITE ADVISORY qa_* columns + review_status only — RACE-GUARDED only where
+  # they touch the re-tier rows: rescue/factcheck write qa_* (advisory, not the re-tier trio) so they are
+  # UNGUARDED; apply-review WRITES icp_tier/quality_fit/lifecycle on promote, so it IS run_guarded (same race
+  # protection as qualify). Ordered: rescue (lift Tier-2->Tier-1 candidates) + factcheck (flag doubtful Tier-1 for
+  # humans, never demote) run first; apply-review then actions any human/auto verdicts BEFORE governor-release so a
+  # freshly-promoted Tier-1 flows through enqueue->mint->verify the SAME cycle. SEND stays OFF throughout.
+  # Portable kill-switch parse (a `case` glob, NOT sed alternation — BSD/macOS sed lacks \| so launchd cycles
+  # would misread it). Truthy = 1/true/yes/on (any case); everything else (incl. unset/0/false/no/off) = OFF.
+  LLM_QA_ON=0
+  case "$(printf '%s' "${LLM_QA_ENABLED:-}" | tr '[:upper:]' '[:lower:]')" in 1|true|yes|on) LLM_QA_ON=1;; esac
+  if [ "$LLM_QA_ON" = "1" ]; then
+    run "node scripts/run-llm-rescue.js --max ${LLM_QA_RESCUE_MAX:-20}"          # find missing public signals -> re-run gate -> qa_* (advisory; gate keeps final say)
+    run "node scripts/run-llm-factcheck.js --max ${LLM_QA_FACTCHECK_MAX:-20}"    # conservative Tier-1 verify -> flag for human review only (NEVER auto-demote)
+    run_guarded "node scripts/apply-review.js --max ${LLM_QA_APPLY_MAX:-200}"    # act on review_status: accept/auto-promote (gate-checked, consent-gated) / needs_info / rejected
+  else
+    echo "[$(TS)] >> SKIP (LLM_QA_ENABLED off): llm-rescue / llm-factcheck / apply-review"
+  fi
   # GOVERNOR RELEASE (P5 [X2/X8]): release today's Tier-1 email-ready batch (100/day, 10x10 per-sector
   # round-robin, reset 00:00 UK). This used to live ONLY inside nightly-workers' single bundled bash -c, which
   # times out and barely ran -> governor_released_at was NULL on every lead (0 released) and the governor was
