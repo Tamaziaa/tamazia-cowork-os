@@ -1,0 +1,30 @@
+name: Audit-gap eval gate (no closed gap re-opens)
+# WS3 · Blocks merge when a change to the compliance applicability surfaces re-opens an audit gap that the
+# gap → root-cause → PR → re-mint loop already closed. Recomputes each fixture entry's expected laws via the
+# PURE jurisdiction-router.js routeForMarkets() and FAILS the build if any expect_laws is absent or any
+# forbid_laws is present (eval/audit-gaps.json). Deterministic + offline → a stable required check.
+on:
+  pull_request:
+    paths:
+      - 'src/lib/compliance/jurisdiction-router.js'
+      - 'src/skills/S008-personalisation-engine/scanners/compliance.js'
+      - 'src/lib/compliance/resolver.js'
+      - 'migrations/**'
+      - 'scripts/eval-audit-gaps.mjs'
+      - 'eval/audit-gaps.json'
+  workflow_dispatch: {}
+  schedule:
+    - cron: '15 5 * * 1'   # weekly Monday 05:15 (alongside the qualifier + audit evals)
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install deps
+        run: npm install --omit=dev || npm install || true
+      - name: Audit-gap eval (deterministic routeForMarkets; fails build on any re-opened gap)
+        run: node scripts/eval-audit-gaps.mjs
