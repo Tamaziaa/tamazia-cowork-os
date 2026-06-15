@@ -134,21 +134,45 @@ def _pct(numer, denom):
 Q_LEADS = "SELECT COUNT(*) FROM leads"
 Q_QUALIFIED = "SELECT COUNT(*) FROM leads WHERE lifecycle_stage='qualified'"
 Q_FIT = "SELECT COUNT(*) FROM leads WHERE COALESCE(quality_fit,FALSE)=TRUE"
+# O5/O6 [A20/X3/A51]: "email-ready" must mirror the REAL push WHERE clause in
+# scripts/push-to-mystrika.js (the gate that actually decides what gets sent), not a
+# looser touch_%_queued + pending-draft proxy. The old proxy reported 32; the true
+# send-eligible set is 25 (and drops to 0 until the governor releases, by design).
+# This is the SINGLE source of truth shared verbatim with gen-state.js's emailReady.
+# Kept in sync with push-to-mystrika.js: quality_fit + qualified + audit_verified +
+# audit_url + email + not-already-pushed + deliverability-clean + not-replied +
+# status-not-suppressed + governor-released. (catch-all stays STRICT per founder.)
 Q_EMAIL_READY = (
-    "SELECT COUNT(*) FROM leads l WHERE l.status LIKE 'touch_%_queued' "
-    "AND COALESCE(NULLIF(l.email,''),l.contact_email,'')<>'' "
-    "AND COALESCE(acquisition_channel,'') NOT ILIKE '%test%' "
-    "AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal') "
-    # Must match gen-state.js EXACTLY (this file claims VERBATIM): a lead is only
-    # email-ready if it ALSO has a pending email outreach_draft. Dropping this clause
-    # over-reported email-ready vs PIPELINE-STATE.md whenever a queued lead had no
-    # pending draft (draft sent/pruned). Same count today (32), correct going forward.
-    "AND EXISTS (SELECT 1 FROM outreach_drafts od WHERE od.lead_id=l.id "
-    "AND od.send_status='pending' AND od.channel='email')"
+    "SELECT COUNT(*) FROM leads l "
+    "WHERE l.quality_fit=TRUE AND COALESCE(l.lifecycle_stage,'')='qualified' "
+    "AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal') "
+    "AND COALESCE(l.audit_verified,FALSE)=TRUE AND COALESCE(l.audit_url,'')<>'' "
+    "AND COALESCE(l.contact_email,l.email,'')<>'' AND COALESCE(l.mystrika_pushed,FALSE)=FALSE "
+    "AND COALESCE(NULLIF(l.deliverability,''), l.verify_status, '') "
+    "NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable') "
+    "AND COALESCE(l.replied,FALSE)=FALSE "
+    "AND COALESCE(l.status,'') NOT IN ('suppressed','dnc','bounced','duplicate') "
+    "AND l.governor_released_at IS NOT NULL"
 )
-Q_SENT = "SELECT COUNT(*) FROM sends"
-Q_REPLIED = "SELECT COUNT(*) FROM inbound_emails WHERE matched_lead_id IS NOT NULL"
-Q_BOOKED = "SELECT COUNT(*) FROM cal_bookings"
+# P2/P4 [A21/X10]: exclude the warmup pool from "sent". Real lead-directed sends stamp
+# sends.lead_id (send-due.js / push-to-mystrika.js); warmup traffic leaves it NULL. The
+# bare COUNT(*) counted 184 warmup rows as outreach. Filter to attributed sends only.
+Q_SENT = "SELECT COUNT(*) FROM sends WHERE lead_id IS NOT NULL"
+# P4 [A33/A40]: a reply is a matched_lead_id row that is NOT a STOP/opt-out or a bounce
+# (those are suppression/deliverability signals, not engagement). Standardised on
+# matched_lead_id across MCP + gen-state; the stop/bounce filter mirrors compute-metrics.js.
+Q_REPLIED = (
+    "SELECT COUNT(*) FROM inbound_emails "
+    "WHERE matched_lead_id IS NOT NULL "
+    "AND COALESCE(stop_keyword_detected,FALSE)=FALSE "
+    "AND COALESCE(bounce_detected,FALSE)=FALSE"
+)
+# P4 [X21]: a booking only counts if it actually stands. Exclude cancelled/rejected/no-show.
+Q_BOOKED = (
+    "SELECT COUNT(*) FROM cal_bookings "
+    "WHERE COALESCE(status,'') NOT IN "
+    "('cancelled','canceled','rejected','declined','no_show','no-show')"
+)
 
 
 def _funnel():
