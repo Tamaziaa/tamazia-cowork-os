@@ -249,8 +249,12 @@ async function scoreLead(lead) {
   // Layer 3 — DECISION-MAKER CONTACT (named email) — now the strongest conversion predictor (16 pts)
   const primaryEmail = lead.primary_email || lead.contact_email || '';
   const dmConf = Math.max(Number(lead.decision_maker_confidence || 0), Number(lead.contact_confidence || 0)); // gap-fix: `||` let a low decision_maker_confidence shadow a higher contact_confidence
-  const { isVerifiedStatus } = require('./verify-status.js');
-  const dmEmailVerified = truthy(lead.email_verified) || isVerifiedStatus(lead.verify_status);
+  // verify_status overloaded -> deliverability split: derive the deliverability VERDICT once via the single
+  // source of truth, which PREFERS lead.deliverability and FALLS BACK to lead.verify_status (correct before and
+  // after the backfill, and for rows that only have verify_status). All deliverability reads below use _deliv.
+  const { deliverabilityOf } = require('./verify-status.js');
+  const _deliv = deliverabilityOf(lead);                              // 'verified' | 'deliverable' | 'bad' | 'unverified'
+  const dmEmailVerified = truthy(lead.email_verified) || _deliv === 'verified';
   const hasNamed = !!(primaryEmail && /@/.test(primaryEmail)) && dmConf >= 60;
   add('3_decision_maker_contact', 16, hasNamed, primaryEmail ? `${primaryEmail} (${dmConf}%${dmEmailVerified ? ', verified' : ''})` : 'none');
 
@@ -319,13 +323,16 @@ async function scoreLead(lead) {
   // -> Tier-2 eligible, not "unreachable" forever. We still never treat it as an own-domain cleanNamedDM.
   const freeProviderDM = dmAny && dmGate.reason === 'free_provider' && servedSector;
   // Confirmed-bad safety net (only ever DEMOTES): enrichment/Apify said the address is definitively undeliverable.
-  const confirmedBad = /^(invalid|bad|undeliverable|no_mx|disposable|invalid_syntax|nxdomain)$/i.test(String(lead.verify_status || ''));
+  // Derived from the deliverability verdict (deliverability col preferred, verify_status fallback).
+  const confirmedBad = _deliv === 'bad';
   // gap-fix: CATCH-ALL guard. The canonical verifier folds accept-all into 'risky' BEFORE storage (free-verify L121,
   // verify-status.js), so the stored value is 'risky', never the literal 'catch-all'. A catch-all domain ACCEPTS a
   // guessed address at SMTP without it existing, so a guessed-but-unverified DM on such a domain must NOT auto-send.
-  // True when the domain is catch-all/unconfirmed (risky/catch*/accept*/unknown) AND we have no positive verification.
-  const _vs = String(lead.verify_status || '').trim();
-  const catchAllUnverified = /^(risky|catch[\s_-]?all|accept[\s_-]?all|unknown)$/i.test(_vs) && !dmEmailVerified;
+  // True when the domain is catch-all/unconfirmed (risky/catch*/accept* => _deliv 'deliverable', OR an explicit
+  // 'unknown' verdict) AND we have no positive verification. _rawVerdict mirrors what deliverabilityOf() read
+  // (deliverability col preferred, verify_status fallback) so the 'unknown' case is also backfill-safe.
+  const _rawVerdict = String((lead.deliverability != null && String(lead.deliverability).trim() !== '') ? lead.deliverability : (lead.verify_status || '')).trim();
+  const catchAllUnverified = (_deliv === 'deliverable' || /^unknown$/i.test(_rawVerdict)) && !dmEmailVerified;
   const reachable = cleanNamedDM || cleanRoleDM || hasSocial || freeProviderDM;
 
   // A fixable gap = ANY real problem the audit can hook on: a missing compliance doc, OR a missing SEO element,
@@ -377,7 +384,7 @@ async function scoreLead(lead) {
   const namedDMRole = cleanNamedDM && (_ROLE_TITLES.test(dmTitle) || (!dmTitle && hasNamed)); // named person whose role matches the DM set
   const smtpVerifiedPersonal = cleanNamedDM && dmEmailVerified;                                // personal email + SMTP/verify-status confirmed
   const hasLinkedin = !!(socials && socials.linkedin) || /linkedin\.com\/(company|in)\//i.test(html);
-  const isCatchAll = /catch[\s_-]?all/i.test(String(lead.verify_status || ''));
+  const isCatchAll = /catch[\s_-]?all/i.test(_rawVerdict);   // verify_status overloaded -> deliverability split: _rawVerdict prefers deliverability, falls back to verify_status
   const inferredEmail = cleanNamedDM && !dmEmailVerified;                        // gap-fix: catch-all domains DO accept mail; keep the inferred-email credit
   let contact_quality_score = 0;
   if (namedDMRole) contact_quality_score += 8;                      // named decision-maker matching the role set

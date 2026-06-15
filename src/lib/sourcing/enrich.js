@@ -74,6 +74,15 @@ function applyPattern(pattern, first, last, domain) {
   if (lp.replace(/[^a-z0-9]/g, '').length < 2) return null;
   const email = `${lp}@${domain}`; return SYNTAX.test(email) ? email : null;
 }
+// gap-fix: officer-name -> guessed email when NO firm pattern was detected. The two register fallbacks
+// (Companies House, SRA/FCA/CQC) used to raw-concat `first.toLowerCase()+'.'+last.toLowerCase()+'@'+domain`,
+// which leaked malformed locals straight into primary_email/contact_email whenever the surname carried a
+// suffix/punctuation: "Robert ... LL.M." -> robert.ll.m.@…, "… Jr." -> robert.jr.@… (both live in the DB).
+// applyPattern already strips non-alpha + rejects <2-char/dangling-separator locals, so route the default
+// 'first.last' guess through it (same sanitisation the detected-pattern branch gets). Returns '' if unusable.
+function guessOfficerEmail(pattern, first, last, domain) {
+  return (pattern ? applyPattern(pattern, first, last, domain) : applyPattern('first.last', first, last, domain)) || '';
+}
 
 // ---- free verify: canonical 10-layer (free-verify.js) with inline as backup ----
 async function verifyFree(email, env) {
@@ -237,7 +246,7 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
     for (const o of (_chRes.officers || [])) {
       const k = (o.name || '').toLowerCase(); if (!o.name || seen.has(k)) continue; seen.add(k);
       const parts = o.name.trim().split(/\s+/); const first = parts[0] || ''; const last = parts.length > 1 ? parts[parts.length - 1] : '';
-      const guess = pattern ? applyPattern(pattern, first, last, domain) : ((first && last) ? (first.toLowerCase() + '.' + last.toLowerCase() + '@' + domain) : '');
+      const guess = guessOfficerEmail(pattern, first, last, domain);
       dms.push({ name: o.name, first_name: first, last_name: last, title: o.role || 'Director', email: guess, email_guessed: !!guess, linkedin: '', source: 'companies_house', ch_url: _chRes.ch_url || '' });
       if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: o.name, position: o.role || 'Director', type: 'personal', source: 'companies_house_pattern', guessed: true };
     }
@@ -250,7 +259,7 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
     for (const o of regOfficers) {
       const k = (o.name || '').toLowerCase(); if (!o.name || seen.has(k)) continue; seen.add(k);
       const parts = o.name.trim().split(/\s+/); const first = parts[0] || ''; const last = parts.length > 1 ? parts[parts.length - 1] : '';
-      const guess = pattern ? applyPattern(pattern, first, last, domain) : ((first && last) ? (first.toLowerCase() + '.' + last.toLowerCase() + '@' + domain) : '');
+      const guess = guessOfficerEmail(pattern, first, last, domain);
       dms.push({ name: o.name, first_name: first, last_name: last, title: o.role || 'Officer', email: guess, email_guessed: !!guess, linkedin: '', source: 'register_pattern', register: o.source || 'register' });
       if (guess && !byEmail[guess]) byEmail[guess] = { value: guess, name: o.name, position: o.role || '', type: 'personal', source: 'register_pattern', guessed: true };
     }

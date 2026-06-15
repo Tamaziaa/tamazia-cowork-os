@@ -724,6 +724,7 @@ CREATE TABLE IF NOT EXISTS leads (
   aggressive_source boolean DEFAULT false,
   scrape_stream text,
   verify_status text,
+  deliverability text,
   scraped_at timestamptz,
   scrape_query text,
   all_emails jsonb,
@@ -1935,6 +1936,10 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS aggressive_selected boolean DEFAULT f
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS aggressive_source boolean DEFAULT false;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS scrape_stream text;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS verify_status text;
+-- deliverability: dedicated email-deliverability VERDICT (good/valid/risky/bad/...), split out of the
+-- overloaded verify_status (which also carried workflow states pending/approved). Additive; verify_status
+-- is retained for back-compat. Single source of truth = src/lib/enrich/verify-status.js deliverabilityOf().
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS deliverability text;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS scraped_at timestamptz;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS scrape_query text;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS all_emails jsonb;
@@ -2397,3 +2402,9 @@ ALTER TABLE win_loss_records ADD COLUMN IF NOT EXISTS created_at timestamptz DEF
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS name varchar(120);
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS status varchar(20) DEFAULT 'active'::character varying;
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+
+-- Partial unique index closing the leads.domain TOCTOU (added by bug5-infra flag-3).
+-- Survivors-only: ignores rows marked status='duplicate' (the non-destructive dedupe tombstone) and
+-- NULL/empty domains. Verified safe live: 0 conflicting groups under this predicate.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_domain_active_unique ON leads (lower(domain)) WHERE COALESCE(status,'') <> 'duplicate' AND COALESCE(domain,'') <> '';
+ALTER TABLE minting_queue ADD COLUMN IF NOT EXISTS claimed_at timestamptz;

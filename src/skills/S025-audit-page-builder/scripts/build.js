@@ -68,8 +68,20 @@ function signUrl({ slug, hash, lead_id, expSeconds }) {
   return { url, sig, exp };
 }
 
+// Constant-time compare of two equal-length hex sig strings (avoids a timing side-channel on the HMAC).
+// Falls back to a length-difference reject before the crypto compare so timingSafeEqual never throws on
+// mismatched buffer lengths.
+function _sigEq(a, b) {
+  const ab = Buffer.from(String(a || ''), 'utf8'); const bb = Buffer.from(String(b || ''), 'utf8');
+  if (ab.length !== bb.length) return false;
+  try { return crypto.timingSafeEqual(ab, bb); } catch (_e) { return false; }
+}
 function verifySignedUrl(url) {
   const secret = process.env.TAMAZIA_HMAC_SECRET || 'NOT_CONFIGURED';
+  // FAIL-CLOSED on a missing secret: if the env var is unset the signer falls back to the literal
+  // 'NOT_CONFIGURED' (in source, public), which would make every signature forgeable by anyone. Refuse to
+  // validate rather than honour a guessable key. (Prod has it set; this only bites a misconfigured deploy.)
+  if (secret === 'NOT_CONFIGURED') return { ok: false, reason: 'hmac_secret_not_configured' };
   try {
     const u = new URL(url);
     const m = u.pathname.match(/^\/audit\/([^/]+)\/([^/]+)$/);
@@ -79,7 +91,7 @@ function verifySignedUrl(url) {
     const exp = u.searchParams.get('x');
     const sig = u.searchParams.get('sig') || '';
     const expected = crypto.createHmac('sha256', secret).update(`${slug}|${hash}|${lead_id}|${exp}`).digest('hex').slice(0, 32);
-    if (sig !== expected) return { ok: false, reason: 'sig_mismatch' };
+    if (!_sigEq(sig, expected)) return { ok: false, reason: 'sig_mismatch' };
     if (Number(exp) < Math.floor(Date.now() / 1000)) return { ok: false, reason: 'expired' };
     return { ok: true, slug, hash, lead_id: Number(lead_id), exp: Number(exp) };
   } catch (_e) { return { ok: false, reason: 'parse_error' }; }

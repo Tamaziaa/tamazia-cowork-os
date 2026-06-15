@@ -61,7 +61,22 @@ function ingest(raw) {
   const payloadJson = JSON.stringify(raw).replace(/'/g, "''").slice(0, 4000);
   pg(`INSERT INTO bounce_events (lead_id, recipient_email, relay, bounce_type, smtp_code, reason, payload) VALUES (${leadId || 'NULL'}, '${ev.recipient_email.replace(/'/g, "''")}', '${(ev.relay || 'unknown').replace(/'/g, "''")}', '${ev.bounce_type}', ${ev.smtp_code ? `'${String(ev.smtp_code).replace(/'/g, "''")}'` : 'NULL'}, '${(ev.reason || '').replace(/'/g, "''").slice(0, 500)}', '${payloadJson}'::jsonb)`);
   if (ev.bounce_type === 'hard' || ev.bounce_type === 'complaint' || ev.bounce_type === 'unsubscribe') {
-    pg(`INSERT INTO dnc (email, reason, added_at) VALUES ('${ev.recipient_email.replace(/'/g, "''")}', 'auto:${ev.bounce_type}', NOW()) ON CONFLICT (email) DO NOTHING`);
+    // BUG FIX: this previously wrote to a `dnc` table that DOES NOT EXIST in Neon (to_regclass NULL), so the
+    // INSERT errored every time and was swallowed by pg() — hard bounces, SPAM COMPLAINTS, and unsubs were never
+    // enrolled in any do-not-contact list. Worse, no send path even read `dnc`. Route enrolment to the CANONICAL
+    // `suppression` table instead: it exists, has UNIQUE(email), and IS consulted by the send gates (push-to-mystrika
+    // + send-due), so a complained/bounced address can never be re-mailed. Idempotent via ON CONFLICT (email).
+    const emailE = ev.recipient_email.replace(/'/g, "''");
+    const domainE = (ev.recipient_email.split('@').pop() || '').replace(/'/g, "''");
+    pg(`INSERT INTO suppression (email, domain, reason, scope, notes, suppressed_at) VALUES ('${emailE}', '${domainE}', 'auto:${ev.bounce_type}', 'all', 'S024 bounce-handler auto-suppress', NOW()) ON CONFLICT (email) DO NOTHING`);
+    // Also reflect it on the lead + sequence so the status-based gates catch it without depending on the
+    // suppression join alone. NB: do NOT set replied=TRUE (a bounce is not a reply — that would inflate
+    // reply-rate metrics + the degradation auto-pause). status='bounced' is what enqueue-leads / send-due gate
+    // on, and email_sequence_state='bounced' is the canonical cadence-halt the touch scheduler already honours.
+    if (leadId) {
+      pg(`UPDATE leads SET status='bounced', updated_at=NOW() WHERE id=${leadId}`);
+      pg(`UPDATE email_sequence_state SET status='bounced', paused_reason='auto:${ev.bounce_type}', updated_at=NOW() WHERE lead_id=${leadId}`);
+    }
   }
   return { ok: true, ev, lead_id: leadId };
 }

@@ -23,24 +23,45 @@ function pickDueDrafts() {
   // manually handled. Belt-and-suspenders across BOTH signals: email_sequence_state status and the
   // reply classifier's inbound_emails verdict. This is a legal line (opt-out must be honored), so it
   // is enforced at selection time, not just suppressed downstream.
+  // THIRD signal: the canonical `suppression` table (opt-out registry written by imap-poll on STOP and by
+  // recycle.js for repliers). email_sequence_state/inbound only catch opt-outs that resolved to THIS lead;
+  // a suppressed address recorded against a colliding lead (or matched by domain only) would otherwise slip
+  // through. Gate the lead's own send address against the registry too. (legal opt-out line)
   // CROSS-WORKFLOW GUARD: `status` (touch_N_queued) and `lifecycle_stage` are written by different
   // workflows and can disagree. The engine cycle's qualify-and-queue sets status='touch_0_queued', but
   // v3-rerun / backlog-burst (requalify-all-leads.js) can later flip the SAME lead's lifecycle_stage to
   // 'pending_approval' or 'rejected' (this divergence is already present in the live data). Selecting on
   // status alone would auto-send a lead another workflow has since demoted. Require the lifecycle_stage to
   // still be a sendable one so the two vocabularies must AGREE before any mail goes out.
-  const sql = `SELECT l.id::text, l.company, COALESCE(NULLIF(l.email,''), l.contact_email, '') AS email, l.status, COALESCE(l.next_touch_date::text, '') AS next FROM leads l WHERE l.status LIKE 'touch_%_queued' AND COALESCE(l.lifecycle_stage,'') NOT IN ('pending_approval','rejected','duplicate','parked','suppressed') AND COALESCE(NULLIF(l.email,''), l.contact_email, '') <> '' AND (l.next_touch_date IS NULL OR l.next_touch_date <= CURRENT_DATE) AND COALESCE(l.replied, FALSE) = FALSE AND COALESCE(l.acquisition_channel,'') NOT ILIKE '%test%' AND COALESCE(l.acquisition_channel,'') NOT ILIKE '%seed%' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal') AND NOT EXISTS (SELECT 1 FROM email_sequence_state ess WHERE ess.lead_id = l.id AND ess.status IN ('unsubscribed','bounced','manually_handled','opted_out','replied','completed','nurture_complete')) AND NOT EXISTS (SELECT 1 FROM inbound_emails ie WHERE ie.matched_lead_id = l.id AND ie.classification IN ('OPT_OUT','BOUNCE','UNSUBSCRIBE')) LIMIT 50`;
+  const sql = `SELECT l.id::text, l.company, COALESCE(NULLIF(l.email,''), l.contact_email, '') AS email, l.status, COALESCE(l.next_touch_date::text, '') AS next FROM leads l WHERE l.status LIKE 'touch_%_queued' AND COALESCE(l.lifecycle_stage,'') NOT IN ('pending_approval','rejected','duplicate','parked','suppressed') AND COALESCE(NULLIF(l.email,''), l.contact_email, '') <> '' AND (l.next_touch_date IS NULL OR l.next_touch_date <= CURRENT_DATE) AND COALESCE(l.replied, FALSE) = FALSE AND COALESCE(l.acquisition_channel,'') NOT ILIKE '%test%' AND COALESCE(l.acquisition_channel,'') NOT ILIKE '%seed%' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal') AND NOT EXISTS (SELECT 1 FROM email_sequence_state ess WHERE ess.lead_id = l.id AND ess.status IN ('unsubscribed','bounced','manually_handled','opted_out','replied','completed','nurture_complete')) AND NOT EXISTS (SELECT 1 FROM inbound_emails ie WHERE ie.matched_lead_id = l.id AND ie.classification IN ('OPT_OUT','BOUNCE','UNSUBSCRIBE')) AND NOT EXISTS (SELECT 1 FROM suppression sup WHERE lower(sup.email) = lower(COALESCE(NULLIF(l.email,''), l.contact_email)) AND (sup.expires_at IS NULL OR sup.expires_at > NOW())) LIMIT 50`;
   const raw = pg(sql);
   if (!raw) return [];
   return raw.split('\n').filter(Boolean).map(l => { const [id, company, email, status, next] = l.split('\t'); return { id: Number(id), company, email, status, next_touch_date: next }; });
 }
 
 function getDraftForTouch(lead_id, touch) {
-  const raw = pg(`SELECT id::text, draft_subject, draft_body FROM outreach_drafts WHERE lead_id=${lead_id} AND channel='email' AND draft_metadata->>'touch' = '${touch}' AND send_status='pending' LIMIT 1`);
+  // ATOMIC CLAIM (idempotency / anti-double-send): GitHub Actions runs this every ~30m and a run can exceed
+  // that (live audit-verify curl + relay calls + paced gaps), so two runs can overlap and both select the same
+  // due lead. Flip the ONE matching pending draft to 'sending' in a single UPDATE ... RETURNING so exactly one
+  // worker claims it; a concurrent worker's UPDATE matches no row and it skips. Prevents sending the same touch
+  // twice to a prospect. The claim is released back to 'pending' on a soft skip (see releaseDraft) and advanced
+  // to 'sent' on success. Uses a CTE so we lock+update+return atomically (psql shim takes no params).
+  const raw = pg(`WITH c AS (
+      SELECT id FROM outreach_drafts
+      WHERE lead_id=${lead_id} AND channel='email' AND draft_metadata->>'touch' = '${touch}' AND send_status='pending'
+      ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)
+    UPDATE outreach_drafts od SET send_status='sending'
+    FROM c WHERE od.id=c.id
+    RETURNING od.id::text, od.draft_subject, od.draft_body`);
   if (!raw) return null;
   const [id, subject, body] = raw.split('\t');
+  if (!id) return null;
   return { id: Number(id), subject, body };
 }
+// Release a claimed-but-not-sent draft back to 'pending' so a later run can retry it (used on soft skips that
+// are transient: no eligible alias / quota exhausted / send error). Terminal skips set their own explicit
+// send_status. (outreach_drafts has no updated_at column — do not reference one.)
+function releaseDraft(draft_id) { pg(`UPDATE outreach_drafts SET send_status='pending' WHERE id=${draft_id} AND send_status='sending'`); }
 
 function currentTouchFromStatus(status) {
   const m = (status || '').match(/touch_(\d+)_queued/);
@@ -57,6 +78,7 @@ async function processLead(lead) {
   const qs = pg(`SELECT quality_score FROM leads WHERE id=${lead.id}`);
   if (qs !== '' && qs != null && Number(qs) < 35) {
     pg(`UPDATE leads SET status='quality_blocked' WHERE id=${lead.id}`);
+    pg(`UPDATE outreach_drafts SET send_status='blocked_quality' WHERE id=${draft.id} AND send_status='sending'`); // release the claim (terminal)
     return { lead_id: lead.id, skipped: 'quality_below_threshold', quality_score: Number(qs) };
   }
 
@@ -112,7 +134,7 @@ async function processLead(lead) {
       alias = pickSendAlias({});
     }
   }
-  if (!alias) return { lead_id: lead.id, skipped: 'no_eligible_alias_quota_exhausted' };
+  if (!alias) { releaseDraft(draft.id); return { lead_id: lead.id, skipped: 'no_eligible_alias_quota_exhausted' }; } // transient — release claim to retry next run
 
   const fromName = alias.persona_name || alias.first_name || 'Aman Pareek';
   // Signature MUST match the sending alias. Fill the __SIGNATURE__ token with the alias's first name,
@@ -123,7 +145,7 @@ async function processLead(lead) {
   const sendSubject = _nd(String(draft.subject));
   // Send via the multi-relay router (routes by alias.relay, fails over, enforces daily caps)
   const result = await routerSend({ to: lead.email, from: alias.email, from_name: fromName, subject: sendSubject, text: sendBody, relay: alias.relay });
-  if (!result.ok) return { lead_id: lead.id, error: 'send_failed', detail: result.attempts };
+  if (!result.ok) { releaseDraft(draft.id); return { lead_id: lead.id, error: 'send_failed', detail: result.attempts }; } // transient — release claim to retry
   const email_id = result.id;
   markUsed(alias.id);
   // Persist BOTH the RFC Message-ID we set (matches a reply's In-Reply-To/References for bit-perfect

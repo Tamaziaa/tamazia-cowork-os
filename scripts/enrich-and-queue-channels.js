@@ -31,7 +31,12 @@ function instagramTouch0({ company }) {
 
 (async () => {
   const limit = Number(process.argv[2] || 10);
-  // Pick leads that lack contact data and aren't internal/test/lexquity
+  // Pick leads that lack contact data and aren't internal/test/lexquity.
+  // bug-fix(round-5): best_channel='none' was TERMINAL — a lead the waterfall found no contact for (often just a
+  // transient empty-site/timeout) was stamped 'none' and, because the filter required best_channel='', NEVER
+  // re-enriched even after its site came back. 166 leads sit permanently stuck at none+zero-contact. Re-admit
+  // 'none' leads that still have a domain and no email, BOUNDED to once a week via updated_at (the script stamps
+  // updated_at on every pass) so they get a periodic retry without re-fetching the same dead set every 30min cycle.
   const raw = pg(`
     SELECT id::text, company, COALESCE(domain,''), COALESCE(first_name,'')
     FROM leads
@@ -39,9 +44,12 @@ function instagramTouch0({ company }) {
       AND COALESCE(sector,'') NOT IN ('lexquity-investor','arbitration-institution','arbitration-practitioner','professional-services','internal')
       AND COALESCE(company,'') NOT ILIKE 'Test %' AND COALESCE(company,'') NOT ILIKE 'Tamazia%'
       AND COALESCE(company,'') NOT ILIKE '%arbitration%' AND COALESCE(company,'') NOT ILIKE '%(ICC)%'
-      AND COALESCE(best_channel,'') = ''
       AND COALESCE(contact_email,'') = ''
-    ORDER BY priority_score DESC NULLS LAST, id DESC
+      AND (
+        COALESCE(best_channel,'') = ''
+        OR (best_channel = 'none' AND COALESCE(domain,'') <> '' AND updated_at < NOW() - INTERVAL '7 days')
+      )
+    ORDER BY (COALESCE(best_channel,'') = '') DESC, priority_score DESC NULLS LAST, id DESC
     LIMIT ${limit}`);
   const leads = raw.split('\n').filter(Boolean).map(l => { const [id, company, domain, first] = l.split('\t'); return { id: Number(id), company, domain, first }; });
   console.log(`Enriching ${leads.length} leads via free waterfall...`);
@@ -60,6 +68,12 @@ function instagramTouch0({ company }) {
     const fn = best ? best.first_name : '';
     const ln = best ? best.last_name : '';
     const title = best ? best.position : '';
+    // bug-fix(round-5): the scorer's contact-quality signal reads contact_name (lead-quality.js dmName =
+    // decision_maker_name||contact_name||dm_name||full_name) and NEVER first_name/last_name. This live enrich path
+    // wrote fn/ln but left contact_name NULL, so a named DM found by the waterfall was INVISIBLE to qualify —
+    // depressing contact_quality_score and the named-DM count (64 leads sit with first/last set but contact_name
+    // empty, 55 of them Tier-1/2). Compose contact_name from a real first+last so the found person actually counts.
+    const cn = (fn && ln) ? `${fn} ${ln}`.replace(/\s+/g, ' ').trim() : '';
     const igHandle = r.instagram ? r.instagram.replace(/.*instagram\.com\//, '').replace(/\/$/, '') : '';
     // Persist EVERYTHING found: all emails (named, scored) + all socials
     const allEmails = JSON.stringify(contacts);
@@ -69,6 +83,7 @@ function instagramTouch0({ company }) {
         contact_email=CASE WHEN ${esc(email)}='' THEN contact_email ELSE ${esc(email)} END,
         first_name=CASE WHEN ${esc(fn)}='' THEN first_name ELSE ${esc(fn)} END,
         last_name=CASE WHEN ${esc(ln)}='' THEN last_name ELSE ${esc(ln)} END,
+        contact_name=CASE WHEN ${esc(cn)}='' THEN contact_name ELSE ${esc(cn)} END,
         title=CASE WHEN ${esc(title)}='' THEN title ELSE ${esc(title)} END,
         linkedin_url=${esc(r.linkedin)}, instagram_handle=${esc(igHandle)}, best_channel=${esc(r.best_channel)},
         lifecycle_stage=CASE WHEN lifecycle_stage IN ('sourced','enriched') THEN 'enriched' ELSE lifecycle_stage END, updated_at=NOW()

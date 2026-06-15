@@ -59,13 +59,22 @@ async function main() {
   let tierRefreshed = 0;
   try {
     const rows = pg(`SELECT id::text, COALESCE(fit,FALSE)::text, COALESCE(fit_score,0), COALESCE(hot_score,0),
-        (CASE WHEN COALESCE(verify_status,'') IN ('verified','approved') OR COALESCE(contact_confidence,0) >= 0.7 THEN 1 ELSE 0 END),
+        -- verify_status overloaded -> deliverability split: prefer the dedicated deliverability VERDICT, fall
+        -- back to verify_status (backfill-safe). 'good'/'valid'/'deliverable'/'verified' = a deliverable email.
+        -- Legacy 'approved' (a WORKFLOW value, never copied into deliverability by the backfill) is still honoured
+        -- via the verify_status fallback so no currently-counted lead drops out of the cache.
+        (CASE WHEN COALESCE(NULLIF(deliverability,''), verify_status, '') IN ('good','valid','deliverable','verified','approved') OR COALESCE(contact_confidence,0) >= 0.7 THEN 1 ELSE 0 END),
         (CASE WHEN decision_makers IS NOT NULL AND decision_makers::text NOT IN ('','null','[]','{}') THEN 1 ELSE 0 END),
         (CASE WHEN COALESCE(linkedin_url, contact_linkedin, '') <> '' THEN 1 ELSE 0 END),
         COALESCE(audit_verified,FALSE)::text,
         (CASE WHEN COALESCE(hiring_signal,'') <> '' THEN 1 ELSE 0 END),
         (CASE WHEN COALESCE(aggressive_source,FALSE) OR COALESCE(scrape_stream,'')='sponsored' THEN 1 ELSE 0 END),
-        COALESCE(conversion_tier,''), COALESCE(conversion_score,0)
+        COALESCE(conversion_tier,''), COALESCE(conversion_score,0),
+        -- PARITY with the send path (push-to-mystrika): the V3 re-tier path writes quality_score and leaves the
+        -- legacy fit_score at 0, and catch-all/risky addresses are still deliverable (Tier B). Without these the
+        -- STORED conversion_tier diverged from what actually sends (V3 leads cached as C; catch-all cached as C).
+        COALESCE(quality_score,0),
+        (CASE WHEN COALESCE(verify_status,'') ~* '(catch|risky|accept)' THEN 1 ELSE 0 END)
       FROM leads
       WHERE COALESCE(lead_type,'') NOT IN ('investor','institution','internal')
         AND lifecycle_stage IN ('sourced','enriched','qualified')
@@ -74,9 +83,10 @@ async function main() {
     if (rows) {
       const upd = [];
       for (const ln of rows.split('\n').filter(Boolean)) {
-        const [id, fit, fs_, hs, vmail, dm, li, av, hire, ad, curTier, curScore] = ln.split('\t');
-        const conv = conversionScore({ fit: fit === 't' || fit === 'true', fit_score: +fs_ || 0, hot_score: +hs || 0,
-          has_verified_email: vmail === '1', decision_maker: dm === '1', has_linkedin: li === '1',
+        const [id, fit, fs_, hs, vmail, dm, li, av, hire, ad, curTier, curScore, qs_, deliv] = ln.split('\t');
+        const verifiedMail = vmail === '1';
+        const conv = conversionScore({ fit: fit === 't' || fit === 'true', fit_score: Math.max(+fs_ || 0, +qs_ || 0), hot_score: +hs || 0,
+          has_verified_email: verifiedMail, has_deliverable_email: !verifiedMail && deliv === '1', decision_maker: dm === '1', has_linkedin: li === '1',
           audit_verified: av === 't' || av === 'true', hiring_signal: hire === '1', ad_runner: ad === '1' });
         if (conv.tier !== curTier || String(conv.score) !== String(curScore)) {
           upd.push(`(${Number(id)}, ${_esc(conv.tier)}, ${Number(conv.score)})`);

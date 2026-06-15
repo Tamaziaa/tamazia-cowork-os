@@ -53,13 +53,22 @@ const num = v => (v == null || v === '' || Number.isNaN(Number(v))) ? 'NULL' : N
         const VE = require(path.join(ROOT, 'src', 'lib', 'enrich', 'verify-email.js'));
         const dm = lead.primary_email || lead.contact_email;
         const vr = await VE.verifyEmailBest(dm, process.env, { allowApify: true });
-        // bug-fix: was `email_verified=${vr.verified ? 'TRUE' : 'email_verified'}` — the false branch wrote the
-        // column to ITSELF (a no-op), so a stale email_verified=TRUE survived even when this fresh authoritative
-        // check returned 'bad'/'invalid', producing the live email_verified=true + verify_status=bad contradiction
-        // (3 rows, all primary_email_verified_by='apify_verify'). This verdict IS authoritative for the primary
-        // email, so a non-verified result must set the flag FALSE, not leave it stale.
-        pg(`UPDATE leads SET verify_status=${esc(vr.status)}, primary_email_verified_by=${esc(vr.provider)}, email_verified=${vr.verified ? 'TRUE' : 'FALSE'} WHERE id=${lead.id}`);
-        if (/^(bad|invalid|undeliverable|no_mx|disposable)$/i.test(String(vr.status || ''))) {
+        // This safety net can ONLY DEMOTE (per the contract above): a confirmed-bad verdict pulls the lead to
+        // Tier-2; an inconclusive verdict ('risky'/'unknown') must NOT touch a prior positive verification.
+        // bug-fix(round-5, leadhalf): the previous `email_verified=${vr.verified ? 'TRUE' : 'FALSE'}` wrote FALSE on
+        // EVERY non-verified result — including the inconclusive 'risky'/'unknown' that catch-all/SMTP-blocking
+        // corporate domains routinely return — so an independently-verified DM (e.g. a site_named address already
+        // confirmed 'valid') got its email_verified clobbered to FALSE on recheck while STAYING Tier-1 (only
+        // bad/invalid demotes). Live: 387 apify_verify rows sat at risky+email_verified=false; 244 Tier-1 DMs
+        // downgraded this way. Correct ladder: positive -> TRUE; confirmed-bad -> FALSE; inconclusive -> leave as-is.
+        // verify_status overloaded -> deliverability split (verify_status branch): vr.status is the authoritative
+        // deliverability VERDICT (good/risky/bad/invalid/...) for the primary email, so write the dedicated
+        // deliverability column alongside verify_status (retained for back-compat). Both carry the same verdict here.
+        // The email_verified flag still follows the three-way ladder above (it is NOT the deliverability verdict).
+        const _bad = /^(bad|invalid|undeliverable|no_mx|disposable)$/i.test(String(vr.status || ''));
+        const _evSet = vr.verified ? 'email_verified=TRUE, ' : (_bad ? 'email_verified=FALSE, ' : '');
+        pg(`UPDATE leads SET ${_evSet}verify_status=${esc(vr.status)}, deliverability=${esc(vr.status)}, primary_email_verified_by=${esc(vr.provider)} WHERE id=${lead.id}`);
+        if (_bad) {
           q = Object.assign({}, q, { tier: 2, tier_reason: 'apify_confirmed_bad_email' });
           console.log(`  ↓ ${lead.domain} DM confirmed-bad via ${vr.provider} (${vr.status}) -> demoted to Tier-2`);
         }

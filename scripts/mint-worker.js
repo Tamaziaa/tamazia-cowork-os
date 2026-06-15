@@ -18,13 +18,42 @@ function q(s) { return String(s == null ? '' : s).replace(/'/g, "''"); }
 const CONC = Math.max(1, parseInt(process.env.MINT_CONCURRENCY || '10', 10));
 const IDLE = Math.max(1000, parseInt(process.env.MINT_IDLE_MS || '15000', 10));
 const MAXR = Math.max(1, parseInt(process.env.MINT_MAX_RETRIES || '3', 10));
+// Stale-claim TTL. A worker killed (SIGKILL at job timeout / OOM / crash) between claim and the
+// done/retry UPDATE leaves its row stuck status='minting' FOREVER — nothing else resets it (the mint-queue
+// analogue of the engine_runs zombie). reclaimStale() force-returns such rows to 'pending' so they re-mint.
+// Default 30m, well past a normal mint; override with MINT_RECLAIM_AFTER_MIN. Idempotent + safe under
+// concurrency (a row a live worker is actively minting is younger than the TTL, so it is never reclaimed).
+const RECLAIM_MIN = Math.max(1, parseInt(process.env.MINT_RECLAIM_AFTER_MIN || '30', 10));
 const ONCE = process.argv.includes('--once');
 const DRY = process.argv.includes('--dry');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Additive, fail-open: a claim timestamp so reclaimStale() can age claims. Legacy rows (and rows a not-yet-
+// upgraded worker claims) have claimed_at NULL — those are aged by enqueued_at instead (see reclaimStale).
+function ensureClaimedAt() { try { pg(`ALTER TABLE minting_queue ADD COLUMN IF NOT EXISTS claimed_at timestamptz`); } catch (_e) {} }
+
+// Reaper: return rows orphaned in 'minting' (claim never resolved) back to 'pending', retry-counted so a row
+// that repeatedly kills a worker eventually goes 'failed' instead of looping. Gated by TTL on claimed_at, OR
+// on enqueued_at when claimed_at IS NULL (legacy/pre-upgrade claims) — so a freshly-claimed row is never stolen.
+function reclaimStale() {
+  try {
+    const out = (pg(`UPDATE minting_queue
+        SET status=(CASE WHEN COALESCE(retries,0)+1 >= ${MAXR} THEN 'failed' ELSE 'pending' END),
+            retries=COALESCE(retries,0)+1,
+            error=COALESCE(error,'reclaimed: stale minting claim (worker killed before done/retry)')
+        WHERE status='minting'
+          AND ( (claimed_at IS NOT NULL AND claimed_at < now() - interval '${RECLAIM_MIN} minutes')
+             OR (claimed_at IS NULL AND enqueued_at < now() - interval '${RECLAIM_MIN} minutes') )
+        RETURNING id;`) || '').trim();
+    const n = out ? out.split('\n').filter(Boolean).length : 0;
+    if (n) console.log(`[mint-worker] reclaimed ${n} stale 'minting' row(s) -> pending/failed`);
+    return n;
+  } catch (e) { console.error('[mint-worker] reclaim error (continue):', String(e.message || e).slice(0, 120)); return 0; }
+}
+
 // Atomically claim up to CONC pending rows (pending -> minting). SKIP LOCKED lets many workers run safely.
 function claimBatch() {
-  const sql = `UPDATE minting_queue SET status='minting'
+  const sql = `UPDATE minting_queue SET status='minting', claimed_at=now()
     WHERE id IN (SELECT id FROM minting_queue WHERE status='pending' ORDER BY enqueued_at LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
     RETURNING id, regexp_replace(COALESCE(domain,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(sector,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(country,''),'[\t\r\n]+',' ','g'), lead_id;`;
   const out = (pg(sql) || '').trim();
@@ -64,6 +93,7 @@ async function mintOne(row) {
 }
 
 async function drainOnce() {
+  reclaimStale();                 // return orphaned 'minting' claims to 'pending' before claiming new work
   const batch = claimBatch();
   if (!batch.length) return 0;
   await Promise.all(batch.map(mintOne)); // CONC in parallel; mints are I/O-bound (API waits)
@@ -72,7 +102,8 @@ async function drainOnce() {
 
 (async () => {
   if (!NEON) { console.error('no NEON_URL'); process.exit(1); }
-  console.log(`[mint-worker] start conc=${CONC} idle=${IDLE}ms once=${ONCE} dry=${DRY}`);
+  console.log(`[mint-worker] start conc=${CONC} idle=${IDLE}ms once=${ONCE} dry=${DRY} reclaimAfter=${RECLAIM_MIN}m`);
+  ensureClaimedAt();              // additive claim-timestamp column (idempotent, fail-open)
   let total = 0;
   for (;;) {
     let n = 0;

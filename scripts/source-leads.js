@@ -20,13 +20,21 @@ const { enrichCompany } = require(path.resolve(__dirname, '..', 'src/lib/sourcin
 const { scanSite } = require(path.resolve(__dirname, '..', 'src/lib/audit/site-scan.js'));
 const ab = require(path.resolve(__dirname, '..', 'src/skills/S025-audit-page-builder/scripts/build.js'));
 
+const { classifyHttpInsert } = require(path.resolve(__dirname, '..', 'src/lib/sourcing/safe-insert.js'));
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING || process.env.NEON_DATABASE_URL;
 async function q(sql) {
   if (!NEON) return { ok: false, rows: [], error: 'neon_unconfigured' };
   try {
     const host = NEON.replace(/.*@([^/]+)\/.*/, '$1');
     const r = await fetch('https://' + host + '/sql', { method: 'POST', headers: { 'Neon-Connection-String': NEON, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: sql, params: [] }), signal: AbortSignal.timeout(20000) });
-    if (!r.ok) return { ok: false, rows: [], error: 'http_' + r.status };
+    if (!r.ok) {
+      // Capture the Postgres SQLSTATE + message from the error body so callers can tell a benign
+      // unique_violation (23505, dup-domain race) apart from a real failure. Body shape:
+      // {"message":"...","code":"23505",...}. Fail-open: if the body can't be parsed, fall back to http_<status>.
+      let code = '', msg = '';
+      try { const eb = await r.json(); code = eb.code || ''; msg = eb.message || ''; } catch (_) {}
+      return { ok: false, rows: [], code, error: msg || ('http_' + r.status) };
+    }
     const d = await r.json(); return { ok: true, rows: d.rows || d.results || [], error: null };
   } catch (e) { return { ok: false, rows: [], error: e.message }; }
 }
@@ -150,7 +158,15 @@ async function run() {
       VALUES (${lit(lead.company)}, ${lit(lead.domain)}, ${lit('https://' + lead.domain)}, ${lit(lead.sector)}, ${lit(lead.country)}, ${lit(lead.country)}, ${lit(r.source)}, ${lit('ad_intel_' + r.platform)}, ${lit('commercial_' + lead.sector)}, 'sourced', ${boolL(adRunner)}, ${num(lead.hot_score)}, ${lit(r.platform)}, ${lit(r.permalink)}, ${lit(adRunner ? 'sponsored' : 'organic_top100')}, ${num(lead.hot_score)}, ${boolL(lead.fit)}, ${num(lead.fit_score)}, ${lit(lead.email)}, ${lit(lead.contact_name)}, ${lit(lead.contact_title)}, ${lit(lead.contact_linkedin)}, ${jb(lead.emails)}, ${jb(lead.decision_makers)}, ${lit(lead.top_finding)}, ${boolL(lead.channel_email_ready)}, ${boolL(lead.channel_linkedin_ready)}, ${boolL(lead.channel_instagram_ready)}, ${lit(lead.conversion_tier)}, ${num(lead.conversion_score)}, ${lit(r.hiring_signal || null)}, NOW(), NOW())
       RETURNING id`);
     const leadId = ins.ok && ins.rows[0] ? ins.rows[0].id : null;
-    if (ins.ok && ins.rows[0]) summary.persisted++; else if (!ins.ok) console.error('[persist] ' + lead.domain + ': ' + ins.error);
+    // Unique-violation safe: with idx_leads_domain_active_unique live, a concurrent writer that inserted
+    // this domain between our dedupe SELECT and this INSERT raises 23505. That's a benign "already exists" —
+    // skip it (don't crash, don't count as persisted, don't log it as an error). Only real failures are logged.
+    if (ins.ok && ins.rows[0]) { summary.persisted++; }
+    else {
+      const kind = classifyHttpInsert(ins);
+      if (kind === 'duplicate') { summary.skipped_dup = (summary.skipped_dup || 0) + 1; }
+      else console.error('[persist] ' + lead.domain + ': ' + ins.error);
+    }
     // Tier routing: Tier-1 auto, Tier-2 -> pending_approval (mint only after founder approval), Tier-3 -> rejected.
     if (leadId) { const stage = lead.tier === 1 ? 'sourced' : lead.tier === 2 ? 'pending_approval' : 'rejected'; try { await q(`UPDATE leads SET icp_tier=${num(lead.tier)}, lifecycle_stage=${lit(stage)} WHERE id=${leadId}`); } catch (_) {} }
     // 5. mint audit page tied to the lead — ONLY Tier-1 auto-mints inline; Tier-2 mints after approval, Tier-3 never.

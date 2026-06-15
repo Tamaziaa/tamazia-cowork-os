@@ -14,6 +14,22 @@ function pg(sql) {
   if (!url) return null;
   try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; }
 }
+// Insert variant that classifies a unique_violation (23505) instead of swallowing it. With
+// idx_leads_domain_active_unique live, a dup-domain race throws 23505 from the pg8000 shim (stderr carries
+// 'C': '23505'); that's a benign "already exists" -> { dup:true }, NOT a crash. { id } on success,
+// { error } on any other failure. Used for the leads INSERT only (the TOCTOU-sensitive write).
+const { isUniqueViolationError } = require(path.join(ROOT, 'src/lib/sourcing/safe-insert.js'));
+function pgInsert(sql) {
+  const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
+  if (!url) return { id: null, error: 'neon_unconfigured' };
+  try {
+    const out = execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim();
+    return { id: /^\d+$/.test(out) ? Number(out) : null };
+  } catch (e) {
+    if (isUniqueViolationError(e)) return { id: null, dup: true };
+    return { id: null, error: (e && e.stderr ? String(e.stderr).trim() : (e && e.message)) || 'insert_failed' };
+  }
+}
 function pgEsc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
 
 const sec = require('../../../lib/sourcing/sec-edgar.js');
@@ -253,14 +269,16 @@ async function upsertLead(rec) {
     if (updates.length > 1) pg(`UPDATE leads SET ${updates.join(', ')} WHERE id=${existing}`);
     return { inserted: 0, updated: 1, lead_id: existing };
   }
-  // Insert
+  // Insert. Unique-violation safe: a dup-domain race (another writer inserted this domain since our SELECT
+  // above) raises 23505 from the partial unique index — treat as "already exists, skip", never a crash.
   const sql = `
     INSERT INTO leads (company, domain, sector, jurisdiction, city, email, phone, source, source_query, source_payload_hash, source_raw, status, imported_at, created_at, updated_at, priority_score)
     VALUES (${pgEsc(rec.company)}, ${pgEsc(rec.domain)}, ${pgEsc(rec.sector)}, ${pgEsc(rec.jurisdiction)}, ${pgEsc(rec.city)}, ${pgEsc(rec.email)}, ${pgEsc(rec.phone)}, ${pgEsc(rec.source)}, ${pgEsc(rec.source_query)}, ${pgEsc(rec.source_payload_hash)}, ${pgEsc(JSON.stringify(rec.source_raw || {}))}::jsonb, ${pgEsc(rec.status || 'new')}, NOW(), NOW(), NOW(), 50)
     RETURNING id`;
-  const idRaw = pg(sql);
-  const lead_id = idRaw && /^\d+$/.test(idRaw) ? Number(idRaw) : null;
-  return { inserted: lead_id ? 1 : 0, updated: 0, lead_id };
+  const r = pgInsert(sql);
+  if (r.dup) return { inserted: 0, updated: 0, skipped_dup: 1 };
+  if (r.error) { console.error('[S028 upsert] ' + (rec.domain || rec.company) + ': ' + String(r.error).slice(0, 160)); return { inserted: 0, updated: 0 }; }
+  return { inserted: r.id ? 1 : 0, updated: 0, lead_id: r.id };
 }
 
 // Map abstract sector name → meaningful search query per source
