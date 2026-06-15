@@ -232,10 +232,11 @@ function parseContactsFromHtml(html, domain, page = '/') {
   return out;
 }
 async function scrapeSiteContacts(domain) {
-  const out = { emails: [], people: [] };
+  const out = { emails: [], people: [], homeHtml: '' };   // Q2: keep the homepage HTML for resolveName (zero extra fetch)
   const seenE = new Set(), seenP = new Set();
   for (const pth of ['', '/team', '/about', '/about-us', '/contact', '/contact-us', '/our-team', '/people', '/our-people', '/staff', '/meet-the-team', '/leadership', '/partners', '/management']) {
     const html = await getText('https://' + domain + pth, 12000); if (!html) continue;
+    if (pth === '' && !out.homeHtml) out.homeHtml = html;   // first successful page (homepage) carries JSON-LD/og/footer name signals
     const part = parseContactsFromHtml(html, domain, pth || '/');
     for (const e of part.emails) { if (seenE.has(e.value)) { const cur = out.emails.find(x => x.value === e.value); if (cur && !cur.name && e.name) { cur.name = e.name; cur.title = e.title; cur.source = 'site_named'; } } else { seenE.add(e.value); out.emails.push(e); } }
     for (const p of part.people) { if (!seenP.has(p.linkedin)) { seenP.add(p.linkedin); out.people.push(p); } }
@@ -259,7 +260,7 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
   const [hunter, dmSerper, site] = await Promise.all([
     Promise.resolve((base.contacts || []).map(c => ({ value: (c.email || '').toLowerCase(), first_name: c.first_name || '', last_name: c.last_name || '', name: [c.first_name, c.last_name].filter(Boolean).join(' '), position: c.position || '', type: c.type || '', confidence: c.confidence || 0, linkedin: '', source: 'waterfall' }))),
     serperDecisionMakers(company || domain.split('.')[0], env.SERPER_KEY),
-    scrapeSiteContacts(domain).then(s => ({ emails: s.emails || [], people: [...(base.linkedin ? [{ linkedin: base.linkedin }] : []), ...(s.people || [])] })).catch(() => ({ emails: [], people: base.linkedin ? [{ linkedin: base.linkedin }] : [] })),
+    scrapeSiteContacts(domain).then(s => ({ emails: s.emails || [], people: [...(base.linkedin ? [{ linkedin: base.linkedin }] : []), ...(s.people || [])], homeHtml: s.homeHtml || '' })).catch(() => ({ emails: [], people: base.linkedin ? [{ linkedin: base.linkedin }] : [], homeHtml: '' })),
   ]);
   // known emails (with names where available) → infer the firm pattern
   const known = [...hunter];
@@ -363,8 +364,22 @@ async function enrichCompany({ domain, company, sector, env = process.env, verif
   const _CCAP = Math.max(1, parseInt(env.ENRICH_CONTACT_CAP || '4', 10));
   const _secCap = Math.max(0, _CCAP - (dmsel.primary ? 1 : 0));
   const _secondaryCapped = (dmsel.secondary || []).slice(0, _secCap);
+  // Q2 (B45/B54): RESOLVE the company name (and legal_name) before persisting. ~51% of leads carry a junk SERP
+  // title as `company` ("How much will a UK Immigration Lawyer cost me?", "20 Best Places to Buy a House …",
+  // "Family Solicitors in London - Brookman"). resolveName mines the homepage HTML we already fetched (JSON-LD ->
+  // og:site_name -> footer © -> <title>) for the real trading name, falls back to free Companies House (UK) /
+  // SearXNG, and REJECTS listicle/question/geo-descriptive titles via normaliseName (it returns name_status
+  // 'unverified' and keeps the best raw rather than fabricating). Serper is NOT used here (tier defaults to 3 —
+  // paid SERP stays gated to the small Tier-1/2 set), so this is a £0 add on the homepage HTML already in hand.
+  let _resolvedCompany = company || '', _legalName = null, _nameStatus = 'raw', _nameSource = 'raw';
+  try {
+    const { resolveName } = require('./resolve-name.js');
+    const rn = await resolveName({ domain, html: site.homeHtml || '', sector, raw: company || '' });
+    if (rn && rn.company) { _resolvedCompany = rn.company; _nameStatus = rn.name_status || 'resolved'; _nameSource = rn.name_source || 'resolve'; }
+    if (rn && rn.legal_name) _legalName = rn.legal_name;
+  } catch (_) {}
   const rec = {
-    domain, company: company || '', pattern,
+    domain, company: _resolvedCompany || company || '', company_raw: company || '', legal_name: _legalName, name_status: _nameStatus, name_source: _nameSource, pattern,
     website: base.website || ('https://' + domain), instagram: (_social.socials.instagram && _social.socials.instagram.url) || base.instagram || '',
     socials: _social.socials || {}, firmographics: { reg_number: _firmo.reg_number || null, registration_country: _firmo.country || '', jurisdiction: _firmo.jurisdiction || '', vat_number: _firmo.vat_number || null, status: _firmo.status || '', officers: _firmo.officers || [], operating_countries: _firmo.operating_countries || [], regions: _firmo.regions || [], serves_eu: !!_firmo.serves_eu, confident_country: !!_firmo.confident_country },
     emails, decisionMakers: dms, linkedin_people: site.people.map(p => p.linkedin),

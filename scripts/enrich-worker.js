@@ -98,6 +98,16 @@ async function enrichOne(row) {
     `email_verified=${primary ? (primary.verified ? 'TRUE' : 'FALSE') : 'FALSE'}`,
     `enriched_at=NOW()`,
   ];
+  // Q2 (B45/B54): persist the RESOLVED company name + legal_name (resolveName ran inside enrichCompany off the
+  // homepage HTML). Only OVERWRITE `company` when resolution actually produced a clean name (name_status
+  // resolved/verified) AND it differs — a 'raw'/'unverified' result keeps the existing value rather than
+  // re-writing junk. legal_name is backfilled whenever resolveName returned one (Companies House, UK) and the
+  // column is currently empty. Never blanks either field.
+  const _rc = String((rec && rec.company) || '').trim();
+  const _ns = String((rec && rec.name_status) || 'raw');
+  const _lg = String((rec && rec.legal_name) || '').trim();
+  if (_rc && (_ns === 'resolved' || _ns === 'verified')) sets.push(`company=${q(_rc)}`);
+  if (_lg) sets.push(`legal_name=COALESCE(NULLIF(legal_name,''), ${q(_lg)})`);
   // Q5 (B30): PERSIST entity_type so the PECR consent gate stops being inert (live: entity_type NULL + consent_required
   // FALSE for ALL 8,712 leads, so the qualifier's gate never fired). Classify from the company NAME's legal form
   // (Ltd/LLP/PLC = corporate; "& Partners"/partnership = individual; person-shaped = sole_trader). CH does not expose
