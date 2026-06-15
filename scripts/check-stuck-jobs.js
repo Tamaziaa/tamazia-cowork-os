@@ -60,7 +60,8 @@ function notifyEvent(kind, message) {
 async function main() {
   if (!NEON) { console.error('[check-stuck-jobs] no NEON_URL — skipping (fail-open)'); return; }
   pg(`CREATE TABLE IF NOT EXISTS system_health (check_key text PRIMARY KEY, category text, status text, detail text, metric numeric, checked_at timestamptz DEFAULT now())`);
-  const red = [];
+  const red = [];          // jobs newly red THIS run (rising edge) -> alert
+  let alreadyRed = 0;      // jobs still red from a prior run -> system_health updated, but no re-alert (anti-storm)
   let warn = 0;
   for (const [job, cad] of Object.entries(CADENCE)) {
     // Liveness = time since the last SUCCESSFUL COMPLETION, not the last start. The old
@@ -77,18 +78,26 @@ async function main() {
     let status = 'ok';
     if (m >= cad * 4) status = 'fail'; else if (m >= cad * 2) status = 'warn';
     const detail = `${job}: last run ${m.toFixed(0)}m ago (cadence ${cad}m)`;
+    // Read the PRIOR status before overwriting it, so we can alert only on the rising edge into red (see below).
+    const prev = (pg(`SELECT status FROM system_health WHERE check_key=${esc('stuck_' + job)}`) || '').split('\n')[0].trim();
     pg(`INSERT INTO system_health (check_key,category,status,detail,metric,checked_at) VALUES (${esc('stuck_' + job)},'liveness',${esc(status)},${esc(detail)},${m.toFixed(1)},now()) ON CONFLICT (check_key) DO UPDATE SET category=EXCLUDED.category,status=EXCLUDED.status,detail=EXCLUDED.detail,metric=EXCLUDED.metric,checked_at=now()`);
-    if (status === 'fail') red.push(detail); else if (status === 'warn') warn++;
+    if (status === 'fail') { if (prev === 'fail') alreadyRed++; else red.push(detail); }
+    else if (status === 'warn') warn++;
   }
+  // Anti-storm: this runs every 30-min cycle, so firing on EVERY red would alert Slack+Telegram every cycle for the
+  // whole duration of a stall — the opposite of "important-only" and quickly muted. We alert only on the RISING EDGE:
+  // jobs that just turned red (prior system_health status was not already 'fail'). The system_health row is still
+  // refreshed every cycle (Health tab + intel-pulse always show live state) and a job that recovers then re-stalls
+  // re-alerts (genuinely new incident). intel-pulse remains the periodic catch-all for a still-red job.
   if (red.length) {
     const detail = red.map(x => '• ' + x).join('\n');
     // Event-driven path (P3-7): fire the shared notify-event orchestrator NOW (Slack + Telegram). Only if that
     // could not run do we fall back to the inline Telegram, so a red flag always reaches at least one channel.
     const sent = notifyEvent('stuck', `Stuck engine${red.length > 1 ? 's' : ''}:\n${detail}`);
     if (!sent) { await telegram(`🛑 *Stuck engine${red.length > 1 ? 's' : ''}*\n${detail}`); }
-    console.log(`[check-stuck-jobs] ${red.length} red -> alert via ${sent ? 'notify-event (Slack+Telegram)' : 'inline Telegram fallback'}`);
+    console.log(`[check-stuck-jobs] ${red.length} newly red -> alert via ${sent ? 'notify-event (Slack+Telegram)' : 'inline Telegram fallback'}`);
   }
-  console.log(`[check-stuck-jobs] checked ${Object.keys(CADENCE).length} jobs · ${red.length} red · ${warn} amber`);
+  console.log(`[check-stuck-jobs] checked ${Object.keys(CADENCE).length} jobs · ${red.length} newly red · ${alreadyRed} still red (no re-alert) · ${warn} amber`);
 }
 
 main();
