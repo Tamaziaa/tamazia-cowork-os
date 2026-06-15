@@ -56,6 +56,13 @@ cat > "$APP_DIR/run-verify.sh" <<EOF
 set -a; . "$APP_DIR/.env"; set +a
 cd "$REPO_DIR"
 LIMIT="\${1:-150}"
+# PREFLIGHT: only run when outbound :25 is actually open. Until Hetzner unblocks it this is a
+# clean no-op (no DB churn — we don't want to burn the backlog into a 30-day cooldown with
+# bogus 'unknown' verdicts). Self-activates the moment :25 opens; no code change needed.
+if ! timeout 6 bash -c 'cat < /dev/null > /dev/tcp/gmail-smtp-in.l.google.com/25' 2>/dev/null; then
+  echo "[\$(date -u +%FT%TZ)] :25 blocked — skipping (request Hetzner unblock)" >> "$LOG_DIR/verify.log"
+  exit 0
+fi
 echo "===== verify run \$(date -u +%FT%TZ) limit=\$LIMIT =====" >> "$LOG_DIR/verify.log"
 ENV_FILE="$APP_DIR/.env" node ops/infra/hetzner-verify.js --limit "\$LIMIT" >> "$LOG_DIR/verify.log" 2>&1
 EOF
