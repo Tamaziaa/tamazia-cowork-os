@@ -17,8 +17,9 @@
 //   • The consent/entity (PECR) gate is NEVER touched: consent_required leads are EXCLUDED from every wave.
 //   • LinkedIn is found via SERP TITLES ONLY (SearXNG/Brave/DDG result url+title for `site:linkedin.com/in …`).
 //     linkedin.com is NEVER fetched. This reuses the existing compliant free-serp path.
-//   • £0: free models first via the llm/router (Cloudflare→Groq→Gemini free), hard per-run token/QPS cap +
-//     llm_cost_ledger + a KILL SWITCH (env LLM_QA_ENABLED). Default OFF so a cycle won't run it until enabled.
+//   • £0: free models first via the llm/router (Cloudflare→Groq→Gemini free), an AGENCY-OWNED daily budget +
+//     an optional per-run cost cap + llm_cost_ledger + a KILL SWITCH (env LLM_QA_ENABLED). Default OFF so a cycle
+//     won't run it until enabled. Budget is exhausted -> the wave EARLY-EXITS (no wasted SERP, no misleading rows).
 //   • Strict-JSON LLM output, validated; on mismatch we fall back to the deterministic finder result (never a guess).
 //
 // Writes (advisory): qa_found(jsonb) qa_suggested_tier qa_reason qa_confidence qa_model qa_checked_at qa_status,
@@ -26,8 +27,10 @@
 //   marked qa_status='rescued' + review_status='auto_promote' for apply-review.js to action (it re-checks the gate).
 //
 // Usage:
-//   LLM_QA_ENABLED=1 node scripts/run-llm-rescue.js --max 15 [--action ACTION] [--dry] [--token-cap 200000]
+//   LLM_QA_ENABLED=1 node scripts/run-llm-rescue.js --max 15 [--cohort NAME] [--dry] [--force] [--run-cost-cap-micro N]
 //   (this lib is require()d by that thin CLI; see run-llm-rescue.js)
+//   (the old --token-cap flag was phantom — never parsed, never enforced — and has been removed; the real per-run
+//    ceiling is --run-cost-cap-micro / LLM_QA_RUN_COST_CAP_MICRO, on top of the agency daily budget.)
 // ============================================================================================================
 
 const path = require('path');
@@ -50,6 +53,45 @@ const jesc = (o) => `'${JSON.stringify(o).replace(/'/g, "''")}'::jsonb`;
 
 // KILL SWITCH — default OFF so a scheduled cycle never runs this until the founder/cron enables it explicitly.
 function isEnabled() { return /^(1|true|yes|on)$/i.test(String(process.env.LLM_QA_ENABLED || '')); }
+
+// ------------------------------------------------------------------------------------------------------------
+// L14 — AGENCY LLM BUDGET (its OWN bucket, decoupled from the AUDIT ENGINE). The llm/router enforces a daily cap
+// against scanner_budget_state, which is part of the OFF-LIMITS audit-engine `scanner_*` family — so the audit
+// engine and the agency rescue layer would starve each other's LLM. We keep a SEPARATE, additive table
+// `agency_llm_budget_state` (same shape: workspace_id, bucket_day, spent_usd_micro, daily_cap_usd_micro) that ONLY
+// the agency layer reads/writes. We NEVER read or write the audit engine's scanner_budget_state. The table is
+// self-provisioned lazily (CREATE TABLE IF NOT EXISTS) on first use — and the whole wave is OFF by default
+// (LLM_QA_ENABLED), so this touches Neon only once the founder/cron enables the layer. Daily cap is env-tunable.
+const AGENCY_LLM_DAILY_CAP_MICRO = Number(process.env.LLM_QA_DAILY_CAP_MICRO || 500000); // default $0.50/day, agency-owned
+let _agencyBudgetReady = false;
+function _ensureAgencyBudget() {
+  if (_agencyBudgetReady) return;
+  try {
+    pg(`CREATE TABLE IF NOT EXISTS agency_llm_budget_state (
+        id bigserial PRIMARY KEY, workspace_id integer NOT NULL DEFAULT 1, bucket_day date NOT NULL DEFAULT CURRENT_DATE,
+        spent_usd_micro integer NOT NULL DEFAULT 0, daily_cap_usd_micro integer NOT NULL DEFAULT ${Math.max(0, AGENCY_LLM_DAILY_CAP_MICRO)},
+        UNIQUE (workspace_id, bucket_day))`);
+    _agencyBudgetReady = true;
+  } catch (_e) { /* if DDL is not permitted, remaining()=null below -> the router's own cap still applies */ }
+}
+// micro-USD remaining in the agency bucket today; null = unknown/uninitialised (caller treats null as "no agency cap").
+function agencyBudgetRemaining() {
+  _ensureAgencyBudget();
+  try {
+    let raw = pg(`SELECT (daily_cap_usd_micro - spent_usd_micro) FROM agency_llm_budget_state WHERE workspace_id=1 AND bucket_day=CURRENT_DATE`).trim();
+    if (raw === '') { pg(`INSERT INTO agency_llm_budget_state (workspace_id, bucket_day, daily_cap_usd_micro) VALUES (1, CURRENT_DATE, ${Math.max(0, AGENCY_LLM_DAILY_CAP_MICRO)}) ON CONFLICT (workspace_id, bucket_day) DO NOTHING`); raw = String(AGENCY_LLM_DAILY_CAP_MICRO); }
+    const n = Number(raw); return Number.isFinite(n) ? n : null;
+  } catch (_e) { return null; }
+}
+function agencyBudgetBump(costMicro) {
+  if (!costMicro || costMicro <= 0) return;
+  _ensureAgencyBudget();
+  try {
+    pg(`INSERT INTO agency_llm_budget_state (workspace_id, bucket_day, spent_usd_micro, daily_cap_usd_micro)
+        VALUES (1, CURRENT_DATE, ${Math.round(costMicro)}, ${Math.max(0, AGENCY_LLM_DAILY_CAP_MICRO)})
+        ON CONFLICT (workspace_id, bucket_day) DO UPDATE SET spent_usd_micro = agency_llm_budget_state.spent_usd_micro + ${Math.round(costMicro)}`);
+  } catch (_e) {}
+}
 
 // ------------------------------------------------------------------------------------------------------------
 // WAVE COHORTS — ordered by ENGINE-FUNCTION-MAP-V4 Part-C highest yield. Each is a SQL predicate over the live
@@ -170,8 +212,10 @@ function parseStrictJson(text) {
   const m = t.match(/\{[\s\S]*\}/); if (m) t = m[0];
   try { return JSON.parse(t); } catch (_e) { return null; }
 }
-async function llmJson({ system, prompt, role = 'classify', max_tokens = 400, lead_id }) {
+async function llmJson({ system, prompt, role = 'classify', max_tokens = 400, lead_id, costRef }) {
   const r = await router.run({ system, prompt, role, json: true, max_tokens, temperature: 0, lead_id });
+  // L4: surface the router's budget-exhausted verdict (free quota + paid daily cap both gone) so the wave can stop.
+  if (costRef && r && r.error === 'budget_exhausted_for_today') costRef.budgetExhausted = true;
   if (!r || !r.ok) return { ok: false, error: (r && r.error) || 'llm_unavailable', cost_usd_micro: (r && r.cost_usd_micro) || 0, model: r && (r.provider + '/' + r.model) };
   let obj = parseStrictJson(r.text);
   if (!obj) { // one retry, terser instruction
@@ -262,7 +306,7 @@ async function findLinkedinViaSerp({ company, dm_name, dm_role, domain, jurisdic
   // mismatch). A deterministic sanity cap backstops the model's calibration below.
   const sys = 'You match a UK/UAE business to its correct LinkedIn URL using ONLY the supplied result labels and URLs (a label may be derived from the URL slug, e.g. "charles-burns-123" -> "charles burns"). You never invent a URL. Be STRICT: if the person\'s surname does not clearly appear in the chosen label or URL, the match is weak -> LOW confidence (<50). Return strict JSON only.';
   const prompt = `Company: ${company || '(unknown)'}\nWebsite: ${domain || '(unknown)'}\nPerson: ${dm_name || '(company page wanted)'}${dm_role ? ' — ' + dm_role : ''}\n\nResults (label | url):\n${scored.map((r, i) => `${i + 1}. ${r.title || '(slug)'} | ${r.url}`).join('\n')}\n\nPick the ONE result that is genuinely this ${dm_name ? 'person (surname must match)' : "company's official page"}. If none clearly matches, choose 0. HIGH (>=75) only on a clear surname match; LOW (<50) if uncertain.\nReturn JSON: {"index": <1-based or 0>, "confidence": <0-100>, "why": "<short>"}`;
-  const r = await llmJson({ system: sys, prompt, role: 'classify', max_tokens: 200 });
+  const r = await llmJson({ system: sys, prompt, role: 'classify', max_tokens: 200, costRef });
   if (costRef) costRef.cost += (r.cost_usd_micro || 0);
   if (!r.ok || !r.obj) {
     // LLM unavailable -> fall back to the deterministic top ONLY if the DM is a person AND the surname matched.
@@ -303,7 +347,7 @@ async function findNamedDM({ company, domain, ch_number, jurisdiction }, costRef
       if (active.length === 1) return { found: true, dm_name: active[0].name, dm_role: active[0].role || 'Director', confidence: 80, model: 'companies_house', reason: 'ch_reg_officer' };
       const sys = 'You pick the most senior public decision-maker (owner/founder/managing/director) of a firm from its Companies House officer list. Return strict JSON only.';
       const prompt = `Company: ${company}\nOfficers (name | role):\n${active.slice(0, 12).map((o, i) => `${i + 1}. ${o.name} | ${o.role || 'Director'}`).join('\n')}\nReturn JSON: {"index": <1-based>, "confidence": <0-100>}`;
-      const r = await llmJson({ system: sys, prompt, role: 'classify', max_tokens: 120 });
+      const r = await llmJson({ system: sys, prompt, role: 'classify', max_tokens: 120, costRef });
       if (costRef) costRef.cost += (r.cost_usd_micro || 0);
       const idx = r.ok && r.obj ? Number(r.obj.index || 1) : 1;
       const pick = active[(idx >= 1 && idx <= active.length) ? idx - 1 : 0];
@@ -317,7 +361,7 @@ async function findNamedDM({ company, domain, ch_number, jurisdiction }, costRef
   if (!organic.length) return { found: false, reason: 'no_dm_signal' };
   const sys = 'You extract the named senior decision-maker (owner/founder/principal/managing partner/director) of a specific firm from search-result titles. Use ONLY the titles; never invent a name. Return strict JSON only.';
   const prompt = `Company: ${company}\nWebsite: ${domain}\nSearch results (title | url):\n${organic.map((r, i) => `${i + 1}. ${r.title} | ${r.url}`).join('\n')}\nIf a clearly-named decision-maker of THIS firm appears, return it. Else none.\nReturn JSON: {"name": "<full name or empty>", "role": "<role or empty>", "confidence": <0-100>}`;
-  const r = await llmJson({ system: sys, prompt, role: 'extract', max_tokens: 160 });
+  const r = await llmJson({ system: sys, prompt, role: 'extract', max_tokens: 160, costRef });
   if (costRef) costRef.cost += (r.cost_usd_micro || 0);
   if (!r.ok || !r.obj || !String(r.obj.name || '').trim()) return { found: false, reason: 'llm_no_dm', model: r.model };
   const nm = String(r.obj.name).trim();
@@ -357,7 +401,7 @@ async function classifySector({ company, domain, website_intel }, costRef) {
   const sys = 'You classify a UK/UAE business into ONE sector code, or "NONE" if it is not in the priority list. Codes: LS=legal/law, HC=healthcare/dental/medical, FS=financial/accounting/insurance, RE=real-estate/property, PS=professional-services/consulting, EC=ecommerce/retail, HS=hospitality/restaurants, AU=automotive, ED=education, BW=beauty/wellness/aesthetics. Use only the supplied text. Return strict JSON only.';
   const text = String(website_intel || '').slice(0, 1200);
   const prompt = `Company: ${company || ''}\nWebsite: ${domain || ''}\nSite text: ${text || '(none)'}\nReturn JSON: {"code": "<one of LS,HC,FS,RE,PS,EC,HS,AU,ED,BW,NONE>", "confidence": <0-100>}`;
-  const r = await llmJson({ system: sys, prompt, role: 'classify', max_tokens: 80 });
+  const r = await llmJson({ system: sys, prompt, role: 'classify', max_tokens: 80, costRef });
   if (costRef) costRef.cost += (r.cost_usd_micro || 0);
   if (!r.ok || !r.obj) return { found: false, reason: 'llm_unavailable', model: r.model };
   const code = String(r.obj.code || '').toUpperCase().trim();
@@ -370,6 +414,9 @@ async function classifySector({ company, domain, website_intel }, costRef) {
 // ------------------------------------------------------------------------------------------------------------
 const AUTO_PROMOTE_MIN_CONF = Number(process.env.LLM_QA_AUTO_CONF || 75);  // ≥ this AND gate re-passes Tier-1 -> auto
 const HUMAN_REVIEW_MIN_CONF = Number(process.env.LLM_QA_REVIEW_CONF || 40); // ≥ this (but below auto, or gate not re-passing) -> human
+// L5: a lead that keeps NOT flipping is re-tried a bounded number of times (qa_found.tries), then parked from the
+// wave even before it lands 'explained'. Stops never-findable leads re-burning SERP/LLM every recheck window.
+const RESCUE_MAX_TRIES = Number(process.env.LLM_QA_MAX_TRIES || 3);
 
 async function rescueLead(lead, cohort) {
   const costRef = { cost: 0 };
@@ -461,6 +508,7 @@ async function rescueLead(lead, cohort) {
     base_tier: base.tier, after_tier: after && after.tier, flippedTo1,
     found, missing, confidence, model: model || 'deterministic', reason,
     qa_status, review_status, suggested_tier, cost_usd_micro: costRef.cost,
+    budget_exhausted: !!costRef.budgetExhausted,   // L4: router reported free quota + paid daily cap both gone
   };
 }
 
@@ -469,8 +517,11 @@ async function rescueLead(lead, cohort) {
 // Idempotent. dry=true prints what it WOULD write (used for the eval when the classifier blocks writes).
 // ------------------------------------------------------------------------------------------------------------
 function writeRescue(res, { dry = false } = {}) {
+  // L5: fold a bumped `tries` counter INTO the new qa_found jsonb (reads the prior count off the existing row), so a
+  // lead that keeps not flipping increments tries and is parked by the wave's terminalGuard after RESCUE_MAX_TRIES.
+  const foundWithTries = `jsonb_set(${jesc(res.found)}, '{tries}', (COALESCE((qa_found->>'tries')::int,0)+1)::text::jsonb, true)`;
   const sets = [
-    `qa_found = ${jesc(res.found)}`,
+    `qa_found = ${foundWithTries}`,
     `qa_suggested_tier = ${res.suggested_tier == null ? 'NULL' : Number(res.suggested_tier)}`,
     `qa_reason = ${esc(res.reason)}`,
     `qa_confidence = ${res.confidence == null ? 'NULL' : Math.round(res.confidence)}`,
@@ -486,10 +537,19 @@ function writeRescue(res, { dry = false } = {}) {
   return { sql, wrote: true };
 }
 
+// L7: the widest, lowest-yield cohort (classify_sector ~2,076 eligible) gets a per-run SUB-BUDGET so a run that
+// doesn't fill `remaining` on the higher-yield cohorts can't pour the entire remainder into sector-classify (the
+// lowest-conversion work, re-burnt every recheck window). Tunable via env. 0 -> uncapped.
+const CLASSIFY_SECTOR_SUBCAP = Number(process.env.LLM_QA_CLASSIFY_CAP || 25);
+
 // ------------------------------------------------------------------------------------------------------------
-// RUN A WAVE. Cost-capped (per-run token cap via the router budget + a per-run lead cap). Free-first. Default OFF.
+// RUN A WAVE. Cost-capped: per-run lead cap (max) + an optional per-run COST cap (runCostCapMicro) + the agency LLM
+// DAILY budget (its own bucket, decoupled from the audit engine — see agencyBudgetRemaining/Bump). Free-first.
+// Default OFF (LLM_QA_ENABLED). Early-exits the moment a budget is exhausted so a blown budget never burns SERP
+// quota or writes misleading `explained` rows on the rest of the wave (L4). The phantom `--token-cap` flag (never
+// parsed / never accepted) was REMOVED; the real per-run ceiling is runCostCapMicro (env LLM_QA_RUN_COST_CAP_MICRO).
 // ------------------------------------------------------------------------------------------------------------
-async function runWave({ max = 15, cohort = null, dry = false, force = false, recheckHours = 168 } = {}) {
+async function runWave({ max = 15, cohort = null, dry = false, force = false, recheckHours = 168, runCostCapMicro = 0 } = {}) {
   if (!isEnabled()) {
     return { ok: false, skipped: true, reason: 'LLM_QA_ENABLED is off (kill switch). Set LLM_QA_ENABLED=1 to run.', processed: 0 };
   }
@@ -498,20 +558,33 @@ async function runWave({ max = 15, cohort = null, dry = false, force = false, re
   const results = [];
   let remaining = Math.max(1, Number(max) || 15);
   let totalCost = 0;
+  let budgetExhausted = false;
+  // per-run cost ceiling (micro-USD). CLI/env override; 0 = no per-run cap (the daily agency budget still applies).
+  const RUN_COST_CAP = Math.max(0, Number(runCostCapMicro || process.env.LLM_QA_RUN_COST_CAP_MICRO || 0));
 
   for (const cname of cohorts) {
-    if (remaining <= 0) break;
+    if (remaining <= 0 || budgetExhausted) break;
     const pred = COHORT_SQL[cname]; if (!pred) continue;
+    // L7: cap how many of the remaining slots the lowest-yield classify_sector cohort may consume this run.
+    const cohortLimit = (cname === 'classify_sector' && CLASSIFY_SECTOR_SUBCAP > 0) ? Math.min(remaining, CLASSIFY_SECTOR_SUBCAP) : remaining;
     // exclude PECR consent_required (hard gate), suppressed/dnc, and recently-checked leads (only re-run on change).
     const freshGuard = force ? '' : `AND (qa_checked_at IS NULL OR qa_checked_at < NOW() - INTERVAL '${Math.max(1, recheckHours)} hours')`;
+    // L5: TERMINAL STATE. A lead written qa_status='explained' genuinely cannot be lifted with current data; the
+    // cohort predicates key on tier/score/contact/sector only, so without this it was re-pulled + re-spent every
+    // recheck window forever. Exclude 'explained' (parked until its underlying data changes). 'retier_error' is a
+    // TRANSIENT failure and is deliberately NOT excluded (it must retry). A small per-lead tries counter
+    // (qa_found->>'tries') caps repeated no-flip churn even before a lead lands 'explained'.
+    const terminalGuard = force ? '' : `AND COALESCE(qa_status,'') NOT IN ('explained')
+        AND COALESCE((qa_found->>'tries')::int, 0) < ${Math.max(1, RESCUE_MAX_TRIES)}`;
     const sql = `SELECT to_jsonb(l) FROM leads l
       WHERE (${pred})
         AND COALESCE(consent_required, FALSE) = FALSE
         AND COALESCE(status,'') NOT IN ('suppressed','dnc','bounced','duplicate')
         AND COALESCE(domain,'') <> ''
         ${freshGuard}
+        ${terminalGuard}
       ORDER BY COALESCE(quality_score,0) DESC NULLS LAST, id DESC
-      LIMIT ${remaining}`;
+      LIMIT ${cohortLimit}`;
     let raw;
     try { raw = pgJson(sql); } catch (e) { results.push({ cohort: cname, error: e.message }); continue; }
     // L12: parse rows PER-ROW. A single malformed to_jsonb line (NUL byte / a row whose JSON psql truncates at the
@@ -522,10 +595,17 @@ async function runWave({ max = 15, cohort = null, dry = false, force = false, re
     if (!rows.length) continue;
     for (const lead of rows) {
       if (remaining <= 0) break;
-      // budget kill: if the router budget is exhausted, stop (free quota first; this never spends without budget).
+      // L4/L14: BUDGET KILL — check the agency LLM budget (its OWN bucket, decoupled from the audit engine) BEFORE
+      // spending. If the daily agency cap is blown, or this run's cost cap is hit, stop the wave: no more SERP/LLM
+      // work, no misleading `explained` writes on the rest. Free quota is tried first inside the router regardless.
+      const budgetLeft = dry ? null : agencyBudgetRemaining();
+      if ((budgetLeft !== null && budgetLeft <= 0) || (RUN_COST_CAP > 0 && totalCost >= RUN_COST_CAP)) { budgetExhausted = true; results.push({ cohort: cname, budget_exhausted: true }); break; }
       try {
         const res = await rescueLead(lead, cname);
         totalCost += res.cost_usd_micro || 0;
+        if (!dry) agencyBudgetBump(res.cost_usd_micro || 0);
+        // surface a router-level budget exhaustion (free quota + paid cap both gone) so we stop the wave (L4).
+        if (res && res.budget_exhausted) budgetExhausted = true;
         const w = writeRescue(res, { dry });
         results.push({ ...res, _sql: dry ? w.sql : undefined });
         remaining--;
