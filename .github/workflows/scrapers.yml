@@ -1,15 +1,21 @@
 name: Lead scrapers (daily, gated)
-# Runs all lead sources through the SAME gated pipeline (gather -> ICP pre-filter -> full audit -> ICP+hot score
-# -> enrich -> persist -> sourcing_runs tracking). New sources: jobspy (firms hiring SEO/marketing/compliance =
-# budget + a gap we fill) + maps (Google Maps places via SERPER). Self-healing: each source fail-open; a bad
-# source never wedges the run. Quality gates in src/lib/sourcing/icp.js keep the list HOT.
+# Runs the FULL free-DIY adapter set through the SAME gated pipeline (gather -> ICP pre-filter -> full audit ->
+# ICP+hot score -> enrich -> persist -> sourcing_runs tracking). Sources: serp-top, maps, jobspy run autonomously
+# (api mode, free-first via serp-client); reddit/youtube/x-ads/social-ads are chrome-mode and fail-open to 0
+# until a free API token / --capture is supplied (they cost nothing to list and go live the moment a key lands).
+# WS5 equal-allocation cap: SOURCE_T1_TARGET (default 50) stops EACH source once it has yielded 50 leads that
+# pass the Tier-1 ICP pre-filter — equal allocation per source. The raw --max is deliberately generous (200) so
+# the eligibility-stop, not the raw cap, governs. Self-healing: each source fail-open; a bad source never wedges
+# the run. Quality gates in src/lib/sourcing/icp.js keep the list HOT. Register sources (companies_house_uk,
+# sec_edgar, opencorporates, osm_overpass, gleif) are sourced by the S028 orchestrator on its own cron, not here.
 on:
   schedule:
     - cron: "0 7 * * *"   # daily 07:00 UTC
   workflow_dispatch:
     inputs:
-      sources: { description: "comma sources (jobspy,maps,serp-top)", default: "jobspy,maps,serp-top" }
-      max: { description: "max leads", default: "40" }
+      sources: { description: "comma sources (full DIY adapter set)", default: "serp-top,maps,jobspy,reddit,youtube,x-ads,social-ads" }
+      max: { description: "raw max leads/source (eligibility-stop, not this, governs)", default: "200" }
+      t1_target: { description: "Tier-1-eligible stop per source (equal allocation)", default: "50" }
 
 concurrency: { group: lead-scrapers, cancel-in-progress: false }
 
@@ -35,7 +41,8 @@ jobs:
       - name: Run gated scrapers
         run: |
           set -a; source .env 2>/dev/null; set +a
-          node scripts/heartbeat.js wrap scrapers -- node scripts/source-leads.js --source ${{ github.event.inputs.sources || 'jobspy,maps,serp-top' }} --max ${{ github.event.inputs.max || '40' }}
+          export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '50' }}"
+          node scripts/heartbeat.js wrap scrapers -- node scripts/source-leads.js --source ${{ github.event.inputs.sources || 'serp-top,maps,jobspy,reddit,youtube,x-ads,social-ads' }} --max ${{ github.event.inputs.max || '200' }}
       - name: Alert on failure
         if: failure()
         run: |

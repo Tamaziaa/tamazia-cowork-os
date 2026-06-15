@@ -2,8 +2,11 @@
 // P2-4 · Nightly scraper scorecard. For each scraper SOURCE, samples the 50 most-recent leads and computes
 // quality metrics, writing one row per scraper to scraper_scorecard (table already exists). A red flag
 // (valid_email_pct < 60 OR sector_match_pct < 70) writes one line into the daily digest via the notifications
-// table (daily-digest.js picks it up under "Leads + pipeline"). Read-mostly; the only writes are the scorecard
-// rows + (on red flag) a notification row. Fail-open per scraper. Usage: node scripts/scorecard-nightly.js [N]
+// table (daily-digest.js picks it up under "Leads + pipeline"). WS5 ALSO writes a per-source DAILY snapshot
+// (one row/source/day) into scraper_daily — today's sourced_n / t1_eligible_n / valid_email_pct /
+// sector_match_pct / cost — upserted on (scraper_source, day) and surfaced by the v_scraper_daily view.
+// Read-mostly; the only writes are scraper_scorecard + scraper_daily rows + (on red flag) a notification row.
+// Fail-open per scraper. Usage: node scripts/scorecard-nightly.js [N] [--dry-run]
 'use strict';
 const path = require('path');
 const fs = require('fs');
@@ -107,12 +110,45 @@ function verdictFor(m) {
   return 'ok';
 }
 
+// WS5 · per-scraper DAILY performance. The scorecard above is a rolling N-sample of quality; this is a
+// per-source-per-DAY snapshot of TODAY's output (one row/source/day in scraper_daily). Metrics are scoped to
+// leads this scraper SOURCED today and use the SAME definitions as the v_scraper_daily view (day = date of
+// scraped_at|imported_at|created_at; valid_email = deliverable-shaped email & verdict not bad; sector_match =
+// sector_code/sector present; t1_eligible = icp_tier=1). Read-only over leads; the write goes to scraper_daily.
+function dailyMetricsToday(source) {
+  const sql = `
+    WITH d AS (
+      SELECT * FROM leads
+      WHERE COALESCE(source,'') = ${esc(source)}
+        AND date(COALESCE(scraped_at, imported_at::timestamptz, created_at)) = CURRENT_DATE
+    )
+    SELECT
+      COUNT(*)::int AS sourced_n,
+      COUNT(*) FILTER (WHERE icp_tier = 1)::int AS t1_eligible_n,
+      ROUND(100.0 * COUNT(*) FILTER (
+        WHERE COALESCE(NULLIF(contact_email,''), NULLIF(email,''), primary_email) IS NOT NULL
+          AND LOWER(COALESCE(deliverability, verify_status, '')) NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable','dead')
+      ) / NULLIF(COUNT(*),0), 1) AS valid_email_pct,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE COALESCE(sector_code, sector, '') <> '') / NULLIF(COUNT(*),0), 1) AS sector_match_pct
+    FROM d`;
+  const raw = pg(sql);
+  if (!raw) return null;
+  const [sourced_n, t1, valid, sector] = raw.split('\t');
+  return { sourced_n: Number(sourced_n), t1_eligible_n: Number(t1), valid_email_pct: valid, sector_match_pct: sector };
+}
+
 (async () => {
+  // WS5: the daily upsert needs a unique key on (scraper_source, day). ADDITIVE-ONLY + idempotent (IF NOT
+  // EXISTS) on the non-off-limits scraper_daily table — guarantees one row per source per day so a re-run
+  // updates in place instead of duplicating. Created here at runtime (mirrors source-leads.js's ADD COLUMN
+  // IF NOT EXISTS guards) so the script is self-sufficient if the index isn't already present.
+  if (!DRY) { try { pg(`CREATE UNIQUE INDEX IF NOT EXISTS idx_scraper_daily_source_day ON scraper_daily (scraper_source, day)`); } catch (_e) {} }
   // every scraper source that has produced leads
   const sources = (pg(`SELECT DISTINCT COALESCE(source,'') FROM leads WHERE COALESCE(source,'') <> ''`) || '').split('\n').filter(Boolean);
   if (!sources.length) { console.log('[scorecard] no scraper sources found.'); return; }
   const redFlags = [];
   let written = 0;
+  let dailyWritten = 0;
   for (const source of sources) {
     let m; try { m = scoreScraper(source); } catch (e) { console.error('[scorecard] ' + source + ': ' + e.message); continue; }
     if (!m || !m.n) { console.log(`[scorecard] ${source}: no sample`); continue; }
@@ -125,6 +161,23 @@ function verdictFor(m) {
     written++;
     console.log(`[scorecard] ${source.padEnd(24)} n=${m.n} valid=${m.valid_email_pct}% named=${m.named_contact_pct}% sector=${m.sector_match_pct}% li=${m.linkedin_id_pct}% dup=${m.duplicate_pct}% t1=${m.tier1_pct}% cpl=${cpl == null ? 'n/a' : cpl} -> ${verdict}`);
     if (verdict === 'red_flag') redFlags.push(`${source}: valid ${m.valid_email_pct}% / sector ${m.sector_match_pct}% (n=${m.n})`);
+
+    // WS5 · daily snapshot: one row per source per day in scraper_daily (cost = serper cost-per-lead reused
+    // from cpl above). Upsert keyed on (scraper_source, day) so a re-run today overwrites rather than dupes.
+    let dm = null; try { dm = dailyMetricsToday(source); } catch (e) { console.error('[scorecard:daily] ' + source + ': ' + e.message); }
+    if (dm && dm.sourced_n > 0) {
+      const upsert = `INSERT INTO scraper_daily (scraper_source, day, sourced_n, t1_eligible_n, valid_email_pct, sector_match_pct, cost, recorded_at)
+          VALUES (${esc(source)}, CURRENT_DATE, ${num(dm.sourced_n)}, ${num(dm.t1_eligible_n)}, ${num(dm.valid_email_pct)}, ${num(dm.sector_match_pct)}, ${num(cpl)}, NOW())
+          ON CONFLICT (scraper_source, day) DO UPDATE SET
+            sourced_n=EXCLUDED.sourced_n, t1_eligible_n=EXCLUDED.t1_eligible_n,
+            valid_email_pct=EXCLUDED.valid_email_pct, sector_match_pct=EXCLUDED.sector_match_pct,
+            cost=EXCLUDED.cost, recorded_at=EXCLUDED.recorded_at`;
+      if (!DRY) pg(upsert);
+      dailyWritten++;
+      console.log(`[scorecard:daily] ${source.padEnd(24)} today sourced=${dm.sourced_n} t1=${dm.t1_eligible_n} valid=${dm.valid_email_pct}% sector=${dm.sector_match_pct}% cost=${cpl == null ? 'n/a' : cpl}${DRY ? ' (dry-run, not written)' : ''}`);
+    } else {
+      console.log(`[scorecard:daily] ${source.padEnd(24)} no leads sourced today — skipped`);
+    }
   }
   // Red flags -> one line in the daily digest (notifications table; daily-digest matches /lead|sourc|scrap/).
   if (redFlags.length) {
@@ -132,5 +185,5 @@ function verdictFor(m) {
     if (!DRY) pg(`INSERT INTO notifications (kind, severity, title, realtime) VALUES ('scorecard_lead_quality','warning',${esc(title.slice(0, 600))},FALSE)`);
     console.log('[scorecard] RED FLAGS -> digest: ' + redFlags.length + (DRY ? ' (dry-run, not written)' : ''));
   }
-  console.log(`[scorecard] ${DRY ? 'DRY-RUN computed' : 'wrote'} ${written} scorecard rows across ${sources.length} scrapers, ${redFlags.length} red-flagged.`);
+  console.log(`[scorecard] ${DRY ? 'DRY-RUN computed' : 'wrote'} ${written} scorecard rows + ${dailyWritten} scraper_daily rows across ${sources.length} scrapers, ${redFlags.length} red-flagged.`);
 })().catch(e => { console.error('[scorecard] fatal (fail-open):', e.message); process.exit(0); });

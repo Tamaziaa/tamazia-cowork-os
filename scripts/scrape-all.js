@@ -27,7 +27,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Previously these used underscores (serp_top/social_ads), which adapterByName() failed to resolve,
 // silently sourcing 0 from every source on the VM. source-leads.js now also normalises, but keep
 // canonical hyphenated names here so the plan log and SCRAPE_SOURCES overrides are correct.
-const DEFAULT_EVERY = { 'serp-top': 30, maps: 45, jobspy: 60, 'social-ads': 90, reddit: 120, youtube: 180 };
+// WS5: full adapter set so the always-on driver exercises EVERYTHING in the REGISTRY, not just the api-mode
+// trio. serp-top/maps/jobspy run autonomously; reddit/youtube/x-ads/social-ads are chrome-mode and fail-open
+// to 0 until a free token / --capture lands (cheap to keep on the schedule, live the moment a key is added).
+const DEFAULT_EVERY = { 'serp-top': 30, maps: 45, jobspy: 60, 'social-ads': 90, reddit: 120, 'x-ads': 150, youtube: 180 };
 function buildJobs() {
   let names = Object.keys(DEFAULT_EVERY);
   if (process.env.SCRAPE_SOURCES) names = process.env.SCRAPE_SOURCES.split(',').map(s => s.trim()).filter(Boolean);
