@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 // Tamazia stuck-job detector · reads the latest run per job from engine_runs, compares to the expected
-// cadence, and flags stalls: past 2x cadence = amber (warn), past 4x = red (fail) + a Telegram alert.
+// cadence, and flags stalls: past 2x cadence = amber (warn), past 4x = red (fail) + an immediate alert.
 // Writes one system_health row per job (check_key = stuck_<job>) so the Health tab and intel-pulse pick
-// it up. Runs inside the 30-min engine cycle. Fail-open. Reuses scripts/psql + NEON_URL + the Telegram
-// pattern from intel-pulse.js. A job that has never run is NOT flagged (no false alarm on a fresh table).
+// it up. Runs inside the 30-min engine cycle. Fail-open. Reuses scripts/psql + NEON_URL.
+// A job that has never run is NOT flagged (no false alarm on a fresh table).
+//
+// P3-7 event-driven stuck path: on a RED flag this fires scripts/notify-event.js stuck "<detail>" RIGHT NOW
+// (Slack #all-tamazia + Telegram, important-only), so a stalled engine is seen immediately — not only when the
+// hourly intel-pulse next runs. notify-event is the single orchestrator; the inline telegram() below is kept
+// purely as a fallback for the rare case notify-event cannot be spawned, so the alert is never silently lost.
 //
 //   node scripts/check-stuck-jobs.js
 
 const path = require('path');
 const fs = require('fs');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const ENV = {};
@@ -41,6 +46,17 @@ async function telegram(text) {
   try { await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text, parse_mode: 'Markdown' }), signal: AbortSignal.timeout(12000) }); } catch (_e) {}
 }
 
+// Fire the shared important-only orchestrator (Slack + Telegram in one place). Synchronous spawn so the alert
+// is sent before the process exits. Returns true on a clean spawn; false (with no throw) if it could not run,
+// so main() can fall back to the inline Telegram path and never lose a red alert. Bounded so a wedged child
+// can't hang the cycle's stuck check.
+function notifyEvent(kind, message) {
+  try {
+    const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'notify-event.js'), kind, message], { encoding: 'utf8', timeout: 20000 });
+    return !r.error && r.status === 0;
+  } catch (_e) { return false; }
+}
+
 async function main() {
   if (!NEON) { console.error('[check-stuck-jobs] no NEON_URL — skipping (fail-open)'); return; }
   pg(`CREATE TABLE IF NOT EXISTS system_health (check_key text PRIMARY KEY, category text, status text, detail text, metric numeric, checked_at timestamptz DEFAULT now())`);
@@ -61,7 +77,14 @@ async function main() {
     pg(`INSERT INTO system_health (check_key,category,status,detail,metric,checked_at) VALUES (${esc('stuck_' + job)},'liveness',${esc(status)},${esc(detail)},${m.toFixed(1)},now()) ON CONFLICT (check_key) DO UPDATE SET category=EXCLUDED.category,status=EXCLUDED.status,detail=EXCLUDED.detail,metric=EXCLUDED.metric,checked_at=now()`);
     if (status === 'fail') red.push(detail); else if (status === 'warn') warn++;
   }
-  if (red.length) await telegram(`🛑 *Stuck engine${red.length > 1 ? 's' : ''}*\n${red.map(x => '• ' + x).join('\n')}`);
+  if (red.length) {
+    const detail = red.map(x => '• ' + x).join('\n');
+    // Event-driven path (P3-7): fire the shared notify-event orchestrator NOW (Slack + Telegram). Only if that
+    // could not run do we fall back to the inline Telegram, so a red flag always reaches at least one channel.
+    const sent = notifyEvent('stuck', `Stuck engine${red.length > 1 ? 's' : ''}:\n${detail}`);
+    if (!sent) { await telegram(`🛑 *Stuck engine${red.length > 1 ? 's' : ''}*\n${detail}`); }
+    console.log(`[check-stuck-jobs] ${red.length} red -> alert via ${sent ? 'notify-event (Slack+Telegram)' : 'inline Telegram fallback'}`);
+  }
   console.log(`[check-stuck-jobs] checked ${Object.keys(CADENCE).length} jobs · ${red.length} red · ${warn} amber`);
 }
 
