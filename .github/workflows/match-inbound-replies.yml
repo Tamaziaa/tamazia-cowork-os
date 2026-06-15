@@ -1,7 +1,15 @@
 name: match-inbound-replies (backfill matched_lead_id)
 # Attaches inbound_emails rows to their lead (per-lead / per-sector reply tracking).
-# Manual backfill only — no send, additive Neon writes (matched_lead_id + match_method). Mirrors gen-state.yml.
+# No send, additive Neon writes (matched_lead_id + match_method). Mirrors gen-state.yml.
+#
+# P1 [A82/X11]: this used to be workflow_dispatch ONLY, so the matcher never ran on its own and 832 inbound
+# rows sat with matched_lead_id NULL (gen-state/MCP "replied" reads matched_lead_id IS NOT NULL, so the whole
+# reply/attribution half read 0). Added an HOURLY cron so replies are matched continuously, no human in the
+# loop. Read-mostly + idempotent (rows with a match are skipped) so a re-run is cheap and safe. The job is
+# heartbeat-wrapped (engine_runs job='match-inbound-replies') so engine_health / check-stuck-jobs can see it.
 on:
+  schedule:
+    - cron: "17 * * * *"   # hourly at :17 (off the top-of-hour so it does not pile onto other crons)
   workflow_dispatch:
     inputs:
       limit:
@@ -10,6 +18,10 @@ on:
         default: ""
 permissions:
   contents: read
+
+concurrency:
+  group: engine-db-work
+  cancel-in-progress: false
 jobs:
   match-inbound:
     runs-on: ubuntu-latest
@@ -23,7 +35,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: python -m pip install --quiet -r requirements.txt
       - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
-      - name: Backfill reply matches (no-send)
+      - name: Match reply -> lead (no-send; heartbeat-wrapped for engine_runs visibility)
         run: |
           set -a; source .env 2>/dev/null; set +a
-          node scripts/match-inbound-replies.js ${{ github.event.inputs.limit }}
+          node scripts/heartbeat.js wrap match-inbound-replies -- node scripts/match-inbound-replies.js ${{ github.event.inputs.limit }} || node scripts/match-inbound-replies.js ${{ github.event.inputs.limit }} || true
