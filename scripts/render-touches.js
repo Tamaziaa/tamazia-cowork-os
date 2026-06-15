@@ -12,13 +12,24 @@ function pg(sql) { try { return execFileSync(path.join(ROOT, 'scripts', 'psql'),
 const { renderAll } = require(path.join(ROOT, 'src/skills/S064-touch-cadence/scripts/render.js'));
 
 async function main() {
-  const limit = Number(process.argv[2]) || 15;
+  // T1-B04: default batch raised 15 -> 30 (matches the cycle's RENDER_BATCH default) so a direct invocation isn't
+  // artificially small and drafts keep pace with the pushable set.
+  const limit = Number(process.argv[2]) || 30;
+  // T1-B04 ORDER BY PUSH-READINESS: render previously ordered by quality_score only, so it spent its slots on
+  // high-score leads that may never push while audit-verified, governor-RELEASED leads sat WITHOUT a Touch-0 draft
+  // (the push drops a released+verified lead that has no draft). Prioritise the leads that are actually about to
+  // ship: governor-released first, then audit-verified, then a present audit_url, THEN the old rank-insight /
+  // quality_score / id keys. So a lead the push is about to send always has a fresh draft. Still writes only
+  // outreach_drafts (no re-tier columns), so it stays unguarded in the cycle.
   const raw = pg(`SELECT id::text FROM leads
     WHERE quality_fit = TRUE
       AND COALESCE(lifecycle_stage,'') = 'qualified'
       AND COALESCE(NULLIF(contact_email,''), email, '') <> ''
       AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal')
-    ORDER BY (rank_insight_sentence IS NOT NULL AND rank_insight_sentence <> '') DESC,
+    ORDER BY (governor_released_at IS NOT NULL) DESC,
+             COALESCE(audit_verified,FALSE) DESC,
+             (COALESCE(audit_url,'') <> '') DESC,
+             (rank_insight_sentence IS NOT NULL AND rank_insight_sentence <> '') DESC,
              COALESCE(quality_score,0) DESC NULLS LAST, id DESC
     LIMIT ${limit}`);
   const ids = raw.split('\n').filter(Boolean).map(Number);
