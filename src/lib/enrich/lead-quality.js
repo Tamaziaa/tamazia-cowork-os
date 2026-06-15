@@ -215,6 +215,28 @@ function classifySectorV3(lead) {
  *   decision_maker_confidence, email_verified, verify_status, ad_intel, all_socials, all_emails,
  *   ai_cited, ai_visibility_gap, audit_critical, audit_high, scrape_stream }
  */
+// PURE 3-tier decision (P2-2 testable seam). Takes the derived signals and returns { tier, tier_reason }.
+// Tier 1 = priority sector AND total>=TIER1_MIN AND a named DM + LinkedIn that is send-ready (positively
+// verified, OR a clean named DM at a regulated+established firm whose domain is not catch-all-unverified).
+// Tier 2 = priority sector AND (total>=BAR_MIN OR any usable contact). Tier 3 = everything else.
+// Behaviour identical to the previous inline block in scoreLead; extracted so the eval can exercise it directly.
+function decideTier(s) {
+  const namedAndLinkedin = (s.namedDMRole || s.cleanNamedDM) && s.hasLinkedin;
+  const tier1Contact = (s.namedDMRole || s.cleanNamedDM) && s.hasLinkedin && !s.confirmedBad
+    && (s.smtpVerifiedPersonal || (s.cleanNamedDM && s.sectorRegulated && s.established && !s.catchAllUnverified));
+  const tier2Contact = (namedAndLinkedin && (s.inferredEmail || s.cleanRoleDM)) || s.cleanNamedDM || s.cleanRoleDM || s.freeProviderDM;
+  if (s.isPrioritySector && s.total_score >= TIER1_MIN && tier1Contact) {
+    return { tier: 1, tier_reason: 'priority_sector_score>=' + TIER1_MIN + '_named_linkedin_reachable' };
+  } else if (s.isPrioritySector && (s.total_score >= BAR_MIN || (namedAndLinkedin && (s.inferredEmail || s.cleanRoleDM)) || tier2Contact)) {
+    return { tier: 2, tier_reason: s.total_score >= BAR_MIN ? ('priority_sector_score>=' + BAR_MIN) : 'priority_sector_usable_contact' };
+  }
+  return {
+    tier: 3,
+    tier_reason: !s.isPrioritySector ? (s.sector_code ? 'non_priority_sector_' + s.sector_code : 'unclassified_sector')
+      : (!tier2Contact ? 'no_usable_contact' : 'below_bar_' + BAR_MIN),
+  };
+}
+
 async function scoreLead(lead) {
   const layers = [];
   let score = 0;
@@ -410,32 +432,15 @@ async function scoreLead(lead) {
   // 2e) TOTAL (0-100) = the four V3 components.
   const total_score = Math.min(100, sector_fit_score + need_signal_score + contact_quality_score + completeness_score);
 
-  // 3) TIER 1/2/3 (founder: everything lands in 1/2/3; Tier 3 = catch-all, no nurture/parked). This REPLACES the
-  //    old 1/2/3 decision and stays consistent with the legacy semantics (fit = tier===1; pass = tier<=2 && genuine).
-  //    Tier 1 = priority sector AND total>=TIER1_MIN AND named DM + linkedin + verified email.
-  //    Tier 2 = priority sector AND (total>=BAR_MIN  OR  named+linkedin with unverified/generic email).
-  //    Tier 3 = everything else.
-  const namedAndLinkedin = (namedDMRole || cleanNamedDM) && hasLinkedin;
-  // gap-fix: most corporate domains BLOCK SMTP probes, so requiring smtpVerifiedPersonal made Tier-1 near-empty.
-  // A clean named DM (own domain, live MX) + LinkedIn at a REGULATED + ESTABLISHED firm is a legitimate auto-send target.
-  // gap-fix: also exclude catchAllUnverified — a guessed personal address on a catch-all domain (verify_status
-  // 'risky') is NOT proof of a real mailbox, so it cannot earn auto-send. It still qualifies as a Tier-2 contact
-  // below (catch-all domains are contactable, just lower-confidence). smtpVerifiedPersonal (a positive verify)
-  // overrides, so a catch-all domain WITH an independently-verified address can still reach Tier-1.
-  const tier1Contact = (namedDMRole || cleanNamedDM) && hasLinkedin && !confirmedBad
-    && (smtpVerifiedPersonal || (cleanNamedDM && sectorRegulated && established && !catchAllUnverified));
-  // gap-fix: any usable contact (named, generic info@, free-provider at a served firm, catch-all) keeps a lead alive at Tier-2.
-  const tier2Contact = (namedAndLinkedin && (inferredEmail || cleanRoleDM)) || cleanNamedDM || cleanRoleDM || freeProviderDM;
-  let tier, tier_reason;
-  if (isPrioritySector && total_score >= TIER1_MIN && tier1Contact) {
-    tier = 1; tier_reason = 'priority_sector_score>=' + TIER1_MIN + '_named_linkedin_reachable';
-  } else if (isPrioritySector && (total_score >= BAR_MIN || (namedAndLinkedin && (inferredEmail || cleanRoleDM)) || tier2Contact)) {
-    tier = 2; tier_reason = total_score >= BAR_MIN ? ('priority_sector_score>=' + BAR_MIN) : 'priority_sector_usable_contact';
-  } else {
-    tier = 3;
-    tier_reason = !isPrioritySector ? (sector_code ? 'non_priority_sector_' + sector_code : 'unclassified_sector')
-      : (!tier2Contact ? 'no_usable_contact' : 'below_bar_' + BAR_MIN);
-  }
+  // 3) TIER 1/2/3 — delegated to the PURE decideTier() below (extracted so the qualifier eval, P2-2, can test
+  //    the tier DECISION deterministically without re-fetching live sites). scoreLead derives the signals above;
+  //    decideTier turns them into the tier. Behaviour is byte-identical to the previous inline block.
+  const _td = decideTier({
+    isPrioritySector, total_score, sector_code,
+    namedDMRole, cleanNamedDM, cleanRoleDM, hasLinkedin, confirmedBad,
+    smtpVerifiedPersonal, sectorRegulated, established, catchAllUnverified, inferredEmail, freeProviderDM,
+  });
+  const tier = _td.tier, tier_reason = _td.tier_reason;
 
   const fit = tier === 1;
   const pass = tier <= 2 && genuine;
@@ -451,7 +456,7 @@ async function scoreLead(lead) {
   };
 }
 
-module.exports = { scoreLead, PASS, REGULATED };
+module.exports = { scoreLead, decideTier, PASS, REGULATED, TIER1_MIN, BAR_MIN };
 
 if (require.main === module) {
   (async () => {

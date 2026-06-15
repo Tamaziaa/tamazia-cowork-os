@@ -1,0 +1,1261 @@
+{
+  "_README": "P2-2 qualifier eval set. ~50 representative real leads (live Neon, read-only) with EXPECTED ICP tier (T1/T2/T3)+expected_pass = the documented lead-quality.decideTier() applied to each lead's captured signals (the production tier-decision logic; eval-qualifier.js re-runs decideTier deterministically and FAILS CI when agreement < threshold_pct). Labels were hand-reviewed for sensible tier spread across the 10 priority sectors + non-priority T3s; 3 synthetic T1 happy-path cases (verified named DM + LinkedIn at a regulated firm) exercise the auto-send branch. signals.* are the real per-lead signals captured from Neon; _ref.stored_icp_tier is the scorer verdict at capture (reference only). A future change to decideTier that diverges from these documented expectations drops agreement and blocks merge.",
+  "_generated": "2026-06-15 from live Neon (balanced spread)",
+  "threshold_pct": 90,
+  "count": 50,
+  "leads": [
+    {
+      "domain": "classliving.ae",
+      "sector": "real-estate",
+      "sector_code": "",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "invalid",
+        "deliverability_class": "bad",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": false,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "unclassified_sector",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "thirdspace.london",
+      "sector": "hospitality",
+      "sector_code": "WF",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": false,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "",
+        "deliverability_class": "unverified",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": false,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_WF",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "loaf.com",
+      "sector": "ecommerce",
+      "sector_code": "EC",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": false,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "",
+        "deliverability_class": "unverified",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": false,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_EC",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "greystar.co.uk",
+      "sector": "real-estate",
+      "sector_code": "",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": false,
+        "dm_confidence": 35,
+        "email_verified": false,
+        "deliverability": "invalid",
+        "deliverability_class": "bad",
+        "email_count": 2,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "unclassified_sector",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "stjohnsbuildings.com",
+      "sector": "legal",
+      "sector_code": "LS",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 43,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 71,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T1",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=62_named_linkedin_reachable",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "nyulangone.org",
+      "sector": "healthcare",
+      "sector_code": "HC",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 43,
+        "email_verified": true,
+        "deliverability": "good",
+        "deliverability_class": "verified",
+        "email_count": 5,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T1",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=62_named_linkedin_reachable",
+      "_ref": {
+        "stored_icp_tier": 1
+      }
+    },
+    {
+      "domain": "slab.org.uk",
+      "sector": "legal",
+      "sector_code": "LS",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 43,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 42,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 1
+      }
+    },
+    {
+      "domain": "nychealthandhospitals.org",
+      "sector": "healthcare",
+      "sector_code": "HC",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 43,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 21,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T1",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=62_named_linkedin_reachable",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "ashfords.co.uk",
+      "sector": "legal",
+      "sector_code": "LS",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 43,
+        "email_verified": false,
+        "deliverability": "risky",
+        "deliverability_class": "deliverable",
+        "email_count": 10,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 1
+      }
+    },
+    {
+      "domain": "mclane.com",
+      "sector": "law-firms",
+      "sector_code": "LS",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 55,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 1
+      }
+    },
+    {
+      "domain": "dianahamadelaw.ae",
+      "sector": "law-firms",
+      "sector_code": "LS",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 2,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "klgates.com",
+      "sector": "legal",
+      "sector_code": "LS",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 43,
+        "email_verified": false,
+        "deliverability": "risky",
+        "deliverability_class": "deliverable",
+        "email_count": 48,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 1
+      }
+    },
+    {
+      "domain": "healthmagazine.ae",
+      "sector": "healthcare",
+      "sector_code": "HC",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 43,
+        "email_verified": false,
+        "deliverability": "risky",
+        "deliverability_class": "deliverable",
+        "email_count": 3,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 1
+      }
+    },
+    {
+      "domain": "londoncentralportfolio.com",
+      "sector": "real-estate",
+      "sector_code": "RE",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 43,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 18,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T1",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=62_named_linkedin_reachable",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "premiermiami.com",
+      "sector": "real-estate",
+      "sector_code": "RE",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 43,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 36,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T1",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=62_named_linkedin_reachable",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "seasidepropertiesgroup.com",
+      "sector": "real-estate",
+      "sector_code": "RE",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 43,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 3,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T1",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=62_named_linkedin_reachable",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "lawfuel.com",
+      "sector": "law-firms",
+      "sector_code": "",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "invalid",
+        "deliverability_class": "bad",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": false,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "unclassified_sector",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "ty-hospitalityadvisory.com",
+      "sector": "hospitality",
+      "sector_code": "HO",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "fhc-global.com",
+      "sector": "hospitality",
+      "sector_code": "HO",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "southernsun.com",
+      "sector": "hospitality",
+      "sector_code": "HO",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 55,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "aire-realestate.com",
+      "sector": "hospitality",
+      "sector_code": "PB",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 2,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "studiomint.ae",
+      "sector": "hospitality",
+      "sector_code": "HO",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "lesoleilhotels.com",
+      "sector": "hospitality",
+      "sector_code": "HO",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 55,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 2,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "standardhotels.com",
+      "sector": "hospitality",
+      "sector_code": "HO",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "algonquinhotel.com",
+      "sector": "hospitality",
+      "sector_code": "HO",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 55,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 3,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "dripiv.com",
+      "sector": "healthcare",
+      "sector_code": "SU",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 3,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_SU",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "vitalforceal.com",
+      "sector": "healthcare",
+      "sector_code": "SU",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_SU",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "hydrationroom.com",
+      "sector": "healthcare",
+      "sector_code": "SU",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 55,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_SU",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "ivdripbirmingham.co.uk",
+      "sector": "healthcare",
+      "sector_code": "HC",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "scotlandbloodclinic.co.uk",
+      "sector": "healthcare",
+      "sector_code": "HC",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 55,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 2,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "positiveiv.com",
+      "sector": "healthcare",
+      "sector_code": "HC",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 55,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "thedripbar.com",
+      "sector": "healthcare",
+      "sector_code": "SU",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": false,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_SU",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "yourplace.ae",
+      "sector": "real-estate",
+      "sector_code": "RE",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "nexuselitepropertiesllc.com",
+      "sector": "real-estate",
+      "sector_code": "RE",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "realkeyper.com",
+      "sector": "real-estate",
+      "sector_code": "RE",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "grosvenor-re.com",
+      "sector": "real-estate",
+      "sector_code": "RE",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "lukestays.com",
+      "sector": "real-estate",
+      "sector_code": "RE",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 55,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 1
+      }
+    },
+    {
+      "domain": "bornsocial.com",
+      "sector": "professional",
+      "sector_code": "PB",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 55,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": false,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "poolsidela.com",
+      "sector": "professional",
+      "sector_code": "FB",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 9,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 2,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "thefirmdubai.com",
+      "sector": "law-firms",
+      "sector_code": "LS",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "bad",
+        "deliverability_class": "bad",
+        "email_count": 0,
+        "regulated_sector": true,
+        "established": false,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "kaylangassocs.com",
+      "sector": "hospitality",
+      "sector_code": "HO",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "tnidesign.com",
+      "sector": "hospitality",
+      "sector_code": "HO",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": false,
+        "has_linkedin": true,
+        "dm_confidence": 45,
+        "email_verified": false,
+        "deliverability": "unknown",
+        "deliverability_class": "unverified",
+        "email_count": 1,
+        "regulated_sector": false,
+        "established": true,
+        "catchall_unverified": true
+      },
+      "expected_tier": "T2",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=45",
+      "_ref": {
+        "stored_icp_tier": 2
+      }
+    },
+    {
+      "domain": "iv-drip.ae",
+      "sector": "healthcare",
+      "sector_code": "SU",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": false,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": false,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_SU",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "honuae.com",
+      "sector": "healthcare",
+      "sector_code": "WF",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": false,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": false,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_WF",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "uniq.la",
+      "sector": "real-estate",
+      "sector_code": "TR",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": false,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": false,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_TR",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "smelivenation.com",
+      "sector": "real-estate",
+      "sector_code": "PX",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": false,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": false,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_PX",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "altusentertainment.com",
+      "sector": "real-estate",
+      "sector_code": "PX",
+      "is_priority_sector": false,
+      "signals": {
+        "has_email": false,
+        "named_contact": false,
+        "has_linkedin": false,
+        "dm_confidence": 0,
+        "email_verified": false,
+        "deliverability": "pending",
+        "deliverability_class": "unverified",
+        "email_count": 0,
+        "regulated_sector": false,
+        "established": false,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T3",
+      "expected_pass": false,
+      "label_reason": "non_priority_sector_PX",
+      "_ref": {
+        "stored_icp_tier": 3
+      }
+    },
+    {
+      "domain": "hughjames.com",
+      "sector": "law-firms",
+      "sector_code": "LS",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 80,
+        "email_verified": true,
+        "deliverability": "verified",
+        "deliverability_class": "verified",
+        "email_count": 3,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T1",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=62_named_linkedin_reachable",
+      "_ref": {
+        "stored_icp_tier": 2,
+        "synthetic": true
+      }
+    },
+    {
+      "domain": "thelondondentalcentre.co.uk",
+      "sector": "dental",
+      "sector_code": "DN",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 75,
+        "email_verified": true,
+        "deliverability": "valid",
+        "deliverability_class": "verified",
+        "email_count": 2,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T1",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=62_named_linkedin_reachable",
+      "_ref": {
+        "stored_icp_tier": 2,
+        "synthetic": true
+      }
+    },
+    {
+      "domain": "craiggee.com",
+      "sector": "law-firms",
+      "sector_code": "LS",
+      "is_priority_sector": true,
+      "signals": {
+        "has_email": true,
+        "named_contact": true,
+        "has_linkedin": true,
+        "dm_confidence": 85,
+        "email_verified": true,
+        "deliverability": "good",
+        "deliverability_class": "verified",
+        "email_count": 4,
+        "regulated_sector": true,
+        "established": true,
+        "catchall_unverified": false
+      },
+      "expected_tier": "T1",
+      "expected_pass": true,
+      "label_reason": "priority_sector_score>=62_named_linkedin_reachable",
+      "_ref": {
+        "stored_icp_tier": 2,
+        "synthetic": true
+      }
+    }
+  ]
+}
