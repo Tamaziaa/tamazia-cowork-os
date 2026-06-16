@@ -44,6 +44,7 @@ function pickSendAlias(opts = {}) {
       ${domainClause}
       AND COALESCE(sent_today,0) < COALESCE(day_quota,2)
       AND COALESCE(bounce_count_7d,0) <= ${maxBounce}
+      AND COALESCE(paused, FALSE) = FALSE
     ORDER BY last_used_at ASC NULLS FIRST, id ASC
     LIMIT 1`;
   const raw = pg(sql);
@@ -58,25 +59,41 @@ function markUsed(aliasId) {
   pg(`UPDATE aliases SET sent_today = COALESCE(sent_today,0) + 1, last_used_at = NOW() WHERE id = ${Number(aliasId)}`);
 }
 
+// D4.1 · Alias ramp cap — raised to 45/inbox once warm (was hard-capped at 40).
+// ALIAS_MAX_CAP env overrides (default 45). Ramp: day 20 -> 30, day 24 -> 36, day 28 -> 42, day 30+ -> 45.
+// Formula: min(ALIAS_MAX_CAP, max(30, floor(warmup_day * 1.5)))
+// The old formula capped at 40 and used 2*warmup_day; the new formula uses 1.5*warmup_day which ramps
+// more gradually but reaches the higher 45 ceiling for inboxes warmed past day 30.
+const ALIAS_MAX_CAP = parseInt(process.env.ALIAS_MAX_CAP || '45', 10);
+
 /**
  * Daily maintenance — call once per day (cron 00:05).
  * 1. Reset sent_today to 0.
- * 2. Advance warmup: warmup_day += 1, day_quota ramps per schedule, cap at 40/day.
- *    Ramp: day N quota = min(40, 2 * N) for first 2 weeks, then +5/day to 40.
+ * 2. Advance warmup: warmup_day += 1, day_quota ramps per schedule, cap at ALIAS_MAX_CAP/day.
+ *    Ramp: min(ALIAS_MAX_CAP, max(30, floor(warmup_day * 1.5))).
+ *    day 20 -> 30, day 24 -> 36, day 28 -> 42, day 30+ -> 45.
  */
 function dailyReset() {
-  // Ramp formula in SQL: new quota = LEAST(40, GREATEST(day_quota, 2*(warmup_day+1)))
+  // D4.1: ramp formula updated to use 1.5*warmup_day with a floor of 30 and cap of ALIAS_MAX_CAP.
+  // SQL LEAST/GREATEST mirrors the JS formula exactly. ALIAS_MAX_CAP is not an env in SQL so we inline it.
+  const maxCap = ALIAS_MAX_CAP;
   const sql = `
     UPDATE aliases
     SET sent_today = 0,
         warmup_day = COALESCE(warmup_day,1) + 1,
-        day_quota  = LEAST(40, GREATEST(COALESCE(day_quota,2), 2 * (COALESCE(warmup_day,1) + 1))),
+        day_quota  = LEAST(${maxCap}, GREATEST(30, FLOOR(1.5 * (COALESCE(warmup_day,1) + 1))::int)),
         warmup_phase = CASE WHEN COALESCE(warmup_day,1) + 1 >= 21 THEN 'warm' ELSE 'cold' END
     WHERE status IN ('active','live','warmup_only')
-    RETURNING id`;
+    RETURNING id, COALESCE(warmup_day,1) AS warmup_day_new, day_quota`;
   const raw = pg(sql);
-  const n = raw ? raw.split('\n').filter(Boolean).length : 0;
-  return { reset: n };
+  const rows = raw ? raw.split('\n').filter(Boolean) : [];
+  const n = rows.length;
+  // Log warmup_day and cap for each alias (useful for debugging ramp behaviour)
+  if (n > 0) {
+    const sample = rows.slice(0, 5).map(r => { const [id, wd, dq] = r.split('\t'); return `alias#${id} warmup_day=${wd} cap=${dq}`; }).join(', ');
+    console.log(`[alias-rotator] dailyReset: ${n} aliases reset. Sample: ${sample}${n > 5 ? ' ...' : ''}`);
+  }
+  return { reset: n, alias_max_cap: maxCap };
 }
 
 /** Capacity snapshot — how many sends remain today across the pool. */

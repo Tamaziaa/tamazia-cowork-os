@@ -127,15 +127,18 @@ async function processLead(lead) {
 
   // AUDIT-LINK GUARANTEE (any touch that references an audit): NEVER send unless the URL is a real,
   // minted, signed audit that resolves HTTP 200. Fail-closed + flag the founder. No frivolous emails.
+  // D4.3: on block, also set needs_remint=true so the mint queue re-mints before the next retry.
   const bodyHasAudit = /\/audit\//i.test(draft.body);
   if (bodyHasAudit) {
     const auditUrl = pg(`SELECT COALESCE(audit_url,'') FROM leads WHERE id=${lead.id}`);
     const v = await verifyAuditUrl(auditUrl);
     if (!v.ok) {
       pg(`UPDATE outreach_drafts SET send_status='blocked_audit_missing', draft_metadata = draft_metadata || ${pgEsc(JSON.stringify({ audit_url: auditUrl || null, audit_check: v, blocked_at: new Date().toISOString() }))}::jsonb WHERE id=${draft.id}`);
-      pg(`UPDATE leads SET status='audit_unverified' WHERE id=${lead.id}`);
-      try { if (_tg) await _tg.send(`ABORTED Touch-${touch} for ${lead.company || lead.domain || ('lead ' + lead.id)}: audit link not verified (${v.reason}). No email sent. Mint or fix the audit and it will resend. [lead ${lead.id}]`, { parse_mode: '' }); } catch (_) {}
-      return { lead_id: lead.id, skipped: 'audit_unverified', audit_url: auditUrl, check: v };
+      // D4.3: mark needs_remint so the mint queue can re-mint the audit page before next retry.
+      pg(`UPDATE leads SET status='audit_unverified', needs_remint=true, updated_at=NOW() WHERE id=${lead.id}`);
+      console.log(`  D4.3 audit-verify: Touch-${touch} BLOCKED for ${lead.company || lead.domain || ('lead ' + lead.id)} — audit URL not live (${v.reason}). needs_remint=true set. [lead ${lead.id}]`);
+      try { if (_tg) await _tg.send(`ABORTED Touch-${touch} for ${lead.company || lead.domain || ('lead ' + lead.id)}: audit link not verified (${v.reason}). No email sent. Mint or fix the audit and it will resend. needs_remint flagged. [lead ${lead.id}]`, { parse_mode: '' }); } catch (_) {}
+      return { lead_id: lead.id, skipped: 'audit_unverified', audit_url: auditUrl, check: v, needs_remint: true };
     }
   }
 

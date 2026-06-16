@@ -114,6 +114,15 @@ function greetName(lead) {
   return 'there';
 }
 
+// D4.2 · Safe name for Touch-0 subjects/bodies. Adds a regex gate on top of greetName so names with
+// digits, special characters, or suspiciously long tokens fall back to 'there' rather than leaking
+// garbled data into the subject line. Accepts only ASCII letters, apostrophe, hyphen, 1-30 chars.
+// All Touch-0 subject/body rendering MUST use safeName(lead) not raw lead.contact_first_name.
+function safeName(lead) {
+  const raw = greetName(lead);
+  return /^[A-Za-z'-]{1,30}$/.test(raw) ? raw : 'there';
+}
+
 // Normalise any audit_url to an ABSOLUTE https link (stored values are sometimes relative '/audit/...').
 function absAudit(u) { u = String(u == null ? '' : u).trim(); if (/^https?:\/\//i.test(u)) return u; if (u.startsWith('/')) return 'https://tamazia.co.uk' + u; return ''; }
 
@@ -187,7 +196,8 @@ function buildTouchFromCampaign(campaign, touchIndex, lead, fields) {
 function buildFields(lead, campaign, findings) {
   const finding = leadFinding(lead, findings, campaign);
   return {
-    first_name: greetName(lead),
+    // D4.2: use safeName (regex-gated) so Touch-0 subjects/bodies never emit garbled names.
+    first_name: safeName(lead),
     company: lead.company || 'your firm',
     city: lead.operating_city || '',
     audit_url: absAudit(lead.audit_url),
@@ -207,8 +217,9 @@ function buildTouch3({ lead, findings }) { const c = _campaignForLead(lead); if 
 
 // Minimal fallback for a lead whose sector has no campaign JSON (non-priority sector). Keeps the engine moving
 // without shipping hollow mail: a short, compliant, audit-anchored note. Touches 1-3 carry the audit link.
+// D4.2: use safeName so fallback touches also apply the regex safety gate.
 function _fallbackTouch(lead, touch, findings) {
-  const name = greetName(lead);
+  const name = safeName(lead);
   const company = lead.company || 'your firm';
   const sector = (lead.sector || 'business').replace(/-/g, ' ');
   const audit = absAudit(lead.audit_url);
@@ -286,4 +297,4 @@ if (require.main === module) {
   renderAll(lead_id).then(r => { console.log(JSON.stringify(r, null, 2)); });
 }
 
-module.exports = { renderAll, buildTouch0, buildTouch1, buildTouch2, buildTouch3, buildTouchFromCampaign, campaignCodeFor, loadCampaign, substitute, greetName };
+module.exports = { renderAll, buildTouch0, buildTouch1, buildTouch2, buildTouch3, buildTouchFromCampaign, campaignCodeFor, loadCampaign, substitute, greetName, safeName };
