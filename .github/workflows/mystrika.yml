@@ -27,4 +27,14 @@ jobs:
         run: |
           set -a; source .env 2>/dev/null; set +a
           if [ "${{ github.event.inputs.action }}" = "push" ]; then node scripts/push-to-mystrika.js --campaign "${{ github.event.inputs.campaign }}" --max "${{ github.event.inputs.max || '200' }}";
-          else node scripts/heartbeat.js wrap mystrika -- bash -c 'node scripts/sync-mystrika-replies.js && node scripts/plane-leads-sync.js'; fi
+          else
+            # Scheduled run = (1) reply-sync, THEN (2) the CAPACITY-AWARE DRAIN. The drain keeps every sector
+            # campaign topped to a buffer of unsent prospects (MYSTRIKA_BUFFER_DAYS x the warmed daily cap), pulling
+            # from the DB ready-pool (claude_cleared + audit_verified + not pushed). It SELF-GATES on SEND_ENABLED:
+            # with SEND off it computes + logs the plan but loads NOTHING into Mystrika, so it is safe to run on the
+            # schedule today and becomes the live drain the instant the founder flips SEND_ENABLED. No new credential.
+            node scripts/heartbeat.js wrap mystrika -- bash -c '
+              node scripts/sync-mystrika-replies.js && node scripts/plane-leads-sync.js
+              node scripts/push-to-mystrika.js --max "${MYSTRIKA_DRAIN_MAX:-500}"
+            ';
+          fi

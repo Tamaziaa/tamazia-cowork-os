@@ -54,21 +54,21 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
   run "node scripts/cc2-provision.js"                                  # CC-2: icp_catalog seeds + v_admin_leads view (idempotent; columns/tables also in the spec)
   run "node scripts/zoho-imap-poll.js"                                  # replies (skips if no IMAP pwd)
   run "node src/skills/S065-touch-scheduler/scripts/send-due.js"        # send window (gated)
-  run "node scripts/run-serp-scrape.js 50"                              # wide SERP scrape (skips if no key)
+  run "node scripts/run-serp-scrape.js ${SERP_SCRAPE_BATCH:-50}"        # wide SERP scrape (skips if no key). Tunable via SERP_SCRAPE_BATCH (default 50, unchanged).
   run '[ "${SOURCING_ENABLED:-1}" = "1" ] && node src/skills/S028-sourcing-orchestrator/scripts/run.js || echo "S028 sourcing disabled"'  # S028 10-source orchestrator (CH/SEC/OC/OSM) -> fresh leads
   run "node scripts/enrich-and-queue-channels.js 8"                     # thin waterfall: website + emails + socials + best_channel + LinkedIn/Instagram Touch-0 channel-queue
-  run "node scripts/enrich-worker.js --once --max 8"                    # RICH DM enrichment (enrichCompany: Companies House officers + SRA/FCA/CQC registers + site-named DM + selectDecisionMaker -> primary_email/decision_maker_confidence/secondary cc). Free-DIY; Apify stays OFF unless APIFY_ENABLE (client fail-closes on the $29 cap). Back-fills the thin path's no-DM leads — the contact-depth fix.
-  run "node scripts/run-deep-research-batch.js 6"                       # S063 deep research: site scrape + news + brand pointers + Touch 0 (feeds personalisation + audit)
-  run "node scripts/verify-contacts.js 25"                              # FREE email verify (Hunter+DIY, £0) → verify_status/contact_confidence
+  run "node scripts/enrich-worker.js --once --max ${ENRICH_WORKER_MAX:-8}"       # RICH DM enrichment (enrichCompany: Companies House officers + SRA/FCA/CQC registers + site-named DM + selectDecisionMaker -> primary_email/decision_maker_confidence/secondary cc). Free-DIY; Apify stays OFF unless APIFY_ENABLE (client fail-closes on the $29 cap). Back-fills the thin path's no-DM leads — the contact-depth fix.
+  run "node scripts/run-deep-research-batch.js ${RESEARCH_BATCH:-6}"                  # S063 deep research: site scrape + news + brand pointers + Touch 0 (feeds personalisation + audit)
+  run "node scripts/verify-contacts.js ${VERIFY_CONTACTS_BATCH:-25}"                        # FREE email verify (Hunter+DIY, £0) → verify_status/contact_confidence
   run "node scripts/dedupe-leads.js"                                    # suppress duplicate-domain leads (non-destructive)
   # qualify is the canonical "rows processed" of the pipeline. Capture its count so the engine_runs heartbeat
   # reports real throughput instead of the hard-coded 0 that made every cycle look idle to the MCP/Health tab.
   # RACE-GUARDED: qualify writes the same tier/lifecycle columns the heavy re-tier writers rewrite — skip when one
   # is live (PROCESSED stays 0 for the skipped cycle, which is the honest count).
   if [ -n "$WRITER_ACTIVE" ]; then
-    echo "[$(TS)] >> SKIP (writer '$WRITER_ACTIVE' active): node scripts/qualify-and-queue.js 12"; PROCESSED="0"
+    echo "[$(TS)] >> SKIP (writer '$WRITER_ACTIVE' active): node scripts/qualify-and-queue.js ${QUALIFY_BATCH:-12}"; PROCESSED="0"
   else
-    QUALIFY_OUT="$(TMO 'node scripts/qualify-and-queue.js 12' 2>&1)"; echo "$QUALIFY_OUT" | tail -3
+    QUALIFY_OUT="$(TMO "node scripts/qualify-and-queue.js ${QUALIFY_BATCH:-12}" 2>&1)"; echo "$QUALIFY_OUT" | tail -3
     PROCESSED="$(printf '%s\n' "$QUALIFY_OUT" | sed -n 's/.*\[qualify\] scored \([0-9]\{1,\}\).*/\1/p' | tail -1)"; PROCESSED="${PROCESSED:-0}"
   fi
   # ---- LLM-RESCUE + HUMAN-REVIEW LOOP (generation-first; LLM-QA-DESIGN.md) -----------------------------------
@@ -107,14 +107,14 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
   # later demotes simply never passes the push gate (self-correcting, harmless). This is the SAME rationale that
   # de-guarded render-touches below. So it runs EVERY cycle and can never be starved. SEND stays OFF.
   run "node scripts/governor-release.js"
-  run_guarded "node scripts/enqueue-leads.js 500"                      # MINT seam (1/2): enqueue qualified, not-yet-minted leads into minting_queue
+  run_guarded "node scripts/enqueue-leads.js ${ENQUEUE_BATCH:-500}"              # MINT seam (1/2): enqueue qualified, not-yet-minted leads into minting_queue
   run_guarded "node scripts/mint-worker.js --once"                     # MINT seam (2/2): drain the queue -> build audit_pages -> set leads.audit_url (the Touch-1 link). REPLACES the never-existed build-audit-pages.js
   # VERIFY AUDITS (P5 [X2/X8]): confirm each FIT+qualified lead's audit_url is a real, minted, signed, LIVE (200)
   # audit; self-heal (re-mint) the broken/missing ones, then set audit_verified (24h TTL). This was NOT a cycle
   # step at all (only require()d by other scripts), so audit_verified stuck at ~35 and the push/export gate (which
   # requires audit_verified=TRUE) was starved. Now its own step. Bounded mint cap (6) so it never runs long; the
   # per-step STEP_TIMEOUT is the hard cap. Race-guarded (touches qualified rows). SEND stays OFF.
-  run_guarded "node scripts/verify-audits.js 6"
+  run_guarded "node scripts/verify-audits.js ${VERIFY_AUDITS_BATCH:-6}"
   # render-touches writes ONLY outreach_drafts (+ leads.status/next_touch_date/updated_at) — it does NOT touch the
   # re-tier trio (icp_tier/quality_fit/lifecycle_stage/sector_code) the heavy writers contend for, so it CANNOT
   # race them. It was previously run_guarded and got STARVED whenever a writer ran (infra round: 75 qualified+minted
