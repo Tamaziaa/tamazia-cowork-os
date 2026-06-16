@@ -1,0 +1,39 @@
+name: Notion cockpit sync
+
+# D5.7: Pushes live Neon funnel numbers to the Tamazia Cockpit Notion page every 30 min.
+# Neon is authoritative; Notion is read-only display. Fail-open (continue-on-error).
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 min, 24/7
+  workflow_dispatch:          # manual trigger from Actions UI
+
+concurrency:
+  group: notion-sync
+  cancel-in-progress: true    # if two fire together, only the latest matters
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python deps (psql shim)
+        run: python -m pip install --quiet pg8000
+
+      - name: Materialise .env from secret
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+
+      - name: Sync Neon funnel snapshot to Notion cockpit
+        run: node scripts/notion-sync.js
+        env:
+          # NOTION_API_KEY and NEON_URL are already in ENV_B64 (.env is sourced by the script).
+          # Expose them explicitly too so the script picks them up via process.env if needed.
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NEON_URL: ${{ secrets.NEON_URL }}
+        continue-on-error: true   # never red the workflow on a transient Notion API hiccup

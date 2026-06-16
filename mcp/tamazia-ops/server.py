@@ -28,13 +28,18 @@ diagnostics go to stderr.
 Run:  python3 server.py        (stdio transport; launched by the MCP client)
 """
 
+import base64
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 # ---------------------------------------------------------------------------
@@ -1051,6 +1056,227 @@ def set_flag(name, value, confirm: str = "", dry: bool = False) -> str:
 
 
 # ===========================================================================
+# GOOGLE API helpers — GSC + GA4 via service account (stdlib-only).
+# Signing uses `cryptography` if installed, else falls back to openssl subprocess.
+# Token is cached in-process (1h lifetime). Fails soft: returns string, never raises.
+# ===========================================================================
+_google_token_cache: Dict[str, Any] = {}  # scope -> (access_token, expires_at_epoch)
+
+
+def _decode_google_sa() -> Optional[Dict]:
+    b64 = _env("GOOGLE_SA_KEY_B64")
+    if not b64:
+        return None
+    try:
+        return json.loads(base64.b64decode(b64 + "==").decode("utf-8"))
+    except Exception:
+        return None
+
+
+def _b64url(b: bytes) -> bytes:
+    return base64.urlsafe_b64encode(b).rstrip(b"=")
+
+
+def _jwt_sign(data_bytes: bytes, private_key_pem: str) -> bytes:
+    """RS256-sign data_bytes. Uses cryptography lib if available, else openssl."""
+    try:
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding
+        key = serialization.load_pem_private_key(private_key_pem.encode(), password=None)
+        return key.sign(data_bytes, padding.PKCS1v15(), hashes.SHA256())
+    except ImportError:
+        pass
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(suffix=".pem")
+        os.write(fd, private_key_pem.encode())
+        os.close(fd)
+        proc = subprocess.run(
+            ["openssl", "dgst", "-sha256", "-sign", tmp],
+            input=data_bytes, capture_output=True, timeout=15,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError("openssl error: " + proc.stderr.decode()[:200])
+        return proc.stdout
+    finally:
+        if tmp and os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+def _google_access_token(scope: str) -> str:
+    """Return a bearer token for `scope`, cached in-process for ~1h."""
+    now = int(time.time())
+    cached = _google_token_cache.get(scope)
+    if cached and cached[1] > now + 60:
+        return cached[0]
+    sa = _decode_google_sa()
+    if not sa:
+        raise ValueError("GOOGLE_SA_KEY_B64 not set or invalid")
+    hdr = _b64url(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
+    pay = _b64url(json.dumps({
+        "iss": sa["client_email"], "scope": scope,
+        "aud": "https://oauth2.googleapis.com/token",
+        "exp": now + 3600, "iat": now,
+    }).encode())
+    sig = _jwt_sign(hdr + b"." + pay, sa["private_key"])
+    jwt = (hdr + b"." + pay + b"." + _b64url(sig)).decode()
+    body = ("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer"
+            "&assertion=" + urllib.parse.quote(jwt, safe=""))
+    req = urllib.request.Request(
+        "https://oauth2.googleapis.com/token",
+        data=body.encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=20) as r:
+        d = json.load(r)
+    tok = d.get("access_token")
+    if not tok:
+        raise ValueError("No access_token in Google token response: " + str(d)[:200])
+    _google_token_cache[scope] = (tok, now + int(d.get("expires_in", 3600)))
+    return tok
+
+
+def _google_post(url: str, tok: str, body: dict) -> dict:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode(),
+        headers={"Authorization": "Bearer " + tok, "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.load(r)
+
+
+# ===========================================================================
+# TOOL 12: gsc_performance
+# ===========================================================================
+def gsc_performance(days: int = 30) -> str:
+    """Top keywords + pages from Google Search Console for tamazia.co.uk."""
+    try:
+        days = max(1, min(int(days), 90))
+    except (TypeError, ValueError):
+        days = 30
+    gsc_site = _env("GSC_SITE") or "sc-domain:tamazia.co.uk"
+    try:
+        tok = _google_access_token("https://www.googleapis.com/auth/webmasters.readonly")
+    except Exception as e:
+        return "gsc_performance: cannot get Google token (" + str(e)[:200] + ")."
+
+    end_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    start_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    site_enc = urllib.parse.quote(gsc_site, safe="")
+    base_url = ("https://www.googleapis.com/webmasters/v3/sites/"
+                + site_enc + "/searchAnalytics/query")
+    lines = ["GSC — " + gsc_site + " (last " + str(days) + "d, " + start_date + " → " + end_date + "):"]
+
+    def _call(dims):
+        return _google_post(base_url, tok, {
+            "startDate": start_date, "endDate": end_date,
+            "dimensions": dims, "rowLimit": 10,
+        })
+
+    try:
+        d = _call(["query"])
+        rows = d.get("rows", [])
+        if rows:
+            lines.append("Top keywords (clicks / impressions / pos / CTR):")
+            for r in rows:
+                q = (r.get("keys") or ["?"])[0]
+                lines.append("  {q}: {c} clicks, {i} impr, pos {p:.1f}, CTR {ctr:.1f}%".format(
+                    q=q[:60], c=int(r.get("clicks", 0)), i=int(r.get("impressions", 0)),
+                    p=float(r.get("position", 0)), ctr=float(r.get("ctr", 0)) * 100,
+                ))
+        else:
+            lines.append("Keywords: no data yet.")
+    except Exception as e:
+        lines.append("Keywords: error (" + str(e)[:120] + ").")
+
+    try:
+        d = _call(["page"])
+        rows = d.get("rows", [])
+        if rows:
+            lines.append("Top pages (clicks / impressions):")
+            for r in rows:
+                page = (r.get("keys") or ["?"])[0].replace("https://tamazia.co.uk", "")
+                lines.append("  {p}: {c} clicks, {i} impr".format(
+                    p=page or "/", c=int(r.get("clicks", 0)), i=int(r.get("impressions", 0)),
+                ))
+        else:
+            lines.append("Pages: no data yet.")
+    except Exception as e:
+        lines.append("Pages: error (" + str(e)[:120] + ").")
+
+    return "\n".join(lines)
+
+
+# ===========================================================================
+# TOOL 13: ga4_analytics
+# ===========================================================================
+def ga4_analytics(days: int = 30) -> str:
+    """Sessions, users, bounce rate, and top pages from GA4 for tamazia.co.uk."""
+    try:
+        days = max(1, min(int(days), 90))
+    except (TypeError, ValueError):
+        days = 30
+    prop = _env("GA4_PROPERTY_ID") or "536210909"
+    try:
+        tok = _google_access_token("https://www.googleapis.com/auth/analytics.readonly")
+    except Exception as e:
+        return "ga4_analytics: cannot get Google token (" + str(e)[:200] + ")."
+
+    url = "https://analyticsdata.googleapis.com/v1beta/properties/" + prop + ":runReport"
+    date_range = [{"startDate": str(days) + "daysAgo", "endDate": "today"}]
+    lines = ["GA4 — property " + prop + " (last " + str(days) + "d):"]
+
+    try:
+        d = _google_post(url, tok, {
+            "dateRanges": date_range,
+            "metrics": [
+                {"name": "sessions"}, {"name": "activeUsers"},
+                {"name": "bounceRate"}, {"name": "averageSessionDuration"},
+            ],
+        })
+        rows = d.get("rows", [])
+        if rows:
+            mv = rows[0].get("metricValues", [])
+            def _mv(i):
+                return mv[i]["value"] if i < len(mv) else "?"
+            br = round(float(_mv(2)) * 100, 1) if _mv(2) != "?" else "?"
+            dur = round(float(_mv(3)), 0) if _mv(3) != "?" else "?"
+            lines.append("Overall: {s} sessions · {u} users · bounce {br}% · avg session {d}s".format(
+                s=_mv(0), u=_mv(1), br=br, d=dur,
+            ))
+        else:
+            lines.append("Overall: no data yet (property may need time to populate).")
+    except Exception as e:
+        lines.append("Overall stats: error (" + str(e)[:120] + ").")
+
+    try:
+        d = _google_post(url, tok, {
+            "dateRanges": date_range,
+            "dimensions": [{"name": "pagePath"}],
+            "metrics": [{"name": "screenPageViews"}, {"name": "activeUsers"}],
+            "limit": 10,
+            "orderBys": [{"metric": {"metricName": "screenPageViews"}, "desc": True}],
+        })
+        rows = d.get("rows", [])
+        if rows:
+            lines.append("Top pages (views / users):")
+            for r in rows:
+                dv = r.get("dimensionValues", [{}])
+                mv = r.get("metricValues", [{}, {}])
+                path = dv[0].get("value", "?") if dv else "?"
+                views = mv[0].get("value", "0") if mv else "0"
+                users = mv[1].get("value", "0") if len(mv) > 1 else "0"
+                lines.append("  {p}: {v} views, {u} users".format(p=path[:60], v=views, u=users))
+    except Exception as e:
+        lines.append("Top pages: error (" + str(e)[:120] + ").")
+
+    return "\n".join(lines)
+
+
+# ===========================================================================
 # Tool registry - name -> (callable, description, JSON-Schema for inputs).
 # The 6 READ tool bodies above are unchanged from the SDK version; the 5 ACTION
 # tools (D5.8) are appended below. This table is the hand-rolled replacement for
@@ -1120,6 +1346,41 @@ TOOLS = {
             "via SLACK_BOT_TOKEN) and Telegram (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)."
         ),
         "inputSchema": _schema(),
+    },
+    # ----- GOOGLE ANALYTICS TOOLS (D5.55) -------------------------------------
+    "gsc_performance": {
+        "fn": gsc_performance,
+        "description": (
+            "Top keywords and pages from Google Search Console for tamazia.co.uk. "
+            "Uses the GOOGLE_SA_KEY_B64 service account. Optional `days` (1-90, default 30). "
+            "Returns clicks, impressions, position, CTR per keyword and page."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "days": {
+                    "type": "integer",
+                    "description": "Look-back window in days (1-90, default 30).",
+                    "minimum": 1, "maximum": 90, "default": 30,
+                }
+            },
+        ),
+    },
+    "ga4_analytics": {
+        "fn": ga4_analytics,
+        "description": (
+            "Sessions, users, bounce rate, avg session duration and top pages from "
+            "GA4 for tamazia.co.uk (property 536210909). Uses GOOGLE_SA_KEY_B64. "
+            "Optional `days` (1-90, default 30)."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "days": {
+                    "type": "integer",
+                    "description": "Look-back window in days (1-90, default 30).",
+                    "minimum": 1, "maximum": 90, "default": 30,
+                }
+            },
+        ),
     },
     # ----- ACTION TOOLS (D5.8) -------------------------------------------------
     "accept_lead": {
@@ -1276,6 +1537,8 @@ TOOLS = {
 # the inputs it declares and nothing else. A tool not listed here takes no args.
 _TOOL_ARGS = {
     "recent_replies": ("limit",),
+    "gsc_performance": ("days",),
+    "ga4_analytics": ("days",),
     "accept_lead": ("lead_id", "dry"),
     "reject_lead": ("lead_id", "reason", "suppress", "dry"),
     "remint_audit": ("lead_id_or_hash", "dry"),
