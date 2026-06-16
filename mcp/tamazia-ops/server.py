@@ -1056,6 +1056,253 @@ def set_flag(name, value, confirm: str = "", dry: bool = False) -> str:
 
 
 # ===========================================================================
+# TOOL 12-NEW: tag_lead_dnc
+# ===========================================================================
+def tag_lead_dnc(lead_id) -> str:
+    """Tag a lead Do-Not-Contact: sets status='dnc', lifecycle_stage='suppressed'.
+
+    ADDITIVE + SCOPED: writes ONLY status, lifecycle_stage, updated_at on the
+    targeted row. Never touches off-limits tables. SEND stays OFF.
+    IDEMPOTENT: a lead already status='dnc' is a no-op.
+    """
+    lid = _as_lead_id(lead_id)
+    if lid is None:
+        return "tag_lead_dnc: invalid lead_id (expected a positive integer id)."
+    try:
+        rows = neon(
+            "SELECT id, company, domain, COALESCE(status,'') AS st FROM leads WHERE id=$1",
+            [lid],
+        )
+    except NeonError as e:
+        return "tag_lead_dnc: cannot reach Neon (" + str(e) + ")."
+    if not rows:
+        return "tag_lead_dnc: no lead with id " + str(lid) + "."
+    row = rows[0]
+    company = row.get("company") or ("#" + str(lid))
+    domain = row.get("domain") or ""
+    if str(row.get("st", "")).lower() == "dnc":
+        return ("tag_lead_dnc: lead " + company + " (" + domain + ") is already dnc. No-op.")
+    try:
+        rows2 = neon(
+            "UPDATE leads SET status='dnc', lifecycle_stage='suppressed', "
+            "updated_at=NOW() AT TIME ZONE 'UTC' "
+            "WHERE id=$1 "
+            "RETURNING company, domain",
+            [lid],
+        )
+    except NeonError as e:
+        return "tag_lead_dnc: write failed (" + str(e) + ")."
+    if rows2:
+        c = rows2[0].get("company") or company
+        d = rows2[0].get("domain") or domain
+        return "tag_lead_dnc: " + c + " (" + d + ") tagged dnc / suppressed."
+    return "tag_lead_dnc: lead #" + str(lid) + " tagged dnc / suppressed."
+
+
+# ===========================================================================
+# TOOL 13-NEW: neon_query
+# ===========================================================================
+def neon_query(sql, limit: int = 50) -> str:
+    """Run an arbitrary SELECT query against Neon. Non-SELECT queries are refused.
+
+    SAFETY: only SELECT statements allowed (checked before execution).
+    Results capped at min(limit, 200) rows. Returns a formatted table string.
+    """
+    if not isinstance(sql, str) or not sql.strip():
+        return "neon_query: empty sql."
+    if not sql.strip().upper().startswith("SELECT"):
+        return "neon_query: Only SELECT queries allowed."
+    try:
+        cap = min(int(limit), 200)
+    except (TypeError, ValueError):
+        cap = 50
+    cap = max(1, cap)
+    # Inject LIMIT if not already present (simple heuristic).
+    stripped = sql.rstrip().rstrip(";")
+    upper = stripped.upper()
+    if " LIMIT " not in upper:
+        stripped = stripped + " LIMIT " + str(cap)
+    try:
+        rows = neon(stripped)
+    except NeonError as e:
+        return "neon_query: query failed (" + str(e) + ")."
+    if not rows:
+        return "neon_query: 0 rows returned."
+    # Format as a plain-text table.
+    if isinstance(rows[0], dict):
+        cols = list(rows[0].keys())
+    else:
+        cols = ["col" + str(i) for i in range(len(rows[0]))]
+    def _cell(r, c, i):
+        if isinstance(r, dict):
+            v = r.get(c)
+        elif isinstance(r, (list, tuple)):
+            v = r[i] if i < len(r) else ""
+        else:
+            v = r
+        return str(v) if v is not None else "NULL"
+    col_widths = [max(len(c), max(len(_cell(r, c, i)) for r in rows)) for i, c in enumerate(cols)]
+    sep = "+" + "+".join("-" * (w + 2) for w in col_widths) + "+"
+    header = "|" + "|".join(" " + c.ljust(w) + " " for c, w in zip(cols, col_widths)) + "|"
+    lines = [sep, header, sep]
+    for r in rows:
+        line = "|" + "|".join(" " + _cell(r, c, i).ljust(w) + " " for i, (c, w) in enumerate(zip(cols, col_widths))) + "|"
+        lines.append(line)
+    lines.append(sep)
+    lines.append(str(len(rows)) + " row(s) returned.")
+    return "\n".join(lines)
+
+
+# ===========================================================================
+# TOOL 14-NEW: get_lead
+# ===========================================================================
+def get_lead(query) -> str:
+    """Look up one or more leads by id (numeric) or by domain/company name (string).
+
+    Numeric query -> exact id lookup.
+    String query  -> ILIKE match on domain and company (up to 5 results).
+    Returns key fields: id, company, domain, sector, icp_tier, lifecycle_stage,
+    contact_email, quality_fit, audit_url, mystrika_pushed, claude_cleared,
+    governor_released_at, status.
+    """
+    q = str(query or "").strip()
+    if not q:
+        return "get_lead: empty query."
+    select = (
+        "SELECT id, company, domain, sector, icp_tier, lifecycle_stage, contact_email, "
+        "quality_fit, audit_url, mystrika_pushed, claude_cleared, governor_released_at, status "
+        "FROM leads "
+    )
+    try:
+        lid = _as_lead_id(q)
+        if lid is not None:
+            rows = neon(select + "WHERE id=$1", [lid])
+        else:
+            safe = q.replace("'", "''")
+            rows = neon(select + "WHERE domain ILIKE '%" + safe + "%' OR company ILIKE '%" + safe + "%' LIMIT 5")
+    except NeonError as e:
+        return "get_lead: cannot reach Neon (" + str(e) + ")."
+    if not rows:
+        return "get_lead: no leads found for query: " + q
+    lines = []
+    for r in rows:
+        lines.append(
+            "id={id} | {company} | {domain} | sector={sector} | tier={icp_tier} | "
+            "stage={lifecycle_stage} | email={contact_email} | fit={quality_fit} | "
+            "pushed={mystrika_pushed} | cleared={claude_cleared} | "
+            "released={governor_released_at} | status={status} | audit_url={audit_url}".format(
+                id=r.get("id"),
+                company=r.get("company") or "",
+                domain=r.get("domain") or "",
+                sector=r.get("sector") or "",
+                icp_tier=r.get("icp_tier"),
+                lifecycle_stage=r.get("lifecycle_stage") or "",
+                contact_email=r.get("contact_email") or "",
+                quality_fit=r.get("quality_fit"),
+                mystrika_pushed=r.get("mystrika_pushed"),
+                claude_cleared=r.get("claude_cleared"),
+                governor_released_at=r.get("governor_released_at"),
+                status=r.get("status") or "",
+                audit_url=r.get("audit_url") or "",
+            )
+        )
+    return ("\n".join(lines))
+
+
+# ===========================================================================
+# TOOL 15-NEW: capacity_snapshot
+# ===========================================================================
+def capacity_snapshot() -> str:
+    """Snapshot of lead capacity across key pipeline gates.
+
+    Counts from leads: total, tier-1, quality_fit, qualified, governor-released,
+    audit_verified, claude_cleared, mystrika_pushed. Single query, fail-soft.
+    """
+    q = (
+        "SELECT "
+        "count(*) AS total, "
+        "count(*) FILTER (WHERE icp_tier=1) AS tier1, "
+        "count(*) FILTER (WHERE quality_fit) AS quality_fit, "
+        "count(*) FILTER (WHERE lifecycle_stage='qualified') AS qualified, "
+        "count(*) FILTER (WHERE governor_released_at IS NOT NULL) AS released, "
+        "count(*) FILTER (WHERE COALESCE(audit_verified,false)) AS audit_verified, "
+        "count(*) FILTER (WHERE COALESCE(claude_cleared,false)) AS cleared, "
+        "count(*) FILTER (WHERE COALESCE(mystrika_pushed,false)) AS pushed "
+        "FROM leads"
+    )
+    try:
+        rows = neon(q)
+    except NeonError as e:
+        return "capacity_snapshot: cannot reach Neon (" + str(e) + ")."
+    if not rows:
+        return "capacity_snapshot: no data returned."
+    r = rows[0] if isinstance(rows[0], dict) else {}
+    lines = [
+        "Capacity snapshot (leads table):",
+        "  Total leads      : " + str(r.get("total", "n/a")),
+        "  Tier-1           : " + str(r.get("tier1", "n/a")),
+        "  Quality fit      : " + str(r.get("quality_fit", "n/a")),
+        "  Qualified        : " + str(r.get("qualified", "n/a")),
+        "  Governor released: " + str(r.get("released", "n/a")),
+        "  Audit verified   : " + str(r.get("audit_verified", "n/a")),
+        "  Claude cleared   : " + str(r.get("cleared", "n/a")),
+        "  Mystrika pushed  : " + str(r.get("pushed", "n/a")),
+    ]
+    return "\n".join(lines)
+
+
+# ===========================================================================
+# TOOL 16-NEW: notion_update_cockpit
+# ===========================================================================
+def notion_update_cockpit(message) -> str:
+    """Append a callout block to the Tamazia Notion cockpit page.
+
+    Uses NOTION_API_KEY (or NOTION_TOKEN) from env. Appends a blue callout block
+    with the provided message to the fixed cockpit page. Fail-soft.
+    """
+    msg = str(message or "").strip()
+    if not msg:
+        return "notion_update_cockpit: empty message."
+    notion_key = _env("NOTION_API_KEY") or _env("NOTION_TOKEN")
+    if not notion_key:
+        return "notion_update_cockpit: NOTION_API_KEY / NOTION_TOKEN not set."
+    PAGE_ID = "38148123-488c-81b4-9293-f9c7056ff2ff"
+    data = json.dumps({
+        "children": [{
+            "type": "callout",
+            "callout": {
+                "rich_text": [{"type": "text", "text": {"content": msg}}],
+                "icon": {"type": "emoji", "emoji": "\U0001f4ca"},
+                "color": "blue_background",
+            },
+        }]
+    }).encode("utf-8")
+    try:
+        req = urllib.request.Request(
+            "https://api.notion.com/v1/blocks/" + PAGE_ID + "/children",
+            data=data,
+            headers={
+                "Authorization": "Bearer " + notion_key,
+                "Notion-Version": "2022-06-28",
+                "Content-Type": "application/json",
+            },
+            method="PATCH",
+        )
+        with urllib.request.urlopen(req, timeout=20) as r:
+            _ = r.read()
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = " - " + e.read().decode("utf-8", "ignore")[:160]
+        except Exception:
+            pass
+        return "notion_update_cockpit: HTTP " + str(e.code) + detail
+    except Exception as e:
+        return "notion_update_cockpit: failed (" + str(e)[:150] + ")."
+    return "notion_update_cockpit: cockpit updated: " + msg[:80]
+
+
+# ===========================================================================
 # GOOGLE API helpers — GSC + GA4 via service account (stdlib-only).
 # Signing uses `cryptography` if installed, else falls back to openssl subprocess.
 # Token is cached in-process (1h lifetime). Fails soft: returns string, never raises.
@@ -1529,6 +1776,93 @@ TOOLS = {
             required=["name", "value"],
         ),
     },
+    # ----- D5.8 ADDITIONAL ACTION TOOLS ----------------------------------------
+    "tag_lead_dnc": {
+        "fn": tag_lead_dnc,
+        "description": (
+            "Tag a lead Do-Not-Contact: sets status='dnc' and lifecycle_stage='suppressed'. "
+            "Additive, scoped to the one row, idempotent (already-dnc = no-op). "
+            "SEND stays OFF. Never touches off-limits tables."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "lead_id": {
+                    "type": "integer",
+                    "description": "leads.id to tag DNC (positive integer).",
+                    "minimum": 1,
+                },
+            },
+            required=["lead_id"],
+        ),
+    },
+    "neon_query": {
+        "fn": neon_query,
+        "description": (
+            "Run an arbitrary SELECT query against the Neon DB. Only SELECT statements "
+            "are allowed (non-SELECT queries are refused). Results capped at min(limit, 200) "
+            "rows. Returns a formatted table. Optional `limit` defaults to 50."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "sql": {
+                    "type": "string",
+                    "description": "A SELECT SQL statement to run against Neon.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max rows to return (capped at 200, default 50).",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "default": 50,
+                },
+            },
+            required=["sql"],
+        ),
+    },
+    "get_lead": {
+        "fn": get_lead,
+        "description": (
+            "Look up a lead by numeric id or by domain/company name (ILIKE match, up to 5 "
+            "results). Returns id, company, domain, sector, icp_tier, lifecycle_stage, "
+            "contact_email, quality_fit, audit_url, mystrika_pushed, claude_cleared, "
+            "governor_released_at, status."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "query": {
+                    "type": "string",
+                    "description": "Numeric leads.id, or a domain/company name fragment.",
+                },
+            },
+            required=["query"],
+        ),
+    },
+    "capacity_snapshot": {
+        "fn": capacity_snapshot,
+        "description": (
+            "One-shot capacity report from the leads table: total, tier-1, quality_fit, "
+            "qualified, governor-released, audit_verified, claude_cleared, mystrika_pushed. "
+            "No args. Fail-soft."
+        ),
+        "inputSchema": _schema(),
+    },
+    "notion_update_cockpit": {
+        "fn": notion_update_cockpit,
+        "description": (
+            "Append a blue callout block to the Tamazia Notion cockpit page "
+            "(page 38148123-488c-81b4-9293-f9c7056ff2ff). Uses NOTION_API_KEY / "
+            "NOTION_TOKEN from env. Fail-soft."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "message": {
+                    "type": "string",
+                    "description": "Text to append as a callout block on the cockpit page.",
+                },
+            },
+            required=["message"],
+        ),
+    },
 }
 
 
@@ -1544,6 +1878,11 @@ _TOOL_ARGS = {
     "remint_audit": ("lead_id_or_hash", "dry"),
     "dispatch_workflow": ("name", "dry"),
     "set_flag": ("name", "value", "confirm", "dry"),
+    # D5.8 additional action tools
+    "tag_lead_dnc": ("lead_id",),
+    "neon_query": ("sql", "limit"),
+    "get_lead": ("query",),
+    "notion_update_cockpit": ("message",),
 }
 
 
