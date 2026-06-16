@@ -41,4 +41,9 @@ jobs:
         run: |
           set -a; source .env 2>/dev/null; set +a
           export REMINT_HASHES="${{ inputs.hashes }}"
-          node scripts/remint-audits.js
+          # A4/IG2: heartbeat-wrap so this long server-side re-mint is visible in engine_runs
+          # (engine_health / check-stuck-jobs). Fallback to a bare call so a heartbeat hiccup never blocks the re-mint.
+          # This job legitimately runs for hours (timeout-minutes: 350), so lift the wrap's hung-step guard above the
+          # job timeout — otherwise heartbeat.js' 20-min default would SIGKILL a healthy long re-mint at exit 124.
+          export HEARTBEAT_WRAP_TIMEOUT_MS=21600000   # 6h, comfortably over the 350-min job cap
+          node scripts/heartbeat.js wrap remint-audits -- node scripts/remint-audits.js || node scripts/remint-audits.js

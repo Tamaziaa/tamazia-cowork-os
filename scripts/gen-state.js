@@ -70,11 +70,24 @@ function main() {
   try { fs.mkdirSync(dir, { recursive: true }); } catch (_e) {}
   fs.writeFileSync(path.join(dir, 'PIPELINE-STATE.md'), out);
   // Also persist the digest to Neon so it is always readable without a repo push (branch-safe, survives a failed git push).
+  // A5 root cause: the digest row was written 0 bytes (i.e. never persisted) because gen-state.yml runs neither
+  // ensure-schema.js nor a CREATE here, so on any DB where system_state did not yet exist the INSERT errored and was
+  // SILENTLY swallowed (pg() returns null on error; the try/catch then dropped it) while the log still claimed
+  // "wrote ... N bytes" — a false success. Peer engine scripts (health-check.js / heartbeat.js / check-stuck-jobs.js)
+  // all self-provision their target table first; gen-state.js was the outlier. Fix: (1) CREATE IF NOT EXISTS the
+  // canonical system_state shape (schema/canonical-schema.json) before the upsert so it can never fail on a missing
+  // table, and (2) read the row back and report the ACTUAL persisted byte length so a future persist failure is
+  // visible instead of masquerading as success.
+  let persistedBytes = null;
   try {
     const esc = s => `'${String(s).replace(/'/g, "''")}'`;
+    pg(`CREATE TABLE IF NOT EXISTS system_state (key varchar(64) NOT NULL, value text, updated_at timestamp DEFAULT now(), PRIMARY KEY (key))`);
     pg(`INSERT INTO system_state (key,value,updated_at) VALUES ('pipeline_state_md',${esc(out)},now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`);
+    const back = one(`SELECT length(value) FROM system_state WHERE key='pipeline_state_md'`);
+    persistedBytes = back == null ? null : Number(back);
   } catch (_e) {}
-  console.log(`[gen-state] wrote docs/PIPELINE-STATE.md + Neon system_state.pipeline_state_md (${out.length} bytes, health ${v(health)}%)`);
+  const persistMsg = persistedBytes == null ? 'Neon persist SKIPPED/UNVERIFIED (no DB or write failed)' : `Neon system_state.pipeline_state_md = ${persistedBytes} bytes`;
+  console.log(`[gen-state] wrote docs/PIPELINE-STATE.md (${out.length} bytes) · ${persistMsg} · health ${v(health)}%`);
 }
 
 main();

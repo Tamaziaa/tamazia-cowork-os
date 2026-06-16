@@ -29,7 +29,11 @@ jobs:
       - name: Campaign compliance check (P2-5; fails build on any non-compliant template)
         run: node scripts/validate-campaigns.js
       - name: Qualifier eval (deterministic decideTier; fails build when agreement < 90%)
-        run: node scripts/eval-qualifier.js
+        # A4/IG2: heartbeat-wrap so this gate is visible in engine_runs (engine_health / check-stuck-jobs).
+        # Fallback to a bare call so a heartbeat hiccup never blocks the gate. Deterministic + offline (no DB),
+        # so the wrap's NEON_URL is simply absent and heartbeat.js is fail-open (pg() returns null, no row) —
+        # harmless; the gate still runs and still gates on the real eval exit code.
+        run: node scripts/heartbeat.js wrap eval-qualifier -- node scripts/eval-qualifier.js || node scripts/eval-qualifier.js
       - name: Live scoreLead spot-check (informational; never fails the gate)
         if: ${{ always() }}
         continue-on-error: true
