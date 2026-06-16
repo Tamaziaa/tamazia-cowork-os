@@ -45,7 +45,7 @@ jobs:
           # Set to 35 min — safely below the 40-min job timeout — so the scraper always finishes.
           HEARTBEAT_WRAP_TIMEOUT_MS: "2100000"
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '50' }}"
           node scripts/heartbeat.js wrap scrapers -- node scripts/source-leads.js --source ${{ github.event.inputs.sources || 'serp-top,maps,jobspy,reddit,youtube,x-ads,social-ads' }} --max ${{ github.event.inputs.max || '200' }}
       - name: Alert on failure

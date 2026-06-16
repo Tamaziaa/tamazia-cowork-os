@@ -31,5 +31,5 @@ jobs:
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Resolve registry domains (logs each resolution + a summary)
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/resolve-registry-domains.js ${{ inputs.limit }}

@@ -37,5 +37,5 @@ jobs:
       - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Match reply -> lead (no-send; heartbeat-wrapped for engine_runs visibility)
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/heartbeat.js wrap match-inbound-replies -- node scripts/match-inbound-replies.js ${{ github.event.inputs.limit }} || node scripts/match-inbound-replies.js ${{ github.event.inputs.limit }} || true

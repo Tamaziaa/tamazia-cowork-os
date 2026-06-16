@@ -29,7 +29,7 @@ jobs:
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Refresh enforcement news
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/heartbeat.js wrap enforcement-news -- node scripts/refresh-enforcement-news.js
       - name: Alert on failure
         if: failure()

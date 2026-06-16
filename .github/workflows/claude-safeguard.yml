@@ -82,7 +82,7 @@ jobs:
           # 35-min wrap timeout: safeguard pull can take a while on large backlogs; well under 45-min job limit.
           HEARTBEAT_WRAP_TIMEOUT_MS: "2100000"
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           echo "## Claude safeguard — clearance queue ($(date -u +%FT%TZ))" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           node scripts/heartbeat.js wrap claude-safeguard -- \

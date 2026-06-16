@@ -47,7 +47,7 @@ jobs:
           if ! grep -q '^PAGESPEED_API_KEY=' .env && [ -n "${{ secrets.PAGESPEED_API_KEY }}" ]; then echo "PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}" >> .env; fi
       - name: Run register sourcing (gated, heartbeat-wrapped)
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '100' }}"
           node scripts/heartbeat.js wrap source-registers -- node scripts/source-registers.js --source ${{ github.event.inputs.sources || 'companies-house,cqc,fca,charity-commission' }} --max ${{ github.event.inputs.max || '300' }}
       - name: Alert on failure
