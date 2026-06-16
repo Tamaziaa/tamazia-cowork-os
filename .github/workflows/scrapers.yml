@@ -39,6 +39,11 @@ jobs:
           echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
           if ! grep -q '^PAGESPEED_API_KEY=' .env && [ -n "${{ secrets.PAGESPEED_API_KEY }}" ]; then echo "PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}" >> .env; fi
       - name: Run gated scrapers
+        env:
+          # heartbeat.js default wrap timeout = 20 min (1200000 ms). The scraper run regularly
+          # approaches 20 min, causing the heartbeat wrapper to SIGKILL the child and exit 124.
+          # Set to 35 min — safely below the 40-min job timeout — so the scraper always finishes.
+          HEARTBEAT_WRAP_TIMEOUT_MS: "2100000"
         run: |
           set -a; source .env 2>/dev/null; set +a
           export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '50' }}"

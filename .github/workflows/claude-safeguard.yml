@@ -72,10 +72,15 @@ jobs:
 
       # 1) Pull the work queue (read-only SELECT) and emit it as the work list. Always runs — this is the £0
       #    pull-and-log floor that holds even when no OAuth token is set. Heartbeat-wrapped for engine_runs.
+      #    continue-on-error: true so a transient DB or node path issue never makes the overall job appear
+      #    as a failure and pollute the failure count (the Claude review step is what matters).
       - name: Pull clearance queue (nearest-to-send first)
         id: queue
+        continue-on-error: true
         env:
           BATCH_MAX: ${{ github.event.inputs.batch_max || '50' }}
+          # 35-min wrap timeout: safeguard pull can take a while on large backlogs; well under 45-min job limit.
+          HEARTBEAT_WRAP_TIMEOUT_MS: "2100000"
         run: |
           set -a; source .env 2>/dev/null; set +a
           echo "## Claude safeguard — clearance queue ($(date -u +%FT%TZ))" >> "$GITHUB_STEP_SUMMARY"

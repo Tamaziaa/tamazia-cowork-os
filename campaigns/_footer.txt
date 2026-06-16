@@ -11,7 +11,7 @@ How we found you: public registers, your website and business directories. Full 
 You are receiving this because of a legitimate business interest in your firm's online compliance and visibility.
 Unsubscribe: {{unsubscribe_url}} (or reply "unsubscribe" and I will remove you and never contact you again).
 
-----------------------------------------------------------------------
+---
 CANONICAL Art-14 cold-outreach footer (single source of truth). Both send paths inject this:
   - src/skills/S065-touch-scheduler/scripts/send-due.js (our relay)
   - scripts/mystrika-export.js + scripts/push-to-mystrika.js (Mystrika)
