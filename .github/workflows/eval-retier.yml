@@ -1,0 +1,30 @@
+name: Re-tier eval gate (persisted seam == canonical scoreLead)
+# IG3 · Blocks merge when the LLM-RESCUE persisted re-tier seam (lead-quality.js tierInputsFromPersisted ->
+# decideTier) drifts from the CANONICAL scoreLead() tier decision. eval/retier-persisted.js exists but no
+# workflow ran it, so the L3 alignment it locks could silently regress. It is deterministic + fully offline
+# (scoreLead's live fetch returns '' with no network; the free-provider / no-email fixtures short-circuit the
+# MX lookup before any DNS), needs no DB and no secrets, and exits 1 on any mismatch — a stable required check
+# on every PR. Mirrors eval-qualifier.yml's structure (same node-20 setup, same trigger shape).
+on:
+  pull_request:
+    paths:
+      - 'src/lib/enrich/lead-quality.js'
+      - 'src/lib/sourcing/icp.js'
+      - 'config/sector-grid.json'
+      - 'eval/retier-persisted.js'
+  workflow_dispatch: {}
+  schedule:
+    - cron: '15 5 * * 1'   # weekly Monday 05:15 (alongside the qualifier + audit evals)
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install deps
+        run: npm install --omit=dev || npm install || true
+      - name: Re-tier seam eval (offline fixtures; fails build on any persisted-vs-canonical tier mismatch)
+        run: node eval/retier-persisted.js

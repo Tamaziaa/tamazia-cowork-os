@@ -27,6 +27,14 @@ jobs:
         with: { python-version: "3.12" }
       - run: python -m pip install --quiet -r requirements.txt
       - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Ensure schema (provision system_state etc; additive-only, fail-open)
+        # A5: gen-state.js persists the digest into system_state. This workflow never provisioned that table
+        # (no ensure-schema.js, no CREATE), so on a DB where system_state was absent the digest INSERT errored and
+        # was swallowed — the digest persisted 0 bytes while the run looked green. ensure-schema.js is additive-only,
+        # uses only Node built-ins + Neon HTTP (no npm needed), and always exits 0, so it can never break this job.
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          node scripts/ensure-schema.js || true
       - run: |
           set -a; source .env 2>/dev/null; set +a
           # O4 [A1/A61/A64]: heartbeat-wrap so this scheduled health-surface generator is visible in engine_runs

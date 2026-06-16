@@ -35,4 +35,6 @@ jobs:
           set -a; source .env 2>/dev/null; set +a
           SRC='${{ github.event.inputs.source }}'
           if [ "$SRC" = "all" ]; then FLAG="--all"; else FLAG="--source $SRC"; fi
-          node scripts/source-leads.js $FLAG --max '${{ github.event.inputs.max }}'
+          # A4/IG2: heartbeat-wrap so this on-demand source run is visible in engine_runs
+          # (engine_health / check-stuck-jobs). Fallback to a bare call so a heartbeat hiccup never blocks sourcing.
+          node scripts/heartbeat.js wrap source-leads -- node scripts/source-leads.js $FLAG --max '${{ github.event.inputs.max }}' || node scripts/source-leads.js $FLAG --max '${{ github.event.inputs.max }}'
