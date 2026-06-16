@@ -74,9 +74,10 @@ function complianceFooter() {
         // moment SEND was enabled the drain pushed zero). When these env vars are unset the tokens stay as {{...}}
         // and the guard correctly fail-closes (a legal Art-14 block). So setting TAMAZIA_REG_ADDRESS /
         // TAMAZIA_COMPANY_NUMBER / TAMAZIA_ICO_NUMBER in ENV_B64 is the literal unblock for sending (founder FB1).
-        .replace(/\{\{\s*reg_address\s*\}\}/g, process.env.TAMAZIA_REG_ADDRESS || '{{reg_address}}')
-        .replace(/\{\{\s*company_number\s*\}\}/g, process.env.TAMAZIA_COMPANY_NUMBER || '{{company_number}}')
-        .replace(/\{\{\s*ico_number\s*\}\}/g, process.env.TAMAZIA_ICO_NUMBER || '{{ico_number}}'));
+        // FUNCTION replacers (not string) so a value containing $/backtick can't be reinterpreted by String.replace.
+        .replace(/\{\{\s*reg_address\s*\}\}/g, () => process.env.TAMAZIA_REG_ADDRESS || '{{reg_address}}')
+        .replace(/\{\{\s*company_number\s*\}\}/g, () => process.env.TAMAZIA_COMPANY_NUMBER || '{{company_number}}')
+        .replace(/\{\{\s*ico_number\s*\}\}/g, () => process.env.TAMAZIA_ICO_NUMBER || '{{ico_number}}'));
     } catch (_e) { _footerCache = ''; }
   }
   return _footerCache;

@@ -23,7 +23,7 @@ SELECT
                      AND COALESCE(claude_cleared, FALSE)
                      AND governor_released_at IS NOT NULL
                      AND NOT COALESCE(mystrika_pushed, FALSE)
-                     AND COALESCE(NULLIF(contact_email, ''), email, '') <> ''
+                     AND COALESCE(contact_email, email, '') <> ''
                      AND COALESCE(NULLIF(deliverability, ''), verify_status, '') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable')
                      AND COALESCE(replied, FALSE) = FALSE
                      AND COALESCE(status, '') NOT IN ('suppressed','dnc','bounced','duplicate'))           AS db_ready_pool,
@@ -44,7 +44,7 @@ WHERE COALESCE(quality_fit, FALSE)
   AND COALESCE(claude_cleared, FALSE)
   AND governor_released_at IS NOT NULL
   AND NOT COALESCE(mystrika_pushed, FALSE)
-  AND COALESCE(NULLIF(contact_email, ''), email, '') <> ''
+  AND COALESCE(contact_email, email, '') <> ''
   AND COALESCE(NULLIF(deliverability, ''), verify_status, '') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable')
   AND COALESCE(replied, FALSE) = FALSE
   AND COALESCE(status, '') NOT IN ('suppressed','dnc','bounced','duplicate')
