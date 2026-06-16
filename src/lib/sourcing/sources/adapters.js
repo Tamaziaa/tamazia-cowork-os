@@ -21,6 +21,12 @@ const GEOS = [['London','UK'],['Manchester','UK'],['Edinburgh','UK'],['Dubai','U
   ['Paris','France'],['Madrid','Spain'],['Barcelona','Spain'],['Berlin','Germany'],['Munich','Germany'],['Frankfurt','Germany'],['Amsterdam','Netherlands'],['Dublin','Ireland'],['Milan','Italy'],['Rome','Italy'],['Brussels','Belgium'],['Lisbon','Portugal'],['Stockholm','Sweden'],['Copenhagen','Denmark'],['Vienna','Austria']];
 
 // ---------- SERP top-results (strengthened "top 100") · SERPER, live ----------
+// serp_top is the ACTIVE daily-cron sourcing path: scrapers.yml (07:00 UTC) and source-leads.yml both call
+// source-leads.js which routes through this adapter (adapters.REGISTRY.serp_top). It drives the full
+// candidate -> ICP pre-filter -> audit -> enrich -> persist pipeline.
+// NOTE: src/lib/scraping/serp-engine.js is NOT superseded — it is a PARALLEL wide-sector scraper
+// (20 sectors × GEOS, run via scripts/run-serp-scrape.js) that also exports isAggregator() used by
+// src/lib/enrich/lead-quality.js. Both paths are active and complement each other.
 const serp_top = {
   name: 'serp-top', platform: 'google-organic',
   // Free-first: serp-client chains SearXNG (unlimited, SEARXNG_URL) -> Brave (BRAVE_API_KEY) -> DuckDuckGo (no key,
