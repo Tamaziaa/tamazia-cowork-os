@@ -53,6 +53,13 @@ jobs:
   safeguard:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # CRITICAL: GitHub does NOT allow the `secrets` context inside a step-level `if:` — it is an "Unrecognized
+    # named-value: 'secrets'" error that INVALIDATES THE ENTIRE WORKFLOW FILE, so every scheduled run startup-fails
+    # with 0 jobs (it silently never ran). Map the secret to a job-level env ONCE here (secrets ARE allowed in env
+    # values), then gate the Claude step on `env.HAS_OAUTH` (the `env` context IS allowed in `if:`). HAS_OAUTH is the
+    # string 'true'/'false'.
+    env:
+      HAS_OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -84,7 +91,7 @@ jobs:
       #    ends after the pull (degrade-to-log). The token is a Claude SUBSCRIPTION token, NOT an API key (£0).
       #    Sonnet 4.6 (claude_args --model) — compliance reasoning + gap analysis + PR writing needs quality.
       - name: Claude review + clearance (subscription OAuth, ZERO paid API)
-        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        if: ${{ env.HAS_OAUTH == 'true' }}
         uses: anthropics/claude-code-action@v1
         with:
           # SUBSCRIPTION OAuth token ONLY — never anthropic_api_key. If this is empty the step above already
