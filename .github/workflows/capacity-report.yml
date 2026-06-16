@@ -1,0 +1,29 @@
+name: Daily capacity report
+# D6.1 — Runs the read-only capacity-report.js daily and surfaces funnel + Mystrika send-capacity numbers.
+# Read-only: zero Neon writes, zero Mystrika mutations, zero sends. Safe to run at any frequency.
+# Output is printed in the Actions log. Errors are non-fatal (continue-on-error: true).
+on:
+  schedule:
+    - cron: '0 7 * * *'   # 07:00 UTC daily (after overnight scraper/qualify cycles)
+  workflow_dispatch:       # manual trigger for on-demand snapshots
+permissions:
+  contents: read
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Decode ENV
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Install dependencies
+        run: npm install --production --no-audit --no-fund || npm install --production || true
+      - name: Run capacity report
+        run: node scripts/capacity-report.js
+        env:
+          NEON_URL: ${{ secrets.NEON_URL }}
+          MYSTRIKA_API_KEY: ${{ secrets.MYSTRIKA_API_KEY }}
+        continue-on-error: true

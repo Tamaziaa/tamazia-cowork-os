@@ -57,10 +57,25 @@ jobs:
           FACTCHECK_MAX: ${{ github.event.inputs.factcheck_max || '100' }}
           COHORT: ${{ github.event.inputs.cohort || '' }}
           FORCE_ENABLE: ${{ github.event.inputs.enable || '' }}
+          # D3.3: LLM_QA_ENABLED must be set in ENV_B64 secret by the founder to activate real LLM calls.
+          # This workflow-level var is a documented no-op placeholder (value '0') so the env key always
+          # exists in the step environment and operators can see it in the Actions UI. The actual activation
+          # comes from the decoded .env (ENV_B64 secret) or the FORCE_ENABLE=1 manual-dispatch override.
+          # Founder action required: set LLM_QA_ENABLED=1 inside the ENV_B64 secret to turn on rescue waves.
+          LLM_QA_ENABLED: '0'
+          # CLAUDE_CODE_OAUTH_TOKEN: founder must add as a GitHub secret if Anthropic/Haiku is wanted as a
+          # fallback model. The rescue script checks for it and exits gracefully with a warning if absent.
+          # Free models (Cloudflare/Groq/Gemini) run without it; Haiku is the paid fallback only.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # D3.3: per-run LLM call cap (cost protection). Caps the SERP+LLM budget per wave run.
+          LLM_QA_RUN_COST_CAP_MICRO: '50000'
         run: |
           set -a; source .env 2>/dev/null; set +a
           # manual dispatch can force-enable for one run (does not change the secret).
           if [ "$FORCE_ENABLE" = "1" ]; then export LLM_QA_ENABLED=1; fi
+          # If LLM_QA_ENABLED came in from ENV_B64 as 1/true, that wins over the workflow-level '0'
+          # (set -a; source .env exports it). So the workflow-level default of '0' is correctly overridden
+          # by whatever the founder set in the secret — no logic change needed here.
           COHORT_ARG=""; if [ -n "$COHORT" ]; then COHORT_ARG="--cohort $COHORT"; fi
           # rescue (advisory) — heartbeat-wrapped for engine_runs visibility; fail-soft.
           node scripts/heartbeat.js wrap llm-rescue -- node scripts/run-llm-rescue.js --max "$RESCUE_MAX" $COHORT_ARG \
