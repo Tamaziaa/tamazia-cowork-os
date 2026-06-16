@@ -1,0 +1,50 @@
+name: Register sourcing (daily, regulated registers)
+# ADDITIVE Tier-1 supply. Runs the REGULATED-REGISTER adapters (companies-house, cqc, fca) through the
+# SAME unchanged gated pipeline source-leads.js uses (gather -> ICP pre-filter -> full audit ->
+# scoreICP+hot -> enrich -> persist -> sourcing_runs), via the SEPARATE runner scripts/source-registers.js
+# (the existing scrapers.yml / source-leads.js path is untouched). Regulated registers = the ICP by
+# construction, so this is the highest-purity Tier-1 sourcing.
+#
+# SOURCE_T1_TARGET=100 per register: each register stops once it has yielded 100 candidates that pass the
+# Tier-1 ICP pre-filter (equal allocation). raw --max is generous (300) so the eligibility-stop governs.
+# Each adapter is fail-open: a register API outage (CQC/FCA were 500-ing server-side on 2026-06-16) yields
+# 0 for that source and never wedges the run. SEND stays OFF — this only sources/qualifies.
+on:
+  schedule:
+    - cron: "30 6 * * *"   # daily 06:30 UTC (offset from scrapers.yml 07:00 so they don't contend)
+  workflow_dispatch:
+    inputs:
+      sources: { description: "comma register sources", default: "companies-house,cqc,fca" }
+      max: { description: "raw max leads/source (eligibility-stop, not this, governs)", default: "300" }
+      t1_target: { description: "Tier-1-eligible stop per register (equal allocation)", default: "100" }
+
+concurrency: { group: register-sourcing, cancel-in-progress: false }
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install deps (pg8000 shim)
+        run: |
+          python -m pip install --quiet -r requirements.txt || true
+          npm install --omit=dev || true
+      - name: Materialise .env from secret
+        run: |
+          echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+          if ! grep -q '^PAGESPEED_API_KEY=' .env && [ -n "${{ secrets.PAGESPEED_API_KEY }}" ]; then echo "PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}" >> .env; fi
+      - name: Run register sourcing (gated, heartbeat-wrapped)
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '100' }}"
+          node scripts/heartbeat.js wrap source-registers -- node scripts/source-registers.js --source ${{ github.event.inputs.sources || 'companies-house,cqc,fca' }} --max ${{ github.event.inputs.max || '300' }}
+      - name: Alert on failure
+        if: failure()
+        run: |
+          set +e; source .env 2>/dev/null
+          [ -n "$TELEGRAM_BOT_TOKEN" ] && curl -s --max-time 15 -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" -d chat_id="$TELEGRAM_CHAT_ID" -d text="🔴 register-sourcing run failed (run ${{ github.run_id }})." >/dev/null || true
