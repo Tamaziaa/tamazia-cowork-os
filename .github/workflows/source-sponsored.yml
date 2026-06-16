@@ -1,0 +1,49 @@
+name: Sponsored ad-leads (daily, automated)
+# D2.2 · Runs the automated Google-SPONSORED scraper (src/lib/scraping/google-sponsored.js) through the SAME
+# gated pipeline as scrapers.yml (candidates -> ICP pre-filter -> full audit -> ICP+hot score -> enrich ->
+# persist -> sourcing_runs + per-source scraper_daily yield). The source harvests Google ad slots via the
+# SERPER API (SERPER_KEY, materialised from ENV_B64). Fail-open: no key / exhausted credits => 0 leads, never
+# a hard failure. Heartbeat-wrapped so engine_health / the tamazia-ops MCP see each run. SOURCE_T1_TARGET
+# (default 50) stops each sector once 50 candidates pass the Tier-1 ICP pre-filter (equal allocation/sector);
+# the raw --max is generous so the eligibility-stop, not the raw cap, governs.
+on:
+  schedule:
+    - cron: "30 7 * * *"   # daily 07:30 UTC (30m after scrapers.yml at 07:00 so they don't contend)
+  workflow_dispatch:
+    inputs:
+      sectors: { description: "comma sectors (canonical icp.js keys), or 'all'", default: "all" }
+      max: { description: "raw max leads/run (eligibility-stop, not this, governs)", default: "200" }
+      t1_target: { description: "Tier-1-eligible stop per sector (equal allocation)", default: "50" }
+
+concurrency: { group: sponsored-ad-leads, cancel-in-progress: false }
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install deps (pg8000 shim for psql)
+        run: |
+          python -m pip install --quiet -r requirements.txt || true
+          npm install --omit=dev || true
+      - name: Materialise .env from secret
+        run: |
+          echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+          if ! grep -q '^PAGESPEED_API_KEY=' .env && [ -n "${{ secrets.PAGESPEED_API_KEY }}" ]; then echo "PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}" >> .env; fi
+      - name: Run sponsored scraper (gated, heartbeat-wrapped)
+        run: |
+          set -a; source .env 2>/dev/null; set +a
+          export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '50' }}"
+          SECTORS_IN="${{ github.event.inputs.sectors || 'all' }}"
+          if [ "$SECTORS_IN" = "all" ]; then SECTOR_FLAG="--all"; else SECTOR_FLAG="--sector $SECTORS_IN"; fi
+          node scripts/heartbeat.js wrap source-sponsored -- node scripts/source-sponsored.js $SECTOR_FLAG --max ${{ github.event.inputs.max || '200' }}
+      - name: Alert on failure
+        if: failure()
+        run: |
+          set +e; source .env 2>/dev/null
+          [ -n "$TELEGRAM_BOT_TOKEN" ] && curl -s --max-time 15 -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" -d chat_id="$TELEGRAM_CHAT_ID" -d text="🔴 sponsored ad-leads run failed (run ${{ github.run_id }})." >/dev/null || true
