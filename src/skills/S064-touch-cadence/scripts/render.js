@@ -4,8 +4,10 @@
 // P7 [X7/X26/X31]: this renderer now reads the FOUNDER-REVIEWED per-sector copy in `campaigns/<CODE>.json`
 // as its template source, instead of its own hardcoded templates. Those JSON files (LS/HC/AE/DN/FS/RE/HO/FB/
 // ED/PB) are the copy the founder approved (different angle + intervals from the old hardcoded set), each with
-// 5 touches; we render touches 0-3 (the existing scheduler + push read t0..t3). Touch 4 (the breakup nudge) is
-// deferred until the scheduler carries a 5th touch — see the DEFERRED note in renderAll().
+// 5 touches; we render touches 0-4. Touch 4 (the +19d breakup nudge) is now wired end to end: send-due.js
+// carries a 5th cadence step ([0,3,7,12,19]) and advances 0->1->2->3->4->cadence_complete (B7). NOTE: the
+// Mystrika send path (scripts/push-to-mystrika.js + scripts/mystrika-export.js) still reads only t0..t3, so
+// touch 4 ships via the direct send path; extending the Mystrika push to t4 is tracked separately (B2 note).
 //
 // Merge fields filled per lead: {{first_name}} {{company}} {{city}} {{audit_url}} {{finding}} {{clause}}
 // {{calendar_link}}. P7 specifics: T0 carries the real {{finding}} (the detection on the prospect's own site),
@@ -201,6 +203,7 @@ function buildTouch0({ lead, apolloOrg, findings }) { const c = _campaignForLead
 function buildTouch1({ lead, findings }) { const c = _campaignForLead(lead); if (!c) return _fallbackTouch(lead, 1, findings); return buildTouchFromCampaign(c, 1, lead, buildFields(lead, c, findings)); }
 function buildTouch2({ lead, findings }) { const c = _campaignForLead(lead); if (!c) return _fallbackTouch(lead, 2, findings); return buildTouchFromCampaign(c, 2, lead, buildFields(lead, c, findings)); }
 function buildTouch3({ lead, findings }) { const c = _campaignForLead(lead); if (!c) return _fallbackTouch(lead, 3, findings); return buildTouchFromCampaign(c, 3, lead, buildFields(lead, c, findings)); }
+function buildTouch4({ lead, findings }) { const c = _campaignForLead(lead); if (!c) return _fallbackTouch(lead, 4, findings); return buildTouchFromCampaign(c, 4, lead, buildFields(lead, c, findings)); }
 
 // Minimal fallback for a lead whose sector has no campaign JSON (non-priority sector). Keeps the engine moving
 // without shipping hollow mail: a short, compliant, audit-anchored note. Touches 1-3 carry the audit link.
@@ -222,8 +225,14 @@ function _fallbackTouch(lead, touch, findings) {
     const body = [`Hi ${name},`, '', `I will leave it here so I am not cluttering your inbox. The audit I made for ${company} stays live at ${audit || 'https://tamazia.co.uk/book/'} for whenever it is useful.`, '', `If the gap is worth fixing properly, the simplest next step is a 20-minute 1:1 with me: ${calendarLink()}.`, '', `And if this is not your area, a quick note on who to speak to would mean a lot.`, '', '__SIGNATURE__'].join('\n');
     return { subject: `Worth 20 minutes, ${company}?`, body, touch: 2 };
   }
-  const body = [`Hi ${name},`, '', `One direct question and then I will stop. Has the compliance posture on ${company}'s site been reviewed and signed off this quarter?`, '', `If yes, apologies for the noise. If no, the audit I built has the fix: ${audit || 'https://tamazia.co.uk/book/'}.`, '', `Worth comparing line by line against the last report your current agency delivered.`, '', '__SIGNATURE__'].join('\n');
-  return { subject: `One question on ${company}'s last report`, body, touch: 3 };
+  if (touch === 3) {
+    const body = [`Hi ${name},`, '', `One direct question and then I will stop. Has the compliance posture on ${company}'s site been reviewed and signed off this quarter?`, '', `If yes, apologies for the noise. If no, the audit I built has the fix: ${audit || 'https://tamazia.co.uk/book/'}.`, '', `Worth comparing line by line against the last report your current agency delivered.`, '', '__SIGNATURE__'].join('\n');
+    return { subject: `One question on ${company}'s last report`, body, touch: 3 };
+  }
+  // touch 4 — breakup nudge (matches the per-sector campaigns' touch-4 voice: polite final note, audit stays
+  // live, calendar + right-person ask, no false urgency / no fake scarcity).
+  const body = [`Hi ${name},`, '', `Closing the file so I am not crowding your inbox. The audit I made for ${company} stays live at ${audit || 'https://tamazia.co.uk/book/'} for 180 days, yours whether or not we ever speak.`, '', `If the gap ever lands on the team's desk, the audit has the fix, or my calendar is here for a 20-minute 1:1: ${calendarLink()}.`, '', `And if I have been writing to the wrong person, a quick pointer to whoever owns the website would be a real help.`, '', '__SIGNATURE__'].join('\n');
+  return { subject: `Closing the file on ${company}`, body, touch: 4 };
 }
 
 function saveDraft(lead_id, touch) {
@@ -246,10 +255,11 @@ async function renderAll(lead_id) {
   const _nd = (_gate && _gate.noDashes) ? _gate.noDashes : (x => x);
   const _scrub = (t) => t ? ({ ...t, subject: _nd(t.subject), body: _nd(t.body) }) : t;
   const fields = campaign ? buildFields(lead, campaign, findings) : null;
-  // Render touches 0-3 from the founder-reviewed campaign copy (the existing scheduler + push read t0..t3).
-  // DEFERRED: the campaign's 5th touch (touch 4, the breakup nudge) is NOT rendered here — send-due.js advances
-  // 0->1->2->3->cadence_complete and push-to-mystrika reads only t0..t3, so a 5th draft would never send. Wiring
-  // a 5th touch is a scheduler change tracked separately; rendering it now would orphan it.
+  // Render touches 0-4 from the founder-reviewed campaign copy. B7: touch 4 (the +19d breakup nudge) is now
+  // wired end to end — send-due.js carries a 5th cadence step ([0,3,7,12,19]) and advances
+  // 0->1->2->3->4->cadence_complete, so the 5th draft is consumed by the direct send path. (The Mystrika push
+  // path — push-to-mystrika.js / mystrika-export.js — still reads only t0..t3; extending it to t4 is a separate
+  // change, noted in the EDIT-LOG. Rendering t4 does NOT orphan it because the direct path now sends it.)
   // maxWords 160: the founder-reviewed campaign bodies run ~130-150 words (longer + more specific than the old
   // hardcoded copy). The gate default (130) would block approved copy, so raise the word ceiling for these
   // reviewed templates; everything else (no unfilled braces / no square placeholders / no dash-pause / a live
@@ -260,13 +270,16 @@ async function renderAll(lead_id) {
   const t1 = mk(1, { requireAuditUrl: true, audit_url: lead.audit_url });
   const t2 = mk(2, {});
   const t3 = mk(3, {});
-  const ids = { touch_0: saveDraft(lead.id, t0), touch_1: saveDraft(lead.id, t1), touch_2: saveDraft(lead.id, t2), touch_3: saveDraft(lead.id, t3) };
+  // B7: touch 4 (breakup) references {{audit_url}} (the audit stays live), so it needs a real audit link just
+  // like touch 1 — same requireAuditUrl gate.
+  const t4 = mk(4, { requireAuditUrl: true, audit_url: lead.audit_url });
+  const ids = { touch_0: saveDraft(lead.id, t0), touch_1: saveDraft(lead.id, t1), touch_2: saveDraft(lead.id, t2), touch_3: saveDraft(lead.id, t3), touch_4: saveDraft(lead.id, t4) };
 
   // Write to disk for inspection (existing pattern client_email_files/<lead>/touch_*.md)
   const dir = path.join(ROOT, 'client_email_files', String(lead.id));
   try {
     fs.mkdirSync(dir, { recursive: true });
-    for (const t of [t0, t1, t2, t3]) fs.writeFileSync(path.join(dir, `touch_${t.touch}.md`), `# Touch ${t.touch}\nSubject: ${t.subject}\n\n---\n\n${t.body}\n`);
+    for (const t of [t0, t1, t2, t3, t4]) fs.writeFileSync(path.join(dir, `touch_${t.touch}.md`), `# Touch ${t.touch}\nSubject: ${t.subject}\n\n---\n\n${t.body}\n`);
   } catch (_e) {}
 
   // Schedule next_touch_date for cron-driven send (Touch 0 immediate). send-due.js computes subsequent intervals.
@@ -281,4 +294,4 @@ if (require.main === module) {
   renderAll(lead_id).then(r => { console.log(JSON.stringify(r, null, 2)); });
 }
 
-module.exports = { renderAll, buildTouch0, buildTouch1, buildTouch2, buildTouch3, buildTouchFromCampaign, campaignCodeFor, loadCampaign, substitute, greetName };
+module.exports = { renderAll, buildTouch0, buildTouch1, buildTouch2, buildTouch3, buildTouch4, buildTouchFromCampaign, campaignCodeFor, loadCampaign, substitute, greetName };

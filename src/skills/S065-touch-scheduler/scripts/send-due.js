@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// S065 · Touch cadence scheduler · Touch 0 → +5d Touch 1 → +5d Touch 2 → +10d Touch 3
+// S065 · Touch cadence scheduler · Touch 0 → +3d T1 → +4d T2 → +5d T3 → +7d T4 (breakup) → cadence_complete
 // Reads `outreach_drafts` where send_status='pending' and lead.next_touch_date <= today, sends, advances.
 // Suppresses if lead.replied=true.
 
@@ -47,11 +47,12 @@ let _tg = null; try { _tg = require('../../../lib/notify/telegram.js'); } catch 
 function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return null; try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; } }
 function pgEsc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
 
-// P7: cadence aligned to the founder-reviewed campaign copy (campaigns/_meta.json
-// interval_days_from_touch0 = [0,3,7,12,19]). We ship the first 4 touches (0-3), so the gaps are
-// touch0->1 = 3d, 1->2 = 4d, 2->3 = 5d. (Touch 4, the +19d breakup, is deferred until the scheduler
-// carries a 5th touch — see S064 render.js renderAll() DEFERRED note.) SEND_GAP env knobs unchanged.
-const CADENCE_DAYS = [0, 3, 7, 12]; // days from Touch 0, matching campaigns/_meta.json
+// P7 + B7: cadence aligned to the founder-reviewed campaign copy (campaigns/_meta.json
+// interval_days_from_touch0 = [0,3,7,12,19]). We ship all 5 touches (0-4), so the gaps are
+// touch0->1 = 3d, 1->2 = 4d, 2->3 = 5d, 3->4 = 7d. Touch 4 is the +19d breakup nudge; after it sends the
+// lead is marked cadence_complete (see processLead). SEND_GAP env knobs unchanged. SEND stays OFF (master gate).
+const LAST_TOUCH = 4; // index of the final touch in the cadence (the breakup). cadence_complete fires AFTER this.
+const CADENCE_DAYS = [0, 3, 7, 12, 19]; // days from Touch 0, matching campaigns/_meta.json interval_days_from_touch0
 
 function pickDueDrafts() {
   // Find leads ready for next touch
@@ -218,14 +219,16 @@ async function processLead(lead) {
   // out-of-order touch never moves the original contact date. Additive column, NULL-safe. (SEND OFF; correct
   // for when the founder flips it.)
   if (touch === 0) pg(`UPDATE leads SET first_contacted_at = COALESCE(first_contacted_at, NOW()) WHERE id = ${lead.id}`);
-  // Advance lead status + schedule next touch
-  if (touch < 3) {
+  // Advance lead status + schedule next touch. B7: cadence runs 0->1->2->3->4; cadence_complete is set ONLY
+  // after the final touch (LAST_TOUCH = 4, the breakup) has sent, not after touch 3. The gap to the next touch
+  // is read from CADENCE_DAYS (touch 3->4 = 19-12 = 7 days).
+  if (touch < LAST_TOUCH) {
     const days = CADENCE_DAYS[touch + 1] - CADENCE_DAYS[touch];
     pg(`UPDATE leads SET status='touch_${touch + 1}_queued', next_touch_date = (CURRENT_DATE + INTERVAL '${days} days')::date, last_reply_received_at = NULL, updated_at = NOW() WHERE id = ${lead.id}`);
   } else {
     pg(`UPDATE leads SET status='cadence_complete', next_touch_date = NULL, updated_at = NOW() WHERE id = ${lead.id}`);
   }
-  return { lead_id: lead.id, company: lead.company, touch_sent: touch, email_id, next_status: touch < 3 ? `touch_${touch + 1}_queued` : 'cadence_complete' };
+  return { lead_id: lead.id, company: lead.company, touch_sent: touch, email_id, next_status: touch < LAST_TOUCH ? `touch_${touch + 1}_queued` : 'cadence_complete' };
 }
 
 async function run() {

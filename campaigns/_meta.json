@@ -6,7 +6,7 @@
   "cadence": {
     "touches": 5,
     "interval_days_from_touch0": [0, 3, 7, 12, 19],
-    "_note": "Touch 0 immediate; +3, +7, +12, +19 days. Full 7-touch plan in the draft is 0/3/7/12/19/28/40; this cadence ships the first 5 (0/1/2 + 2 nudges) per the P2-5 scope. Saturday is skipped by the scheduler (send-pacing.sendingPausedToday)."
+    "_note": "Touch 0 immediate; +3, +7, +12, +19 days. All 5 touches (0/1/2 + 2 nudges, the last being the +19d breakup) ship via the direct send path (send-due.js CADENCE_DAYS = [0,3,7,12,19], advances 0->1->2->3->4->cadence_complete; B7). Full 7-touch plan in the draft is 0/3/7/12/19/28/40; touches 5-6 (28/40) remain out of scope per P2-5. The Mystrika push path currently enqueues t0..t3 only. Saturday is skipped by the scheduler (send-pacing.sendingPausedToday)."
   },
   "credential_line": "LLM in International Business Law, King's College London",
   "signature_name": "Aman Pareek",
