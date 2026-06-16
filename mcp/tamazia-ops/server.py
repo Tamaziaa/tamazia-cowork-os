@@ -642,10 +642,10 @@ SAFE_WORKFLOWS = {
     "match-inbound-replies": "match-inbound-replies.yml",
     "deliverability-guard": "deliverability-guard.yml",
     "neon-guard": "neon-guard.yml",
-    "source-leads": "source-leads.yml",
-    "source-registers": "source-registers.yml",
-    "scrapers": "scrapers.yml",
-    "resolve-registry-domains": "resolve-registry-domains.yml",
+    # BUGFIX-R2 (#2): dedicated paid-sourcing jobs (source-leads / source-registers / scrapers /
+    # resolve-registry-domains) REMOVED from the conversational allow-list — they spend Serper credits, which
+    # violates the £0-default. engine-cycle (the normal cron loop) stays; re-add a specific one with founder
+    # awareness if conversational scrape-triggering is wanted.
     "llm-rescue-backlog": "llm-rescue-backlog.yml",
     "nightly-workers": "nightly-workers.yml",
 }
