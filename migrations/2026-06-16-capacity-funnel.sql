@@ -13,20 +13,40 @@ SELECT
   count(*) FILTER (WHERE COALESCE(audit_verified, FALSE))                                           AS audit_verified,
   count(*) FILTER (WHERE COALESCE(claude_cleared, FALSE))                                           AS claude_cleared,
   count(*) FILTER (WHERE COALESCE(mystrika_pushed, FALSE))                                          AS mystrika_pushed,
-  count(*) FILTER (WHERE COALESCE(claude_cleared, FALSE)
+  -- BUGFIX-R1 (#4): db_ready_pool must MIRROR the push-to-mystrika.js WHERE clause (the truly drainable set), not
+  -- just cleared+verified+not-pushed — else it over-reports inventory the push can't actually send.
+  count(*) FILTER (WHERE COALESCE(quality_fit, FALSE)
+                     AND COALESCE(lifecycle_stage, '') = 'qualified'
+                     AND COALESCE(lead_type, '') NOT IN ('investor','institution','internal')
                      AND COALESCE(audit_verified, FALSE)
-                     AND NOT COALESCE(mystrika_pushed, FALSE))                                      AS db_ready_pool,
+                     AND COALESCE(audit_url, '') <> ''
+                     AND COALESCE(claude_cleared, FALSE)
+                     AND governor_released_at IS NOT NULL
+                     AND NOT COALESCE(mystrika_pushed, FALSE)
+                     AND COALESCE(contact_email, email, '') <> ''
+                     AND COALESCE(NULLIF(deliverability, ''), verify_status, '') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable')
+                     AND COALESCE(replied, FALSE) = FALSE
+                     AND COALESCE(status, '') NOT IN ('suppressed','dnc','bounced','duplicate'))           AS db_ready_pool,
   now() AT TIME ZONE 'UTC'                                                                          AS as_of_utc
 FROM leads;
 
--- Per-sector drain pool (which sector campaigns have cleared, audit-ready leads waiting to be loaded to Mystrika).
+-- Per-sector drain pool — same push-gate definition as db_ready_pool above (truly drainable, not just cleared).
 CREATE OR REPLACE VIEW v_ready_pool_by_sector AS
 SELECT
   COALESCE(NULLIF(sector, ''), NULLIF(sector_code, ''), '(none)') AS sector,
   count(*)                                                        AS ready_count
 FROM leads
-WHERE COALESCE(claude_cleared, FALSE)
+WHERE COALESCE(quality_fit, FALSE)
+  AND COALESCE(lifecycle_stage, '') = 'qualified'
+  AND COALESCE(lead_type, '') NOT IN ('investor','institution','internal')
   AND COALESCE(audit_verified, FALSE)
+  AND COALESCE(audit_url, '') <> ''
+  AND COALESCE(claude_cleared, FALSE)
+  AND governor_released_at IS NOT NULL
   AND NOT COALESCE(mystrika_pushed, FALSE)
+  AND COALESCE(contact_email, email, '') <> ''
+  AND COALESCE(NULLIF(deliverability, ''), verify_status, '') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable')
+  AND COALESCE(replied, FALSE) = FALSE
+  AND COALESCE(status, '') NOT IN ('suppressed','dnc','bounced','duplicate')
 GROUP BY 1
 ORDER BY 2 DESC;
