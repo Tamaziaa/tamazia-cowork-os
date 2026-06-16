@@ -63,7 +63,7 @@ function markUsed(aliasId) {
 // ALIAS_MAX_CAP env overrides (default 45). Ramp: day 20 -> 30, day 24 -> 36, day 28 -> 42, day 30+ -> 45.
 // Formula: min(ALIAS_MAX_CAP, max(30, floor(warmup_day * 1.5)))
 // The old formula capped at 40 and used 2*warmup_day; the new formula uses 1.5*warmup_day which ramps
-// more gradually but reaches the higher 45 ceiling for inboxes warmed past day 30.
+// more gradually but reaches the higher 45 ceiling for inboxes that have been warmed past day 30.
 const ALIAS_MAX_CAP = parseInt(process.env.ALIAS_MAX_CAP || '45', 10);
 
 /**
