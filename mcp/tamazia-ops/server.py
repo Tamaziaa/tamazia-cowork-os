@@ -32,6 +32,7 @@ import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -573,9 +574,487 @@ def push_digest() -> str:
 
 
 # ===========================================================================
+# ACTION TOOLS (D5.8) - write side of the cockpit. Everything below is ADDITIVE
+# and SCOPED: the lead-verdict tools touch ONLY review_status / review metadata /
+# the claude_* review columns (never the off-limits audit_*/compliance_*/
+# framework_*/classifier_*/pointer_*/scanner_cache families), the flag tool writes
+# ONLY the system_state key/value store, and the (re)mint never UPDATEs audit_*
+# directly - it dispatches the remint-audits workflow instead. Each tool is
+# fail-soft (returns an error string, never raises out of the dispatcher) and
+# idempotent (re-running on an already-acted row is a safe no-op).
+#
+# DESIGN BOUNDARY (matches the task's hard rule): these tools do NOT re-implement
+# scoreLead / decideTier / icp.js. accept_lead/reject_lead only WRITE THE VERDICT
+# into leads.review_status; the engine's scripts/apply-review.js then re-runs the
+# CANONICAL gate and performs the promotion atomically (its promote() writes the
+# same columns qualify-and-queue.js writes). The MCP is the verdict pen, not the
+# scorer. SEND stays OFF throughout (the SEND_ENABLED master gate in send-due.js /
+# push-to-mystrika.js sits ABOVE everything here; set_flag refuses to flip it
+# without an explicit double-confirm sentinel).
+# ===========================================================================
+
+# The single SQL-string escaper, mirroring scripts/apply-review.js `esc` for the
+# few spots where a value must be inlined (jsonb literal building). Parameterised
+# binding ($1, $2 ...) is preferred and used wherever neon() takes params; this is
+# only for values folded into a jsonb object literal.
+def _sql_str(v):
+    if v is None:
+        return "NULL"
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+def _as_lead_id(lead_id):
+    """Coerce a lead id to a positive int, or return None if it is not one."""
+    try:
+        n = int(str(lead_id).strip())
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+# Verdict values that mean "already acted on" - apply-review.js stamps these
+# 'applied_*' forms after it promotes/parks, and 'accepted'/'rejected' are the
+# pending verdicts this MCP writes. Re-writing a verdict over any of these would
+# either re-queue an already-applied lead or stomp a human decision, so the tools
+# treat them as terminal for idempotency.
+_APPLIED_PREFIX = "applied_"
+_PENDING_VERDICTS = ("accepted", "rejected", "auto_promote", "needs_info")
+
+
+# ===========================================================================
+# GitHub Actions workflow_dispatch helper - mirrors the _post_slack / _post_telegram
+# HTTP pattern (stdlib urllib, fail-soft string return). Used by dispatch_workflow
+# and remint_audit. The repo is read from git's origin remote first, then env.
+# ===========================================================================
+# Allow-list of workflow files Claude may trigger conversationally. Deliberately a
+# CLOSED set of safe, idempotent, NON-SEND jobs: the cold-send relay (mystrika.yml
+# is gated by SEND_ENABLED anyway, but we still keep send orchestration off this
+# list) and any destructive/long re-tier reruns are excluded. Unknown names are
+# rejected with the allow-list echoed back. Keys are the human names accepted as the
+# `name` argument; values are the .github/workflows/<file>.yml that GitHub expects.
+SAFE_WORKFLOWS = {
+    "engine-cycle": "engine-cycle.yml",
+    "remint-audits": "remint-audits.yml",
+    "claude-safeguard": "claude-safeguard.yml",
+    "gen-state": "gen-state.yml",
+    "intel-pulse": "intel-pulse.yml",
+    "daily-digest": "daily-digest.yml",
+    "match-inbound-replies": "match-inbound-replies.yml",
+    "deliverability-guard": "deliverability-guard.yml",
+    "neon-guard": "neon-guard.yml",
+    # BUGFIX-R2 (#2): dedicated paid-sourcing jobs (source-leads / source-registers / scrapers /
+    # resolve-registry-domains) REMOVED from the conversational allow-list — they spend Serper credits, which
+    # violates the £0-default. engine-cycle (the normal cron loop) stays; re-add a specific one with founder
+    # awareness if conversational scrape-triggering is wanted.
+    "llm-rescue-backlog": "llm-rescue-backlog.yml",
+    "nightly-workers": "nightly-workers.yml",
+}
+
+# The GitHub repo (owner/name) these workflows live in. Mirrors the engine repo;
+# overridable via TAMAZIA_GH_REPO for forks/mirrors. Default matches CLAUDE.md.
+GH_REPO = _env("TAMAZIA_GH_REPO") or "Tamaziaa/tamazia-cowork-os"
+
+
+def _gh_token():
+    """The GitHub token used for workflow_dispatch (env or engine .env)."""
+    return _env("GH_TOKEN") or _env("GITHUB_TOKEN")
+
+
+def _gh_dispatch(workflow_file, ref="main", inputs=None):
+    """POST a workflow_dispatch to the GitHub API. Returns a fail-soft string.
+
+    Endpoint + payload mirror `gh workflow run`:
+      POST /repos/{owner}/{repo}/actions/workflows/{file}/dispatches
+      body = {"ref": <branch>, "inputs": {...}}
+    A successful dispatch returns HTTP 204 (no body), which we report as 'dispatched'.
+    Any auth/network/HTTP failure is caught and returned as a one-line message so the
+    MCP never crashes. The token value is never printed.
+    """
+    tok = _gh_token()
+    if not tok:
+        return "GitHub: skipped (GH_TOKEN / GITHUB_TOKEN not set)."
+    url = (
+        "https://api.github.com/repos/" + GH_REPO
+        + "/actions/workflows/" + workflow_file + "/dispatches"
+    )
+    body = {"ref": ref}
+    if inputs:
+        body["inputs"] = inputs
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Authorization": "Bearer " + tok,
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "tamazia-ops-mcp",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=20) as r:
+            code = getattr(r, "status", r.getcode())
+        if code in (201, 202, 204):
+            return "dispatched"
+        return "GitHub: unexpected status " + str(code) + "."
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = " - " + e.read().decode("utf-8", "ignore")[:160]
+        except Exception:
+            pass
+        return "GitHub: HTTP " + str(e.code) + detail
+    except Exception as e:
+        return "GitHub: dispatch failed (" + str(e)[:120] + ")."
+
+
+# ===========================================================================
+# TOOL 7: accept_lead
+# ===========================================================================
+def accept_lead(lead_id, dry: bool = False) -> str:
+    """Mark a lead ACCEPTED for the cold path by writing leads.review_status='accepted'.
+
+    This is the verdict pen, not the scorer: the engine's scripts/apply-review.js is
+    the canonical promote hook. On its next run it re-tiers with the found data and
+    promotes (quality_fit=TRUE + lifecycle_stage='qualified' + a governor-release
+    attempt), then stamps review_status='applied_accepted' - all atomically, in
+    apply-review.js's own UPDATE. The PECR consent gate there is never bypassed.
+
+    ADDITIVE + SCOPED: writes ONLY review_status, reviewed_by, reviewed_at and
+    claude_reviewed_at on the one targeted row. Never touches scores, tier, or any
+    off-limits table. SEND stays OFF.
+
+    IDEMPOTENT: if the lead is already 'accepted' (pending) or already 'applied_*'
+    (apply-review.js has acted), this is a no-op and says so. `dry=True` returns the
+    exact SQL without executing.
+    """
+    lid = _as_lead_id(lead_id)
+    if lid is None:
+        return "accept_lead: invalid lead_id (expected a positive integer id)."
+    # Read the current verdict first so we can be idempotent and fail-soft.
+    try:
+        rows = neon(
+            "SELECT id, lead_ref, COALESCE(review_status,'') AS rs, "
+            "COALESCE(lifecycle_stage,'') AS stage FROM leads WHERE id=$1",
+            [lid],
+        )
+    except NeonError as e:
+        return "accept_lead: cannot reach Neon (" + str(e) + ")."
+    if not rows:
+        return "accept_lead: no lead with id " + str(lid) + "."
+    row = rows[0]
+    ref = row.get("lead_ref") or ("#" + str(lid))
+    cur = str(row.get("rs", "")).lower().strip()
+    if cur == "accepted":
+        return ("accept_lead: lead " + str(ref) + " is already review_status='accepted' "
+                "(pending apply-review). No-op.")
+    if cur.startswith(_APPLIED_PREFIX):
+        return ("accept_lead: lead " + str(ref) + " is already '" + cur
+                + "' (apply-review.js has acted). No-op - won't re-queue.")
+    sql = (
+        "UPDATE leads SET review_status='accepted', "
+        "reviewed_by=COALESCE(NULLIF(reviewed_by,''),'mcp_claude'), "
+        "reviewed_at=NOW(), claude_reviewed_at=NOW() "
+        "WHERE id=$1 "
+        "AND COALESCE(review_status,'') NOT IN ('accepted') "
+        "AND COALESCE(review_status,'') NOT LIKE 'applied_%'"
+    )
+    if dry:
+        return "accept_lead (DRY) would run:\n" + sql + "\n  params=[" + str(lid) + "]"
+    try:
+        neon(sql, [lid])
+    except NeonError as e:
+        return "accept_lead: write failed (" + str(e) + ")."
+    return ("accept_lead: lead " + str(ref) + " marked review_status='accepted'. "
+            "apply-review.js will re-tier + promote on its next run (SEND stays OFF).")
+
+
+# ===========================================================================
+# TOOL 8: reject_lead
+# ===========================================================================
+def reject_lead(lead_id, reason: str = "", suppress: bool = False,
+                dry: bool = False) -> str:
+    """Mark a lead REJECTED (parks it out of the cold path) via review_status='rejected'.
+
+    Mirrors apply-review.js semantics exactly: a reject PARKS the lead
+    (lifecycle_stage='rejected' when apply-review runs) but does NOT suppress by
+    itself - suppression is reserved for opt-outs. The free-text `reason` is stored
+    additively in leads.claude_review_notes (jsonb merge, never clobbering existing
+    keys). Pass suppress=True to ALSO add the lead's email to the suppression table
+    (scope='domain'->no, scope is set to 'manual'); this is an explicit, separate,
+    additive action.
+
+    ADDITIVE + SCOPED: writes ONLY review_status, reviewed_by, reviewed_at,
+    claude_reviewed_at and claude_review_notes on the targeted row (+ one additive
+    suppression INSERT when suppress=True). Never touches off-limits tables.
+
+    IDEMPOTENT: a lead already 'rejected'/'applied_*' is a no-op; the suppression
+    INSERT is guarded by NOT EXISTS so re-running never duplicates a row.
+    """
+    lid = _as_lead_id(lead_id)
+    if lid is None:
+        return "reject_lead: invalid lead_id (expected a positive integer id)."
+    try:
+        rows = neon(
+            "SELECT id, lead_ref, COALESCE(review_status,'') AS rs, "
+            "COALESCE(contact_email,email,'') AS em FROM leads WHERE id=$1",
+            [lid],
+        )
+    except NeonError as e:
+        return "reject_lead: cannot reach Neon (" + str(e) + ")."
+    if not rows:
+        return "reject_lead: no lead with id " + str(lid) + "."
+    row = rows[0]
+    ref = row.get("lead_ref") or ("#" + str(lid))
+    cur = str(row.get("rs", "")).lower().strip()
+    email = str(row.get("em", "")).strip()
+    already = cur == "rejected" or cur.startswith(_APPLIED_PREFIX)
+
+    # Build the verdict UPDATE. The reason is merged into claude_review_notes jsonb
+    # additively (|| keeps any existing keys); reason is inlined via _sql_str because
+    # it sits inside a jsonb object literal (a bind param cannot build the {} object).
+    note_obj = {
+        "reject_reason": str(reason or "").strip(),
+        "rejected_by": "mcp_claude",
+    }
+    note_lit = _sql_str(json.dumps(note_obj))
+    upd = (
+        "UPDATE leads SET review_status='rejected', "
+        "reviewed_by=COALESCE(NULLIF(reviewed_by,''),'mcp_claude'), "
+        "reviewed_at=NOW(), claude_reviewed_at=NOW(), "
+        "claude_review_notes = COALESCE(claude_review_notes,'{}'::jsonb) || "
+        + note_lit + "::jsonb "
+        "WHERE id=$1 "
+        "AND COALESCE(review_status,'') NOT IN ('rejected') "
+        "AND COALESCE(review_status,'') NOT LIKE 'applied_%'"
+    )
+    # Suppression INSERT (only when asked AND we have an email). Guarded by NOT EXISTS
+    # on (email, scope) so it is idempotent. scope='manual' marks a hand/agent action.
+    sup_sql = None
+    if suppress and email:
+        sup_sql = (
+            "INSERT INTO suppression (email, reason, scope, notes, suppressed_at) "
+            "SELECT $1, $2, 'manual', $3, NOW() "
+            "WHERE NOT EXISTS (SELECT 1 FROM suppression WHERE lower(email)=lower($1))"
+        )
+
+    if dry:
+        out = ["reject_lead (DRY) would run:", upd, "  params=[" + str(lid) + "]"]
+        if sup_sql:
+            out.append("AND (suppress=True):")
+            out.append(sup_sql)
+            out.append("  params=[" + repr(email) + ", " + repr("rejected: " + str(reason or "")[:120]) + ", "
+                       + repr(str(reason or "")[:200]) + "]")
+        elif suppress and not email:
+            out.append("(suppress=True requested but lead has no email -> suppression skipped)")
+        return "\n".join(out)
+
+    if not already:
+        try:
+            neon(upd, [lid])
+        except NeonError as e:
+            return "reject_lead: verdict write failed (" + str(e) + ")."
+    sup_msg = ""
+    if sup_sql:
+        try:
+            neon(sup_sql, [email, ("rejected: " + str(reason or "")[:120]).strip(), str(reason or "")[:200]])
+            sup_msg = " Suppression: " + email + " added (or already present)."
+        except NeonError as e:
+            sup_msg = " Suppression write failed (" + str(e) + ")."
+    elif suppress and not email:
+        sup_msg = " (suppress requested but lead has no email -> skipped.)"
+
+    if already:
+        return ("reject_lead: lead " + str(ref) + " was already '" + cur
+                + "' (no verdict change)." + sup_msg)
+    return ("reject_lead: lead " + str(ref) + " marked review_status='rejected' "
+            "(apply-review.js will park it out of the cold path; not suppressed by "
+            "default)." + sup_msg)
+
+
+# ===========================================================================
+# TOOL 9: remint_audit
+# ===========================================================================
+def remint_audit(lead_id_or_hash, dry: bool = False) -> str:
+    """Enqueue a re-mint of one audit page by dispatching the remint-audits workflow.
+
+    The audit_pages table is in the OFF-LIMITS audit_* family, so this tool NEVER
+    UPDATEs it directly. Instead it resolves the input to an audit hash and triggers
+    the `remint-audits` GitHub Actions workflow (workflow_dispatch) with the `hashes`
+    input set to that single hash - exactly the supported manual path
+    (.github/workflows/remint-audits.yml -> REMINT_HASHES -> scripts/remint-audits.js,
+    which rebuilds payload_json server-side). Resumable + per-row fail-soft on the
+    engine side; safe to re-run (idempotent: a re-mint just refreshes the payload).
+
+    Resolution: a numeric input is treated as a leads.id and its leads.audit_hash is
+    looked up (READ only); anything else is treated as an audit hash directly. The
+    hash is validated against audit_pages (a READ) before dispatch so a typo fails
+    cleanly rather than kicking off an empty run.
+    """
+    raw = str(lead_id_or_hash).strip()
+    if not raw:
+        return "remint_audit: empty lead_id_or_hash."
+    audit_hash = None
+    lid = _as_lead_id(raw)
+    if lid is not None:
+        # numeric -> resolve the lead's audit hash (read-only).
+        try:
+            rows = neon(
+                "SELECT COALESCE(audit_hash,'') AS h, COALESCE(audit_url,'') AS u "
+                "FROM leads WHERE id=$1",
+                [lid],
+            )
+        except NeonError as e:
+            return "remint_audit: cannot reach Neon (" + str(e) + ")."
+        if not rows:
+            return "remint_audit: no lead with id " + str(lid) + "."
+        audit_hash = str(rows[0].get("h", "")).strip()
+        if not audit_hash:
+            return ("remint_audit: lead #" + str(lid) + " has no audit_hash yet "
+                    "(not minted). Nothing to re-mint.")
+    else:
+        audit_hash = raw
+
+    # Validate the hash exists in audit_pages (READ only - we never write audit_*).
+    try:
+        chk = neon(
+            "SELECT domain FROM audit_pages WHERE hash=$1 LIMIT 1", [audit_hash]
+        )
+    except NeonError as e:
+        return "remint_audit: cannot verify hash against audit_pages (" + str(e) + ")."
+    if not chk:
+        return ("remint_audit: no audit_pages row with hash '" + audit_hash
+                + "' (check the hash). Not dispatching.")
+    domain = chk[0].get("domain", "")
+
+    if dry:
+        return (
+            "remint_audit (DRY) would dispatch workflow 'remint-audits.yml' on "
+            + GH_REPO + " (ref=main) with inputs={'hashes': '" + audit_hash + "'} "
+            "for domain " + str(domain) + ". (No direct audit_* write.)"
+        )
+    res = _gh_dispatch("remint-audits.yml", ref="main", inputs={"hashes": audit_hash})
+    if res == "dispatched":
+        return ("remint_audit: dispatched remint-audits for hash " + audit_hash
+                + " (" + str(domain) + "). Watch the Actions run; payload_json refreshes "
+                "server-side. Re-running is safe.")
+    return "remint_audit: " + res
+
+
+# ===========================================================================
+# TOOL 10: dispatch_workflow
+# ===========================================================================
+def dispatch_workflow(name, dry: bool = False) -> str:
+    """Trigger a GitHub Actions workflow_dispatch by name, restricted to an allow-list.
+
+    Only the SAFE_WORKFLOWS set may be triggered (idempotent, non-destructive, NON-
+    SEND jobs - the cold-send relay and heavy multi-hour re-tier reruns are
+    deliberately excluded). An unknown/typo name is rejected with the allow-list
+    echoed back. Uses the same GH_TOKEN workflow_dispatch path as remint_audit.
+    Fail-soft: any auth/network error is returned as a one-line message.
+    """
+    key = str(name or "").strip()
+    # Accept either the human key ('engine-cycle') or the file ('engine-cycle.yml').
+    if key.endswith(".yml"):
+        key = key[:-4]
+    wf = SAFE_WORKFLOWS.get(key)
+    if not wf:
+        allowed = ", ".join(sorted(SAFE_WORKFLOWS.keys()))
+        return ("dispatch_workflow: '" + str(name) + "' is not in the allow-list. "
+                "Allowed: " + allowed + ".")
+    if dry:
+        return ("dispatch_workflow (DRY) would dispatch '" + wf + "' on " + GH_REPO
+                + " (ref=main), no inputs.")
+    res = _gh_dispatch(wf, ref="main", inputs=None)
+    if res == "dispatched":
+        return "dispatch_workflow: dispatched '" + wf + "' on " + GH_REPO + " (ref=main)."
+    return "dispatch_workflow: " + res
+
+
+# ===========================================================================
+# TOOL 11: set_flag
+# ===========================================================================
+# The kill-switch / flag store the engine actually reads is the system_state
+# key/value table (e.g. send-due.js reads system_state.paused). set_flag upserts
+# into it. SEND_ENABLED is the master send gate; flipping it ON is the single most
+# dangerous action in the cockpit, so it requires an explicit double-confirm
+# sentinel and defaults to REFUSE. (Note: the live SEND_ENABLED the relays read is
+# the process env/ENV_B64 master gate; writing it here records intent in
+# system_state and is still gated by the sentinel so the MCP can never be the thing
+# that quietly turns sending on.)
+_SEND_FLAG_KEYS = ("send_enabled",)  # lower-cased comparison
+_CONFIRM_SENTINEL = "I_UNDERSTAND_SENDS_GO_LIVE"
+# Values normalised to a canonical 'true'/'false' for the engine's truthy test
+# (send-due.js: value.trim().toLowerCase()==='true'); other flags store verbatim.
+_TRUTHY = ("1", "true", "yes", "on")
+_FALSY = ("0", "false", "no", "off")
+
+
+def set_flag(name, value, confirm: str = "", dry: bool = False) -> str:
+    """Set an engine flag in the system_state key/value store the engine reads.
+
+    Writes ONLY system_state (key, value, updated_at) - never a lead row, never an
+    off-limits table. Idempotent by construction (ON CONFLICT (key) DO UPDATE).
+
+    SAFETY: turning SEND ON is refused unless `confirm` is exactly the sentinel
+    'I_UNDERSTAND_SENDS_GO_LIVE'. Any send-flag write WITHOUT the sentinel is
+    rejected (whether you are turning it on OR off, so the gate is impossible to
+    fumble); a non-send flag is written normally. boolean-ish values are normalised
+    to 'true'/'false' so the engine's truthy test matches.
+
+    Examples: set_flag('paused','true') arms the kill-switch (halts all sending
+    immediately); set_flag('SEND_ENABLED','true', confirm='I_UNDERSTAND_SENDS_GO_LIVE')
+    records send-go-live intent (and is the ONLY way that key can be written here).
+    """
+    key = str(name or "").strip()
+    if not key:
+        return "set_flag: empty flag name."
+    val = "" if value is None else str(value).strip()
+    low = val.lower()
+    # Normalise boolean-ish values; leave other strings verbatim.
+    if low in _TRUTHY:
+        norm = "true"
+    elif low in _FALSY:
+        norm = "false"
+    else:
+        norm = val
+
+    is_send_flag = key.lower() in _SEND_FLAG_KEYS
+    if is_send_flag:
+        # Double-confirm is MANDATORY for the send gate, in either direction, so the
+        # MCP can never be the thing that flips sending without an explicit sentinel.
+        if confirm != _CONFIRM_SENTINEL:
+            return (
+                "set_flag: REFUSED. '" + key + "' is the SEND master gate. To change "
+                "it you must pass confirm='" + _CONFIRM_SENTINEL + "' (exactly). "
+                "SEND is OFF by policy; nothing was written."
+            )
+
+    sql = (
+        "INSERT INTO system_state (key, value, updated_at) VALUES ($1, $2, now()) "
+        "ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()"
+    )
+    if dry:
+        return ("set_flag (DRY) would run:\n" + sql + "\n  params=["
+                + repr(key) + ", " + repr(norm) + "]"
+                + ("  [SEND gate - sentinel OK]" if is_send_flag else ""))
+    try:
+        neon(sql, [key, norm])
+    except NeonError as e:
+        return "set_flag: write failed (" + str(e) + ")."
+    extra = ""
+    if is_send_flag:
+        extra = (" NOTE: the live relays still read the SEND_ENABLED ENV master gate; "
+                 "this records intent in system_state under the sentinel.")
+    return ("set_flag: system_state['" + key + "'] = '" + norm + "'." + extra)
+
+
+# ===========================================================================
 # Tool registry - name -> (callable, description, JSON-Schema for inputs).
-# The 6 tool bodies above are unchanged from the SDK version; this table is the
-# hand-rolled replacement for the @mcp.tool() decorators.
+# The 6 READ tool bodies above are unchanged from the SDK version; the 5 ACTION
+# tools (D5.8) are appended below. This table is the hand-rolled replacement for
+# the @mcp.tool() decorators.
 # ===========================================================================
 def _schema(properties=None, required=None):
     return {
@@ -642,6 +1121,166 @@ TOOLS = {
         ),
         "inputSchema": _schema(),
     },
+    # ----- ACTION TOOLS (D5.8) -------------------------------------------------
+    "accept_lead": {
+        "fn": accept_lead,
+        "description": (
+            "ACCEPT a lead for the cold path: writes leads.review_status='accepted' "
+            "(+ reviewed_by/reviewed_at/claude_reviewed_at). The engine's apply-review.js "
+            "then re-tiers via the CANONICAL gate and promotes atomically (the MCP does NOT "
+            "score). Additive, scoped to that one row, idempotent (already-accepted / "
+            "applied_* = no-op). SEND stays OFF. Pass dry=true to see the SQL."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "lead_id": {
+                    "type": "integer",
+                    "description": "leads.id to accept (positive integer).",
+                    "minimum": 1,
+                },
+                "dry": {
+                    "type": "boolean",
+                    "description": "If true, return the exact SQL without executing.",
+                    "default": False,
+                },
+            },
+            required=["lead_id"],
+        ),
+    },
+    "reject_lead": {
+        "fn": reject_lead,
+        "description": (
+            "REJECT a lead (parks it out of the cold path via review_status='rejected'; "
+            "apply-review.js sets lifecycle_stage='rejected'). `reason` is stored additively "
+            "in claude_review_notes. Optional suppress=true ALSO adds the email to the "
+            "suppression table (guarded, idempotent). Does NOT suppress by default "
+            "(suppression is for opt-outs). Scoped + idempotent. Pass dry=true for the SQL."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "lead_id": {
+                    "type": "integer",
+                    "description": "leads.id to reject (positive integer).",
+                    "minimum": 1,
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Why it is rejected (stored in claude_review_notes).",
+                    "default": "",
+                },
+                "suppress": {
+                    "type": "boolean",
+                    "description": "Also add the lead's email to the suppression table.",
+                    "default": False,
+                },
+                "dry": {
+                    "type": "boolean",
+                    "description": "If true, return the exact SQL without executing.",
+                    "default": False,
+                },
+            },
+            required=["lead_id"],
+        ),
+    },
+    "remint_audit": {
+        "fn": remint_audit,
+        "description": (
+            "Enqueue a re-mint of ONE audit page by dispatching the remint-audits "
+            "workflow (workflow_dispatch, hashes input). Resolves a numeric leads.id to "
+            "its leads.audit_hash, else treats the input as a hash; validates it against "
+            "audit_pages first (read only). NEVER writes audit_* directly. Idempotent / "
+            "safe to re-run. Pass dry=true to preview the dispatch."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "lead_id_or_hash": {
+                    "type": "string",
+                    "description": "A leads.id (numeric) or an audit hash to re-mint.",
+                },
+                "dry": {
+                    "type": "boolean",
+                    "description": "If true, describe the dispatch without firing it.",
+                    "default": False,
+                },
+            },
+            required=["lead_id_or_hash"],
+        ),
+    },
+    "dispatch_workflow": {
+        "fn": dispatch_workflow,
+        "description": (
+            "Trigger a GitHub Actions workflow_dispatch by name, restricted to a safe "
+            "allow-list (engine-cycle, remint-audits, claude-safeguard, gen-state, "
+            "intel-pulse, daily-digest, match-inbound-replies, deliverability-guard, "
+            "neon-guard, source-leads, source-registers, scrapers, "
+            "resolve-registry-domains, llm-rescue-backlog, nightly-workers). Unknown names "
+            "are refused with the allow-list echoed back. Pass dry=true to preview."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "name": {
+                    "type": "string",
+                    "description": "Workflow name from the allow-list (with or without .yml).",
+                },
+                "dry": {
+                    "type": "boolean",
+                    "description": "If true, describe the dispatch without firing it.",
+                    "default": False,
+                },
+            },
+            required=["name"],
+        ),
+    },
+    "set_flag": {
+        "fn": set_flag,
+        "description": (
+            "Set an engine flag in the system_state key/value store the engine reads "
+            "(e.g. paused='true' arms the kill-switch). Writes ONLY system_state; "
+            "idempotent (upsert). SAFETY: the SEND master gate (SEND_ENABLED) is REFUSED "
+            "unless confirm='I_UNDERSTAND_SENDS_GO_LIVE' is passed exactly; default "
+            "refuses. boolean-ish values normalise to 'true'/'false'. Pass dry=true for "
+            "the SQL."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "name": {
+                    "type": "string",
+                    "description": "Flag key in system_state (e.g. 'paused', 'SEND_ENABLED').",
+                },
+                "value": {
+                    "type": "string",
+                    "description": "Flag value (booleans normalise to 'true'/'false').",
+                },
+                "confirm": {
+                    "type": "string",
+                    "description": (
+                        "Required ONLY for the SEND gate: must be "
+                        "'I_UNDERSTAND_SENDS_GO_LIVE' to change SEND_ENABLED."
+                    ),
+                    "default": "",
+                },
+                "dry": {
+                    "type": "boolean",
+                    "description": "If true, return the exact SQL without executing.",
+                    "default": False,
+                },
+            },
+            required=["name", "value"],
+        ),
+    },
+}
+
+
+# Per-tool accepted keyword arguments. The dispatcher passes ONLY these keys
+# (when present in the call's arguments) by keyword, so each function gets exactly
+# the inputs it declares and nothing else. A tool not listed here takes no args.
+_TOOL_ARGS = {
+    "recent_replies": ("limit",),
+    "accept_lead": ("lead_id", "dry"),
+    "reject_lead": ("lead_id", "reason", "suppress", "dry"),
+    "remint_audit": ("lead_id_or_hash", "dry"),
+    "dispatch_workflow": ("name", "dry"),
+    "set_flag": ("name", "value", "confirm", "dry"),
 }
 
 
@@ -723,11 +1362,16 @@ def _handle_tools_call(params):
         }
     try:
         fn = spec["fn"]
-        # Only recent_replies takes an argument; pass through the optional 'limit'.
-        if name == "recent_replies":
-            text = fn(arguments.get("limit", 15))
-        else:
-            text = fn()
+        # Map each tool to the argument keys it accepts, and pass ONLY those through
+        # by keyword (a tool that takes no args is called bare). This whitelists the
+        # surface so a stray/extra argument from a client can never break the call,
+        # and keeps the no-dependency, Python-3.9 style (no inspect/signature magic).
+        accepted = _TOOL_ARGS.get(name, ())
+        kwargs = {k: arguments[k] for k in accepted if k in arguments}
+        # Unconditional **kwargs: a no-arg tool gets fn() (empty kwargs); a tool with
+        # required args that the client omitted raises a clean TypeError, which the
+        # outer except turns into a fail-soft "Tool error" result (never a crash).
+        text = fn(**kwargs)
         return {
             "content": [{"type": "text", "text": str(text)}],
             "isError": False,
