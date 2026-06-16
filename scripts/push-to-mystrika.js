@@ -19,6 +19,14 @@ const b64d = (s)=>{ try { return Buffer.from(String(s||''),'base64').toString('u
 const pgEsc = (v)=> `'${String(v==null?'':v).replace(/'/g,"''")}'`;
 const arg = (n,d)=>{ const i=process.argv.indexOf('--'+n); return i>=0?process.argv[i+1]:d; };
 const DRY = process.argv.includes('--dry');
+// SEND_ENABLED MASTER GATE (parity with src/skills/S065-touch-scheduler/scripts/send-due.js). Loading prospects
+// into an ACTIVE Mystrika campaign IS the send commitment: Mystrika then mails them on its own warmup schedule,
+// OUTSIDE our SEND_ENABLED switch. So this push MUST honour the same master gate as the native relay — otherwise a
+// claude_cleared=TRUE lead would ship through the brain while SEND reads "off". Unless SEND_ENABLED is truthy we
+// PLAN ONLY: compute routing + live capacity and log the plan, but never call addProspects / write sends / mark
+// pushed. Flip SEND_ENABLED (ENV_B64) to go live. DRY forces plan-only regardless.
+const SEND_OFF = !/^(1|true|yes|on)$/i.test(process.env.SEND_ENABLED || '');
+const PLAN_ONLY = DRY || SEND_OFF;
 // Each contact = its own prospect (Mystrika has no CC/BCC). Decision-maker = primary; the rest = secondary.
 const PER_COMPANY = Math.max(1, parseInt(process.env.MYSTRIKA_MAX_PER_COMPANY||'4',10));
 const firstOf = (n)=> String(n||'').trim().split(/\s+/)[0] || '';
@@ -298,11 +306,44 @@ if (require.main === module) (async()=>{
   // but has no campaign (unmapped/NULL sector and no MYSTRIKA_DEFAULT_CAMPAIGN_ID) is HELD here — surface it so the
   // waste is never silent. Set MYSTRIKA_DEFAULT_CAMPAIGN_ID to route unsectored leads, or classify their sector.
   if (unrouted) console.log('  UNROUTED: '+unrouted+' prospect(s) held — no campaign for sector(s) '+JSON.stringify(unroutedSectors)+' (set MYSTRIKA_DEFAULT_CAMPAIGN_ID or classify sector_code)');
+  // CAPACITY-AWARE TOP-UP (the drain controller). Mystrika IS the persistent campaign queue: prospects loaded into
+  // a campaign sit there and Mystrika mails them at its own warmup-paced daily cap (campaignSummary.daily_send_allowed
+  // — 20/day/campaign during warmup, rising as inboxes warm). To keep every campaign FUELLED at full capacity without
+  // flooding it (dumping all 5,000 'opportunity' slots would strand leads far beyond Claude's re-verification horizon
+  // and surrender our control), we TOP UP each campaign to a target buffer of UNSENT prospects (MYSTRIKA_BUFFER_DAYS ×
+  // daily_send_allowed), bounded by the campaign's own remaining room (opportunity − loaded). The buffer auto-scales
+  // with the warmed cap, so the engine always keeps Mystrika just-full and the rest waits in the DB ready-pool
+  // (claude_cleared + audit_verified + mystrika_pushed=FALSE) to be drained on the next run — exactly "store in the
+  // campaign, run anytime, fill whenever there is pending capacity". Read-only summary call per campaign; this only
+  // ever TRIMS what we load this run (never inflates). Disable with MYSTRIKA_NO_CAPACITY=1.
+  if (!/^(1|true|yes|on)$/i.test(process.env.MYSTRIKA_NO_CAPACITY || '')) {
+    const BUFFER_DAYS = Math.max(1, parseInt(process.env.MYSTRIKA_BUFFER_DAYS || '7', 10));
+    for (const cid of Object.keys(byCamp)) {
+      let allowed = byCamp[cid].length;
+      try {
+        const s = await M.campaignSummary(cid);
+        const d = (s && s.data && s.data.data) || {};
+        const dailyAllowed = Number(d.daily_send_allowed || 0);
+        const loaded = Number(d.total_lead_contact_count || 0);
+        const sent = Number(d.total_send_count || 0);
+        const opportunity = Number(d.opportunity || 0);
+        const pending = Math.max(0, loaded - sent);                              // loaded-but-not-yet-sent = real runway
+        const target = Math.max(dailyAllowed * BUFFER_DAYS, dailyAllowed, 0);    // desired buffer of unsent prospects
+        const bufferRoom = Math.max(0, target - pending);                        // how many more to reach the buffer
+        const hardRoom = opportunity > 0 ? Math.max(0, opportunity - loaded) : allowed; // never exceed campaign cap
+        allowed = Math.max(0, Math.min(allowed, bufferRoom, hardRoom));
+        console.log('  capacity '+cid+': daily_allowed='+dailyAllowed+' loaded='+loaded+' sent='+sent+' pending='+pending+' target='+target+' -> top-up '+allowed+'/'+byCamp[cid].length);
+      } catch (e) { console.log('  capacity '+cid+': summary unavailable ('+e.message+'); loading all '+allowed); }
+      if (allowed < byCamp[cid].length) byCamp[cid] = byCamp[cid].sort((a,b)=>(b.conversion_score||0)-(a.conversion_score||0)).slice(0, allowed);
+      if (allowed === 0) delete byCamp[cid];
+    }
+  }
   const totalRouted = Object.values(byCamp).reduce((a,x)=>a+x.length,0);
   prospects.sort((a,b)=>(b.conversion_score||0)-(a.conversion_score||0));  // SEND BEST FIRST
   const tierA=prospects.filter(p=>p.conversion_tier==='A').length;
-  console.log('Routing '+totalRouted+'/'+prospects.length+' prospects ('+tierA+' Tier-A) across '+Object.keys(byCamp).length+' sector campaigns'+(DRY?' (DRY)':'')+' ...');
-  if (DRY) { for (const [cid,ps] of Object.entries(byCamp)) console.log('  campaign '+cid+': '+ps.length+' prospects (e.g. '+(ps[0]||{}).company+')'); return; }
+  const planLabel = DRY ? ' (DRY)' : (SEND_OFF ? ' (PLAN-ONLY — SEND_ENABLED off, nothing loaded to Mystrika)' : '');
+  console.log('Routing '+totalRouted+'/'+prospects.length+' prospects ('+tierA+' Tier-A) across '+Object.keys(byCamp).length+' sector campaigns'+planLabel+' ...');
+  if (PLAN_ONLY) { for (const [cid,ps] of Object.entries(byCamp)) console.log('  campaign '+cid+': would load '+ps.length+' prospects (e.g. '+(ps[0]||{}).company+')'); return; }
   let pushedProspects = [];
   for (const [cid, ps] of Object.entries(byCamp)) {
     const res = await M.addProspects(cid, ps, true);
