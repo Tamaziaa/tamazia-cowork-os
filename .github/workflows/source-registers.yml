@@ -1,20 +1,27 @@
 name: Register sourcing (daily, regulated registers)
-# ADDITIVE Tier-1 supply. Runs the REGULATED-REGISTER adapters (companies-house, cqc, fca) through the
-# SAME unchanged gated pipeline source-leads.js uses (gather -> ICP pre-filter -> full audit ->
-# scoreICP+hot -> enrich -> persist -> sourcing_runs), via the SEPARATE runner scripts/source-registers.js
-# (the existing scrapers.yml / source-leads.js path is untouched). Regulated registers = the ICP by
-# construction, so this is the highest-purity Tier-1 sourcing.
+# ADDITIVE Tier-1 supply. Runs the REGULATED-REGISTER adapters (companies-house, cqc, fca,
+# charity-commission) through the SAME unchanged gated pipeline source-leads.js uses (gather -> ICP
+# pre-filter -> full audit -> scoreICP+hot -> enrich -> persist -> sourcing_runs), via the SEPARATE runner
+# scripts/source-registers.js (the existing scrapers.yml / source-leads.js path is untouched). Regulated
+# registers = the ICP by construction, so this is the highest-purity Tier-1 sourcing.
+#
+# Companies House uses the ADVANCED SEARCH API (SIC + company_status=active) for precise regulated-firm
+# sourcing (D2.4); the keyless public-page keyword path remains as fallback. CQC/FCA are wrapped in a
+# retry/health guard so a 5xx/403/timeout returns [] (fail-open) and they AUTO-ACTIVATE the moment the API
+# returns 200 with a real key present (both were 500-ing server-side / 403 without a key on 2026-06-16).
+# Charity Commission is wired here too (D2.4): keyed official register API (CHARITY_COMMISSION_API_KEY,
+# auto-activates on key landing) with the keyless internal search as fallback — both fail-open.
 #
 # SOURCE_T1_TARGET=100 per register: each register stops once it has yielded 100 candidates that pass the
 # Tier-1 ICP pre-filter (equal allocation). raw --max is generous (300) so the eligibility-stop governs.
-# Each adapter is fail-open: a register API outage (CQC/FCA were 500-ing server-side on 2026-06-16) yields
-# 0 for that source and never wedges the run. SEND stays OFF — this only sources/qualifies.
+# Each adapter is fail-open: a register API outage yields 0 for that source and never wedges the run.
+# SEND stays OFF — this only sources/qualifies.
 on:
   schedule:
     - cron: "30 6 * * *"   # daily 06:30 UTC (offset from scrapers.yml 07:00 so they don't contend)
   workflow_dispatch:
     inputs:
-      sources: { description: "comma register sources", default: "companies-house,cqc,fca" }
+      sources: { description: "comma register sources", default: "companies-house,cqc,fca,charity-commission" }
       max: { description: "raw max leads/source (eligibility-stop, not this, governs)", default: "300" }
       t1_target: { description: "Tier-1-eligible stop per register (equal allocation)", default: "100" }
 
@@ -42,7 +49,7 @@ jobs:
         run: |
           set -a; source .env 2>/dev/null; set +a
           export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '100' }}"
-          node scripts/heartbeat.js wrap source-registers -- node scripts/source-registers.js --source ${{ github.event.inputs.sources || 'companies-house,cqc,fca' }} --max ${{ github.event.inputs.max || '300' }}
+          node scripts/heartbeat.js wrap source-registers -- node scripts/source-registers.js --source ${{ github.event.inputs.sources || 'companies-house,cqc,fca,charity-commission' }} --max ${{ github.event.inputs.max || '300' }}
       - name: Alert on failure
         if: failure()
         run: |

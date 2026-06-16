@@ -76,6 +76,58 @@ async function searchByKeyword(keyword, opts = {}) {
   return await searchByKeywordPublic(keyword, opts);
 }
 
+// ADVANCED SEARCH (precision sourcing) — Companies House Advanced Search API.
+// `/advanced-search/companies` is the ONLY CH endpoint that filters by SIC code + company status, so it
+// is the right tool for sourcing REGULATED firms by sector: every returned row is an active company in a
+// regulated SIC by construction (no post-hoc keyword guessing, no dissolved companies, no off-target hits
+// that bare /search/companies returns). Verified live 2026-06-16: SIC 69102 + active -> 12,518 hits, each
+// row carrying sic_codes + company_status + company_type + registered_office_address.
+//
+//   sicCodes : string[]  one or more 5-digit SIC codes (repeated `sic_codes=` params — CH ORs them).
+//   opts     : { status='active', size=100, startIndex=0, retries=1, timeout=15000 }
+//
+// Returns the SAME row shape as searchByKeyword() (company/company_number/company_status/company_type/
+// date_of_creation/address/sic_codes/ch_url) so every existing consumer can use it interchangeably.
+//
+// FAIL-OPEN: needs CH_API_KEY (advanced-search is API-only; there is no public HTML equivalent that
+// exposes SIC). Without a key, or on any non-200 / parse error, returns [] (never throws). Callers keep
+// their own keyword/public fallback for the keyless case.
+const CH_ADV_MAX_SIZE = 5000;   // CH documented hard cap on `size`
+async function advancedSearch(sicCodes = [], opts = {}) {
+  if (!hasApiKey()) return [];                                  // advanced-search is API-only -> fail-open
+  const codes = (Array.isArray(sicCodes) ? sicCodes : [sicCodes]).map(c => String(c || '').trim()).filter(Boolean);
+  const status = (opts.status === undefined ? 'active' : opts.status);   // '' / null -> no status filter
+  const size = Math.max(1, Math.min(CH_ADV_MAX_SIZE, opts.size || 100));
+  const startIndex = Math.max(0, opts.startIndex || 0);
+  const qs = [];
+  for (const c of codes) qs.push('sic_codes=' + encodeURIComponent(c));
+  if (status) qs.push('company_status=' + encodeURIComponent(status));
+  qs.push('size=' + size);
+  if (startIndex) qs.push('start_index=' + startIndex);
+  const url = `${API_BASE}/advanced-search/companies?${qs.join('&')}`;
+  let r;
+  try { r = await fetchWithRetry(url, { headers: { 'User-Agent': UA, 'Accept': 'application/json', ...authHeader() }, timeout: opts.timeout || 15000, retries: opts.retries == null ? 1 : opts.retries }); }
+  catch (_e) { return []; }
+  if (!r || !r.ok) return [];
+  try {
+    const json = JSON.parse(r.body);
+    return (json.items || []).map(it => {
+      const a = it.registered_office_address || {};
+      const addr = [a.address_line_1, a.address_line_2, a.locality, a.postal_code, a.country].filter(Boolean).join(', ');
+      return {
+        company_number: it.company_number,
+        company: it.company_name,
+        company_status: it.company_status,
+        company_type: it.company_type,
+        date_of_creation: it.date_of_creation,
+        address: addr || null,
+        sic_codes: it.sic_codes || [],
+        ch_url: `https://find-and-update.company-information.service.gov.uk/company/${it.company_number}`,
+      };
+    }).filter(x => x.company);
+  } catch (_e) { return []; }
+}
+
 async function getCompany(company_number) {
   if (hasApiKey()) {
     const url = `${API_BASE}/company/${company_number}`;
@@ -141,12 +193,15 @@ async function getOfficers(company_number, opts = {}) {
 // company|domain keyword and bound the top-ranked officer onto every firm in a sector, fabricating
 // decision-makers (one person on 20 firms) and leaking UK officers onto non-UK firms. Officers now
 // come only from the reg-number-matched path in enrich.js.
-module.exports = { searchByKeyword, getCompany, getOfficers, hasApiKey };
+module.exports = { searchByKeyword, advancedSearch, getCompany, getOfficers, hasApiKey };
 
 if (require.main === module) {
   (async () => {
     const r = await searchByKeyword('aesthetic clinic');
     console.log('CH search "aesthetic clinic" returned:', r.length);
     console.log(JSON.stringify(r.slice(0, 5), null, 2));
+    const adv = await advancedSearch(['69102'], { size: 5 });   // solicitors, active
+    console.log('CH advanced-search SIC 69102 (active) returned:', adv.length);
+    console.log(JSON.stringify(adv.slice(0, 5), null, 2));
   })();
 }
