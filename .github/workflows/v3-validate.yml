@@ -34,14 +34,14 @@ jobs:
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Phase 0 - additive V3 schema (idempotent)
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ensure-schema.js || true
           node scripts/v3/migrate-v3-schema.js || true
       - name: Re-score a small batch with the gap-fixed scorer
         env:
           REQUAL_VERSION: ${{ inputs.version }}
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # Heartbeat so the engine-cycle race guard (heartbeat.js active-writer) sees this re-tier as a live
           # writer and skips its tier/lifecycle steps while it runs.
           node scripts/heartbeat.js wrap v3-validate -- node scripts/requalify-all-leads.js ${{ inputs.batch }}
@@ -49,7 +49,7 @@ jobs:
         env:
           REQUAL_VERSION: ${{ inputs.version }}
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node -e '
             const v = process.env.REQUAL_VERSION;
             const q = async (sql) => { const host = process.env.NEON_URL.replace(/.*@([^/]+)\/.*/, "$1");

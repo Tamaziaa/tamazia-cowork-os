@@ -49,20 +49,20 @@ jobs:
           echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Schema + CC-2 provision (idempotent, additive-only)
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ensure-schema.js
           node scripts/v3/migrate-v3-schema.js || true   # guarantee requal_version + v3 cols before requalify (canonical-schema now also carries them; this is belt-and-suspenders)
           node scripts/cc2-provision.js
       - name: Re-qualify the existing pile (current Tier-1 criteria)
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # Heartbeat the re-tier pass too (the advance step below is already wrapped). Keeps backlog-burst visible
           # to the engine-cycle race guard (heartbeat.js active-writer) during requalify, which rewrites the same
           # tier/lifecycle columns the cycle's qualify->mint seam touches.
           node scripts/heartbeat.js wrap backlog-burst -- node scripts/requalify-all-leads.js ${{ inputs.requalify }} || true
       - name: Advance the backlog (no-send)
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/heartbeat.js wrap backlog-burst -- bash -c '
             node scripts/enrich-and-queue-channels.js ${{ inputs.enrich }} || true
             node scripts/run-deep-research-batch.js ${{ inputs.research }} || true
@@ -74,7 +74,7 @@ jobs:
           ' || true   # outer guard: a heartbeat-wrap timeout (exit 124 on a large burst, e.g. verify=400) must NOT fail this best-effort no-send drain — partial progress is kept (matches the requalify step's guard)
       - name: Funnel summary
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node -e '
             const q = async (sql) => {
               const host = process.env.NEON_URL.replace(/.*@([^/]+)\/.*/, "$1");

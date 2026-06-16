@@ -37,17 +37,17 @@ jobs:
         # runner Node.js migration) can cause exit 127 even with || true when bash -e is active.
         continue-on-error: true
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ensure-schema.js || true
       - run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # O4 [A1/A61/A64]: heartbeat-wrap so this scheduled health-surface generator is visible in engine_runs
           # (engine_health / check-stuck-jobs). Fallback to a bare call so a heartbeat hiccup never blocks the state file.
           node scripts/heartbeat.js wrap gen-state -- node scripts/gen-state.js || node scripts/gen-state.js
       - name: Commit if changed (best-effort; Neon holds the digest regardless)
         continue-on-error: true
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           git config user.name "tamazia-bot"
           git config user.email "bot@tamazia.co.uk"
           git add docs/PIPELINE-STATE.md

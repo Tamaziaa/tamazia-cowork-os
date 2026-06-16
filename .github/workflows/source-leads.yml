@@ -32,7 +32,7 @@ jobs:
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Source leads
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           SRC='${{ github.event.inputs.source }}'
           if [ "$SRC" = "all" ]; then FLAG="--all"; else FLAG="--source $SRC"; fi
           # A4/IG2: heartbeat-wrap so this on-demand source run is visible in engine_runs

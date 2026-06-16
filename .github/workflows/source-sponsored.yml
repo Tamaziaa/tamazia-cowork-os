@@ -37,7 +37,7 @@ jobs:
           if ! grep -q '^PAGESPEED_API_KEY=' .env && [ -n "${{ secrets.PAGESPEED_API_KEY }}" ]; then echo "PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}" >> .env; fi
       - name: Run sponsored scraper (gated, heartbeat-wrapped)
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '50' }}"
           SECTORS_IN="${{ github.event.inputs.sectors || 'all' }}"
           if [ "$SECTORS_IN" = "all" ]; then SECTOR_FLAG="--all"; else SECTOR_FLAG="--sector $SECTORS_IN"; fi

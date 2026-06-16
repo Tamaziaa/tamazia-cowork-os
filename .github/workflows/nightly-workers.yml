@@ -28,12 +28,12 @@ jobs:
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Schema provision (idempotent)
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ensure-schema.js
           node scripts/cc2-provision.js
       - name: Reconcile + recycle (Neon <-> Mystrika <-> cal <-> audits, then recycle)
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # One heartbeat spanning the bundle: recycle.js re-tiers leads back to lifecycle_stage='qualified', and
           # reconcile.js flips leads to 'booked' — both write the tier/lifecycle columns the engine cycle's seam
           # reads. Wrapping them keeps nightly-workers visible to the engine-cycle race guard (heartbeat.js
@@ -49,7 +49,7 @@ jobs:
           '
       - name: Compute nightly metrics (per-source + per-pipeline deliverability/cost -> metrics table)
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # P3-5: aggregate sends/bounce_events/inbound_emails/lead_sources/leads into the `metrics` table,
           # idempotent per metric_date. Read-mostly (only writes the metrics table, not lead tier columns) so it
           # is NOT a re-tier writer and gets its OWN heartbeat job name (not nightly-workers / not guarded).

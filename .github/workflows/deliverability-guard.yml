@@ -24,5 +24,5 @@ jobs:
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Run deliverability guard (alerts on any SPF/DKIM/DMARC/Postmaster gap)
         run: |
-          set -a; source .env; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/heartbeat.js wrap deliverability-guard -- node scripts/deliverability-guard.js || node scripts/deliverability-guard.js || true

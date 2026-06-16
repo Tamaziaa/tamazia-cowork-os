@@ -70,7 +70,7 @@ jobs:
           # D3.3: per-run LLM call cap (cost protection). Caps the SERP+LLM budget per wave run.
           LLM_QA_RUN_COST_CAP_MICRO: '50000'
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # manual dispatch can force-enable for one run (does not change the secret).
           if [ "$FORCE_ENABLE" = "1" ]; then export LLM_QA_ENABLED=1; fi
           # If LLM_QA_ENABLED came in from ENV_B64 as 1/true, that wins over the workflow-level '0'

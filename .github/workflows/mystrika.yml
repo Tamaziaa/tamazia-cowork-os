@@ -25,7 +25,7 @@ jobs:
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Run
         run: |
-          set -a; source .env 2>/dev/null; set +a
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           if [ "${{ github.event.inputs.action }}" = "push" ]; then node scripts/push-to-mystrika.js --campaign "${{ github.event.inputs.campaign }}" --max "${{ github.event.inputs.max || '200' }}";
           else
             # Scheduled run = (1) reply-sync, THEN (2) the CAPACITY-AWARE DRAIN. The drain keeps every sector
