@@ -28,7 +28,7 @@ name: claude-safeguard (Layer-3 twice-daily lead clearance)
 # ============================================================================================================
 on:
   schedule:
-    - cron: "0 6,21 * * *"   # 06:00 + 21:00 UTC — morning + night clearance waves
+    - cron: "0 6,11 * * *"   # 06:00 + 11:00 UTC — morning + midday clearance waves
   workflow_dispatch:
     inputs:
       batch_max:
@@ -53,6 +53,13 @@ jobs:
   safeguard:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # CRITICAL: GitHub does NOT allow the `secrets` context inside a step-level `if:` — it is an "Unrecognized
+    # named-value: 'secrets'" error that INVALIDATES THE ENTIRE WORKFLOW FILE, so every scheduled run startup-fails
+    # with 0 jobs (it silently never ran). Map the secret to a job-level env ONCE here (secrets ARE allowed in env
+    # values), then gate the Claude step on `env.HAS_OAUTH` (the `env` context IS allowed in `if:`). HAS_OAUTH is the
+    # string 'true'/'false'.
+    env:
+      HAS_OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -82,16 +89,16 @@ jobs:
       #    (--clear-lead/--clear-audit/--clear-touch/--finalize via the batch tool) + opens any engine-fix PR.
       #    GATED on the OAuth token: if secrets.CLAUDE_CODE_OAUTH_TOKEN is unset, this step is SKIPPED and the job
       #    ends after the pull (degrade-to-log). The token is a Claude SUBSCRIPTION token, NOT an API key (£0).
-      #    Lowest model (claude_args --model) keeps the subscription footprint minimal.
+      #    Sonnet 4.6 (claude_args --model) — compliance reasoning + gap analysis + PR writing needs quality.
       - name: Claude review + clearance (subscription OAuth, ZERO paid API)
-        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        if: ${{ env.HAS_OAUTH == 'true' }}
         uses: anthropics/claude-code-action@v1
         with:
           # SUBSCRIPTION OAuth token ONLY — never anthropic_api_key. If this is empty the step above already
           # skipped this whole step (see the `if:` guard), so the job degrades to pull-and-log and never bills.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Lowest model — batched twice-daily clearance does not need a frontier model.
-          claude_args: "--model claude-3-5-haiku-latest"
+          # Sonnet 4.6 — safeguard requires real compliance reasoning + gap analysis + PR writing.
+          claude_args: "--model claude-sonnet-4-6"
           prompt: |
             You are the Tamazia Layer-3 Claude safeguard. SEND is OFF; you only make leads ELIGIBLE.
             A batch id is "${{ github.run_id }}". The dry flag is "${{ github.event.inputs.dry || 'false' }}".
