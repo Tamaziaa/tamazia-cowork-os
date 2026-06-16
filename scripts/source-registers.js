@@ -44,13 +44,19 @@ const boolL = v => v ? 'TRUE' : 'FALSE';
 const jb = o => o == null ? 'NULL' : `'${JSON.stringify(o).replace(/'/g, "''")}'::jsonb`;
 
 function args() {
-  const a = process.argv.slice(2); const o = { sources: [], max: 50, dryRun: false, capture: null };
+  const a = process.argv.slice(2); const o = { sources: [], max: 50, dryRun: false, capture: null, resolveCap: null, sector: null };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === '--source') o.sources = (a[++i] || '').split(',').map(s => s.trim()).filter(Boolean);
     else if (a[i] === '--all') o.sources = Object.values(REGISTER_REGISTRY).map(s => s.name);
     else if (a[i] === '--max') o.max = Number(a[++i]) || 50;
     else if (a[i] === '--dry-run') o.dryRun = true;
     else if (a[i] === '--capture') o.capture = a[++i];
+    // --resolve-cap N: bound the SERP domain-resolution budget per adapter (registers carry no website).
+    // Lower = faster dry-runs; 0 = skip resolution entirely (candidates stay domain-less). Defaults to each
+    // adapter's own cap when omitted. ADDITIVE — does not change the gated pipeline.
+    else if (a[i] === '--resolve-cap') o.resolveCap = Math.max(0, Number(a[++i]) || 0);
+    // --sector NAME: restrict CH advanced-search to one regulated sector (law-firms|healthcare|financial).
+    else if (a[i] === '--sector') o.sector = (a[++i] || '').trim() || null;
   }
   if (!o.sources.length) o.sources = Object.values(REGISTER_REGISTRY).map(s => s.name);   // default: all registers
   // No DB configured -> force dry (default behavior with no DB available = dry).
@@ -76,7 +82,12 @@ async function gather(o) {
     const srcRaws = [];
     try {
       if (captured && (captured[ad.name] || captured[name])) srcRaws.push(...ad.ingestCaptured(captured[ad.name] || captured[name]));
-      if (mode === 'api') srcRaws.push(...await ad.candidates({ max: o.max }, process.env));
+      if (mode === 'api') {
+        const co = { max: o.max };
+        if (o.resolveCap != null) co.resolveCap = o.resolveCap;   // bound SERP budget (fast dry-runs)
+        if (o.sector) co.sector = o.sector;                       // restrict CH to one regulated sector
+        srcRaws.push(...await ad.candidates(co, process.env));
+      }
     } catch (e) { console.error('[register ' + name + '] ' + e.message); }
     // Eligibility-stop: keep candidates in order until SOURCE_T1_TARGET pass the Tier-1 ICP pre-filter.
     let t1 = 0; let kept = 0;
@@ -104,7 +115,7 @@ async function run() {
   }
   const t0 = Date.now();
   const runId = 'reg-' + Date.now().toString(36);
-  console.log(`[source-registers] sources=${o.sources.join(',')} max=${o.max} t1Target=${o.t1Target || 'off'} dryRun=${o.dryRun}${!NEON ? ' (no NEON_URL -> dry)' : ''}`);
+  console.log(`[source-registers] sources=${o.sources.join(',')} max=${o.max} t1Target=${o.t1Target || 'off'}${o.sector ? ' sector=' + o.sector : ''}${o.resolveCap != null ? ' resolveCap=' + o.resolveCap : ''} dryRun=${o.dryRun}${!NEON ? ' (no NEON_URL -> dry)' : ''}`);
   const raws = await gather(o);
   // dedupe by domain (in-memory). Register candidates without a resolvable domain are dropped here.
   const seen = new Set(); const cand = [];

@@ -50,6 +50,41 @@ function extractCity(addr) {
   return addr.locality || addr.city || addr.address_line_3 || null;
 }
 
+// OFFICIAL Charity Commission Register API (keyed, auto-activates on key landing) ----------------------
+// The KEYLESS internal-search endpoint above was reverse-engineered from the public UI and the Commission
+// migrated that site (it now returns 404 — verified 2026-06-16), so search() fails open to []. The OFFICIAL
+// supported API (api.charitycommission.gov.uk/register/api) is live but needs an Azure APIM subscription key
+// (Ocp-Apim-Subscription-Key = CHARITY_COMMISSION_API_KEY; free signup, founder has none yet -> 401). This
+// keyed path mirrors the CQC/FCA pattern: when the key is absent it returns [] (fail-open); the moment a key
+// is set it auto-activates with NO code change. searchCharityName -> a name list; we map the documented
+// fields defensively (the API returns snake_case charity_* fields) to the SAME row shape as search().
+const CC_OFFICIAL_BASE = 'https://api.charitycommission.gov.uk/register/api';
+async function searchOfficial({ q = '', take = 25, env = process.env } = {}) {
+  const key = env.CHARITY_COMMISSION_API_KEY || env.CHARITY_API_KEY;
+  if (!key || !q) return [];                                  // keyed-only path -> fail-open without a key
+  const url = `${CC_OFFICIAL_BASE}/searchCharityName/${encodeURIComponent(q)}`;
+  const r = await fetchWithRetry(url, { headers: { 'Ocp-Apim-Subscription-Key': key, 'Accept': 'application/json' }, timeout: 18000, retries: 1 });
+  if (!r.ok) return [];                                       // 401/403/5xx/timeout -> [] (never throw)
+  try {
+    const json = JSON.parse(r.body);
+    const items = Array.isArray(json) ? json : (json?.charities || json?.Charities || []);
+    return items.slice(0, take).map(c => ({
+      source: 'charity_commission',
+      company: c.charity_name || c.CharityName || c.charity_title || null,
+      domain: extractDomain(c.charity_contact_web || c.charity_contact_web_address || c.web_address || c.charity_email_address),
+      sector: 'charity',
+      jurisdiction: 'UK',
+      city: c.charity_contact_address?.address_line_1 || null,
+      email: c.charity_email_address || null,
+      phone: c.charity_contact_phone || c.charity_contact_telephone || null,
+      registration_number: c.reg_charity_number || c.charity_number || c.organisation_number || c.RegCharityNumber,
+      classification: c.classifications || null,
+      website: c.charity_contact_web || c.charity_contact_web_address || c.web_address || null,
+      raw: c
+    })).filter(x => x.company);
+  } catch (_e) { return []; }
+}
+
 async function bulkSearch({ classifications = ['101','102','103','104','105'], pages_per_classification = 4 } = {}) {
   // Classifications: 101=Education/Training, 102=Health, 103=Disability, 104=Religion, 105=Arts/Culture
   const out = [];
@@ -64,7 +99,7 @@ async function bulkSearch({ classifications = ['101','102','103','104','105'], p
   return out;
 }
 
-module.exports = { search, bulkSearch };
+module.exports = { search, searchOfficial, bulkSearch };
 
 if (require.main === module) {
   (async () => {
