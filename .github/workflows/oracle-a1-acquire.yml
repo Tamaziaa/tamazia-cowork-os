@@ -39,6 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     name: Try to acquire A1.Flex instance
     steps:
+      - name: Install OCI CLI
+        run: pip install oci-cli --quiet 2>&1 | tail -3 || true
+
       - name: Check if instance already exists
         id: check
         env:
@@ -48,18 +51,11 @@ jobs:
           OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
           OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
         run: |
-          pip install oci-cli --quiet 2>/dev/null || true
-          # Set up OCI config
           mkdir -p ~/.oci
-          echo "[DEFAULT]" > ~/.oci/config
-          echo "user=$OCI_CLI_USER" >> ~/.oci/config
-          echo "fingerprint=$OCI_CLI_FINGERPRINT" >> ~/.oci/config
-          echo "tenancy=$OCI_CLI_TENANCY" >> ~/.oci/config
-          echo "region=$OCI_CLI_REGION" >> ~/.oci/config
-          echo "key_file=~/.oci/key.pem" >> ~/.oci/config
-          echo "$OCI_CLI_KEY_CONTENT" > ~/.oci/key.pem
+          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
+            "$OCI_CLI_USER" "$OCI_CLI_FINGERPRINT" "$OCI_CLI_TENANCY" "$OCI_CLI_REGION" "~/.oci/key.pem" > ~/.oci/config
+          printf '%s' "$OCI_CLI_KEY_CONTENT" > ~/.oci/key.pem
           chmod 600 ~/.oci/key.pem
-          # Check for existing A1 instance named tamazia-engine-a1
           EXISTING=$(oci compute instance list \
             --compartment-id "$OCI_CLI_TENANCY" \
             --display-name "tamazia-engine-a1" \
@@ -67,7 +63,7 @@ jobs:
             --query "data[0].\"public-ip\"" \
             --raw-output 2>/dev/null || echo "")
           if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
-            echo "Instance already RUNNING at $EXISTING — stopping workflow"
+            echo "Instance already RUNNING at $EXISTING"
             echo "ALREADY_EXISTS=true" >> $GITHUB_OUTPUT
           else
             echo "ALREADY_EXISTS=false" >> $GITHUB_OUTPUT
@@ -87,15 +83,12 @@ jobs:
           MEMORY_GB: ${{ github.event.inputs.memory_gb || '24' }}
         run: |
           mkdir -p ~/.oci
-          echo "[DEFAULT]" > ~/.oci/config
-          echo "user=$OCI_CLI_USER" >> ~/.oci/config
-          echo "fingerprint=$OCI_CLI_FINGERPRINT" >> ~/.oci/config
-          echo "tenancy=$OCI_CLI_TENANCY" >> ~/.oci/config
-          echo "region=$OCI_CLI_REGION" >> ~/.oci/config
-          echo "key_file=~/.oci/key.pem" >> ~/.oci/config
-          echo "$OCI_CLI_KEY_CONTENT" > ~/.oci/key.pem
+          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
+            "$OCI_CLI_USER" "$OCI_CLI_FINGERPRINT" "$OCI_CLI_TENANCY" "$OCI_CLI_REGION" "~/.oci/key.pem" > ~/.oci/config
+          printf '%s' "$OCI_CLI_KEY_CONTENT" > ~/.oci/key.pem
           chmod 600 ~/.oci/key.pem
 
+          set +e  # Don't abort on oci CLI non-zero exit (capacity errors return exit 1)
           SUCCESS=false
           for AD in "HzzF:UK-LONDON-1-AD-1" "HzzF:UK-LONDON-1-AD-2" "HzzF:UK-LONDON-1-AD-3"; do
             echo "Trying $AD ..."
@@ -110,7 +103,9 @@ jobs:
               --assign-public-ip true \
               --metadata '{"ssh_authorized_keys":""}' \
               2>&1)
-            if echo "$RESULT" | grep -q "\"lifecycle-state\": \"PROVISIONING\""; then
+            EXIT_CODE=$?
+            echo "Exit code: $EXIT_CODE | Response: $(echo "$RESULT" | head -c 300)"
+            if echo "$RESULT" | grep -q '"lifecycle-state": "PROVISIONING"'; then
               PUBLIC_IP=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('public-ip','pending'))" 2>/dev/null || echo "pending")
               echo "SUCCESS on $AD — IP: $PUBLIC_IP"
               echo "INSTANCE_AD=$AD" >> $GITHUB_ENV
@@ -118,13 +113,14 @@ jobs:
               SUCCESS=true
               break
             else
-              echo "Failed on $AD: $(echo $RESULT | head -c 200)"
+              echo "No capacity on $AD — trying next"
             fi
           done
+          set -e
 
           if [ "$SUCCESS" = "false" ]; then
-            echo "All ADs at capacity — will retry next run"
-            exit 0  # Don't fail, just wait for next cron
+            echo "All ADs at capacity — will retry on next cron tick (every 10 min)"
+            exit 0
           fi
 
       - name: Notify on success
