@@ -16,7 +16,7 @@ const n = (v) => Number(v || 0);
 
 // Touches per lead and campaign span — used for the steady-state intake maths. A lead receives TOUCHES emails over
 // SPAN_DAYS; in steady state daily_sends = new_leads_per_day * TOUCHES, so sustainable intake = capacity / TOUCHES.
-const TOUCHES = Math.max(1, parseInt(process.env.CADENCE_TOUCHES || '5', 10));
+const TOUCHES = Math.max(1, parseInt(process.env.CADENCE_TOUCHES || '4', 10));
 
 async function main() {
   if (!NEON) { console.log('No NEON_URL'); return; }

@@ -4,9 +4,9 @@
   "source_copy": "Tamazia-Remix/campaigns/touch-copy-top10.md (founder-reviewed draft)",
   "priority_sectors": ["LS", "HC", "AE", "DN", "FS", "RE", "HO", "FB", "ED", "PB"],
   "cadence": {
-    "touches": 5,
-    "interval_days_from_touch0": [0, 3, 7, 12, 19],
-    "_note": "Touch 0 immediate; +3, +7, +12, +19 days. All 5 touches (0/1/2 + 2 nudges, the last being the +19d breakup) ship via the direct send path (send-due.js CADENCE_DAYS = [0,3,7,12,19], advances 0->1->2->3->4->cadence_complete; B7). Full 7-touch plan in the draft is 0/3/7/12/19/28/40; touches 5-6 (28/40) remain out of scope per P2-5. The Mystrika push path currently enqueues t0..t3 only. Saturday is skipped by the scheduler (send-pacing.sendingPausedToday)."
+    "touches": 4,
+    "interval_days_from_touch0": [0, 3, 10, 21],
+    "_note": "FOUNDER-LOCKED cadence: EXACTLY 4 touches (0/1/2 + the breakup at touch 3), Touch 0 immediate then +3, +10, +21 days, after which the lead recycles (recycle.js). send-due.js CADENCE_DAYS = [0,3,10,21], advances 0->1->2->3->cadence_complete (LAST_TOUCH=3). This REVERTS #50, which wrongly added a 5th touch ([0,3,7,12,19], touch 4 the +19d breakup). The per-sector campaign JSONs still carry a touch-4 block but it is deliberately NOT rendered or scheduled. The Mystrika push path enqueues t0..t3 only. Saturday is skipped by the scheduler (send-pacing.sendingPausedToday)."
   },
   "credential_line": "LLM in International Business Law, King's College London",
   "signature_name": "Aman Pareek",
