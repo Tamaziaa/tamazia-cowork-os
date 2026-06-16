@@ -13,6 +13,11 @@ const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
 const JSON_OUT = process.argv.includes('--json');
 function pg(sql) { try { return execFileSync(path.join(__dirname, 'psql'), [NEON, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }).trim(); } catch (_) { return ''; } }
 const n = (v) => Number(v || 0);
+// BUGFIX-R1 (#4): the TRUE drainable pool must mirror push-to-mystrika.js's WHERE clause verbatim, not just
+// "cleared + audit_verified + not pushed" — otherwise the funnel/ready-pool over-reports inventory the push can't
+// actually send. Alias-free (bare columns) so it is valid in both a FILTER and a WHERE. (Suppression registry is
+// the one push gate enforced at send-time only; the status/deliverability gates here catch the rest.)
+const DRAINABLE = `COALESCE(quality_fit,FALSE) AND COALESCE(lifecycle_stage,'')='qualified' AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal') AND COALESCE(audit_verified,FALSE) AND COALESCE(audit_url,'')<>'' AND COALESCE(claude_cleared,FALSE) AND governor_released_at IS NOT NULL AND NOT COALESCE(mystrika_pushed,FALSE) AND COALESCE(NULLIF(contact_email,''),email,'')<>'' AND COALESCE(NULLIF(deliverability,''),verify_status,'') NOT IN ('bad','invalid','undeliverable','no_mx','nxdomain','disposable') AND COALESCE(replied,FALSE)=FALSE AND COALESCE(status,'') NOT IN ('suppressed','dnc','bounced','duplicate')`;
 
 // Touches per lead and campaign span — used for the steady-state intake maths. A lead receives TOUCHES emails over
 // SPAN_DAYS; in steady state daily_sends = new_leads_per_day * TOUCHES, so sustainable intake = capacity / TOUCHES.
@@ -31,13 +36,13 @@ async function main() {
       count(*) FILTER (WHERE COALESCE(audit_verified,FALSE)),
       count(*) FILTER (WHERE COALESCE(claude_cleared,FALSE)),
       count(*) FILTER (WHERE COALESCE(mystrika_pushed,FALSE)),
-      count(*) FILTER (WHERE COALESCE(claude_cleared,FALSE) AND COALESCE(audit_verified,FALSE) AND NOT COALESCE(mystrika_pushed,FALSE))
+      count(*) FILTER (WHERE ${DRAINABLE})
     FROM leads`).split('\t').map(n);
   const [total, tier1, qfit, qualified, pending, released, auditV, cleared, pushed, readyPool] = f;
-  // ready-by-sector (the DB drain pool: cleared + audit-verified + not pushed) keyed to the sector campaigns
+  // ready-by-sector (the TRUE drain pool = mirrors the push-to-mystrika.js WHERE clause, not just cleared+verified)
   const bySector = {};
   for (const ln of pg(`SELECT COALESCE(NULLIF(sector,''),NULLIF(sector_code,''),'(none)'), count(*)
-      FROM leads WHERE COALESCE(claude_cleared,FALSE) AND COALESCE(audit_verified,FALSE) AND NOT COALESCE(mystrika_pushed,FALSE)
+      FROM leads WHERE ${DRAINABLE}
       GROUP BY 1 ORDER BY 2 DESC`).split('\n').filter(Boolean)) { const [s, c] = ln.split('\t'); bySector[s] = n(c); }
 
   // ---- 2) Live Mystrika capacity per campaign (read-only summary calls)

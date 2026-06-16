@@ -35,7 +35,10 @@ const firstOf = (n)=> String(n||'').trim().split(/\s+/)[0] || '';
 // so match an optional salutation + the leading 1-3 capitalised name words before the first comma. Anchored
 // at string start (no /m) so only the opening greeting is ever touched.
 const greet = (body, first)=> !body ? body : body.replace(/^([ \t]*)((?:Hi|Hello|Dear|Hey)\s+)?([A-Z][\w'’\-]*(?:[ \t]+[A-Z][\w'’\-]*){0,2})([ \t]*,)(?=[ \t]*(?:\r?\n|$))/, (m,ws,sal,_n,c)=> ws + (sal||'') + (first || 'there') + c);
-const okStatus = (s)=> /valid|risky|catchall|catch-all|role_valid|accept|deliverable|ok/i.test(String(s||''));
+// BUGFIX-R1 (#3): catch-all = do-not-send (house rule). Secondary contacts are gated ONLY by okStatus (they never
+// pass through conversion.js's SEND_TIERS like the primary does), so 'catchall'/'catch-all' must NOT be accepted
+// here or a catch-all colleague address would be pushed. Removed from the allow-pattern.
+const okStatus = (s)=> /valid|risky|role_valid|accept|deliverable|ok/i.test(String(s||''));
 
 // B-1 FIX [LLM-RESCUE COMMIT 1]: CANONICAL Art-14 FOOTER for the LIVE Mystrika push path.
 // push-to-mystrika.js is what mystrika.yml (action=push) runs, and it pushed the RAW outreach_drafts bodies that
@@ -64,7 +67,16 @@ function complianceFooter() {
       _footerCache = _nd(lines.join('\n').replace(/^\n+/, '')
         .replace(/\{\{\s*privacy_notice_url\s*\}\}/g, PRIVACY_NOTICE_URL)
         .replace(/\{\{\s*unsubscribe_url\s*\}\}/g, '{{ unsubscribe }}')
-        .replace(/\{\{\s*eu_rep_line\s*\}\}\n?/g, ''));
+        .replace(/\{\{\s*eu_rep_line\s*\}\}\n?/g, '')
+        // BUGFIX-R1 (#1 CRITICAL): fill the founder-identity tokens from env when provided, so the Art-14 footer
+        // becomes COMPLETE and the fail-closed unfilledPlaceholder guard PASSES. Without this nothing ever filled
+        // {{reg_address}}/{{company_number}}/{{ico_number}}, so the guard rejected 100% of prospects FOREVER (the
+        // moment SEND was enabled the drain pushed zero). When these env vars are unset the tokens stay as {{...}}
+        // and the guard correctly fail-closes (a legal Art-14 block). So setting TAMAZIA_REG_ADDRESS /
+        // TAMAZIA_COMPANY_NUMBER / TAMAZIA_ICO_NUMBER in ENV_B64 is the literal unblock for sending (founder FB1).
+        .replace(/\{\{\s*reg_address\s*\}\}/g, process.env.TAMAZIA_REG_ADDRESS || '{{reg_address}}')
+        .replace(/\{\{\s*company_number\s*\}\}/g, process.env.TAMAZIA_COMPANY_NUMBER || '{{company_number}}')
+        .replace(/\{\{\s*ico_number\s*\}\}/g, process.env.TAMAZIA_ICO_NUMBER || '{{ico_number}}'));
     } catch (_e) { _footerCache = ''; }
   }
   return _footerCache;
