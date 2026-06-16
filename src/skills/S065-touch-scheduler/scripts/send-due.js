@@ -127,7 +127,8 @@ async function processLead(lead) {
 
   // AUDIT-LINK GUARANTEE (any touch that references an audit): NEVER send unless the URL is a real,
   // minted, signed audit that resolves HTTP 200. Fail-closed + flag the founder. No frivolous emails.
-  // D4.3: on block, also set needs_remint=true so the mint queue re-mints before the next retry.
+  // D4.3: Touch-1 specific — if the audit URL is not live, mark needs_remint=true on the lead so the
+  // mint queue can pick it up and remint before the next retry. All other touches are gated identically.
   const bodyHasAudit = /\/audit\//i.test(draft.body);
   if (bodyHasAudit) {
     const auditUrl = pg(`SELECT COALESCE(audit_url,'') FROM leads WHERE id=${lead.id}`);

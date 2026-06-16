@@ -1,6 +1,6 @@
 'use strict';
 // D4.5 · Bounce-guard auto-pause component.
-// Checks every sending alias for a dangerous bounce rate (>3 bounced leads in 7 days)
+// Checks every sending alias for a dangerous bounce rate (>3 bounces from leads in 7 days)
 // and pauses any alias that breaches the threshold. Sets paused=true + paused_reason='bounce_guard'
 // on the aliases table so alias-rotator.js (pickSendAlias) never picks a paused alias.
 //
@@ -23,11 +23,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 // Inline logger: uses src/lib/logger if available, else console.
 let log;
 try { log = require('../lib/logger'); } catch (_) {
-  log = {
-    info: (...a) => console.log('[deliverability-guard]', ...a),
-    warn: (...a) => console.warn('[deliverability-guard] WARN', ...a),
-    error: (...a) => console.error('[deliverability-guard] ERROR', ...a)
-  };
+  log = { info: (...a) => console.log('[deliverability-guard]', ...a), warn: (...a) => console.warn('[deliverability-guard] WARN', ...a), error: (...a) => console.error('[deliverability-guard] ERROR', ...a) };
 }
 
 function pg(sql) {
@@ -40,7 +36,7 @@ function pg(sql) {
 function esc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/'/g, "''")}'`; }
 
 /**
- * Pause any alias whose sending domain has >bounceThreshold bounces from recipient leads in 7d.
+ * Pause any alias whose sending domain has >BOUNCE_THRESHOLD bounces from recipient leads in 7d.
  * @param {object} opts
  * @param {number} [opts.bounceThreshold=3] - pause if bounce_count > this value
  * @returns {{ paused: number, aliases: string[], skipped_no_neon: boolean }}
@@ -53,10 +49,10 @@ async function checkAndPauseHighBounceAliases(opts = {}) {
     return { paused: 0, aliases: [], skipped_no_neon: true };
   }
 
-  // Find aliases whose domain appears in recently bounced leads.
-  // Bounce signal: leads.status='bounced' (always present, written by bounce-handler S024).
-  // SPLIT_PART(a.address,'@',2) extracts the sending domain from the alias email address.
-  // Excludes already-paused aliases. COALESCE guards rows predating the paused column.
+  // Find aliases whose domain appears in recent bounced leads.
+  // Bounce signals: leads.status='bounced' OR bounce_events table (if exists).
+  // We use leads.status='bounced' as the primary signal (always present).
+  // SPLIT_PART(a.address,'@',2) extracts the domain from the alias email address.
   const findSql = `
     SELECT a.id::text, a.email, SPLIT_PART(a.address, '@', 2) AS alias_domain,
            COUNT(l.id)::text AS bounce_count
@@ -72,7 +68,7 @@ async function checkAndPauseHighBounceAliases(opts = {}) {
 
   const raw = pg(findSql);
   if (!raw) {
-    log.info('bounce-guard: no data returned (aliases table may be empty or bounced leads are 0)');
+    log.info('bounce-guard: no data returned from Neon (aliases table may be empty or bounced leads are 0)');
     return { paused: 0, aliases: [] };
   }
 
@@ -82,7 +78,7 @@ async function checkAndPauseHighBounceAliases(opts = {}) {
   });
 
   if (rows.length === 0) {
-    log.info(`bounce-guard: all aliases below threshold (>${bounceThreshold} bounces in 7d). No pauses needed.`);
+    log.info(`bounce-guard: all aliases are below bounce threshold (>${bounceThreshold} in 7d). No pauses needed.`);
     return { paused: 0, aliases: [] };
   }
 

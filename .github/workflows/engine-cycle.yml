@@ -26,6 +26,13 @@ jobs:
   cycle:
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    # D3.2: throughput knobs — overridable via workflow_dispatch inputs or ENV_B64 secret.
+    # Defaults match the shell-script fallbacks so behaviour is unchanged until a founder adjusts them.
+    env:
+      VERIFY_AUDITS_BATCH: '20'
+      QUALIFY_BATCH: '50'
+      ENQUEUE_BATCH: '30'
+      STEP_TIMEOUT: '600'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
