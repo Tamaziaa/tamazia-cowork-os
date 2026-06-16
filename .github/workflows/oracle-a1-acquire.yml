@@ -71,6 +71,7 @@ jobs:
 
       - name: Try each Availability Domain
         if: steps.check.outputs.ALREADY_EXISTS == 'false'
+        continue-on-error: true
         env:
           OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
           OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
