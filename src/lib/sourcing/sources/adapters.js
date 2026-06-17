@@ -14,6 +14,26 @@ async function timed(fn, ms){const c=new AbortController();const t=setTimeout(()
 async function getJSON(u,o,ms){try{const r=await timed(s=>fetch(u,{...o,signal:s}),ms||15000);if(!r.ok)return null;return await r.json();}catch(_){return null;}}
 function rootDomain(u){try{return new URL(u.startsWith('http')?u:'https://'+u).hostname.replace(/^www\./,'');}catch{return '';}}
 let _serpClient=null; try { _serpClient=require('../../scraping/serp-client.js'); } catch(_e){}
+// SOURCE-side junk-name gate (B-gap #1): the serp_top + maps adapters used to store a raw SERP title
+// (first segment before |/-/–/·) as `company`, so listicles / geo phrases / "Price List" etc. became
+// company names. Run the same pure rejector the enrich path uses (no regex duplication) at the write
+// site: junk title -> company:'' + name_status:'unverified' (enrich's resolveName resolves it later,
+// never fabricating); clean title -> the normalised trading name. resolveName stays the 2nd defence.
+let _looksLikeJunkTitle=null, _normaliseName=null;
+try { ({ looksLikeJunkTitle:_looksLikeJunkTitle, normaliseName:_normaliseName } = require('../resolve-name.js')); } catch(_e){}
+function cleanTitleName(title, domain){
+  // Fail-open: if the resolver module is unavailable, fall back to the legacy first-segment split.
+  if (!_looksLikeJunkTitle || !_normaliseName) {
+    return { company: (title||'').split(/[|\-–·]/)[0].trim(), name_status: 'raw' };
+  }
+  if (!_looksLikeJunkTitle(title, { domain })) {
+    // Kept by the gate. r.name holds the cleaned candidate even on a 'single_word' verdict, which is
+    // the legal-suffix-rescue case ("Macfarlanes LLP" -> "Macfarlanes"), so keep the real trading name.
+    const r = _normaliseName(title, { domain });
+    if (r.name) return { company: r.name, name_status: 'clean' };
+  }
+  return { company: '', name_status: 'unverified' };   // junk -> no raw title; enrich resolves later
+}
 const SECTOR_TERMS = ['law firm','solicitors','dental clinic','aesthetic clinic','private clinic','estate agents','property developer','luxury hotel','fine dining','wealth management','financial advisers','accountants','cosmetic surgery'];
 // [city, country]; country names map to gl codes in serp-client (unmapped fail-open to 'gb').
 // Expanded EU coverage so the served EU region is actually sourced (was ~0.7% of leads).
@@ -40,9 +60,10 @@ const serp_top = {
         let d = null; try { d = await _serpClient.search(`${term} ${city}`, country, 20); } catch (_e) {}
         for (const o of ((d && d.organic) || [])) {
           const dom = o.domain || rootDomain(o.url || o.link || ''); if (!dom) continue;
-          out.push({ domain: dom, company: (o.title || '').split(/[|\-–·]/)[0].trim(), country, title: o.title, snippet: o.snippet || '', adText: '', adRunner: false, platform: 'google-organic', source: 'serp-top', permalink: o.url || o.link || '' });
+          const nm = cleanTitleName(o.title, dom);   // reject junk SERP titles at the write site
+          out.push({ domain: dom, company: nm.company, name_status: nm.name_status, country, title: o.title, snippet: o.snippet || '', adText: '', adRunner: false, platform: 'google-organic', source: 'serp-top', permalink: o.url || o.link || '' });
         }
-        for (const a of ((d && d.ads) || [])) { const dom = a.domain || rootDomain(a.url || a.link || ''); if (dom) out.push({ domain: dom, company: (a.title || '').trim(), country, title: a.title, snippet: '', adText: a.title || '', adRunner: true, platform: 'google-ads', source: 'serp-top', permalink: a.url || a.link || '' }); }
+        for (const a of ((d && d.ads) || [])) { const dom = a.domain || rootDomain(a.url || a.link || ''); if (dom) { const nm = cleanTitleName(a.title, dom); out.push({ domain: dom, company: nm.company, name_status: nm.name_status, country, title: a.title, snippet: '', adText: a.title || '', adRunner: true, platform: 'google-ads', source: 'serp-top', permalink: a.url || a.link || '' }); } }
       }
     }
     return out;
@@ -222,7 +243,8 @@ const maps = {
         let d = null; try { d = await _serpClient.search(`${term} in ${city}`, country, 15); } catch (_e) {}
         for (const o of ((d && d.organic) || [])) {
           const dom = o.domain || rootDomain(o.url || ''); if (!dom || seen.has(dom)) continue; if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(dom) || dom.length > 60) continue; seen.add(dom);
-          out.push({ domain: dom, company: (o.title || '').split(/[|\-–·]/)[0].trim(), country, title: o.title || '', snippet: term + ' · ' + city, adText: '', adRunner: false, platform: 'google-maps', source: 'maps', permalink: o.url || '' });
+          const nm = cleanTitleName(o.title, dom);   // reject junk SERP titles at the write site
+          out.push({ domain: dom, company: nm.company, name_status: nm.name_status, country, title: o.title || '', snippet: term + ' · ' + city, adText: '', adRunner: false, platform: 'google-maps', source: 'maps', permalink: o.url || '' });
         }
       }
     }
