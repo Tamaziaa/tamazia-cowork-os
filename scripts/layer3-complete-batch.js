@@ -292,6 +292,9 @@ function runMint(limit) {
   const before = countNeedingMint();
   try { execFileSync('node', [path.join(ROOT, 'scripts', 'enqueue-leads.js'), String(Math.max(1, limit))], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }); } catch (_e) {}
   try { execFileSync('node', [path.join(ROOT, 'scripts', 'mint-worker.js'), '--once'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); } catch (_e) {}
+  // After minting, verify the freshly-minted audit URLs so audit_verified=TRUE before the clear step (d).
+  // mintCap=200 covers the full batch; fail-open so a verify hiccup never blocks clearing.
+  try { execFileSync('node', [path.join(ROOT, 'scripts', 'verify-audits.js'), '200'], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }); } catch (_e) {}
   const after = countNeedingMint();
   return { minted: Math.max(0, before - after), wouldMint: before };
 }
