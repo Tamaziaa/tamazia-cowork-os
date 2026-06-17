@@ -29,6 +29,7 @@ Run:  python3 server.py        (stdio transport; launched by the MCP client)
 """
 
 import base64
+import io
 import json
 import os
 import re
@@ -39,6 +40,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -1303,6 +1305,313 @@ def notion_update_cockpit(message) -> str:
 
 
 # ===========================================================================
+# HEAL TOOLS (D5.9) — the self-healing nerve center. READ-ONLY by default:
+# failing_workflows / diagnose_run / gap_scan only OBSERVE (GitHub REST GETs +
+# Neon SELECTs). retry_workflow is the ONLY mutating heal tool, and it is gated
+# by a closed allow-list of safe, idempotent, NON-SEND workflows (send/mystrika
+# can never be retried from here). Every tool is fail-soft (returns a compact
+# JSON string, never raises out of the dispatcher) and never prints a secret.
+#
+# These wrap the exact GitHub REST + log-grep path that was done by hand all
+# session (list failed runs -> pull the logs zip -> grep the real error), so the
+# capability is now a first-class, repeatable tool instead of an ad-hoc curl.
+# ===========================================================================
+
+# A GitHub API GET helper, mirroring _gh_dispatch's auth/headers but for reads.
+# Returns (parsed_json, None) on success or (None, error_string) on any failure.
+def _gh_get(path, accept="application/vnd.github+json", raw=False):
+    """GET https://api.github.com/<path>. Fail-soft: (data, None) | (None, err).
+
+    `path` is everything after the api host (it may start with '/repos/...'). When
+    raw=True the response body bytes are returned unparsed (used for the logs zip).
+    The token value is never included in any returned string.
+    """
+    tok = _gh_token()
+    if not tok:
+        return None, "GH_TOKEN / GITHUB_TOKEN not set"
+    url = "https://api.github.com" + (path if path.startswith("/") else "/" + path)
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": "Bearer " + tok,
+                "Accept": accept,
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "tamazia-ops-mcp",
+            },
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=40) as r:
+            body = r.read()
+        if raw:
+            return body, None
+        return json.loads(body.decode("utf-8", "ignore")), None
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = " - " + e.read().decode("utf-8", "ignore")[:140]
+        except Exception:
+            pass
+        return None, "HTTP " + str(e.code) + detail
+    except Exception as e:
+        return None, str(e)[:160]
+
+
+# ===========================================================================
+# HEAL TOOL 1: failing_workflows
+# ===========================================================================
+def failing_workflows(limit: int = 12) -> str:
+    """List the most recent FAILED GitHub Actions runs across the engine repo.
+
+    Read-only GET /repos/{repo}/actions/runs?status=failure. Returns a compact JSON
+    string: {"repo":..., "count":N, "runs":[{name, conclusion, run_id, branch,
+    created_at, workflow_file, html_url}, ...]}. `limit` clamped 1..30 (default 12).
+    Fail-soft: returns {"error": "..."} (never a secret) if the API is unreachable.
+    """
+    try:
+        n = max(1, min(int(limit), 30))
+    except (TypeError, ValueError):
+        n = 12
+    data, err = _gh_get(
+        "/repos/" + GH_REPO + "/actions/runs?status=failure&per_page=" + str(n)
+    )
+    if err:
+        return json.dumps({"tool": "failing_workflows", "error": err})
+    runs = (data or {}).get("workflow_runs", []) or []
+    out = []
+    for r in runs[:n]:
+        wf_path = r.get("path") or ""
+        wf_file = wf_path.split("/")[-1] if wf_path else ""
+        out.append({
+            "name": r.get("name"),
+            "conclusion": r.get("conclusion"),
+            "run_id": r.get("id"),
+            "branch": r.get("head_branch"),
+            "created_at": r.get("created_at"),
+            "workflow_file": wf_file,
+            "html_url": r.get("html_url"),
+        })
+    return json.dumps({
+        "tool": "failing_workflows",
+        "repo": GH_REPO,
+        "count": len(out),
+        "runs": out,
+    }, separators=(",", ":"))
+
+
+# ===========================================================================
+# HEAL TOOL 2: diagnose_run
+# ===========================================================================
+# Lines that carry no diagnostic signal even though they match the error regex
+# (the safeguard prompt text, instructional comments echoed into logs, etc.).
+_DIAGNOSE_NOISE = re.compile(
+    r"(errors actually exist|If you find|Record with:|--clear-audit|"
+    r"\"prompt\"|the named competitors|SYSTEMIC engine gap)", re.I
+)
+# A shell/script comment echoed into the log (starts with '#' but is NOT a GitHub
+# Actions '##[...]' workflow command). These often contain words like "exit code"
+# in prose and would otherwise masquerade as the real failure line, so drop them.
+_COMMENT_LINE = re.compile(r"^#(?!#\[)")
+# What counts as a real failure line. Ordered so the dispatcher can also surface
+# the single most useful "headline" (an ##[error] / exit-code line) first.
+_DIAGNOSE_PAT = re.compile(
+    r"(##\[error\]|\bexit code\b|traceback|\bdenied\b|not found|\b401\b|\b403\b|"
+    r"\bfatal\b|\berror:|\bException\b|Process completed with exit code [1-9])", re.I
+)
+# Strip a leading ISO-ish GitHub log timestamp and any ANSI colour escapes so the
+# returned error lines are clean and de-duplicate properly.
+_TS_PREFIX = re.compile(r"^\d{4}-\d\d-\d\dT[\d:.]+Z\s")
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def diagnose_run(run_id, max_lines: int = 15) -> str:
+    """Download a run's logs zip, unzip in-memory, return the top distinct error lines.
+
+    THIS is the capability used by hand all session: GET the logs zip for {run_id},
+    unzip it with the stdlib zipfile (no temp files), grep every member for the real
+    error lines (##[error] / exit code / traceback / denied / 401 / not found / ...),
+    drop known prompt/instruction noise, strip timestamps + ANSI colour, de-dupe, and
+    return the top ~`max_lines` distinct lines plus a single best 'headline'.
+
+    Read-only. Returns a compact JSON string {"run_id":..., "name":..., "conclusion":
+    ..., "headline":..., "errors":[...]}. Fail-soft: {"error": "..."} on any failure.
+    Note: the GitHub logs endpoint 302-redirects to signed blob storage; urllib's
+    default redirect handling drops the Authorization header on the cross-host hop,
+    which is exactly what that storage requires, so this works without extra handling.
+    """
+    rid = str(run_id or "").strip()
+    if not rid.isdigit():
+        return json.dumps({"tool": "diagnose_run",
+                           "error": "invalid run_id (expected a numeric Actions run id)"})
+    # Fetch run metadata first (name/conclusion) — nice context, and confirms the id.
+    meta, merr = _gh_get("/repos/" + GH_REPO + "/actions/runs/" + rid)
+    name = (meta or {}).get("name") if not merr else None
+    conclusion = (meta or {}).get("conclusion") if not merr else None
+    raw, err = _gh_get(
+        "/repos/" + GH_REPO + "/actions/runs/" + rid + "/logs", raw=True
+    )
+    if err:
+        return json.dumps({"tool": "diagnose_run", "run_id": rid, "name": name,
+                           "conclusion": conclusion, "error": "logs: " + err})
+    try:
+        n = max(1, min(int(max_lines), 40))
+    except (TypeError, ValueError):
+        n = 15
+    seen = []
+    headline = None
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(raw))
+        for member in zf.namelist():
+            try:
+                txt = zf.read(member).decode("utf-8", "ignore")
+            except Exception:
+                continue
+            for line in txt.splitlines():
+                s = _ANSI.sub("", _TS_PREFIX.sub("", line)).strip()
+                if not s or len(s) < 4:
+                    continue
+                if _DIAGNOSE_NOISE.search(s) or _COMMENT_LINE.search(s):
+                    continue
+                if _DIAGNOSE_PAT.search(s):
+                    s = s[:240]
+                    if s not in seen:
+                        seen.append(s)
+                    # Prefer a real GitHub Actions ##[error] line as the headline;
+                    # fall back to a bare exit-code line only if no ##[error] is seen.
+                    if re.search(r"##\[error\]", s, re.I):
+                        if headline is None or not re.search(
+                            r"##\[error\]", headline, re.I
+                        ):
+                            headline = s
+                    elif headline is None and re.search(
+                        r"exit code [1-9]", s, re.I
+                    ):
+                        headline = s
+    except zipfile.BadZipFile:
+        return json.dumps({"tool": "diagnose_run", "run_id": rid,
+                           "error": "logs body was not a valid zip"})
+    if headline is None and seen:
+        headline = seen[0]
+    return json.dumps({
+        "tool": "diagnose_run",
+        "run_id": rid,
+        "name": name,
+        "conclusion": conclusion,
+        "headline": headline,
+        "errors": seen[:n],
+    }, separators=(",", ":"))
+
+
+# ===========================================================================
+# HEAL TOOL 3: retry_workflow
+# ===========================================================================
+# The ONLY workflows the retry-once healer may re-run. A CLOSED allow-list of
+# safe, idempotent, NON-SEND jobs (the exact set named in the task). send/mystrika
+# orchestration is deliberately absent and can never be retried from here. Keys are
+# the human names accepted as the `workflow_file` argument (with or without .yml);
+# values are the .github/workflows/<file> GitHub expects.
+RETRY_SAFE_WORKFLOWS = {
+    "gen-state": "gen-state.yml",
+    "match-inbound-replies": "match-inbound-replies.yml",
+    "notion-sync": "notion-sync.yml",
+    "capacity-report": "capacity-report.yml",
+    "engine-cycle": "engine-cycle.yml",
+    "scrapers": "scrapers.yml",
+    "source-registers": "source-registers.yml",
+    "llm-rescue-backlog": "llm-rescue-backlog.yml",
+    "backlog-burst": "backlog-burst.yml",
+    "layer3-complete": "layer3-complete.yml",
+}
+
+
+def retry_workflow(workflow_file, dry: bool = False) -> str:
+    """Re-run a workflow on main via workflow_dispatch — the 'retry-once' healer.
+
+    GUARD: refuses any workflow NOT in RETRY_SAFE_WORKFLOWS (a closed set of safe,
+    idempotent, NON-SEND jobs). send/mystrika are never retryable from here. Accepts
+    either the human name ('gen-state') or the file ('gen-state.yml'). Uses the same
+    GH_TOKEN workflow_dispatch path (HTTP 204 = dispatched). Fail-soft JSON string;
+    pass dry=true to preview without dispatching.
+    """
+    key = str(workflow_file or "").strip()
+    if key.endswith(".yml"):
+        key = key[:-4]
+    wf = RETRY_SAFE_WORKFLOWS.get(key)
+    if not wf:
+        return json.dumps({
+            "tool": "retry_workflow",
+            "refused": True,
+            "reason": "'" + str(workflow_file) + "' is not in the retry allow-list",
+            "allowed": sorted(RETRY_SAFE_WORKFLOWS.keys()),
+        })
+    if dry:
+        return json.dumps({"tool": "retry_workflow", "dry": True,
+                           "would_dispatch": wf, "repo": GH_REPO, "ref": "main"})
+    res = _gh_dispatch(wf, ref="main", inputs=None)
+    ok = res == "dispatched"
+    return json.dumps({
+        "tool": "retry_workflow",
+        "workflow": wf,
+        "repo": GH_REPO,
+        "ref": "main",
+        "dispatched": ok,
+        "detail": ("re-run requested" if ok else res),
+    }, separators=(",", ":"))
+
+
+# ===========================================================================
+# HEAL TOOL 4: gap_scan
+# ===========================================================================
+# A live mini gap-ledger: a handful of canned Neon integrity SELECTs, each a
+# single COUNT, run read-only and returned as numbers. Every query is fail-soft
+# on its own (a missing column or table yields "err" for that row, not a crash),
+# so the ledger always returns something even if the schema drifts.
+_GAP_QUERIES = [
+    ("claude_cleared",
+     "SELECT count(*) c FROM leads WHERE COALESCE(claude_cleared,false)=true"),
+    ("qa_status_null",
+     "SELECT count(*) c FROM leads WHERE qa_status IS NULL"),
+    ("sends_lead_id_null",
+     "SELECT count(*) c FROM sends WHERE lead_id IS NULL"),
+    ("leads_over_4_emails",
+     "SELECT count(*) c FROM leads WHERE jsonb_typeof(emails)='array' "
+     "AND jsonb_array_length(emails) > 4"),
+    ("entity_type_null",
+     "SELECT count(*) c FROM leads WHERE entity_type IS NULL"),
+    ("stuck_sourced_enriched_7d",
+     "SELECT count(*) c FROM leads WHERE lifecycle_stage IN ('sourced','enriched') "
+     "AND created_at < now() - interval '7 days'"),
+]
+
+
+def gap_scan() -> str:
+    """Run the canned Neon integrity COUNTs and return a live mini gap-ledger.
+
+    Read-only. Each metric is a single COUNT, run independently and fail-soft (a
+    metric that errors reports "err" rather than aborting the scan). Returns a
+    compact JSON string {"tool":"gap_scan","gaps":{metric: n, ...}}. No args.
+    """
+    gaps = {}
+    reachable = True
+    for label, q in _GAP_QUERIES:
+        try:
+            v = _scalar(q, default=None)
+            gaps[label] = int(v) if v is not None else None
+        except NeonError as e:
+            gaps[label] = "err"
+            # If Neon itself is down the first failure flips this; later rows still
+            # try (cheap) so a single bad query doesn't masquerade as a total outage.
+            if "NEON_URL not found" in str(e):
+                reachable = False
+        except (TypeError, ValueError):
+            gaps[label] = "err"
+    out = {"tool": "gap_scan", "gaps": gaps}
+    if not reachable:
+        out["error"] = "NEON_URL not found in env or engine .env"
+    return json.dumps(out, separators=(",", ":"))
+
+
+# ===========================================================================
 # GOOGLE API helpers — GSC + GA4 via service account (stdlib-only).
 # Signing uses `cryptography` if installed, else falls back to openssl subprocess.
 # Token is cached in-process (1h lifetime). Fails soft: returns string, never raises.
@@ -1863,6 +2172,91 @@ TOOLS = {
             required=["message"],
         ),
     },
+    # ----- HEAL TOOLS (D5.9) — self-healing nerve center -----------------------
+    "failing_workflows": {
+        "fn": failing_workflows,
+        "description": (
+            "List the most recent FAILED GitHub Actions runs across the engine repo "
+            "(name, conclusion, run_id, branch, workflow_file, html_url) via the GitHub "
+            "REST API. Read-only. Optional `limit` clamped 1..30 (default 12). Returns "
+            "compact JSON. Pair run_id with diagnose_run to read the real error."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "limit": {
+                    "type": "integer",
+                    "description": "Max failed runs to return, clamped 1..30 (default 12).",
+                    "minimum": 1,
+                    "maximum": 30,
+                    "default": 12,
+                }
+            },
+        ),
+    },
+    "diagnose_run": {
+        "fn": diagnose_run,
+        "description": (
+            "Download a failed run's logs zip, unzip in-memory, and return the top "
+            "distinct REAL error lines (##[error] / exit code / traceback / denied / "
+            "401 / not found ...) plus a single best 'headline'. Read-only. Required "
+            "`run_id` (numeric, from failing_workflows). Optional `max_lines` 1..40 "
+            "(default 15). Returns compact JSON. This is the session-long manual "
+            "log-grep capability made a first-class tool."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "run_id": {
+                    "type": "integer",
+                    "description": "GitHub Actions run id to diagnose (from failing_workflows).",
+                },
+                "max_lines": {
+                    "type": "integer",
+                    "description": "Max distinct error lines to return, 1..40 (default 15).",
+                    "minimum": 1,
+                    "maximum": 40,
+                    "default": 15,
+                },
+            },
+            required=["run_id"],
+        ),
+    },
+    "retry_workflow": {
+        "fn": retry_workflow,
+        "description": (
+            "Re-run a workflow on main via workflow_dispatch — the 'retry-once' healer. "
+            "GUARDED: only an allow-list of safe, idempotent, NON-SEND workflows may be "
+            "retried (gen-state, match-inbound-replies, notion-sync, capacity-report, "
+            "engine-cycle, scrapers, source-registers, llm-rescue-backlog, backlog-burst, "
+            "layer3-complete). Never retries send/mystrika. Accepts the name or the .yml. "
+            "Returns compact JSON; pass dry=true to preview."
+        ),
+        "inputSchema": _schema(
+            properties={
+                "workflow_file": {
+                    "type": "string",
+                    "description": (
+                        "Workflow name or file to retry (must be in the retry allow-list)."
+                    ),
+                },
+                "dry": {
+                    "type": "boolean",
+                    "description": "If true, preview the dispatch without executing.",
+                    "default": False,
+                },
+            },
+            required=["workflow_file"],
+        ),
+    },
+    "gap_scan": {
+        "fn": gap_scan,
+        "description": (
+            "Live mini gap-ledger: runs canned Neon integrity COUNTs (claude_cleared, "
+            "qa_status NULL, sends.lead_id NULL, leads with >4 emails, entity_type NULL, "
+            "leads stuck in sourced/enriched >7d) and returns the numbers as compact JSON. "
+            "Read-only, no args, fail-soft per-metric."
+        ),
+        "inputSchema": _schema(),
+    },
 }
 
 
@@ -1883,6 +2277,10 @@ _TOOL_ARGS = {
     "neon_query": ("sql", "limit"),
     "get_lead": ("query",),
     "notion_update_cockpit": ("message",),
+    # D5.9 heal tools (gap_scan takes no args, so it is intentionally absent)
+    "failing_workflows": ("limit",),
+    "diagnose_run": ("run_id", "max_lines"),
+    "retry_workflow": ("workflow_file", "dry"),
 }
 
 
