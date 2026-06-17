@@ -42,6 +42,11 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # id-token: write is REQUIRED by anthropics/claude-code-action@v1 — it mints a short-lived OIDC token to
+  # authenticate the Claude Code session. Without it the action dies with: "Could not fetch an OIDC token. Did
+  # you remember to add `id-token: write`?" (the ACTIONS_ID_TOKEN_REQUEST_URL env var is never injected) →
+  # exit 1, so the entire twice-daily run goes RED. This was the actual root cause of the recent failures.
+  id-token: write
 
 # Share the heavy-DB-work group: a clearance wave must never overlap a v3-rerun / backlog-burst / nightly-workers
 # writer that rewrites icp_tier / quality_fit / lifecycle on the same leads. cancel-in-progress:false so a wave
@@ -60,10 +65,13 @@ jobs:
     # string 'true'/'false'.
     env:
       HAS_OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+      # GitHub forced JS actions to Node 24 on 2026-06-16; pin so checkout/setup-* never run on EOL Node 20
+      # (the source of the recurring startup exit-127 family across the engine workflows).
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: "20" }
+        with: { node-version: "24" }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: npm install --no-audit --no-fund || npm install || true
@@ -131,3 +139,12 @@ jobs:
 
             Add `--dry` to every batch command if the dry flag above is "true".
             The batch tool writes ONLY leads.claude_* columns. Touch nothing else.
+
+      # Self-heal: if any step above failed, post the REAL error to Telegram + Slack so the failure is
+      # never silent. Reads creds from .env (decoded from ENV_B64 above). Fail-open + `|| true` — the
+      # notifier can never itself fail the job.
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/notify-workflow-failure.sh "${{ github.workflow }}" "${{ github.run_id }}" || true

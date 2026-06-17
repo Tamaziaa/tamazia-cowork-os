@@ -37,7 +37,23 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: python -m pip install --quiet -r requirements.txt
       - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
-      - name: Match reply -> lead (no-send; heartbeat-wrapped for engine_runs visibility)
+      - name: Match reply -> lead (no-send; heartbeat-wrapped, retry-once on transient failure)
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          node scripts/heartbeat.js wrap match-inbound-replies -- node scripts/match-inbound-replies.js ${{ github.event.inputs.limit }} || node scripts/match-inbound-replies.js ${{ github.event.inputs.limit }} || true
+          run_once() { node scripts/heartbeat.js wrap match-inbound-replies -- node scripts/match-inbound-replies.js ${{ github.event.inputs.limit }} || node scripts/match-inbound-replies.js ${{ github.event.inputs.limit }}; }
+          # Retry-once on a transient Neon cold-start / HTTP blip. Previously this ended in `|| true`, which
+          # GREENED every failure and hid real breakage; now it retries, then fails honestly so the
+          # `if: failure()` notifier below fires with the real error. The matcher is idempotent (matched rows
+          # are skipped) so a second attempt is safe.
+          if ! run_once; then
+            echo "match-inbound-replies: first attempt failed — retrying once after 10s…" >&2
+            sleep 10
+            run_once
+          fi
+
+      # Self-heal: post the REAL error to Telegram + Slack if the match step failed. Fail-open + `|| true`.
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/notify-workflow-failure.sh "${{ github.workflow }}" "${{ github.run_id }}" || true
