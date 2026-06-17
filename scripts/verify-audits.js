@@ -42,7 +42,10 @@ async function main() {
       if (!v.ok && domain && mintsUsed < mintCap) {
         mintsUsed++;
         try {
-          const b = await auditBuilder.build({ lead_id: Number(id), domain, sector, country, company, env: process.env });
+          // 45-second timeout per build so one unresponsive site cannot block the whole batch
+          const BUILD_TIMEOUT_MS = 45000;
+          const buildPromise = auditBuilder.build({ lead_id: Number(id), domain, sector, country, company, env: process.env });
+          const b = await Promise.race([buildPromise, new Promise((_, rej) => setTimeout(() => rej(new Error('build timeout')), BUILD_TIMEOUT_MS))]);
           if (b && b.signed_url) {
             url = b.signed_url;
             pg(`UPDATE leads SET audit_url=${esc(url)}, audit_slug=${esc(b.slug)}, audit_hash=${esc(b.hash)} WHERE id=${id}`);
