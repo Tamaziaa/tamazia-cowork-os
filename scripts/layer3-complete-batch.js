@@ -71,7 +71,7 @@ const FORCE = has('force');
 // parseInt('0',10)||24 = 24 (falsy 0 falls through to default) — use explicit isFinite guard so 0 is honoured.
 const RECHECK_HOURS = (() => { const v = parseInt(arg('recheck-hours', '24'), 10); return Number.isFinite(v) ? Math.max(0, v) : 24; })();
 // --max default 400, clamped to the [300,500] design range.
-const MAX = Math.min(500, Math.max(300, parseInt(arg('max', '400'), 10) || 400));
+const MAX = Math.min(500, Math.max(50, parseInt(arg('max', '400'), 10) || 400));
 const BATCH = arg('batch', 'layer3-' + new Date().toISOString().slice(0, 10));
 
 // junk-company detector (mirrors the spirit of llm-rescue's looksLikePerson NONPERSON guard, but for company strings
@@ -441,6 +441,23 @@ function notify(summaryLine) {
   try {
     if (APPLY) ensureLayer3Column();
     const hasL3Col = _l3ColReady || layer3ColExists();
+
+    // ---- GLOBAL PRE-CLEAR: runs FIRST, before the main loop, so a slow/timeout main loop never blocks clearing.
+    // This clears ALL qualified+verified+uncleared leads across the entire DB (not just the current batch).
+    // Idempotent: already-cleared leads are skipped by the inner predicate.
+    const globalPreClrRaw = pgSafe(`SELECT id FROM leads
+        WHERE quality_fit=TRUE AND COALESCE(lifecycle_stage,'')='qualified'
+          AND COALESCE(audit_verified,FALSE)=TRUE AND governor_released_at IS NOT NULL
+          AND COALESCE(claude_cleared,FALSE)=FALSE`);
+    const globalPreClrIds = (globalPreClrRaw && !globalPreClrRaw._err)
+      ? String(globalPreClrRaw).split('\n').map(s => s.trim()).filter(Boolean)
+      : [];
+    if (globalPreClrIds.length) {
+      const globalPreClr = clearEligibleIds(globalPreClrIds);
+      counts.cleared += globalPreClr.cleared;
+      if (DRY) console.log(`[layer3] global-pre-clear (DRY): ${globalPreClrIds.length} candidate(s) already send-gate-eligible.`);
+      else console.log(`[layer3] global-pre-clear: cleared ${globalPreClr.cleared}/${globalPreClrIds.length} already-verified lead(s) globally (before main loop).`);
+    }
 
     // ---- PULL the batch ----
     const raw = pgSafe(pullSql(MAX, hasL3Col));
