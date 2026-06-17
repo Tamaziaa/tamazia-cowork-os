@@ -1,0 +1,83 @@
+# Layer-3 complete batch · the NEW "third layer": Neon->Neon completion sweep (300-500 leads/run).
+# For every Tier-2/qualified uncleared lead in the batch it: rechecks every key column (deterministic fixes +
+# flags), attempts a Tier-2->Tier-1 lift (the canonical deterministic gate keeps final say — never fabricated),
+# mints the audit BEFORE any Touch-1, sets claude_cleared for fully send-ready leads, updates Notion tags, and
+# posts ONE real summary to Telegram + Slack.
+#
+# SEND stays OFF: this only makes leads ELIGIBLE beneath the global SEND_ENABLED master gate (never touched here).
+# Idempotent + additive. DEFAULT IS DRY on cron (proves itself first); dispatch with apply=1 for real runs.
+#
+# RACE-GUARD: the script registers an engine_runs heartbeat AND defers if a heavy re-tier writer
+# (v3-rerun/v3-validate/backlog-burst/nightly-workers) is live (heartbeat.js active-writer), so it never collides
+# with engine-cycle/backlog-burst on the tier/lifecycle/sector rows. The cron times below are ALSO staggered well
+# clear of engine-cycle (:00/:30), llm-rescue-backlog (02:23/14:23 UTC), nightly-workers (02:30 UTC) and
+# claude-safeguard (06:00/11:00 UTC) — belt and braces on top of the data-layer guard.
+name: Layer-3 complete batch (Neon to Neon recheck + lift + mint + clear, no-send)
+
+on:
+  schedule:
+    # 08:47 + 20:47 UTC — two sweeps/day, off the top/bottom of the hour and clear of every heavy writer/cron above.
+    - cron: "47 8,20 * * *"
+  workflow_dispatch:
+    inputs:
+      max:
+        description: 'batch size (clamped to 300-500)'
+        default: '400'
+      apply:
+        description: 'set to 1 to WRITE (default DRY / no writes)'
+        default: '0'
+      recheck_hours:
+        description: 'skip leads Layer-3 checked within this many hours (idempotency window)'
+        default: '24'
+      force:
+        description: 'set to 1 to ignore the recheck window (re-process everything)'
+        default: '0'
+
+# Share the heavy-writer concurrency group so a real (apply) run never overlaps the other re-tier writers, AND so
+# back-to-back Layer-3 runs serialise. cancel-in-progress:false = queue, never cancel (no founder-alarming cancels).
+concurrency:
+  group: engine-db-work
+  cancel-in-progress: false
+
+jobs:
+  layer3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Node deps
+        run: npm install --omit=dev || npm install || true
+      - name: Install Python deps (pg8000 for DB shim)
+        run: python -m pip install --quiet -r requirements.txt
+      - name: Materialise .env from secret
+        run: |
+          echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Run Layer-3 complete batch
+        continue-on-error: true
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # cron default => DRY (no apply flag). workflow_dispatch with apply=1 => real write run.
+          MAX="${{ github.event.inputs.max || '400' }}"
+          RECHECK="${{ github.event.inputs.recheck_hours || '24' }}"
+          APPLY_FLAG=""
+          [ "${{ github.event.inputs.apply || '0' }}" = "1" ] && APPLY_FLAG="--apply"
+          FORCE_FLAG=""
+          [ "${{ github.event.inputs.force || '0' }}" = "1" ] && FORCE_FLAG="--force"
+          echo "[layer3-wf] max=$MAX recheck=$RECHECK apply='${APPLY_FLAG:-(dry)}' force='${FORCE_FLAG:-no}'"
+          node scripts/layer3-complete-batch.js --max "$MAX" --recheck-hours "$RECHECK" $APPLY_FLAG $FORCE_FLAG
+      - name: Alert on failure
+        if: failure()
+        run: |
+          MSG="🔴 GitHub Actions Layer-3 complete batch failed (run ${{ github.run_id }}). Check the Actions tab."
+          set +e
+          source .env 2>/dev/null
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            curl -s --max-time 15 -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+              -d chat_id="$TELEGRAM_CHAT_ID" -d text="$MSG" >/dev/null || true
+          fi
