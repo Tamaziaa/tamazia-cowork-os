@@ -147,7 +147,8 @@ function pullSql(n, hasL3Col) {
         l.contact_email, l.primary_email, l.all_emails,
         l.icp_tier, l.quality_fit, l.lifecycle_stage, l.status,
         l.consent_required, l.audit_verified, l.governor_released_at,
-        l.claude_cleared, l.layer3_checked_at, l.qa_checked_at, l.reviewed_at
+        l.claude_cleared, l.layer3_checked_at, l.qa_checked_at, l.reviewed_at,
+        l.qa_status
       FROM leads l
       WHERE (COALESCE(l.icp_tier,2) = 2 OR COALESCE(l.lifecycle_stage,'') = 'qualified')
         AND COALESCE(l.claude_cleared, FALSE) = FALSE
@@ -268,6 +269,10 @@ function flushStamps() {
 async function liftLead(lead) {
   // LLM lift obeys the SAME kill switch llm-rescue obeys. If off, skip the lift (recheck/mint/clear still run).
   if (!rescue.isEnabled()) return { attempted: false, reason: 'llm_qa_disabled' };
+  // Skip leads that have already been LLM-evaluated (qa_checked_at set = LLM ran a verdict). Layer-3's job is
+  // integrity-recheck + mint + clear; llm-rescue-backlog is responsible for LLM evaluation. Re-calling the LLM
+  // on 400 already-checked leads wastes ~25 free-quota credits/lead and easily exhausts the 60-min job timeout.
+  if (!FORCE && lead.qa_checked_at != null) return { attempted: false, reason: 'already_qa_checked' };
   let res;
   try { res = await rescue.rescueLead(lead, 'layer3'); }
   catch (e) { return { attempted: true, error: e.message }; }
