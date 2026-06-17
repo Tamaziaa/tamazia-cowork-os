@@ -1,0 +1,100 @@
+{
+  "version": "v1-2026-06-17",
+  "purpose": "The 20x20 smatleads.io GBP (Google Maps) search run-plan — the PRIORITY 'goldmine' sourcing channel. Maps the canonical 20 sectors (config/sector-grid.json) to smatleads GBP 'Type' categories x a list of UK cities x a default radius. The future n8n flow / browser-bot iterates this list, calls the smatleads GBP search per (sector_type, city), exports the result, and feeds it to scripts/import-smatleads.js (which dedups on placeId/domain and tiers each lead via the canonical ICP scorer). Priority sectors (is_priority=true, ranks 1-10) run FIRST.",
+  "_engine_note": "Sector codes are the SAME codes as config/sector-grid.json (LS..PX). gbp_types[] are the literal strings to type into the smatleads GBP 'Business type / category' field (Google Maps category names). The importer derives the real Tier 1/2/3 from each lead's data; this matrix only decides WHAT to search.",
+
+  "smatleads_api": {
+    "_comment": "FOR THE BOT BUILDER — smatleads has 4 search types: GBP (Google Maps, the MAIN one), Bing, LinkedIn Database, Domain Enrichment. This matrix drives GBP. The internal JSON API is faster + richer than the CSV export; prefer it when a JWT is available, else drive the UI and use the CSV export.",
+    "gbp_search": {
+      "method": "POST",
+      "url": "https://backend.smatleads.io/api/smatleads-userend/gbp/search-places",
+      "auth": "Bearer <JWT>  (from the logged-in smatleads session; refresh per smatleads token TTL)",
+      "headers": { "Authorization": "Bearer <JWT>", "Content-Type": "application/json" },
+      "payload_shape": {
+        "query": "<gbp_type> in <city>",
+        "type": "<gbp_type>",
+        "location": "<city>, UK",
+        "radius_km": 10,
+        "_note": "Exact field names may differ slightly in the live payload — capture one real request from the smatleads UI (devtools > Network > search-places) and template query/type/location/radius from it. Keep paging until the result set is exhausted."
+      },
+      "response_object_fields": [
+        "id", "score", "name", "claimed", "rating", "email", "phone", "website",
+        "websiteMessage", "address", "photos", "reviews", "status", "placeId",
+        "openNow", "types[]", "lead_status"
+      ],
+      "dedup_key": "placeId  (-> leads.external_id; domain is the secondary dedup key)",
+      "email_coverage_note": "~45% of GBP rows carry an email — the rest still import and are picked up by the engine's free MX/SMTP verify + own-crawler enrich downstream. No fabrication."
+    },
+    "csv_export": {
+      "headers": ["ID", "Name", "Score", "Rating", "Reviews", "Email", "Phone", "Website", "Address", "Photos", "Status", "Claimed"],
+      "note": "The UI export. scripts/import-smatleads.js auto-detects CSV vs JSON. CSV lacks placeId/types[] so dedup falls back to domain and sector falls back to the --sector override (pass the searched type, e.g. --sector dental)."
+    }
+  },
+
+  "defaults": {
+    "radius_km": 10,
+    "country": "UK",
+    "source": "smatleads",
+    "search_type": "gbp",
+    "priority_first": true,
+    "import_cmd": "node scripts/import-smatleads.js --file <export> --sector <sector_code_or_type> --apply"
+  },
+
+  "cities": [
+    "London", "Birmingham", "Manchester", "Leeds", "Bristol", "Glasgow", "Edinburgh",
+    "Liverpool", "Sheffield", "Newcastle", "Nottingham", "Cardiff", "Belfast",
+    "Leicester", "Brighton", "Cambridge", "Oxford", "Reading", "Southampton", "Aberdeen"
+  ],
+
+  "sectors": [
+    { "code": "LS", "name": "Law Firms & Legal", "priority_rank": 1, "is_priority": true,
+      "gbp_types": ["Solicitor", "Law firm", "Lawyer", "Conveyancer", "Family law attorney", "Immigration lawyer", "Barrister"] },
+    { "code": "HC", "name": "Healthcare & Medical", "priority_rank": 2, "is_priority": true,
+      "gbp_types": ["Private GP", "Medical clinic", "Private hospital", "Physiotherapist", "Fertility clinic", "Consultant", "Diagnostic centre"] },
+    { "code": "AE", "name": "Aesthetics, Cosmetic & Dermatology", "priority_rank": 3, "is_priority": true,
+      "gbp_types": ["Aesthetic clinic", "Medical spa", "Cosmetic surgeon", "Skin care clinic", "Dermatologist", "Hair transplant clinic", "Laser hair removal service"] },
+    { "code": "DN", "name": "Dental", "priority_rank": 4, "is_priority": true,
+      "gbp_types": ["Dentist", "Dental clinic", "Cosmetic dentist", "Dental implants periodontist", "Orthodontist", "Emergency dental service"] },
+    { "code": "FS", "name": "Financial Services", "priority_rank": 5, "is_priority": true,
+      "gbp_types": ["Financial planner", "Financial consultant", "Accountant", "Mortgage broker", "Wealth management service", "Tax consultant", "Investment service"] },
+    { "code": "RE", "name": "Real Estate & Property", "priority_rank": 6, "is_priority": true,
+      "gbp_types": ["Estate agent", "Real estate agency", "Letting agent", "Property management company", "Real estate developer", "Commercial real estate agency"] },
+    { "code": "HO", "name": "Hotels & Hospitality", "priority_rank": 7, "is_priority": true,
+      "gbp_types": ["Hotel", "Boutique hotel", "Resort hotel", "Spa", "Bed & breakfast", "Serviced apartment", "Event venue"] },
+    { "code": "FB", "name": "Restaurants, Bars & F&B", "priority_rank": 8, "is_priority": true,
+      "gbp_types": ["Fine dining restaurant", "Restaurant", "Bar", "Cocktail bar", "Caterer", "Wine bar", "Gastropub"] },
+    { "code": "ED", "name": "Education", "priority_rank": 9, "is_priority": true,
+      "gbp_types": ["Private school", "Independent school", "Tutoring service", "College", "Training provider", "Language school", "Nursery school"] },
+    { "code": "PB", "name": "Professional & B2B Services", "priority_rank": 10, "is_priority": true,
+      "gbp_types": ["Management consultant", "Business consultant", "Marketing agency", "Recruitment agency", "Architect", "Surveyor", "Engineering consultant"] },
+
+    { "code": "CR", "name": "Crypto, Web3 & Digital Assets", "priority_rank": 11, "is_priority": false,
+      "gbp_types": ["Cryptocurrency exchange", "Blockchain company", "Financial technology company"] },
+    { "code": "IN", "name": "Insurance", "priority_rank": 12, "is_priority": false,
+      "gbp_types": ["Insurance agency", "Insurance broker", "Health insurance agency", "Commercial insurance agency"] },
+    { "code": "EC", "name": "E-commerce & Luxury Retail", "priority_rank": 13, "is_priority": false,
+      "gbp_types": ["Jewelry store", "Boutique", "Luxury goods store", "Watch store", "Fashion designer"] },
+    { "code": "AU", "name": "Automotive", "priority_rank": 14, "is_priority": false,
+      "gbp_types": ["Car dealer", "Used car dealer", "Luxury car dealer", "Car leasing service", "Auto repair shop"] },
+    { "code": "WF", "name": "Wellness & Fitness", "priority_rank": 15, "is_priority": false,
+      "gbp_types": ["Gym", "Fitness centre", "Personal trainer", "Yoga studio", "Pilates studio", "Wellness centre"] },
+    { "code": "SU", "name": "CBD, Supplements & Nutraceuticals", "priority_rank": 16, "is_priority": false,
+      "gbp_types": ["Vitamin & supplements store", "Health food store", "CBD store", "Nutritionist"] },
+    { "code": "VT", "name": "Veterinary & Pet Care", "priority_rank": 17, "is_priority": false,
+      "gbp_types": ["Veterinarian", "Veterinary clinic", "Animal hospital", "Pet groomer"] },
+    { "code": "TR", "name": "Travel, Tourism & Experiences", "priority_rank": 18, "is_priority": false,
+      "gbp_types": ["Travel agency", "Tour operator", "Tour agency", "Luxury travel agency"] },
+    { "code": "EN", "name": "Energy, Cleantech & Sustainability", "priority_rank": 19, "is_priority": false,
+      "gbp_types": ["Solar energy company", "Renewable energy company", "Solar panel installer", "Energy consultant"] },
+    { "code": "PX", "name": "Executive & Personal Brand", "priority_rank": 20, "is_priority": false,
+      "gbp_types": ["Business management consultant", "Public speaker", "Life coach", "Executive coach"] }
+  ],
+
+  "run_plan": {
+    "_comment": "Iterate priority sectors first (is_priority=true). For each sector, for each gbp_type, for each city: run a GBP search at radius_km, export, then import. The 20x20 framing = 20 sectors x 20 cities (=400 sector-city searches); each sector additionally fans out across its gbp_types[] for fuller coverage.",
+    "sector_city_combos": 400,
+    "priority_sector_city_combos": 200,
+    "order": "by priority_rank ascending (LS, HC, AE, DN, FS, RE, HO, FB, ED, PB, then 11-20)",
+    "per_search": { "radius_km": 10, "paginate": "until exhausted" }
+  }
+}
