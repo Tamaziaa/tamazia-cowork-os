@@ -464,19 +464,26 @@ function notify(summaryLine) {
       else console.log(`[layer3] apply-review promoted ${promoted} lead(s) (gate re-verified, atomic).`);
     }
 
+    // ---- (c-pre) PRE-CLEAR already-verified leads BEFORE minting so a slow/stuck mint never blocks clearing. ----
+    // Leads with audit_verified=TRUE right now pass the send-gate predicate immediately.
+    const clearCandidates = rows.filter(l => !integrityRecheck(l).flags.length).map(l => l.id);
+    const preClr = clearEligibleIds(clearCandidates);
+    counts.cleared = preClr.cleared;
+    if (DRY) console.log(`[layer3] pre-clear (DRY): ${preClr.eligible.length} lead(s) already send-gate-eligible.`);
+    else if (preClr.cleared > 0) console.log(`[layer3] pre-clear: cleared ${preClr.cleared}/${preClr.eligible.length} already-verified lead(s) before mint.`);
+
     // ---- (c) MINT before Touch-1: ensure every qualified/quality_fit lead has an audit_url. ----
     const mint = runMint(MAX);
     counts.minted = mint.minted;
     if (DRY) console.log(`[layer3] mint (DRY): ${mint.wouldMint} quality_fit lead(s) currently lack a fresh audit (would enqueue+mint).`);
     else console.log(`[layer3] mint: minted ${mint.minted} new audit(s) (${mint.wouldMint} needed before run).`);
 
-    // ---- (d) CLAUDE_CLEARED: clear the send-gate for fully send-ready, unflagged leads in this batch. ----
-    // candidate ids = scanned leads with NO integrity flags. (clearEligibleIds re-restricts to the send-gate set.)
-    const clearCandidates = rows.filter(l => !integrityRecheck(l).flags.length).map(l => l.id);
+    // ---- (d) CLAUDE_CLEARED: clear newly-minted leads after the mint step completes. ----
+    // (clearEligibleIds is idempotent — already-cleared leads are skipped; this second pass catches newly-minted ones.)
     const clr = clearEligibleIds(clearCandidates);
-    counts.cleared = clr.cleared;
-    if (DRY) console.log(`[layer3] clear (DRY): ${clr.eligible.length} lead(s) are send-gate-eligible and would be claude_cleared.`);
-    else console.log(`[layer3] cleared ${clr.cleared}/${clr.eligible.length} send-gate-eligible lead(s).`);
+    counts.cleared += clr.cleared;
+    if (DRY) console.log(`[layer3] clear (DRY): ${clr.eligible.length} newly-minted lead(s) would be claude_cleared.`);
+    else if (clr.cleared > 0) console.log(`[layer3] clear: cleared ${clr.cleared}/${clr.eligible.length} newly-minted lead(s) (post-mint).`);
 
     // ---- SUMMARY line (the ONE real result posted everywhere). lifted reflects gate-verified promotions. ----
     const summary = `Layer-3 batch: scanned ${counts.scanned}, fixed ${counts.fixed}, lifted ${promoted || counts.lifted}->T1, minted ${counts.minted}, cleared ${counts.cleared}, flagged ${counts.flagged}`;
