@@ -137,6 +137,8 @@ function pullSql(n, hasL3Col) {
     ? `COALESCE(l.layer3_checked_at, l.qa_checked_at, l.reviewed_at, '1970-01-01'::timestamptz) ASC`
     : `COALESCE(l.qa_checked_at, l.reviewed_at, '1970-01-01'::timestamptz) ASC`;
   const freshGuard = (FORCE || !hasL3Col) ? '' : `AND (l.layer3_checked_at IS NULL OR l.layer3_checked_at < NOW() - INTERVAL '${RECHECK_HOURS} hours')`;
+  // qualified leads (lifecycle_stage='qualified') are always pulled first — they are send-gate-eligible and must be
+  // processed before the larger Tier-2 backlog, which may push them out of the MAX window.
   return `SELECT to_jsonb(l) FROM leads l
     WHERE (COALESCE(l.icp_tier,2) = 2 OR COALESCE(l.lifecycle_stage,'') = 'qualified')
       AND COALESCE(l.claude_cleared, FALSE) = FALSE
@@ -144,7 +146,7 @@ function pullSql(n, hasL3Col) {
       AND COALESCE(l.status,'') NOT IN ('suppressed','dnc','bounced','duplicate')
       AND COALESCE(l.domain,'') <> ''
       ${freshGuard}
-    ORDER BY ${orderCheck}, l.id ASC
+    ORDER BY CASE WHEN COALESCE(l.lifecycle_stage,'') = 'qualified' THEN 0 ELSE 1 END ASC, ${orderCheck}, l.id ASC
     LIMIT ${Math.max(1, n)}`;
 }
 
