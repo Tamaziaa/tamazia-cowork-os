@@ -139,15 +139,25 @@ function pullSql(n, hasL3Col) {
   const freshGuard = (FORCE || !hasL3Col) ? '' : `AND (l.layer3_checked_at IS NULL OR l.layer3_checked_at < NOW() - INTERVAL '${RECHECK_HOURS} hours')`;
   // qualified leads (lifecycle_stage='qualified') are always pulled first — they are send-gate-eligible and must be
   // processed before the larger Tier-2 backlog, which may push them out of the MAX window.
-  return `SELECT to_jsonb(l) FROM leads l
-    WHERE (COALESCE(l.icp_tier,2) = 2 OR COALESCE(l.lifecycle_stage,'') = 'qualified')
-      AND COALESCE(l.claude_cleared, FALSE) = FALSE
-      AND COALESCE(l.consent_required, FALSE) = FALSE
-      AND COALESCE(l.status,'') NOT IN ('suppressed','dnc','bounced','duplicate')
-      AND COALESCE(l.domain,'') <> ''
-      ${freshGuard}
-    ORDER BY CASE WHEN COALESCE(l.lifecycle_stage,'') = 'qualified' THEN 0 ELSE 1 END ASC, ${orderCheck}, l.id ASC
-    LIMIT ${Math.max(1, n)}`;
+  // Select only the columns layer3 actually uses — avoids serialising 124 cols (outreach_drafts, audit_data, etc.)
+  // through the psql shim for every row. liftLead returns immediately when LLM_QA_ENABLED=0 so we only need the
+  // integrityRecheck columns + enough context for logging and the clearEligibleIds predicate.
+  return `SELECT to_jsonb(sub) FROM (
+      SELECT l.id, l.lead_ref, l.domain, l.company, l.sector, l.sector_code, l.filter_key,
+        l.contact_email, l.primary_email, l.all_emails,
+        l.icp_tier, l.quality_fit, l.lifecycle_stage, l.status,
+        l.consent_required, l.audit_verified, l.governor_released_at,
+        l.claude_cleared, l.layer3_checked_at, l.qa_checked_at, l.reviewed_at
+      FROM leads l
+      WHERE (COALESCE(l.icp_tier,2) = 2 OR COALESCE(l.lifecycle_stage,'') = 'qualified')
+        AND COALESCE(l.claude_cleared, FALSE) = FALSE
+        AND COALESCE(l.consent_required, FALSE) = FALSE
+        AND COALESCE(l.status,'') NOT IN ('suppressed','dnc','bounced','duplicate')
+        AND COALESCE(l.domain,'') <> ''
+        ${freshGuard}
+      ORDER BY CASE WHEN COALESCE(l.lifecycle_stage,'') = 'qualified' THEN 0 ELSE 1 END ASC, ${orderCheck}, l.id ASC
+      LIMIT ${Math.max(1, n)}
+    ) sub`;
 }
 
 // ------------------------------------------------------------------------------------------------------------
