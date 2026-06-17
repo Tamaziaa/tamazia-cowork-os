@@ -11,13 +11,17 @@ name: llm-rescue backlog (generation-first Tier-1 lift)
 # the deterministic + consent gate). SEND stays OFF. Heartbeat-wrapped (engine_runs) so health/check-stuck see it.
 on:
   schedule:
-    - cron: "23 2,14 * * *"   # 02:23 + 14:23 UTC (off-peak, off the top-of-hour) — two backlog waves/day
+    # FOUR staggered backlog waves/day (every ~6h, off the top-of-hour) so the ~8.6k un-checked Tier-2
+    # backlog drains continuously. Each wave is still bounded by --max (LLM_QA_MAX_CALLS_PER_RUN, default
+    # 250) AND the per-run cost early-exit (LLM_QA_RUN_COST_CAP_MICRO) + agency daily LLM budget, so 4 waves
+    # cannot bill past the cost ceiling — free-first routing returns $0 on the common path.
+    - cron: "23 2,8,14,20 * * *"   # 02:23 + 08:23 + 14:23 + 20:23 UTC (off-peak, off the top-of-hour)
   workflow_dispatch:
     inputs:
       rescue_max:
-        description: "Max non-Tier-1 leads to rescue this run"
+        description: "Max non-Tier-1 leads to rescue this run (clamped to LLM_QA_MAX_CALLS_PER_RUN, default 250)"
         required: false
-        default: "150"
+        default: "250"
       factcheck_max:
         description: "Max Tier-1 leads to fact-check this run"
         required: false
@@ -54,8 +58,14 @@ jobs:
       - run: python -m pip install --quiet -r requirements.txt
       - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: LLM-RESCUE backlog wave (generation-first; advisory writes; gate keeps final say; SEND OFF)
+        # Fail-soft: a wave must never fail the workflow (it is heartbeat-tracked + budget-bounded). The shell
+        # steps already end in `|| true`; continue-on-error makes the fail-soft contract explicit at the step
+        # level so a transient SERP/LLM/Neon hiccup leaves the schedule green and the next wave just retries.
+        continue-on-error: true
         env:
-          RESCUE_MAX: ${{ github.event.inputs.rescue_max || '150' }}
+          # Default raised 150 -> 250 to match LLM_QA_MAX_CALLS_PER_RUN and drain the backlog faster across the
+          # 4 daily waves. The per-run cost cap + agency daily LLM budget still bound spend regardless of --max.
+          RESCUE_MAX: ${{ github.event.inputs.rescue_max || '250' }}
           FACTCHECK_MAX: ${{ github.event.inputs.factcheck_max || '100' }}
           COHORT: ${{ github.event.inputs.cohort || '' }}
           FORCE_ENABLE: ${{ github.event.inputs.enable || '' }}

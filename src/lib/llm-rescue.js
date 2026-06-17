@@ -537,10 +537,14 @@ function writeRescue(res, { dry = false } = {}) {
   return { sql, wrote: true };
 }
 
-// L7: the widest, lowest-yield cohort (classify_sector ~2,076 eligible) gets a per-run SUB-BUDGET so a run that
+// L7: the widest, lowest-yield cohort (classify_sector ~2,464 eligible) gets a per-run SUB-BUDGET so a run that
 // doesn't fill `remaining` on the higher-yield cohorts can't pour the entire remainder into sector-classify (the
 // lowest-conversion work, re-burnt every recheck window). Tunable via env. 0 -> uncapped.
-const CLASSIFY_SECTOR_SUBCAP = Number(process.env.LLM_QA_CLASSIFY_CAP || 25);
+// Raised 25 -> 60 alongside the 100->250 per-run cap: sector-classify is the CHEAPEST call (one classify,
+// max_tokens 80) AND the gate that unlocks every downstream cohort (a NULL-sector lead can never be priority),
+// so a modestly larger slice drains the ~2.4k unclassified pool faster while still leaving the bulk of a
+// 250-lead run for the higher-yield contact-find cohorts. Still bounded; the cost cap is the hard guard.
+const CLASSIFY_SECTOR_SUBCAP = Number(process.env.LLM_QA_CLASSIFY_CAP || 60);
 
 // ------------------------------------------------------------------------------------------------------------
 // RUN A WAVE. Cost-capped: per-run lead cap (max) + an optional per-run COST cap (runCostCapMicro) + the agency LLM
