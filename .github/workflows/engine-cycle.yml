@@ -26,11 +26,10 @@ jobs:
   cycle:
     runs-on: ubuntu-latest
     timeout-minutes: 50
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     # D3.2: throughput knobs — overridable via workflow_dispatch inputs or ENV_B64 secret.
     # Defaults match the shell-script fallbacks so behaviour is unchanged until a founder adjusts them.
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       VERIFY_AUDITS_BATCH: '20'
       QUALIFY_BATCH: '50'
       ENQUEUE_BATCH: '30'
