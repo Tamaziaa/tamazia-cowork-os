@@ -33,10 +33,11 @@ on:
         description: 'set to 1 to ignore the recheck window (re-process everything)'
         default: '0'
 
-# Share the heavy-writer concurrency group so a real (apply) run never overlaps the other re-tier writers, AND so
-# back-to-back Layer-3 runs serialise. cancel-in-progress:false = queue, never cancel (no founder-alarming cancels).
+# Layer-3 has its own concurrency group so it never competes with llm-rescue/backlog-burst (engine-db-work).
+# The data-layer heartbeat guard (engine_runs) already prevents row collisions — two separate groups is safe.
+# cancel-in-progress:false = queue, never cancel.
 concurrency:
-  group: engine-db-work
+  group: layer3-complete
   cancel-in-progress: false
 
 jobs:
