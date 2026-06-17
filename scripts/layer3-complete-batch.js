@@ -317,10 +317,13 @@ function runMint(limit) {
   if (DRY) return { minted: 0, wouldMint: countNeedingMint() };
   const before = countNeedingMint();
   try { execFileSync('node', [path.join(ROOT, 'scripts', 'enqueue-leads.js'), String(Math.max(1, limit))], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }); } catch (_e) {}
-  try { execFileSync('node', [path.join(ROOT, 'scripts', 'mint-worker.js'), '--once'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); } catch (_e) {}
+  // 45-min cap: if mint-worker can't drain the queue in time (slow LLM/CF rate limits), Node kills it cleanly
+  // so the catch block runs and POST-CLEAR can still clear whatever was already audit_verified=TRUE.
+  // Without this cap, GitHub's 60-min SIGKILL abruptly ends the process before POST-CLEAR runs.
+  try { execFileSync('node', [path.join(ROOT, 'scripts', 'mint-worker.js'), '--once'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 45 * 60 * 1000 }); } catch (_e) {}
   // After minting, verify the freshly-minted audit URLs so audit_verified=TRUE before the clear step (d).
-  // mintCap=200 covers the full batch; fail-open so a verify hiccup never blocks clearing.
-  try { execFileSync('node', [path.join(ROOT, 'scripts', 'verify-audits.js'), '200'], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }); } catch (_e) {}
+  // mintCap=200 covers the full batch; fail-open so a verify hiccup never blocks clearing. 5-min cap.
+  try { execFileSync('node', [path.join(ROOT, 'scripts', 'verify-audits.js'), '200'], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 5 * 60 * 1000 }); } catch (_e) {}
   const after = countNeedingMint();
   return { minted: Math.max(0, before - after), wouldMint: before };
 }
