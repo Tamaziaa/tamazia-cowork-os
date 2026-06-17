@@ -13,7 +13,7 @@ function pg(sql) { return execFileSync(path.join(__dirname, 'psql'), [NEON, '-tA
   const limit = Math.max(1, parseInt(process.argv[2] || '500', 10));
   // Pick fit leads with a real domain, not yet minted (no audit_url) and not already queued.
   // country hint = best-effort from jurisdiction text; the engine still auto-detects from the live site.
-  const sql = `INSERT INTO minting_queue (domain, company, sector, country, lead_id, status)
+  const sql = `INSERT INTO minting_queue (domain, company, sector, country, lead_id, status, priority)
     SELECT DISTINCT ON (lower(l.domain))
       l.domain, l.company,
       -- DATA-CONTRACT FIX: the V3 re-tier path (requalify-all-leads.js, run by v3-rerun/backlog-burst)
@@ -25,7 +25,8 @@ function pg(sql) { return execFileSync(path.join(__dirname, 'psql'), [NEON, '-tA
         WHEN l.jurisdiction ILIKE '%emirat%' OR l.jurisdiction ILIKE '%uae%' OR l.jurisdiction ILIKE '%dubai%' THEN 'UAE'
         WHEN l.jurisdiction ILIKE '%united states%' OR l.jurisdiction ILIKE '%usa%' OR l.jurisdiction ILIKE '% us %' THEN 'USA'
         ELSE 'UK' END,
-      l.id, 'pending'
+      l.id, 'pending',
+      CASE WHEN l.icp_tier = 1 THEN 1 ELSE 2 END
     FROM leads l
     WHERE l.domain IS NOT NULL AND l.domain <> ''
       AND COALESCE(l.quality_fit, false) = true
