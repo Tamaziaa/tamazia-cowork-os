@@ -269,10 +269,13 @@ function flushStamps() {
 async function liftLead(lead) {
   // LLM lift obeys the SAME kill switch llm-rescue obeys. If off, skip the lift (recheck/mint/clear still run).
   if (!rescue.isEnabled()) return { attempted: false, reason: 'llm_qa_disabled' };
-  // Skip leads that have already been LLM-evaluated (qa_checked_at set = LLM ran a verdict). Layer-3's job is
-  // integrity-recheck + mint + clear; llm-rescue-backlog is responsible for LLM evaluation. Re-calling the LLM
-  // on 400 already-checked leads wastes ~25 free-quota credits/lead and easily exhausts the 60-min job timeout.
-  if (!FORCE && lead.qa_checked_at != null) return { attempted: false, reason: 'already_qa_checked' };
+  // Layer-3 does NOT call the LLM in-band unless explicitly forced. llm-rescue-backlog owns LLM evaluation
+  // (runs twice daily). In-band LLM at ~15s/call × 400 leads exhausts the 60-min job budget before
+  // flushStamps()/clearEligibleIds() can run, leaving claude_cleared=0. runApplyReview() below promotes
+  // already-staged auto_promote leads without re-calling the LLM. Pass force=1 to re-enable in-band lift.
+  if (!FORCE) return { attempted: false, reason: 'layer3_no_llm_unless_forced' };
+  // Skip leads that have already been LLM-evaluated (qa_checked_at set = LLM ran a verdict).
+  if (lead.qa_checked_at != null) return { attempted: false, reason: 'already_qa_checked' };
   let res;
   try { res = await rescue.rescueLead(lead, 'layer3'); }
   catch (e) { return { attempted: true, error: e.message }; }
