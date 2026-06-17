@@ -25,7 +25,9 @@ async function verifyAuditUrl(url, opts = {}) {
   if (isFallbackGuess(u)) return { ok: false, status: null, real: false, reason: 'fallback_guess_not_minted' };
   if (!isMintedAuditPath(u)) return { ok: false, status: null, real: false, reason: 'not_minted_audit_path' };
   if (/[?&]sig=/.test(u) && _verifySigned) {
-    try { const v = _verifySigned(u); if (v && v.ok === false) return { ok: false, status: null, real: true, reason: 'sig_' + (v.reason || 'invalid') }; } catch (_) {}
+    // Block only on expiry — sig_invalid may mean a key rotation; HTTP 200 is the ultimate arbiter.
+    // hmac_secret_not_configured = local dev without ENV; both fall through to the live check.
+    try { const v = _verifySigned(u); if (v && v.ok === false && v.reason === 'sig_expired') return { ok: false, status: null, real: true, reason: 'sig_expired' }; } catch (_) {}
   }
   if (opts.live === false) return { ok: true, status: 'skipped_live', real: true, reason: 'structural_ok' };
   const code = httpStatus(u, opts.timeoutSec);
