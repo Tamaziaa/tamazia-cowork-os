@@ -145,11 +145,11 @@ function formatTelegram(s) {
   return [
     `🏭 *TAMAZIA ENGINE — Daily Report* ${date}`,
     ``,
-    `📥 *SOURCING:* ${s.newLeads} new leads today | ${s.newTier1} Tier\\-1, ${s.newTier2} Tier\\-2`,
-    `🧠 *ENRICHMENT:* ${s.rescued} rescued by LLM | ${s.reoonVerified} verified by Reoon`,
-    `✅ *QUALIFIED:* ${s.claudeCleared} claude\\_cleared total | ${s.tier1Total} Tier\\-1 total`,
-    `📧 *SEND:* ${s.sendGate === 'OPEN' ? '🟢 OPEN' : '🔴 GATED \\(SEND\\_ENABLED=false\\)'} | ${s.pendingSend} pending email\\-ready`,
-    `⚡ *ENGINE:* gen\\-state ${s.gsStatus === 'GREEN' ? '🟢 GREEN' : '🔴 ' + s.gsStatus} | last cycle ${s.lastCycleMin} min ago`,
+    `📥 *SOURCING:* ${s.newLeads} new leads today \\| ${s.newTier1} Tier\\-1, ${s.newTier2} Tier\\-2`,
+    `🧠 *ENRICHMENT:* ${s.rescued} rescued by LLM \\| ${s.reoonVerified} verified by Reoon`,
+    `✅ *QUALIFIED:* ${s.claudeCleared} claude\\_cleared total \\| ${s.tier1Total} Tier\\-1 total`,
+    `📧 *SEND:* ${s.sendGate === 'OPEN' ? '🟢 OPEN' : '🔴 GATED \\(SEND\\_ENABLED=false\\)'} \\| ${s.pendingSend} pending email\\-ready`,
+    `⚡ *ENGINE:* gen\\-state ${s.gsStatus === 'GREEN' ? '🟢 GREEN' : '🔴 ' + s.gsStatus} \\| last cycle ${s.lastCycleMin} min ago`,
     ``,
     `📊 *Top sector today:* ${s.topSector} \\(${s.topSectorCount} new leads\\)`,
   ].join('\n');
@@ -257,7 +257,8 @@ async function sendSlack(payload) {
 
   console.log('[daily-report] done. telegram=' + (tgOk ? 'ok' : 'failed') + ' slack=' + (slackOk ? 'ok' : 'skipped/failed'));
   // Non-zero exit only if BOTH channels fail and Neon was reachable
-  if (!tgOk && !slackOk && NEON) process.exit(1);
+  // Exit 1 only if Telegram failed (primary channel); Slack is optional.
+  if (!tgOk && NEON) process.exit(1);
 })().catch((e) => {
   console.error('[daily-report] fatal:', e.message || e);
   process.exit(1);
