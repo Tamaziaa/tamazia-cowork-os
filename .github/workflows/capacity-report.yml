@@ -12,11 +12,13 @@ jobs:
   report:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Decode ENV
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Install dependencies

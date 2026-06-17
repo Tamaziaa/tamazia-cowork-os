@@ -31,11 +31,13 @@ jobs:
   rerun:
     runs-on: ubuntu-latest
     timeout-minutes: 330        # ~5.5h (under the 6h runner cap): cover the full ~7.6k backlog in one idempotent pass
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Install deps
         run: npm install --omit=dev || npm install || true
       - name: Python deps (pg8000 shim)

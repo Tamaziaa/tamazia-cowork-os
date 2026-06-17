@@ -15,11 +15,13 @@ jobs:
   workers:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Install Node deps
         run: npm install --omit=dev || npm install || true
       - name: Install Python deps (pg8000 for DB shim)
