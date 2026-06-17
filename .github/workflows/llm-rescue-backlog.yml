@@ -40,7 +40,10 @@ permissions:
 # Share the heavy-DB-work group so a backlog wave never re-tiers rows while a requalify writer is live (apply-review
 # writes icp_tier on promote). cancel-in-progress:false so back-to-back waves queue rather than cancel.
 concurrency:
-  group: engine-db-work
+  # Own group so hourly match-inbound-replies (engine-db-work, :17) and manual backlog-burst dispatches
+  # cannot cancel queued llm-rescue runs. JS-level race-guard (heartbeat.js active-writer) handles any
+  # actual data-layer conflicts with v3-rerun/backlog-burst — this group just prevents queue-kick.
+  group: llm-rescue-work
   cancel-in-progress: false
 jobs:
   rescue:
