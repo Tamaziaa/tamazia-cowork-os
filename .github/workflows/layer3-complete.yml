@@ -5,7 +5,8 @@
 # posts ONE real summary to Telegram + Slack.
 #
 # SEND stays OFF: this only makes leads ELIGIBLE beneath the global SEND_ENABLED master gate (never touched here).
-# Idempotent + additive. DEFAULT IS DRY on cron (proves itself first); dispatch with apply=1 for real runs.
+# Idempotent + additive. Cron runs at 08:47+20:47 UTC use APPLY by default (times already staggered clear of
+# backlog-burst/llm-rescue). Dispatch with apply=0 to force DRY; dispatch with force=1 to ignore recheck window.
 #
 # RACE-GUARD: the script registers an engine_runs heartbeat AND defers if a heavy re-tier writer
 # (v3-rerun/v3-validate/backlog-burst/nightly-workers) is live (heartbeat.js active-writer), so it never collides
@@ -63,11 +64,13 @@ jobs:
         continue-on-error: true
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          # cron default => DRY (no apply flag). workflow_dispatch with apply=1 => real write run.
+          # Cron events always apply (times already staggered clear of heavy writers + race-guard as belt+braces).
+          # Dispatch with apply=0 for a forced dry run; dispatch with apply=1 (the default) for a real run.
           MAX="${{ github.event.inputs.max || '400' }}"
           RECHECK="${{ github.event.inputs.recheck_hours || '24' }}"
           APPLY_FLAG=""
-          [ "${{ github.event.inputs.apply || '0' }}" = "1" ] && APPLY_FLAG="--apply"
+          APPLY_IN="${{ github.event.inputs.apply }}"
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${APPLY_IN:-1}" = "1" ]; then APPLY_FLAG="--apply"; fi
           FORCE_FLAG=""
           [ "${{ github.event.inputs.force || '0' }}" = "1" ] && FORCE_FLAG="--force"
           echo "[layer3-wf] max=$MAX recheck=$RECHECK apply='${APPLY_FLAG:-(dry)}' force='${FORCE_FLAG:-no}'"
