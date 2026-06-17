@@ -139,19 +139,21 @@ async function gather() {
   };
 }
 
-// ── Format Telegram message (Markdown) ─────────────────────────────────────
+// ── Format Telegram message (HTML mode — no reserved-char issues) ────────────
 function formatTelegram(s) {
   const date = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const gate = s.sendGate === 'OPEN' ? '🟢 OPEN' : '🔴 GATED (SEND_ENABLED=off)';
+  const eng = s.gsStatus === 'GREEN' ? '🟢 GREEN' : '🔴 ' + s.gsStatus;
   return [
-    `🏭 *TAMAZIA ENGINE — Daily Report* ${date}`,
+    `🏭 <b>TAMAZIA ENGINE — Daily Report</b> ${date}`,
     ``,
-    `📥 *SOURCING:* ${s.newLeads} new leads today \\| ${s.newTier1} Tier\\-1, ${s.newTier2} Tier\\-2`,
-    `🧠 *ENRICHMENT:* ${s.rescued} rescued by LLM \\| ${s.reoonVerified} verified by Reoon`,
-    `✅ *QUALIFIED:* ${s.claudeCleared} claude\\_cleared total \\| ${s.tier1Total} Tier\\-1 total`,
-    `📧 *SEND:* ${s.sendGate === 'OPEN' ? '🟢 OPEN' : '🔴 GATED \\(SEND\\_ENABLED=false\\)'} \\| ${s.pendingSend} pending email\\-ready`,
-    `⚡ *ENGINE:* gen\\-state ${s.gsStatus === 'GREEN' ? '🟢 GREEN' : '🔴 ' + s.gsStatus} \\| last cycle ${s.lastCycleMin} min ago`,
+    `📥 <b>SOURCING:</b> ${s.newLeads} new leads today | T1: ${s.newTier1} T2: ${s.newTier2}`,
+    `🧠 <b>ENRICHMENT:</b> ${s.rescued} LLM rescued | ${s.reoonVerified} Reoon verified`,
+    `✅ <b>QUALIFIED:</b> ${s.claudeCleared} claude_cleared | ${s.tier1Total} Tier-1 total`,
+    `📧 <b>SEND:</b> ${gate} | ${s.pendingSend} pending email-ready`,
+    `⚡ <b>ENGINE:</b> gen-state ${eng} | last cycle ${s.lastCycleMin} min ago`,
     ``,
-    `📊 *Top sector today:* ${s.topSector} \\(${s.topSectorCount} new leads\\)`,
+    `📊 <b>Top sector today:</b> ${s.topSector} (${s.topSectorCount} new leads)`,
   ].join('\n');
 }
 
@@ -199,7 +201,7 @@ async function sendTelegram(text) {
   const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'MarkdownV2', disable_web_page_preview: true }),
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
     signal: AbortSignal.timeout(15000),
   });
   const body = await r.json();
