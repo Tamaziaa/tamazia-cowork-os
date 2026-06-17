@@ -23,6 +23,15 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+      # FIRST gate: fail LOUDLY + EARLY if ENV_B64 is malformed (the `City: London` class of bug — a line with
+      # no '=' before the first space). The safe per-line loader stops such a line from CRASHING the run, but it
+      # then SILENTLY drops the variable and a downstream script fails far away with a confusing NULL. This lints
+      # the decoded secret directly (no .env on disk yet) and exits 1 with the exact offending line — never a
+      # silent exit 127. Runs before setup-node/python so a bad secret is caught in seconds.
+      - name: "Lint ENV_B64 (catch malformed secret early - the City London guard)"
+        env:
+          ENV_B64: ${{ secrets.ENV_B64 }}
+        run: bash scripts/lint-env.sh
       - uses: actions/setup-node@v4
         with: { node-version: "24" }
       - uses: actions/setup-python@v5
@@ -41,13 +50,27 @@ jobs:
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ensure-schema.js || true
-      - run: |
+      - name: Generate PIPELINE-STATE (heartbeat-wrapped, retry-once on transient failure)
+        run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # O4 [A1/A61/A64]: heartbeat-wrap so this scheduled health-surface generator is visible in engine_runs
           # (engine_health / check-stuck-jobs). Fallback to a bare call so a heartbeat hiccup never blocks the state file.
-          node scripts/heartbeat.js wrap gen-state -- node scripts/gen-state.js || node scripts/gen-state.js
+          run_once() { node scripts/heartbeat.js wrap gen-state -- node scripts/gen-state.js || node scripts/gen-state.js; }
+          # Retry-once: a Neon cold-start / transient HTTP blip is the common cause of a one-off failure here.
+          # Try, and if it returns non-zero, wait briefly and try a SECOND time before letting the step fail.
+          if ! run_once; then
+            echo "gen-state: first attempt failed — retrying once after 10s (transient Neon/HTTP guard)…" >&2
+            sleep 10
+            run_once
+          fi
       - name: Commit if changed (best-effort; Neon holds the digest regardless)
         continue-on-error: true
+        env:
+          # The push targets main via x-access-token:${GH_TOKEN}. GH_TOKEN was never set in this job's env, so
+          # it relied entirely on a GH_TOKEN= line existing in ENV_B64; fall back to the built-in GITHUB_TOKEN
+          # (which has contents:write here) so the push works regardless. continue-on-error keeps a push hiccup
+          # from failing the job — Neon holds the digest either way.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           git config user.name "tamazia-bot"
@@ -56,3 +79,10 @@ jobs:
           git diff --cached --quiet && { echo "no change"; exit 0; }
           git commit -m "chore(state): regenerate PIPELINE-STATE.md [skip ci]"
           git push "https://x-access-token:${GH_TOKEN}@github.com/Tamaziaa/tamazia-cowork-os.git" HEAD:main
+
+      # Self-heal: post the REAL error to Telegram + Slack if any step failed. Fail-open + `|| true`.
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/notify-workflow-failure.sh "${{ github.workflow }}" "${{ github.run_id }}" || true
