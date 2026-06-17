@@ -19,11 +19,13 @@ jobs:
   source:
     runs-on: ubuntu-latest
     timeout-minutes: 40   # match scrapers.yml; bound a hung scraper so it can't pin a runner for the 6h default
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

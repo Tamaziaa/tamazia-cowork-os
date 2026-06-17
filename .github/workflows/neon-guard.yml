@@ -7,11 +7,13 @@ jobs:
   guard:
     runs-on: ubuntu-latest
     timeout-minutes: 10   # bound a hung Neon HTTP call so the drift-guard can't pin a runner for the 6h default
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Materialise .env from secret
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Check Neon schema drift (code refs vs live)
