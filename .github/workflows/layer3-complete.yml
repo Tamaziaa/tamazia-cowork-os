@@ -81,8 +81,10 @@ jobs:
         if: steps.layer3.outputs.DEFERRED == '1'
         run: |
           # Re-queue this workflow (apply=1 force=1) so it runs as soon as the heavy writer clears.
+          # Sleep 10 min first — avoids a tight dispatch loop when backlog-burst/llm-rescue runs long.
           # The layer3-complete concurrency group (cancel-in-progress:false) ensures at most one queued run.
-          echo "[layer3-wf] deferred by race-guard — re-queuing apply=1 run for when heavy writer clears..."
+          echo "[layer3-wf] deferred by race-guard — sleeping 10m before re-queue to avoid tight loop..."
+          sleep 600
           curl -s -X POST \
             -H "Authorization: token ${{ github.token }}" \
             -H "Content-Type: application/json" \
