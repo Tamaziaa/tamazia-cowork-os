@@ -68,7 +68,8 @@ const has = (n) => process.argv.includes('--' + n);
 const APPLY = has('apply');
 const DRY = !APPLY;
 const FORCE = has('force');
-const RECHECK_HOURS = Math.max(0, parseInt(arg('recheck-hours', '24'), 10) || 24);
+// parseInt('0',10)||24 = 24 (falsy 0 falls through to default) — use explicit isFinite guard so 0 is honoured.
+const RECHECK_HOURS = (() => { const v = parseInt(arg('recheck-hours', '24'), 10); return Number.isFinite(v) ? Math.max(0, v) : 24; })();
 // --max default 400, clamped to the [300,500] design range.
 const MAX = Math.min(500, Math.max(300, parseInt(arg('max', '400'), 10) || 400));
 const BATCH = arg('batch', 'layer3-' + new Date().toISOString().slice(0, 10));
