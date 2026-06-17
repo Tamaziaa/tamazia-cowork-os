@@ -193,24 +193,32 @@ function formatSlack(s) {
 // ── Send to Telegram ────────────────────────────────────────────────────────
 async function sendTelegram(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const chatId = (process.env.TELEGRAM_CHAT_ID || '').trim();
   if (!token || !chatId) {
     console.warn('[telegram] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — skipping');
     return false;
   }
-  const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
-    signal: AbortSignal.timeout(15000),
-  });
-  const body = await r.json();
-  if (!r.ok || !body.ok) {
-    console.error('[telegram] send error:', JSON.stringify(body));
-    return false;
+  // Try HTML first; fall back to plain text if Telegram rejects the parse mode
+  const plain = text.replace(/<\/?b>/g, '');
+  for (const payload of [
+    { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true },
+    { chat_id: chatId, text: plain, disable_web_page_preview: true },
+  ]) {
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
+    });
+    const body = await r.json();
+    if (r.ok && body.ok) {
+      console.log('[telegram] sent message_id=' + body.result.message_id + (payload.parse_mode ? '' : ' (plain-text fallback)'));
+      return true;
+    }
+    console.warn('[telegram] attempt failed:', JSON.stringify(body));
   }
-  console.log('[telegram] sent message_id=' + body.result.message_id);
-  return true;
+  console.error('[telegram] all attempts failed');
+  return false;
 }
 
 // ── Send to Slack ───────────────────────────────────────────────────────────
@@ -258,9 +266,7 @@ async function sendSlack(payload) {
   ]);
 
   console.log('[daily-report] done. telegram=' + (tgOk ? 'ok' : 'failed') + ' slack=' + (slackOk ? 'ok' : 'skipped/failed'));
-  // Non-zero exit only if BOTH channels fail and Neon was reachable
-  // Exit 1 only if Telegram failed (primary channel); Slack is optional.
-  if (!tgOk && NEON) process.exit(1);
+  // Notification failures are advisory — never fail the workflow (data was collected successfully).
 })().catch((e) => {
   console.error('[daily-report] fatal:', e.message || e);
   process.exit(1);
