@@ -33,6 +33,13 @@ jobs:
     timeout-minutes: 40
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      # 35-min heartbeat cap (default is 20m which is too short for CH+charity full-pipeline at 100 leads).
+      # Source-registers runs scanSite+enrichCompany per lead serially; 50 leads × ~10s = ~8min + API fetch.
+      # 35m gives margin while staying under the 40m job timeout.
+      HEARTBEAT_WRAP_TIMEOUT_MS: "2100000"
+      # Cap Tier-1 target per source at 50 (was 100 via SOURCE_T1_TARGET default) to halve runtime.
+      # At 50 Tier-1 candidates × ~10s each ≈ 8min for CH + 8min for charity = ~16min total, fits in 35m.
+      SOURCE_T1_TARGET: "50"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
