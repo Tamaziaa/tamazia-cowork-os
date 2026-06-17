@@ -1,0 +1,45 @@
+name: Apollo contact enrichment (priority sectors)
+# Searches Apollo for named decision-makers on Tier-2/qualified leads in priority sectors that are
+# missing a contact_name. Writes contact_name, contact_linkedin, contact_email, qa_status, and
+# re-runs decideTier so the lead can be re-tiered if the contact push tips it to Tier-1.
+#
+# KILL SWITCH: APOLLO_KEY must be set in ENV_B64. If absent the script exits 0 with a log notice.
+# Limit: 100 leads per run (Apollo free plan). Fail-open: no result = skip + move on.
+on:
+  schedule:
+    - cron: '0 5 * * *'   # 05:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      max:
+        description: 'Max leads to enrich per run (default 100)'
+        required: false
+        default: '100'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-db-work
+  cancel-in-progress: false
+
+jobs:
+  apollo-enrich:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - name: Install Node deps
+        run: npm install --no-audit --no-fund || npm install || true
+      - name: Materialise .env from secret
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Apollo contact enrichment (priority sectors)
+        continue-on-error: true
+        env:
+          APOLLO_MAX: ${{ github.event.inputs.max || '100' }}
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          node scripts/apollo-enrich.js --max "$APOLLO_MAX" || true
