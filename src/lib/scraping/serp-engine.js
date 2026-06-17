@@ -12,6 +12,27 @@ const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const { search, hasKey, hasSerp, rootDomain } = require('./serp-client.js');
 const { pickTodaysQueries, logQueryRun } = require('./query-calendar.js');
+// SOURCE-side junk-name gate (B-gap #1): reject raw SERP titles that are listicles / geo phrases /
+// questions / year-stamped / too-long / single-word before they are stored as a company name.
+// Pure + synchronous (no I/O); shares normaliseName's regexes so we never duplicate them. The
+// enrich-time resolveName() stays as the second line of defence.
+const { looksLikeJunkTitle, normaliseName } = require('../sourcing/resolve-name.js');
+
+// Decide the company name + name_status from a raw result title at the WRITE SITE.
+// If the title passes the pure rejector, store the cleaned trading name (name_status='clean').
+// If it fails (junk), fall back to companyFromDomain() and mark name_status='unverified' — NEVER
+// store the raw listicle/geo title. The domain is passed so single-word titles that simply echo the
+// domain stem are handled consistently with normaliseName.
+function nameFromTitle(title, domain) {
+  if (!looksLikeJunkTitle(title, { domain })) {
+    // Kept by the gate. Prefer normaliseName's cleaned candidate (tagline/suffix-stripped); r.name is
+    // populated even on a 'single_word' verdict, which is exactly the legal-suffix-rescue case
+    // ("Macfarlanes LLP" -> "Macfarlanes"), so we keep the real trading name, not the domain stem.
+    const r = normaliseName(title, { domain });
+    if (r.name) return { company: r.name, name_status: 'clean' };
+  }
+  return { company: companyFromDomain(domain), name_status: 'unverified' };
+}
 
 function pg(sql) { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); }
 const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
@@ -115,13 +136,16 @@ function alreadyHave(domain) {
   return !!pg(`SELECT 1 FROM leads WHERE ${normExpr('domain')}=${esc(nd)} OR ${normExpr('website')}=${esc(nd)} LIMIT 1`);
 }
 
-function insertLead({ company, domain, sector, country, stream, verify, query }) {
+function insertLead({ company, domain, sector, country, stream, verify, query, name_status = 'unverified' }) {
   // Write BOTH jurisdiction AND country from the same source value (mirrors scripts/source-leads.js).
   // Previously only jurisdiction was populated, so the country column was blank on these leads.
-  pg(`INSERT INTO leads (company, domain, website, sector, jurisdiction, country, source, acquisition_channel, lead_type, lifecycle_stage, aggressive_source, scrape_stream, verify_status, scrape_query, scraped_at, priority_score, created_at)
+  // name_status (additive, same column the enrich path uses): 'clean' when the SERP title passed the
+  // pure junk-name gate, 'unverified' when we fell back to companyFromDomain() — so downstream knows
+  // this name still needs the enrich-time resolveName() pass and was never a raw listicle/geo title.
+  pg(`INSERT INTO leads (company, domain, website, sector, jurisdiction, country, source, acquisition_channel, lead_type, lifecycle_stage, aggressive_source, scrape_stream, verify_status, scrape_query, name_status, scraped_at, priority_score, created_at)
       VALUES (${esc(company)}, ${esc(domain)}, ${esc('https://' + domain)}, ${esc(sector)}, ${esc(country)}, ${esc(country)},
               ${esc('serp_' + stream)}, ${esc('ad_intelligence_google')}, ${esc('commercial_' + sector)},
-              'sourced', ${stream === 'sponsored' ? 'TRUE' : 'FALSE'}, ${esc(stream)}, ${esc(verify)}, ${esc(query)}, NOW(), ${stream === 'sponsored' ? 62 : 50}, NOW())`);
+              'sourced', ${stream === 'sponsored' ? 'TRUE' : 'FALSE'}, ${esc(stream)}, ${esc(verify)}, ${esc(query)}, ${esc(name_status)}, NOW(), ${stream === 'sponsored' ? 62 : 50}, NOW())`);
 }
 
 /**
@@ -149,7 +173,8 @@ async function scrapeSector(sector, { target = 50, queryCap = 40 } = {}) {
       const d = a.domain;
       if (!isGenuineClient(d)) { aggr++; continue; }
       if (alreadyHave(d)) { dupes++; continue; }
-      insertLead({ company: a.title?.split('|')[0].trim() || companyFromDomain(d), domain: d, sector, country: item.country, stream: 'sponsored', verify: 'approved', query: item.q });
+      const an = nameFromTitle(a.title, d);   // reject junk SERP titles at the write site
+      insertLead({ company: an.company, name_status: an.name_status, domain: d, sector, country: item.country, stream: 'sponsored', verify: 'approved', query: item.q });
       found++; leadsThisQuery++;
     }
     // ORGANIC TOP-100 stream — pending manual verification
@@ -158,7 +183,8 @@ async function scrapeSector(sector, { target = 50, queryCap = 40 } = {}) {
       const d = o.domain;
       if (!isGenuineClient(d)) { aggr++; continue; }
       if (alreadyHave(d)) { dupes++; continue; }
-      insertLead({ company: o.title?.split('|')[0].trim() || companyFromDomain(d), domain: d, sector, country: item.country, stream: 'organic_top100', verify: 'pending', query: item.q });
+      const on = nameFromTitle(o.title, d);   // reject junk SERP titles at the write site
+      insertLead({ company: on.company, name_status: on.name_status, domain: d, sector, country: item.country, stream: 'organic_top100', verify: 'pending', query: item.q });
       found++; leadsThisQuery++;
     }
     logQueryRun(item.q, leadsThisQuery);   // calendar: mark query run + yield (drives rotation)
