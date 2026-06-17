@@ -53,12 +53,19 @@ function args() {
     else if (a[i] === '--capture') o.capture = a[++i];
   }
   if (!o.sources.length) o.sources = ['serp-top'];
-  // WS5 equal-allocation cap: each source stops once it has yielded SOURCE_T1_TARGET leads that pass the
-  // Tier-1 ICP PRE-FILTER (preFilter from src/lib/sourcing/icp.js — the SAME gate run() applies; we only
-  // COUNT with it here, we don't re-score). Default 50, same target for every source = equal allocation.
-  // 0/negative disables the cap (raw --max governs). This is purely a sourcing-side stop; the qualify layer
-  // (preFilter/scoreICP/decideTier) is unchanged.
+  // WS5 equal-allocation cap (now OUTCOME-AWARE). The Tier-1 OUTCOME target per source is SOURCE_T1_TARGET
+  // (default 50). We cannot know the FINAL tier at source (that needs enrich + scoreICP), so we still measure
+  // eligibility with preFilter — but we count it PER (source, sector) so one sector can't eat the whole 50,
+  // and we DO NOT drop overflow: candidates past the cap are still collected and persisted (the enrich/score
+  // path assigns them their real, usually lower, tier for the LLM-rescue backlog). 0/negative disables the cap.
   o.t1Target = Math.max(0, parseInt(process.env.SOURCE_T1_TARGET || '50', 10) || 0);
+  // Per-sector ceiling so the 50 is spread across served sectors (10 priority sectors => ~5 each by default).
+  // Derived from t1Target / SOURCE_SECTORS (default 10) unless SOURCE_T1_PER_SECTOR is set explicitly.
+  const sectorsN = Math.max(1, parseInt(process.env.SOURCE_SECTORS || '10', 10) || 10);
+  o.t1PerSector = Math.max(0, parseInt(process.env.SOURCE_T1_PER_SECTOR || '', 10) || (o.t1Target ? Math.ceil(o.t1Target / sectorsN) : 0));
+  // Overflow headroom: keep collecting past the t1-eligible cap up to OVERFLOW_MULT x the target so overflow
+  // persists as Tier-2/3 backlog instead of being discarded. Bounded by --max downstream. 1 = no overflow.
+  o.overflowMult = Math.max(1, parseFloat(process.env.SOURCE_OVERFLOW_MULT || '3') || 3);
   return o;
 }
 // Match adapters tolerantly: callers (scrape-all.js, cron) sometimes pass underscores (serp_top,
@@ -71,13 +78,14 @@ async function gather(o) {
   let captured = null;
   if (o.capture) { try { captured = JSON.parse(require('fs').readFileSync(o.capture, 'utf8')); } catch (_) {} }
   const raws = [];
+  const stats = {};                            // per-source yield: { raw, eligible, kept, t1, by_sector{} }
   const target = o.t1Target || 0;             // 0 = no cap (raw --max governs)
+  const perSector = o.t1PerSector || 0;       // 0 = no per-sector ceiling
   for (const name of o.sources) {
     const ad = adapterByName(name);
     if (!ad) { console.error(`[source ${name}] no adapter registered (known: ${Object.values(REGISTRY).map(s => s.name).join(', ')}) — skipped`); continue; }
-    const before = raws.length;
     const mode = ad.mode(process.env);
-    // Collect this source's candidates first, then apply the per-source Tier-1-eligible cap so the stop is
+    // Collect this source's candidates first, then apply the per-source / per-sector cap so the stop is
     // measured PER SOURCE (equal allocation), independent of what other sources produced.
     const srcRaws = [];
     try {
@@ -85,23 +93,36 @@ async function gather(o) {
       else if (captured && captured[name]) srcRaws.push(...ad.ingestCaptured(captured[name]));
       if (mode === 'api') srcRaws.push(...await ad.candidates({}, process.env));
     } catch (e) { console.error('[source ' + name + '] ' + e.message); }
-    // Eligibility-stop: walk this source's candidates in order and keep them until SOURCE_T1_TARGET have
-    // passed the Tier-1 ICP pre-filter (preFilter). preFilter().pass == served-sector + served-geo + real
-    // business == the Tier-1-eligible pre-gate. Once the target is reached, this source stops contributing.
-    let t1 = 0; let kept = 0;
+    // OUTCOME-AWARE cap with per-sector balance and NO overflow loss:
+    //  - preFilter().pass == served-sector + served-geo + real business == the Tier-1-eligible pre-gate.
+    //  - We count t1-eligible per (source, SECTOR) so the 50 spreads across served sectors (no single
+    //    sector eats the whole allocation). A sector that hit its per-sector ceiling stops counting toward
+    //    the cap but its candidates are STILL kept as overflow (persisted later as their real, lower tier).
+    //  - We keep collecting overflow up to overflowMult x target (or everything when uncapped) so nothing
+    //    is dropped — the enrich/score path decides the final tier for the LLM-rescue backlog.
+    const st = { raw: srcRaws.length, eligible: 0, kept: 0, t1: 0, by_sector: {} };
+    const overflowCap = target ? Math.ceil(target * o.overflowMult) : 0;   // 0 = keep all (raw --max governs)
     for (const r of srcRaws) {
-      if (target && t1 >= target) break;        // this source has hit its equal-allocation target — stop it
-      raws.push(r); kept++;
-      let pass = false; try { pass = !!preFilter(r).pass; } catch (_) {}
-      if (pass) t1++;
+      let pf = { pass: false, sector: null }; try { pf = preFilter(r) || pf; } catch (_) {}
+      const sec = pf.sector || r.sector || 'unclassified';
+      if (pf.pass) st.eligible++;
+      // Count toward the equal-allocation target only while neither the global nor this sector's ceiling is hit.
+      const globalRoom = !target || st.t1 < target;
+      const sectorRoom = !perSector || (st.by_sector[sec] || 0) < perSector;
+      const countsToward = pf.pass && globalRoom && sectorRoom;
+      if (countsToward) { st.t1++; st.by_sector[sec] = (st.by_sector[sec] || 0) + 1; }
+      // Stop collecting only once BOTH the t1 target is met AND we've taken our overflow headroom — this
+      // keeps overflow flowing into persistence instead of discarding it the instant the 50 is reached.
+      if (target && st.t1 >= target && overflowCap && st.kept >= overflowCap) break;
+      raws.push(r); st.kept++;
     }
-    const got = kept;
-    if (target) console.error(`[source ${ad.name}] produced=${srcRaws.length} kept=${kept} t1-eligible=${t1}/${target}${t1 >= target ? ' (cap hit)' : ''}`);
+    stats[ad.name] = st;
+    if (target) console.error(`[source ${ad.name}] produced=${st.raw} kept=${st.kept} eligible=${st.eligible} t1-counted=${st.t1}/${target}${st.t1 >= target ? ' (cap hit, overflow kept)' : ''} per-sector=${JSON.stringify(st.by_sector)}`);
     // Explain a 0-yield chrome-mode source instead of failing silently (root cause of reddit/youtube/
     // x-ads/social-ads logging 0 every run: they need an API token or a --capture file).
-    if (got === 0 && mode !== 'api') console.error(`[source ${ad.name}] mode=chrome and no --capture provided — yields 0 (set the source's API token or pass --capture).`);
+    if (st.kept === 0 && mode !== 'api') console.error(`[source ${ad.name}] mode=chrome and no --capture provided — yields 0 (set the source's API token or pass --capture).`);
   }
-  return raws;
+  return { raws, stats };
 }
 
 async function run() {
@@ -114,12 +135,21 @@ async function run() {
       'ALTER TABLE leads ADD COLUMN IF NOT EXISTS hiring_signal text',
       'ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed boolean DEFAULT false',
       'ALTER TABLE leads ADD COLUMN IF NOT EXISTS mystrika_pushed_at timestamptz',
+      // Unified per-scraper daily yield — uses the EXISTING scraper_daily table (scorecard-nightly.js /
+      // source-sponsored.js) keyed UNIQUE(scraper_source, day); we additively ensure the richer columns exist.
+      'CREATE TABLE IF NOT EXISTS scraper_daily (id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, scraper_source text, day date, sourced_n integer DEFAULT 0, t1_eligible_n integer DEFAULT 0, valid_email_pct numeric, sector_match_pct numeric, cost numeric, recorded_at timestamptz DEFAULT now())',
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_scraper_daily_source_day ON scraper_daily (scraper_source, day)',
+      'ALTER TABLE scraper_daily ADD COLUMN IF NOT EXISTS raw_found integer DEFAULT 0',
+      'ALTER TABLE scraper_daily ADD COLUMN IF NOT EXISTS eligible integer DEFAULT 0',
+      'ALTER TABLE scraper_daily ADD COLUMN IF NOT EXISTS persisted integer DEFAULT 0',
+      "ALTER TABLE scraper_daily ADD COLUMN IF NOT EXISTS sector_breakdown jsonb DEFAULT '{}'::jsonb",
+      'ALTER TABLE scraper_daily ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()',
     ]) { try { await q(ddl); } catch (_) {} }
   }
   const t0 = Date.now();
   const runId = 'src-' + Date.now().toString(36);
   console.log(`[source-leads] sources=${o.sources.join(',')} max=${o.max} t1Target=${o.t1Target || 'off'} dryRun=${o.dryRun}`);
-  const raws = await gather(o);
+  const { raws, stats: srcStats } = await gather(o);
   // dedupe by domain (in-memory)
   const seen = new Set(); const cand = [];
   for (const r of raws) { const d = (r.domain || '').toLowerCase(); if (d && !seen.has(d)) { seen.add(d); cand.push(r); } }
@@ -132,6 +162,13 @@ async function run() {
   console.log(`[source-leads] raw=${raws.length} unique=${cand.length} fresh=${fresh.length} icp-qualified=${qualified.length}`);
 
   const summary = { run_id: runId, sources: o.sources, raw: raws.length, qualified: qualified.length, audited: 0, enriched: 0, send_ready: 0, persisted: 0, hot: 0, leads: [] };
+  // Per-source OUTCOME accumulator for the unified scraper_daily yield row. Seeded from gather() stats
+  // (raw/eligible/t1-eligible/per-sector pre-gate counts) and finalised below with real persisted + Tier-1
+  // OUTCOME counts (icp_tier===1 after enrich/score) so the daily yield reflects true Tier-1 output, not just
+  // pre-filter eligibility. Keyed by the canonical source string written to leads.source (r.source).
+  const yieldBySource = {};
+  const _ys = (src) => (yieldBySource[src] = yieldBySource[src] || { raw: 0, eligible: 0, persisted: 0, tier1: 0, by_sector: {}, emailed: 0, leads: 0 });
+  for (const [name, st] of Object.entries(srcStats || {})) { const y = _ys(name); y.raw += st.raw || 0; y.eligible += st.eligible || 0; }
   for (const r of qualified.slice(0, o.max)) {
     // 1. full audit (real site scan)
     let scan = { counts: { total: 0, p1: 0 }, signals: {}, reachable: false, pointers: [] };
@@ -182,8 +219,14 @@ async function run() {
     // Unique-violation safe: with idx_leads_domain_active_unique live, a concurrent writer that inserted
     // this domain between our dedupe SELECT and this INSERT raises 23505. That's a benign "already exists" —
     // skip it (don't crash, don't count as persisted, don't log it as an error). Only real failures are logged.
-    if (ins.ok && ins.rows[0]) { summary.persisted++; }
-    else {
+    if (ins.ok && ins.rows[0]) {
+      summary.persisted++;
+      // Per-source OUTCOME tally for the unified scraper_daily yield. tier1 here is the REAL Tier-1 outcome
+      // (icp_tier===1 after enrich/score), NOT pre-filter eligibility, so the daily row reflects true output.
+      const y = _ys(r.source); y.persisted++; y.leads++;
+      if (lead.tier === 1) { y.tier1++; y.by_sector[lead.sector] = (y.by_sector[lead.sector] || 0) + 1; }
+      if (lead.channel_email_ready || ((enr.counts || {}).emails || 0) > 0 || ((enr.counts || {}).verified || 0) > 0) y.emailed++;
+    } else {
       const kind = classifyHttpInsert(ins);
       if (kind === 'duplicate') { summary.skipped_dup = (summary.skipped_dup || 0) + 1; }
       else console.error('[persist] ' + lead.domain + ': ' + ins.error);
@@ -201,7 +244,31 @@ async function run() {
       } catch (_) {}
     }
   }
-  // 6. log the run
+  // 6. UNIFIED per-scraper daily yield → scraper_daily (one row per scraper_source per day; ADDITIVE upsert on
+  // the EXISTING (scraper_source, day) key, mirroring source-sponsored.js so source-leads + scorecard-nightly +
+  // source-sponsored all converge on the SAME table). Counters SUM across same-day runs; pct/breakdown are
+  // last-write per run. Written PER SOURCE so each scraper's true Tier-1 OUTCOME + sector spread is tracked.
+  if (!o.dryRun) {
+    for (const [src, y] of Object.entries(yieldBySource)) {
+      if (!src) continue;
+      const validPct = y.leads ? Math.round(1000 * y.emailed / y.leads) / 10 : null;
+      const t1Eligible = Math.max(y.tier1, srcStats[src] ? srcStats[src].t1 : 0);   // OUTCOME, floored by pre-gate count
+      const sectorMatchPct = y.persisted ? Math.round(1000 * Object.values(y.by_sector).reduce((n, v) => n + v, 0) / y.persisted) / 10 : null;
+      const upsert = `INSERT INTO scraper_daily (scraper_source, day, sourced_n, t1_eligible_n, valid_email_pct, sector_match_pct, cost, recorded_at, raw_found, eligible, persisted, sector_breakdown, updated_at)
+          VALUES (${lit(src)}, CURRENT_DATE, ${num(y.persisted)}, ${num(t1Eligible)}, ${num(validPct)}, ${num(sectorMatchPct)}, NULL, NOW(), ${num(y.raw)}, ${num(y.eligible)}, ${num(y.persisted)}, ${jb(y.by_sector)}, NOW())
+          ON CONFLICT (scraper_source, day) DO UPDATE SET
+            sourced_n = scraper_daily.sourced_n + EXCLUDED.sourced_n,
+            t1_eligible_n = scraper_daily.t1_eligible_n + EXCLUDED.t1_eligible_n,
+            persisted = COALESCE(scraper_daily.persisted,0) + EXCLUDED.persisted,
+            raw_found = COALESCE(scraper_daily.raw_found,0) + EXCLUDED.raw_found,
+            eligible = COALESCE(scraper_daily.eligible,0) + EXCLUDED.eligible,
+            valid_email_pct = EXCLUDED.valid_email_pct, sector_match_pct = EXCLUDED.sector_match_pct,
+            sector_breakdown = EXCLUDED.sector_breakdown, recorded_at = EXCLUDED.recorded_at, updated_at = NOW()`;
+      try { await q(upsert); } catch (_) {}
+    }
+    summary.yield_by_source = yieldBySource;
+  }
+  // 7. log the run
   if (!o.dryRun) await q(`INSERT INTO sourcing_runs (source, sector, query, records_found, records_new, status, ended_at, payload_summary) VALUES (${lit(o.sources.join('+'))}, NULL, ${lit('source-leads')}, ${num(summary.qualified)}, ${num(summary.persisted)}, 'completed', NOW(), ${jb({ run_id: runId, hot: summary.hot, send_ready: summary.send_ready, audited: summary.audited })})`);
   summary.ms = Date.now() - t0;
   console.log(JSON.stringify(summary, null, 2));
