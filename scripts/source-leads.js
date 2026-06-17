@@ -10,6 +10,19 @@
  * full audit (real site-scan + mint /audit page) -> ICP+hot score -> enrich (multi-email + decision-makers
  * + LinkedIn, verified) -> persist to leads + audit_pages + sourcing_runs with full provenance ->
  * set channel-ready flags (Mystrika / LinkedIn / Instagram). Fail-open throughout.
+ *
+ * DEDUP STRATEGY (cross-scraper global):
+ *   1. external_id match  — placeId (smatleads GBP) or equivalent stable ID from the source
+ *   2. domain match       — normalised domain (strip www., lowercase)
+ *   3. company+city fuzzy — lowercased company name + city, to catch smatleads vs SERP overlap
+ * Each check hits the leads table so dedup is GLOBAL across all scrapers, not just in-memory.
+ *
+ * PER-SCRAPER DAILY CAP (50 Tier-1+2):
+ *   Each scraper stops persisting NEW Tier-1 or Tier-2 leads once it has reached
+ *   SCRAPER_T12_DAILY_CAP (default 50) for the current UTC day. Tier-3 leads are exempt
+ *   (low-cost backlog) and always flow through. The cap is per (scraper_source, day) and is
+ *   read from scraper_daily at run start, then enforced in-process to avoid double-counting
+ *   from concurrent runs.
  */
 const path = require('path');
 const { REGISTRY } = require(path.resolve(__dirname, '..', 'src/lib/sourcing/sources/adapters.js'));
@@ -59,6 +72,9 @@ function args() {
   // and we DO NOT drop overflow: candidates past the cap are still collected and persisted (the enrich/score
   // path assigns them their real, usually lower, tier for the LLM-rescue backlog). 0/negative disables the cap.
   o.t1Target = Math.max(0, parseInt(process.env.SOURCE_T1_TARGET || '50', 10) || 0);
+  // Per-scraper Tier-1+2 daily cap. Each scraper stops persisting NEW Tier-1 or Tier-2 leads once it
+  // hits this number today. Tier-3 leads (low-cost backlog) are exempt. Set to 0 to disable.
+  o.t12DailyCap = Math.max(0, parseInt(process.env.SCRAPER_T12_DAILY_CAP || '50', 10) || 0);
   // Per-sector ceiling so the 50 is spread across served sectors (10 priority sectors => ~5 each by default).
   // Derived from t1Target / SOURCE_SECTORS (default 10) unless SOURCE_T1_PER_SECTOR is set explicitly.
   const sectorsN = Math.max(1, parseInt(process.env.SOURCE_SECTORS || '10', 10) || 10);
@@ -144,19 +160,56 @@ async function run() {
       'ALTER TABLE scraper_daily ADD COLUMN IF NOT EXISTS persisted integer DEFAULT 0',
       "ALTER TABLE scraper_daily ADD COLUMN IF NOT EXISTS sector_breakdown jsonb DEFAULT '{}'::jsonb",
       'ALTER TABLE scraper_daily ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()',
+      // Global cross-scraper dedup: store the source-system stable ID (placeId for smatleads GBP).
+      // ADDITIVE only — never rename/drop.
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS external_id text',
+      'CREATE INDEX IF NOT EXISTS idx_leads_external_id ON leads (external_id) WHERE external_id IS NOT NULL',
+      // Per-scraper Tier-1+2 daily cap tracking column in scraper_daily.
+      'ALTER TABLE scraper_daily ADD COLUMN IF NOT EXISTS t12_persisted integer DEFAULT 0',
+      // city column on leads (used by company+city cross-scraper dedup key).
+      'ALTER TABLE leads ADD COLUMN IF NOT EXISTS city text',
     ]) { try { await q(ddl); } catch (_) {} }
   }
   const t0 = Date.now();
   const runId = 'src-' + Date.now().toString(36);
   console.log(`[source-leads] sources=${o.sources.join(',')} max=${o.max} t1Target=${o.t1Target || 'off'} dryRun=${o.dryRun}`);
   const { raws, stats: srcStats } = await gather(o);
-  // dedupe by domain (in-memory)
+  // In-memory dedup by domain (first pass — catches within-batch duplicates before the DB round-trip).
   const seen = new Set(); const cand = [];
   for (const r of raws) { const d = (r.domain || '').toLowerCase(); if (d && !seen.has(d)) { seen.add(d); cand.push(r); } }
-  // dedupe against existing leads
-  let existing = new Set();
-  if (!o.dryRun) { const e = await q('SELECT LOWER(domain) d FROM leads WHERE domain IS NOT NULL'); if (e.ok) existing = new Set(e.rows.map(x => x.d)); }
-  const fresh = cand.filter(r => !existing.has(r.domain.toLowerCase()));
+
+  // ── GLOBAL CROSS-SCRAPER DEDUP ──────────────────────────────────────────────────────────────────
+  // Load three dedup signals from Neon so ANY scraper that already inserted this business is caught,
+  // regardless of which scraper originally found it.
+  //
+  //  Signal 1 — external_id (placeId from smatleads GBP, or equivalent stable ID)
+  //  Signal 2 — normalised domain (strip www., lowercase)
+  //  Signal 3 — company+city fuzzy key  (lowercased, trimmed, joined with '|')
+  //             catches same business found by smatleads AND a SERP scraper under slightly different names.
+  let existingDomains = new Set();
+  let existingExtIds  = new Set();
+  let existingCompCity = new Set();
+  if (!o.dryRun) {
+    const [edR, eiR, ecR] = await Promise.all([
+      q('SELECT LOWER(domain) d FROM leads WHERE domain IS NOT NULL'),
+      q("SELECT LOWER(external_id) ei FROM leads WHERE external_id IS NOT NULL AND external_id <> ''"),
+      q("SELECT LOWER(company) || '|' || LOWER(COALESCE(city,'')) k FROM leads WHERE company IS NOT NULL"),
+    ]);
+    if (edR.ok) existingDomains  = new Set(edR.rows.map(x => x.d));
+    if (eiR.ok) existingExtIds   = new Set(eiR.rows.map(x => x.ei));
+    if (ecR.ok) existingCompCity = new Set(ecR.rows.map(x => x.k));
+  }
+  const _normDomain = d => (d || '').toLowerCase().replace(/^www\./, '');
+  const _compCityKey = r => ((r.company || '') + '|' + (r.city || '')).toLowerCase().trim();
+  const fresh = cand.filter(r => {
+    if (!r.domain) return false;
+    const nd = _normDomain(r.domain);
+    if (existingDomains.has(nd)) return false;
+    if (r.external_id && existingExtIds.has((r.external_id || '').toLowerCase())) return false;
+    const ck = _compCityKey(r);
+    if (ck !== '|' && existingCompCity.has(ck)) return false;
+    return true;
+  });
   // ICP pre-filter
   const qualified = []; for (const r of fresh) { const pf = preFilter(r); if (pf.pass) { r.sector = pf.sector; qualified.push(r); } }
   console.log(`[source-leads] raw=${raws.length} unique=${cand.length} fresh=${fresh.length} icp-qualified=${qualified.length}`);
@@ -167,8 +220,21 @@ async function run() {
   // OUTCOME counts (icp_tier===1 after enrich/score) so the daily yield reflects true Tier-1 output, not just
   // pre-filter eligibility. Keyed by the canonical source string written to leads.source (r.source).
   const yieldBySource = {};
-  const _ys = (src) => (yieldBySource[src] = yieldBySource[src] || { raw: 0, eligible: 0, persisted: 0, tier1: 0, by_sector: {}, emailed: 0, leads: 0 });
+  const _ys = (src) => (yieldBySource[src] = yieldBySource[src] || { raw: 0, eligible: 0, persisted: 0, tier1: 0, tier2: 0, by_sector: {}, emailed: 0, leads: 0 });
   for (const [name, st] of Object.entries(srcStats || {})) { const y = _ys(name); y.raw += st.raw || 0; y.eligible += st.eligible || 0; }
+
+  // ── PER-SCRAPER TIER-1+2 DAILY CAP ─────────────────────────────────────────────────────────────
+  // Load today's already-persisted Tier-1+2 count per scraper source from Neon so the cap is
+  // respected across multiple same-day runs of this script (or parallel runners).
+  // Tier-3 is exempt — it flows through regardless (low-cost backlog, doesn't eat send capacity).
+  const t12Cap = o.t12DailyCap || 0;   // 0 = disabled
+  const t12TodayBySource = {};          // scraper_source => count already persisted today
+  if (t12Cap && !o.dryRun) {
+    const r12 = await q(`SELECT source, COUNT(*) n FROM leads WHERE icp_tier IN (1,2) AND sourced_at >= CURRENT_DATE AND sourced_at < CURRENT_DATE + INTERVAL '1 day' GROUP BY source`);
+    if (r12.ok) for (const row of r12.rows) t12TodayBySource[row.source] = Number(row.n) || 0;
+  }
+  // In-process counters so concurrent leads within this run also count toward the cap.
+  const t12InProcess = {};   // scraper_source => count added this run (before the DB upsert at step 6)
   for (const r of qualified.slice(0, o.max)) {
     // 1. full audit (real site scan)
     let scan = { counts: { total: 0, p1: 0 }, signals: {}, reachable: false, pointers: [] };
@@ -212,8 +278,25 @@ async function run() {
 
     if (o.dryRun) continue;
     // 4. persist lead (upsert by domain)
-    const ins = await q(`INSERT INTO leads (company, domain, website, sector, jurisdiction, country, source, acquisition_channel, lead_type, lifecycle_stage, aggressive_source, priority_score, platform, source_permalink, scrape_stream, hot_score, fit, fit_score, email, contact_name, contact_title, contact_linkedin, emails, decision_makers, top_finding, channel_email_ready, channel_linkedin_ready, channel_instagram_ready, conversion_tier, conversion_score, hiring_signal, sourced_at, created_at)
-      VALUES (${lit(lead.company)}, ${lit(lead.domain)}, ${lit('https://' + lead.domain)}, ${lit(lead.sector)}, ${lit(lead.country)}, ${lit(lead.country)}, ${lit(r.source)}, ${lit('ad_intel_' + r.platform)}, ${lit('commercial_' + lead.sector)}, 'sourced', ${boolL(adRunner)}, ${num(lead.hot_score)}, ${lit(r.platform)}, ${lit(r.permalink)}, ${lit(adRunner ? 'sponsored' : 'organic_top100')}, ${num(lead.hot_score)}, ${boolL(lead.fit)}, ${num(lead.fit_score)}, ${lit(lead.email)}, ${lit(lead.contact_name)}, ${lit(lead.contact_title)}, ${lit(lead.contact_linkedin)}, ${jb(lead.emails)}, ${jb(lead.decision_makers)}, ${lit(lead.top_finding)}, ${boolL(lead.channel_email_ready)}, ${boolL(lead.channel_linkedin_ready)}, ${boolL(lead.channel_instagram_ready)}, ${lit(lead.conversion_tier)}, ${num(lead.conversion_score)}, ${lit(r.hiring_signal || null)}, NOW(), NOW())
+    //
+    // PER-SCRAPER TIER-1+2 DAILY CAP CHECK — skip this lead if:
+    //   • the cap is enabled (t12Cap > 0)
+    //   • the lead is Tier-1 or Tier-2  (Tier-3 always flows through)
+    //   • this scraper has already hit or exceeded its cap today
+    // "Today" = already-in-DB count (t12TodayBySource) + added-this-run count (t12InProcess).
+    const _srcKey = r.source || 'unknown';
+    const _isT12 = lead.tier === 1 || lead.tier === 2;
+    if (t12Cap && _isT12) {
+      const _dbCount  = t12TodayBySource[_srcKey] || 0;
+      const _runCount = t12InProcess[_srcKey] || 0;
+      if (_dbCount + _runCount >= t12Cap) {
+        console.error(`[daily-cap] ${_srcKey} Tier-${lead.tier} skipped — cap ${t12Cap} reached (db=${_dbCount} run=${_runCount}) domain=${lead.domain}`);
+        summary.skipped_cap = (summary.skipped_cap || 0) + 1;
+        continue;
+      }
+    }
+    const ins = await q(`INSERT INTO leads (company, domain, website, sector, jurisdiction, country, source, acquisition_channel, lead_type, lifecycle_stage, aggressive_source, priority_score, platform, source_permalink, scrape_stream, hot_score, fit, fit_score, email, contact_name, contact_title, contact_linkedin, emails, decision_makers, top_finding, channel_email_ready, channel_linkedin_ready, channel_instagram_ready, conversion_tier, conversion_score, hiring_signal, external_id, sourced_at, created_at)
+      VALUES (${lit(lead.company)}, ${lit(lead.domain)}, ${lit('https://' + lead.domain)}, ${lit(lead.sector)}, ${lit(lead.country)}, ${lit(lead.country)}, ${lit(r.source)}, ${lit('ad_intel_' + r.platform)}, ${lit('commercial_' + lead.sector)}, 'sourced', ${boolL(adRunner)}, ${num(lead.hot_score)}, ${lit(r.platform)}, ${lit(r.permalink)}, ${lit(adRunner ? 'sponsored' : 'organic_top100')}, ${num(lead.hot_score)}, ${boolL(lead.fit)}, ${num(lead.fit_score)}, ${lit(lead.email)}, ${lit(lead.contact_name)}, ${lit(lead.contact_title)}, ${lit(lead.contact_linkedin)}, ${jb(lead.emails)}, ${jb(lead.decision_makers)}, ${lit(lead.top_finding)}, ${boolL(lead.channel_email_ready)}, ${boolL(lead.channel_linkedin_ready)}, ${boolL(lead.channel_instagram_ready)}, ${lit(lead.conversion_tier)}, ${num(lead.conversion_score)}, ${lit(r.hiring_signal || null)}, ${lit(r.external_id || null)}, NOW(), NOW())
       RETURNING id`);
     const leadId = ins.ok && ins.rows[0] ? ins.rows[0].id : null;
     // Unique-violation safe: with idx_leads_domain_active_unique live, a concurrent writer that inserted
@@ -225,7 +308,10 @@ async function run() {
       // (icp_tier===1 after enrich/score), NOT pre-filter eligibility, so the daily row reflects true output.
       const y = _ys(r.source); y.persisted++; y.leads++;
       if (lead.tier === 1) { y.tier1++; y.by_sector[lead.sector] = (y.by_sector[lead.sector] || 0) + 1; }
+      if (lead.tier === 2) { y.tier2++; }
       if (lead.channel_email_ready || ((enr.counts || {}).emails || 0) > 0 || ((enr.counts || {}).verified || 0) > 0) y.emailed++;
+      // Advance in-process counter so the daily cap is enforced within this run too.
+      if (t12Cap && _isT12) { t12InProcess[_srcKey] = (t12InProcess[_srcKey] || 0) + 1; }
     } else {
       const kind = classifyHttpInsert(ins);
       if (kind === 'duplicate') { summary.skipped_dup = (summary.skipped_dup || 0) + 1; }
@@ -254,14 +340,16 @@ async function run() {
       const validPct = y.leads ? Math.round(1000 * y.emailed / y.leads) / 10 : null;
       const t1Eligible = Math.max(y.tier1, srcStats[src] ? srcStats[src].t1 : 0);   // OUTCOME, floored by pre-gate count
       const sectorMatchPct = y.persisted ? Math.round(1000 * Object.values(y.by_sector).reduce((n, v) => n + v, 0) / y.persisted) / 10 : null;
-      const upsert = `INSERT INTO scraper_daily (scraper_source, day, sourced_n, t1_eligible_n, valid_email_pct, sector_match_pct, cost, recorded_at, raw_found, eligible, persisted, sector_breakdown, updated_at)
-          VALUES (${lit(src)}, CURRENT_DATE, ${num(y.persisted)}, ${num(t1Eligible)}, ${num(validPct)}, ${num(sectorMatchPct)}, NULL, NOW(), ${num(y.raw)}, ${num(y.eligible)}, ${num(y.persisted)}, ${jb(y.by_sector)}, NOW())
+      const t12Added = (t12InProcess[src] || 0);
+      const upsert = `INSERT INTO scraper_daily (scraper_source, day, sourced_n, t1_eligible_n, valid_email_pct, sector_match_pct, cost, recorded_at, raw_found, eligible, persisted, sector_breakdown, t12_persisted, updated_at)
+          VALUES (${lit(src)}, CURRENT_DATE, ${num(y.persisted)}, ${num(t1Eligible)}, ${num(validPct)}, ${num(sectorMatchPct)}, NULL, NOW(), ${num(y.raw)}, ${num(y.eligible)}, ${num(y.persisted)}, ${jb(y.by_sector)}, ${num(t12Added)}, NOW())
           ON CONFLICT (scraper_source, day) DO UPDATE SET
             sourced_n = scraper_daily.sourced_n + EXCLUDED.sourced_n,
             t1_eligible_n = scraper_daily.t1_eligible_n + EXCLUDED.t1_eligible_n,
             persisted = COALESCE(scraper_daily.persisted,0) + EXCLUDED.persisted,
             raw_found = COALESCE(scraper_daily.raw_found,0) + EXCLUDED.raw_found,
             eligible = COALESCE(scraper_daily.eligible,0) + EXCLUDED.eligible,
+            t12_persisted = COALESCE(scraper_daily.t12_persisted,0) + EXCLUDED.t12_persisted,
             valid_email_pct = EXCLUDED.valid_email_pct, sector_match_pct = EXCLUDED.sector_match_pct,
             sector_breakdown = EXCLUDED.sector_breakdown, recorded_at = EXCLUDED.recorded_at, updated_at = NOW()`;
       try { await q(upsert); } catch (_) {}
