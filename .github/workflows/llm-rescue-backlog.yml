@@ -11,11 +11,11 @@ name: llm-rescue backlog (generation-first Tier-1 lift)
 # the deterministic + consent gate). SEND stays OFF. Heartbeat-wrapped (engine_runs) so health/check-stuck see it.
 on:
   schedule:
-    # FOUR staggered backlog waves/day (every ~6h, off the top-of-hour) so the ~8.6k un-checked Tier-2
-    # backlog drains continuously. Each wave is still bounded by --max (LLM_QA_MAX_CALLS_PER_RUN, default
-    # 250) AND the per-run cost early-exit (LLM_QA_RUN_COST_CAP_MICRO) + agency daily LLM budget, so 4 waves
-    # cannot bill past the cost ceiling — free-first routing returns $0 on the common path.
-    - cron: "23 2,8,14,20 * * *"   # 02:23 + 08:23 + 14:23 + 20:23 UTC (off-peak, off the top-of-hour)
+    # EIGHT staggered backlog waves/day (every ~3h, off the top-of-hour) so the ~8k un-checked Tier-2
+    # backlog drains at ~2,000 leads/day (8 × 250-max). Each wave is still bounded by --max and the
+    # per-run cost cap (LLM_QA_RUN_COST_CAP_MICRO) + daily LLM budget — free-first routing means $0 on
+    # the common path. Race-guard + Layer-3 self-retry handle any rare scheduling overlaps.
+    - cron: "23 2,5,8,11,14,17,20,23 * * *"  # 8 waves/day every 3h (02:23..23:23 UTC); off-peak, off the top-of-hour
   workflow_dispatch:
     inputs:
       rescue_max:
@@ -98,3 +98,4 @@ jobs:
           # act on any pending review verdicts (accept/auto-promote under the gate + consent; needs_info; rejected).
           node scripts/heartbeat.js wrap apply-review -- node scripts/apply-review.js --max 500 \
             || node scripts/apply-review.js --max 500 || true
+
