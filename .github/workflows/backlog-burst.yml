@@ -59,6 +59,7 @@ jobs:
           # Heartbeat the re-tier pass too (the advance step below is already wrapped). Keeps backlog-burst visible
           # to the engine-cycle race guard (heartbeat.js active-writer) during requalify, which rewrites the same
           # tier/lifecycle columns the cycle's qualify->mint seam touches.
+          export HEARTBEAT_WRAP_TIMEOUT_MS=3300000  # 55 min: backlog-burst job = 120 min; 2 wraps max; 55+55<120
           node scripts/heartbeat.js wrap backlog-burst -- node scripts/requalify-all-leads.js ${{ inputs.requalify }} || true
       - name: Advance the backlog (no-send)
         run: |
