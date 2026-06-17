@@ -82,7 +82,9 @@ jobs:
       - name: Self-retry after race-guard deferral
         if: steps.layer3.outputs.DEFERRED == '1'
         run: |
-          # Re-queue this workflow (apply=1 force=1) so it runs as soon as the heavy writer clears.
+          # Re-queue this workflow (apply=1 force=0 recheck_hours=0) so it runs as soon as the heavy writer clears.
+          # force=0: keeps LLM in-band disabled (force=1 would re-enable inline LLM and exhaust the 60-min budget).
+          # recheck_hours=0: processes all leads regardless of when they were last checked (bypass idempotency window).
           # Sleep 10 min first — avoids a tight dispatch loop when backlog-burst/llm-rescue runs long.
           # The layer3-complete concurrency group (cancel-in-progress:false) ensures at most one queued run.
           echo "[layer3-wf] deferred by race-guard — sleeping 10m before re-queue to avoid tight loop..."
@@ -91,7 +93,7 @@ jobs:
             -H "Authorization: token ${{ github.token }}" \
             -H "Content-Type: application/json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/layer3-complete.yml/dispatches" \
-            -d '{"ref":"main","inputs":{"max":"400","apply":"1","recheck_hours":"0","force":"1"}}' && \
+            -d '{"ref":"main","inputs":{"max":"400","apply":"1","recheck_hours":"0","force":"0"}}' && \
           echo "[layer3-wf] re-queued OK (will run when backlog-burst/llm-rescue finishes)"
       - name: Alert on failure
         if: failure()
