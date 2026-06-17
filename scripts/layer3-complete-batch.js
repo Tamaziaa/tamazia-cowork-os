@@ -236,10 +236,16 @@ function writeIntegrity(lead, sets, flags) {
   return { sql, wrote: true };
 }
 
-// stamp layer3_checked_at on a processed lead (idempotency window). additive; only in APPLY mode.
+// stamp layer3_checked_at: queue IDs during the loop, flush with ONE batch UPDATE after (avoids N subprocess calls).
+const _stampQueue = [];
 function stampChecked(id) {
   if (DRY || !_l3ColReady) return;
-  pgSafe(`UPDATE leads SET layer3_checked_at=NOW() WHERE id=${Number(id)}`);
+  _stampQueue.push(Number(id));
+}
+function flushStamps() {
+  if (DRY || !_l3ColReady || !_stampQueue.length) return;
+  const ids = _stampQueue.splice(0).filter(Number.isFinite).join(',');
+  if (ids) pgSafe(`UPDATE leads SET layer3_checked_at=NOW() WHERE id IN (${ids})`);
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -321,19 +327,28 @@ function clearEligibleIds(ids) {
       AND COALESCE(claude_cleared, FALSE) = FALSE`);
   const eligible = (r && !r._err) ? String(r).split('\n').map(s => s.trim()).filter(Boolean) : [];
   if (!eligible.length) return { eligible: [], cleared: 0 };
-  if (DRY) return { eligible, cleared: 0 };  // DRY: count what WOULD clear; write nothing.
-  let cleared = 0;
-  const sg = path.join(ROOT, 'scripts', 'claude-safeguard-batch.js');
-  const note = JSON.stringify({ layer3: { batch: BATCH, at: new Date().toISOString() } });
-  for (const id of eligible) {
-    try {
-      execFileSync('node', [sg, '--clear-lead', id, '--batch', BATCH, '--note', note], { encoding: 'utf8' });
-      execFileSync('node', [sg, '--clear-audit', id, '--batch', BATCH], { encoding: 'utf8' });
-      execFileSync('node', [sg, '--clear-touch', id, '--batch', BATCH], { encoding: 'utf8' });
-      const out = execFileSync('node', [sg, '--finalize', id, '--batch', BATCH], { encoding: 'utf8' }).toString();
-      if (/claude_cleared=TRUE/.test(out)) cleared++;
-    } catch (_e) {}
-  }
+  if (DRY) return { eligible, cleared: 0 };
+  // Batch-clear: 3 SQL calls instead of N×4 Node subprocess spawns (was O(N) processes, now O(1)).
+  // Mirrors exactly what claude-safeguard-batch.js --clear-lead/--clear-audit/--clear-touch/--finalize does.
+  const eIdList = eligible.map(Number).filter(Number.isFinite).join(',');
+  const noteJson = JSON.stringify({ layer3: { batch: BATCH, at: new Date().toISOString() } });
+  // Step 1: set all three sub-flags + stamp + batch tag + merge note in ONE batch UPDATE.
+  pgSafe(`UPDATE leads SET
+      claude_lead_cleared=TRUE, claude_audit_cleared=TRUE, claude_touch_cleared=TRUE,
+      claude_reviewed_at=NOW(), claude_review_batch=${esc(BATCH)},
+      claude_review_notes = COALESCE(claude_review_notes,'{}'::jsonb) || ${esc(noteJson)}::jsonb
+    WHERE id IN (${eIdList})
+      AND quality_fit=TRUE AND COALESCE(lifecycle_stage,'')='qualified'
+      AND COALESCE(audit_verified,FALSE)=TRUE AND governor_released_at IS NOT NULL
+      AND COALESCE(claude_cleared,FALSE)=FALSE`);
+  // Step 2: finalize — compute claude_cleared atomically from sub-flags (same logic as --finalize).
+  pgSafe(`UPDATE leads SET
+      claude_cleared=(COALESCE(claude_lead_cleared,FALSE) AND COALESCE(claude_audit_cleared,FALSE) AND COALESCE(claude_touch_cleared,FALSE)),
+      claude_reviewed_at=NOW(), claude_review_batch=${esc(BATCH)}
+    WHERE id IN (${eIdList}) AND claude_lead_cleared=TRUE AND claude_audit_cleared=TRUE AND claude_touch_cleared=TRUE`);
+  // Step 3: count cleared.
+  const chk = pgSafe(`SELECT COUNT(*)::int FROM leads WHERE id IN (${eIdList}) AND COALESCE(claude_cleared,FALSE)=TRUE`);
+  const cleared = parseInt(String(chk && !chk._err ? chk : '0').trim(), 10) || 0;
   return { eligible, cleared };
 }
 
@@ -454,6 +469,8 @@ function notify(summaryLine) {
       if (changed) changedIds.add(lead.id);
       stampChecked(lead.id);
     }
+    // Flush all stamp IDs in ONE batch UPDATE instead of N individual writes.
+    flushStamps();
 
     // ---- promote staged auto_promote leads via the EXISTING atomic promote (gate re-decides). ----
     let promoted = 0;
