@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: engine-db-work
+  group: apollo-enrich
   cancel-in-progress: false
 
 jobs:
