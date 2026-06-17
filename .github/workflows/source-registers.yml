@@ -57,7 +57,9 @@ jobs:
       - name: Run register sourcing (gated, heartbeat-wrapped)
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '100' }}"
+          # Pin heartbeat + T1 target AFTER .env export (which may carry the old 20-min default)
+          export HEARTBEAT_WRAP_TIMEOUT_MS="2100000"
+          export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '50' }}"
           node scripts/heartbeat.js wrap source-registers -- node scripts/source-registers.js --source ${{ github.event.inputs.sources || 'companies-house,cqc,fca,charity-commission' }} --max ${{ github.event.inputs.max || '300' }}
       - name: Alert on failure
         if: failure()
