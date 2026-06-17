@@ -12,8 +12,12 @@
 //   CLAUDE_CODE_OAUTH_TOKEN check: if the Anthropic/Haiku fallback is needed but the token is absent, this
 //   script logs a clear warning and continues — free models (Cloudflare/Groq/Gemini) are tried first, so
 //   the wave still runs without the token, just without the paid Haiku fallback tier.
-//   Rate-limit protection: --max is capped at MAX_LLM_CALLS_PER_RUN (default 100) so a single run can
-//   never exceed the cost-protection ceiling regardless of what is passed on the CLI.
+//   Rate-limit protection: --max is capped at MAX_LLM_CALLS_PER_RUN (default 250) so a single run can
+//   never exceed the cost-protection ceiling regardless of what is passed on the CLI. The hard COST
+//   guard is independent of this lead cap: the per-run budget early-exit (LLM_QA_RUN_COST_CAP_MICRO)
+//   + the agency daily LLM budget stop the wave the instant spend is hit, and free-first routing
+//   (Cloudflare->Groq->Gemini) returns $0 on the common path, so widening the lead cap raises drain
+//   throughput WITHOUT raising the cost ceiling — a quota spike still cannot bill past the cost cap.
 const path = require('path');
 const fs = require('fs');
 const ROOT = path.resolve(__dirname, '..');
@@ -23,8 +27,13 @@ const rescue = require(path.join(ROOT, 'src', 'lib', 'llm-rescue.js'));
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i >= 0 ? process.argv[i + 1] : d; };
 const has = (n) => process.argv.includes('--' + n);
 
-// D3.3: hard ceiling on LLM calls per run (cost protection). Env-tunable; default 100.
-const MAX_LLM_CALLS_PER_RUN = Math.max(1, parseInt(process.env.LLM_QA_MAX_CALLS_PER_RUN || '100', 10));
+// D3.3: hard ceiling on LLM calls per run (rate-limit / throughput cap). Env-tunable; default 250.
+// Raised 100 -> 250 to drain the ~8.6k un-checked Tier-2 backlog continuously across the 4 daily waves.
+// This is a LEAD throughput cap, NOT the cost guard: the real spend ceiling is the per-run cost early-exit
+// (LLM_QA_RUN_COST_CAP_MICRO) + the agency daily LLM budget (LLM_QA_DAILY_CAP_MICRO), both enforced inside
+// runWave(). Free-first routing returns $0 on the common path, so a wider lead cap lifts drain rate while
+// the cost cap still hard-stops the wave the instant any paid spend reaches the ceiling (quota-spike safe).
+const MAX_LLM_CALLS_PER_RUN = Math.max(1, parseInt(process.env.LLM_QA_MAX_CALLS_PER_RUN || '250', 10));
 
 // D3.3: CLAUDE_CODE_OAUTH_TOKEN check. Free models run without it; Haiku is the paid fallback only.
 // If absent we warn clearly and continue (the wave still runs on Cloudflare/Groq/Gemini at £0).
