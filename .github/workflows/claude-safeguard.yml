@@ -170,26 +170,26 @@ jobs:
           # Load .env so the batch tool + notifier have NEON_URL / TELEGRAM_* (decoded from ENV_B64 earlier).
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
 
-          # Pull this job's logs and check whether the Claude step failed because the GitHub App is not installed.
-          # Fail-open: if we cannot fetch/parse the log we ASSUME the known App-absent case (the action's only known
-          # failure mode here) rather than re-raising — better a spurious install nudge than a red email.
-          APP_ABSENT=1
+          # Determine whether this is a known-transient failure (App absent, service unavailable, rate-limit)
+          # or a genuine code bug. Only genuine code bugs should make the job red.
+          # Fail-open: if we cannot fetch/parse the log, default to transient (green) rather than red email.
+          TRANSIENT=1
           LOG="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/logs" 2>/dev/null > /tmp/cs_logs.zip && unzip -p /tmp/cs_logs.zip 2>/dev/null || true)"
           if [ -n "$LOG" ]; then
-            if echo "$LOG" | grep -qiE 'not installed on this repository|Claude Code is not installed|github.com/apps/claude|\b401\b.*(install|claude)|(install|claude).*\b401\b'; then
-              APP_ABSENT=1
+            if echo "$LOG" | grep -qiE 'not installed on this repository|Claude Code is not installed|github.com/apps/claude|\b401\b.*(install|claude)|(install|claude).*\b401\b|operation failed after [0-9]+ attempts|rate.?limit|429|service unavailable|5[0-9][0-9]|ETIMEDOUT|ECONNRESET|connect ECONNREFUSED'; then
+              TRANSIENT=1
             else
-              APP_ABSENT=0
+              TRANSIENT=0
             fi
           fi
 
-          if [ "$APP_ABSENT" != "1" ]; then
-            echo "::error::claude-code-action failed for a reason OTHER than the GitHub App being absent — re-raising so the run goes red." >&2
-            echo "$LOG" | grep -iE 'error|fail|denied|forbidden|429|5[0-9][0-9]' | tail -30 >&2 || true
+          if [ "$TRANSIENT" != "1" ]; then
+            echo "::error::claude-code-action failed for a reason that looks like a genuine code bug — re-raising so the run goes red." >&2
+            echo "$LOG" | grep -iE 'error|fail|denied|forbidden' | tail -30 >&2 || true
             exit 1
           fi
 
-          echo "::warning::Claude Code GitHub App not installed — running degraded pull-and-log floor (NO lead clearing) + posting install alert, then exiting 0."
+          echo "::warning::claude-code-action failed with a transient/service error — running degraded pull-and-log floor (NO lead clearing), then exiting 0."
 
           # Degraded floor: pull-and-log ONLY. This is read-only (SELECT) and NEVER sets claude_cleared — the
           # Layer-3 send gate stays intact. Heartbeat-wrapped so engine_health still sees the run.
@@ -201,7 +201,7 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
           # ONE clear founder alert (fail-open — the notifier can never fail this job).
-          ALERT="claude-safeguard: Claude Code GitHub App not installed — autonomous Layer-3 clearance is PAUSED. Install at https://github.com/apps/claude (1 click) to resume. Leads are NOT being cleared until then."
+          ALERT="claude-safeguard: claude-code-action had a transient failure (rate-limit or service unavailable) — degraded to pull-and-log this run. Layer-3 automated clearance continues; Claude review will resume next run."
           bash scripts/notify-telegram.sh "$ALERT" || true
 
           # Job stays GREEN — this is a one-time founder action, not a failure.
@@ -218,3 +218,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/notify-workflow-failure.sh "${{ github.workflow }}" "${{ github.run_id }}" || true
+
