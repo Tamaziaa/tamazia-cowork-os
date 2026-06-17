@@ -26,6 +26,8 @@ jobs:
   cycle:
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     # D3.2: throughput knobs — overridable via workflow_dispatch inputs or ENV_B64 secret.
     # Defaults match the shell-script fallbacks so behaviour is unchanged until a founder adjusts them.
     env:
@@ -37,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
