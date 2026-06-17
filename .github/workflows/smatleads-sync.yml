@@ -1,0 +1,51 @@
+name: smatleads-sync (GBP/Google Maps ingest)
+# Calls the smatleads.io API to search Google Business Profile places for each combo
+# in config/smatleads-matrix.json (2,168 entries). Runs 100 searches per day by default.
+# Budget: 10,000 total credits — 100/day = 100-day runway before exhaustion.
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC daily (before engine-cycle picks up new leads at 07:00)
+  workflow_dispatch:
+    inputs:
+      max_searches:
+        description: "Max searches this run (default 100)"
+        required: false
+        default: "100"
+      force:
+        description: "Skip city-today dedup check (re-run already-searched combos)"
+        required: false
+        default: "false"
+      dry:
+        description: "Dry run — search but do not write to Neon"
+        required: false
+        default: "false"
+
+# Single-flight: two concurrent runs would double-consume the credit budget.
+concurrency:
+  group: smatleads-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: npm install --omit=dev || npm install || true
+      - run: python -m pip install --quiet -r requirements.txt
+      - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Run smatleads sync
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          MAX="${{ github.event.inputs.max_searches || '100' }}"
+          FORCE_FLAG=""
+          DRY_FLAG=""
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then FORCE_FLAG="--force"; fi
+          if [ "${{ github.event.inputs.dry }}" = "true" ]; then DRY_FLAG="--dry"; fi
+          node scripts/smatleads-sync.js --max "$MAX" $FORCE_FLAG $DRY_FLAG
