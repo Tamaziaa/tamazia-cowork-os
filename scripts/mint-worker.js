@@ -24,6 +24,11 @@ const MAXR = Math.max(1, parseInt(process.env.MINT_MAX_RETRIES || '3', 10));
 // Default 30m, well past a normal mint; override with MINT_RECLAIM_AFTER_MIN. Idempotent + safe under
 // concurrency (a row a live worker is actively minting is younger than the TTL, so it is never reclaimed).
 const RECLAIM_MIN = Math.max(1, parseInt(process.env.MINT_RECLAIM_AFTER_MIN || '30', 10));
+// Z7-06: per-build wall-clock cap. build() fetches the live site; one un-fetchable/challenge-walled domain can
+// hang the await until the JOB timeout SIGKILLs the worker mid-build, orphaning the claim (status stuck 'minting').
+// Racing build() against a timeout lets mintOne reject cleanly → catch increments retries → after MAXR the row
+// goes 'failed' instead of looping as a zombie. Default 120s (well past a normal mint); override with the env.
+const BUILD_TIMEOUT_MS = Math.max(30000, parseInt(process.env.MINT_BUILD_TIMEOUT_MS || '120000', 10));
 const ONCE = process.argv.includes('--once');
 const DRY = process.argv.includes('--dry');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -67,11 +72,16 @@ function claimBatch() {
 async function mintOne(row) {
   if (DRY) { console.log('  DRY would mint ' + row.domain + ' (' + row.sector + ')'); return; }
   try {
-    const r = await build({
-      lead_id: row.lead_id ? Number(row.lead_id) : undefined,
-      domain: row.domain, sector: row.sector || 'general', country: row.country || 'UK',
-      company: row.company || null, env: process.env,
-    });
+    let _to;
+    const r = await Promise.race([
+      build({
+        lead_id: row.lead_id ? Number(row.lead_id) : undefined,
+        domain: row.domain, sector: row.sector || 'general', country: row.country || 'UK',
+        company: row.company || null, env: process.env,
+      }),
+      new Promise((_, rej) => { _to = setTimeout(() => rej(new Error('mint build timeout after ' + BUILD_TIMEOUT_MS + 'ms')), BUILD_TIMEOUT_MS); }),
+    ]);
+    clearTimeout(_to);
     pg(`UPDATE minting_queue SET status='done', slug='${q(r.slug)}', hash='${q(r.hash)}', minted_at=now(), error=NULL WHERE id=${row.id};`);
     // Bind the URL to the lead — set ONCE and never overwrite. A lead that already has an audit_url may
     // already be in an active campaign; a new hash would 404 in the recipient's inbox. Re-mints only ever

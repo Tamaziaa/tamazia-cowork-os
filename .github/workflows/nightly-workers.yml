@@ -57,3 +57,10 @@ jobs:
           # is NOT a re-tier writer and gets its OWN heartbeat job name (not nightly-workers / not guarded).
           # Fail-open by construction; the || true is belt-and-braces so a metrics hiccup never reds the workflow.
           node scripts/heartbeat.js wrap compute-metrics -- node scripts/compute-metrics.js || true
+      - name: Health check (Z17-08 — wire the orphaned health-check.js)
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # Z17-08: health-check.js was never attached to a workflow, so the health row went 51h stale.
+          # Run it nightly, fail-open (|| true) so a probe hiccup never reds the workflow; it self-alerts
+          # to Telegram/Slack on _overall=fail. Cheap, high-value observability (no writes beyond health row).
+          node scripts/heartbeat.js wrap health-check -- node scripts/health-check.js || true
