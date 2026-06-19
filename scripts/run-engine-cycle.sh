@@ -31,6 +31,16 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
   else
     echo "[$(TS)] preflight ok: pg8000 importable"
   fi
+  # Z14-03 · FAIL-LOUD DB PREFLIGHT. A dead/wrong NEON_URL must red the workflow (if:failure()->Telegram),
+  # NOT run green-empty (every pg() fail-opens). This is the ONLY non-fail-open DB touch in the cycle; it writes a
+  # flag the trailer reads so we red the run WITHOUT aborting mid-block (which would skip heartbeat finish).
+  if ! node scripts/db-preflight.js; then
+    echo "[$(TS)] 🔴 DB PREFLIGHT FAILED — Neon unreachable/auth error; cycle would run green-empty. Marking run failed."
+    node scripts/notify-event.js stuck "engine-cycle: DB PREFLIGHT FAILED — Neon unreachable/auth error. Engine would run green-empty. Fix NEON_URL." 2>/dev/null || true
+    echo "PREFLIGHT_FAIL" > .preflight_status
+  else
+    echo "OK" > .preflight_status
+  fi
   HB_ID=$(node scripts/heartbeat.js start engine-cycle 2>/dev/null || echo "")   # A2: open a per-cycle heartbeat row in engine_runs
   # GLOBAL STALE-REAPER (race-guard hardening). MUST run BEFORE the active-writer check below. heartbeat.js has a
   # per-job reaper, but it only fires on that SAME job's next start — so a heavy writer that CRASHES and never
@@ -130,3 +140,6 @@ run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}
   echo "===== CYCLE END $(TS) ====="
 } >> "$LOG" 2>&1
 echo "cycle complete · see $LOG"
+# Z14-03: propagate a preflight blackout as a non-zero exit so engine-cycle.yml's if:failure() fires.
+if [ "$(cat .preflight_status 2>/dev/null)" = "PREFLIGHT_FAIL" ]; then rm -f .preflight_status; exit 1; fi
+rm -f .preflight_status

@@ -87,6 +87,26 @@ function run() {
   band('sendable_real_leads', 'send', num(`SELECT COUNT(*) FROM leads l WHERE l.status LIKE 'touch_%_queued' AND COALESCE(NULLIF(l.email,''),l.contact_email,'')<>'' AND COALESCE(acquisition_channel,'') NOT ILIKE '%test%' AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal') AND EXISTS (SELECT 1 FROM outreach_drafts od WHERE od.lead_id=l.id AND od.send_status='pending' AND od.channel='email')`), 1, 0, v => `${v} real leads ready to send (queue starved if 0)`, true);
   band('null_quality_pct', 'quality', (() => { const t = num(`SELECT COUNT(*) FROM leads WHERE COALESCE(contact_email,'')<>''`) || 1; const u = num(`SELECT COUNT(*) FROM leads WHERE COALESCE(contact_email,'')<>'' AND quality_score IS NULL`) || 0; return u / t * 100; })(), 60, 90, v => `${v.toFixed(0)}% of emailable leads unscored`);
 
+  // ---- STAGE-LATENCY SLA (Z17-15) · the detector the 6-day stuck mint lacked ----
+  // COALESCE(...,0): an EMPTY stage (no rows) yields MIN=NULL -> 0h -> healthy (NOT a false 'fail').
+  band('mint_oldest_minting_h', 'sla',
+    num(`SELECT COALESCE(EXTRACT(EPOCH FROM (NOW()-MIN(COALESCE(claimed_at,enqueued_at))))/3600,0) FROM minting_queue WHERE status='minting'`),
+    4, 12, v => `oldest row stuck minting ${v.toFixed(1)}h (Z7-06 zombie guard)`);
+  band('mint_oldest_pending_h', 'sla',
+    num(`SELECT COALESCE(EXTRACT(EPOCH FROM (NOW()-MIN(enqueued_at)))/3600,0) FROM minting_queue WHERE status='pending'`),
+    12, 36, v => `oldest pending mint waiting ${v.toFixed(1)}h (drain stalled)`);
+  band('qual_no_audit_oldest_h', 'sla',
+    num(`SELECT COALESCE(EXTRACT(EPOCH FROM (NOW()-MIN(created_at)))/3600,0) FROM leads WHERE lifecycle_stage='qualified' AND COALESCE(quality_fit,FALSE)=TRUE AND COALESCE(audit_verified,FALSE)=FALSE`),
+    48, 120, v => `oldest FIT+qualified lead un-audit-verified ${v.toFixed(1)}h (mint/verify tail wedged)`);
+  // enrich_claimed_at arrives with Z4-08; guard so a missing column never false-fails.
+  try {
+    if (pg(`SELECT 1 FROM information_schema.columns WHERE table_name='leads' AND column_name='enrich_claimed_at'`) === '1') {
+      band('enrich_oldest_claimed_h', 'sla',
+        num(`SELECT COALESCE(EXTRACT(EPOCH FROM (NOW()-MIN(enrich_claimed_at)))/3600,0) FROM leads WHERE enrich_claimed_at IS NOT NULL AND enriched_at IS NULL`),
+        2, 8, v => `oldest enrich claim un-completed ${v.toFixed(1)}h (crashed claim — Z4-08)`);
+    }
+  } catch (_e) {}
+
   return persist();
 }
 
@@ -103,6 +123,17 @@ function persist() {
   pg(`INSERT INTO system_health (check_key,category,status,detail,metric,checked_at) VALUES ('_overall','meta',${esc(fails ? 'fail' : warns ? 'warn' : 'ok')},${esc(score + '% healthy · ' + fails + ' fail · ' + warns + ' warn')},${score},NOW()) ON CONFLICT (check_key) DO UPDATE SET status=EXCLUDED.status,detail=EXCLUDED.detail,metric=EXCLUDED.metric,checked_at=NOW()`);
   console.log(`Health: ${score}% · ${fails} fail · ${warns} warn · ${results.length} checks`);
   for (const r of results.filter(r => r.status !== 'ok')) console.log(`  [${r.status.toUpperCase()}] ${r.key}: ${r.detail}`);
+  // Z17-15: actually ALERT on fail (the nightly-workers comment claimed this but the code only console.logged).
+  // Fire once, fail-open, via the shared notify-event 'stuck' channel; surface SLA breaches specifically.
+  try {
+    const slaFails = results.filter(r => r.status === 'fail' && r.cat === 'sla');
+    if (fails > 0) {
+      const head = slaFails.length
+        ? `STAGE-LATENCY SLA breach: ${slaFails.map(r => r.key + ' (' + r.detail + ')').join('; ')}`
+        : `health-check: ${fails} fail / ${warns} warn (${score}% healthy)`;
+      execFileSync('node', [path.join(ROOT, 'scripts', 'notify-event.js'), 'stuck', head], { encoding: 'utf8' });
+    }
+  } catch (_e) {}
   return { score, fails, warns, results };
 }
 
