@@ -22,3 +22,4 @@ db/seeds/*.upsert.sql
 # runtime caches + local symlinks — never commit
 .cache/
 node_modules
+.preflight_status
