@@ -54,7 +54,7 @@ function reclaimStale() {
 // Atomically claim up to CONC pending rows (pending -> minting). SKIP LOCKED lets many workers run safely.
 function claimBatch() {
   const sql = `UPDATE minting_queue SET status='minting', claimed_at=now()
-    WHERE id IN (SELECT id FROM minting_queue WHERE status='pending' ORDER BY enqueued_at LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
+    WHERE id IN (SELECT id FROM minting_queue WHERE status='pending' ORDER BY priority ASC NULLS LAST, enqueued_at ASC LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
     RETURNING id, regexp_replace(COALESCE(domain,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(sector,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(country,''),'[\t\r\n]+',' ','g'), lead_id;`;
   const out = (pg(sql) || '').trim();
   if (!out) return [];
