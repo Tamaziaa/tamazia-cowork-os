@@ -152,14 +152,51 @@ function insertLead({ company, domain, sector, country, stream, verify, query, n
  * Scrape one sector until `target` unique genuine leads, or queryCap reached.
  * Both streams (sponsored + organic top-100) ingested.
  */
+// Check whether a freshly-inserted lead is "complete": has a website, a named DM, and a non-role
+// email address. Called immediately after insertLead so we can decide whether it counts toward the
+// `complete` target. We only query the domain column (the key we just inserted on) and look for
+// contact fields that may have been populated by a prior enrichment run on the same domain.
+// Role-address filter: local parts like info/contact/hello/admin/sales etc. are NOT a named contact.
+const ROLE_LOCAL = new Set(['info','contact','hello','admin','sales','support','enquiries','enquiry','office','mail','team','reception','hi','help','no-reply','noreply']);
+function isRoleEmail(email) {
+  if (!email) return true;
+  const local = String(email).split('@')[0].toLowerCase().replace(/[^a-z]/g, '');
+  return ROLE_LOCAL.has(local);
+}
+function isCompleteLeadDomain(domain) {
+  try {
+    const nd = normaliseDomain(domain);
+    const row = pg(`SELECT website, contact_name, dm_name, contact_email, primary_email FROM leads WHERE domain=${esc(nd)} LIMIT 1`);
+    if (!row) return false;
+    // pg() returns a raw tab-separated line for multi-column SELECT; split on tab
+    const [website, contact_name, dm_name, contact_email, primary_email] = row.split('\t');
+    const hasWebsite = website && website !== '' && website !== 'NULL' && website !== '\\N';
+    const hasDM = (contact_name && contact_name !== 'NULL' && contact_name !== '\\N') ||
+                  (dm_name && dm_name !== 'NULL' && dm_name !== '\\N');
+    const emailVal = (contact_email && contact_email !== 'NULL' && contact_email !== '\\N') ? contact_email
+                   : (primary_email && primary_email !== 'NULL' && primary_email !== '\\N') ? primary_email : null;
+    const hasEmail = emailVal && !isRoleEmail(emailVal);
+    return !!(hasWebsite && hasDM && hasEmail);
+  } catch (_) { return false; }
+}
+
+/**
+ * Scrape one sector until `target` COMPLETE leads (website + named DM + non-role email), or
+ * queryCap reached. "Complete" is checked post-insert against Neon so that a domain already
+ * enriched in a prior cycle counts immediately; a brand-new bare insert does not count until
+ * the enrich pipeline fills its contact fields. The lead is always inserted (never lost) — we
+ * just keep scraping until the completion gate is satisfied or the query budget runs out.
+ * Both streams (sponsored + organic top-100) ingested.
+ */
 async function scrapeSector(sector, { target = 50, queryCap = 40 } = {}) {
-  let found = 0, queries = 0, dupes = 0, aggr = 0;
+  let found = 0, complete = 0, queries = 0, dupes = 0, aggr = 0;
   const run = pg(`INSERT INTO scrape_runs (sector, stream) VALUES (${esc(sector)}, 'both') RETURNING id`);
   // SMART CALENDAR: pull the freshest (never-run / stalest) queries for this sector today
   const qlist = pickTodaysQueries(sector, queryCap).map(x => ({ q: x.query, country: x.country, sector }));
   let lastError = null, errCount = 0;
   for (const item of qlist) {
-    if (found >= target || queries >= queryCap) break;
+    // Gate on `complete` (not `found`) so we keep scraping until we have `target` SEND-READY leads.
+    if (complete >= target || queries >= queryCap) break;
     const r = await search(item.q, item.country, 100);
     queries++;
     // gap-fix: a SINGLE transient query error (429 / momentary empty SERP) used to `return {error}` and abandon
@@ -169,29 +206,34 @@ async function scrapeSector(sector, { target = 50, queryCap = 40 } = {}) {
     let leadsThisQuery = 0;
     // SPONSORED stream (ads) — auto-approved ad-runners
     for (const a of (r.ads || [])) {
-      if (found >= target) break;
+      if (complete >= target) break;
       const d = a.domain;
       if (!isGenuineClient(d)) { aggr++; continue; }
       if (alreadyHave(d)) { dupes++; continue; }
       const an = nameFromTitle(a.title, d);   // reject junk SERP titles at the write site
       insertLead({ company: an.company, name_status: an.name_status, domain: d, sector, country: item.country, stream: 'sponsored', verify: 'approved', query: item.q });
       found++; leadsThisQuery++;
+      // Only count toward the completion target if this lead already has a named DM + verified email
+      // (populated by a prior enrich run). Brand-new bare inserts do NOT count — we keep scraping.
+      if (isCompleteLeadDomain(d)) complete++;
     }
     // ORGANIC TOP-100 stream — pending manual verification
     for (const o of (r.organic || [])) {
-      if (found >= target) break;
+      if (complete >= target) break;
       const d = o.domain;
       if (!isGenuineClient(d)) { aggr++; continue; }
       if (alreadyHave(d)) { dupes++; continue; }
       const on = nameFromTitle(o.title, d);   // reject junk SERP titles at the write site
       insertLead({ company: on.company, name_status: on.name_status, domain: d, sector, country: item.country, stream: 'organic_top100', verify: 'pending', query: item.q });
       found++; leadsThisQuery++;
+      // Only count toward the completion target if this lead already has a named DM + verified email.
+      if (isCompleteLeadDomain(d)) complete++;
     }
     logQueryRun(item.q, leadsThisQuery);   // calendar: mark query run + yield (drives rotation)
     await new Promise(z => setTimeout(z, 400));
   }
   pg(`UPDATE scrape_runs SET queries_run=${queries}, leads_found=${found}, dupes_skipped=${dupes}, aggregators_skipped=${aggr}, finished_at=NOW() WHERE id=${run}`);
-  const out = { sector, found, queries, dupes, aggregators_skipped: aggr };
+  const out = { sector, found, complete, queries, dupes, aggregators_skipped: aggr };
   // Only report an error if the whole sector produced nothing AND every attempted query errored (a real outage),
   // so a partial run that found leads despite some transient errors is reported as a success with what it got.
   if (found === 0 && errCount > 0 && errCount === queries) { out.error = lastError; }
@@ -231,7 +273,7 @@ async function runDaily({ perSector = 50, sectors = Object.keys(SECTORS) } = {})
     r.already = already;
     results.push(r);
     total += r.found || 0;
-    console.log(`  ${sector.padEnd(22)} found=${r.found || 0} queries=${r.queries || 0} dupes=${r.dupes || 0} aggr=${r.aggregators_skipped || 0} (had ${already}/${perSector})${r.error ? ' ERR:' + r.error : ''}`);
+    console.log(`  ${sector.padEnd(22)} found=${r.found || 0} complete=${r.complete || 0} queries=${r.queries || 0} dupes=${r.dupes || 0} aggr=${r.aggregators_skipped || 0} (had ${already}/${perSector})${r.error ? ' ERR:' + r.error : ''}`);
   }
   return { total, target: perSector * sectors.length, results };
 }
