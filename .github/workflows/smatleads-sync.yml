@@ -1,16 +1,16 @@
 name: smatleads-sync (GBP/Google Maps ingest)
 # Calls the smatleads.io API to search Google Business Profile places for each combo
-# in config/smatleads-matrix.json (2,168 entries). Runs 100 searches per day by default.
-# Budget: 10,000 total credits — 100/day = 100-day runway before exhaustion.
+# in config/smatleads-matrix.json (2,168 entries). Runs 333 searches per day by default.
+# Budget: 10,000 total credits — 333/day = ~30-day runway (monthly reset). Wave-5 target.
 on:
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC daily (before engine-cycle picks up new leads at 07:00)
   workflow_dispatch:
     inputs:
       max_searches:
-        description: "Max searches this run (default 100)"
+        description: "Max searches this run (default 333, ~10k/mo budget)"
         required: false
-        default: "100"
+        default: "333"
       force:
         description: "Skip city-today dedup check (re-run already-searched combos)"
         required: false
@@ -43,7 +43,7 @@ jobs:
       - name: Run smatleads sync
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          MAX="${{ github.event.inputs.max_searches || '100' }}"
+          MAX="${{ github.event.inputs.max_searches || '333' }}"
           FORCE_FLAG=""
           DRY_FLAG=""
           if [ "${{ github.event.inputs.force }}" = "true" ]; then FORCE_FLAG="--force"; fi

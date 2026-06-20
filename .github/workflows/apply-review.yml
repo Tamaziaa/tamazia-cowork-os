@@ -1,0 +1,49 @@
+name: Apply review (promote auto_promote + accepted leads)
+# Wave-3 of the finishing plan. Runs apply-review.js which:
+#   auto_promote  -> gate re-checks; promotes to Tier-1 ONLY if scoreLead confirms (never bypasses consent gate)
+#   accepted      -> human authority; promotes to qa_suggested_tier (PECR gate still hard)
+#   needs_info    -> enrich hint + lifecycle reset
+#   rejected      -> park to lifecycle='rejected' (no suppression)
+#
+# Runs every 30 min so LLM-rescue's auto_promote rescues reach Tier-1 within half an hour.
+# Idempotent: already-applied leads are stamped applied_* and skipped. SEND stays OFF.
+on:
+  schedule:
+    - cron: '7,37 * * * *'    # :07 and :37 every hour — clear of engine :00/:30, notion :00/:30, verify :37 (own group)
+  workflow_dispatch: {}
+
+concurrency:
+  group: apply-review
+  cancel-in-progress: false   # queue, never cancel — every batch matters
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install Node deps
+        run: npm install --omit=dev || npm install || true
+      - name: Install Python deps (pg8000 shim)
+        run: python -m pip install --quiet -r requirements.txt
+      - name: Materialise .env from secret
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: DB preflight (fail loud on dead Neon)
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          node scripts/db-preflight.js
+      - name: Apply review verdicts (promote auto_promote, accept, park reject/needs_info)
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          node scripts/heartbeat.js wrap apply-review -- node scripts/apply-review.js
+      - name: Alert on failure
+        if: failure()
+        run: |
+          set +e; source .env 2>/dev/null
+          [ -n "$TELEGRAM_BOT_TOKEN" ] && curl -s --max-time 15 -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" -d chat_id="$TELEGRAM_CHAT_ID" -d text="🔴 apply-review failed (run ${{ github.run_id }})." >/dev/null || true

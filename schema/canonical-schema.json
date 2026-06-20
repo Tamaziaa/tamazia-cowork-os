@@ -8655,5 +8655,45 @@
     "indexes": [
       "CREATE INDEX IF NOT EXISTS idx_cost_ledger_source_run ON cost_ledger (source, run_at)"
     ]
+  },
+  "backup_runs": {
+    "columns": {
+      "id": {
+        "type": "bigint",
+        "default": "nextval('backup_runs_id_seq'::regclass)",
+        "notnull": true,
+        "identity": true
+      },
+      "kind": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "status": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "detail": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "bytes": {
+        "type": "bigint",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "ran_at": {
+        "type": "timestamptz",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      }
+    }
   }
 }
