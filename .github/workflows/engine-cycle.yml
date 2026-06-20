@@ -34,6 +34,8 @@ jobs:
       QUALIFY_BATCH: '50'
       ENQUEUE_BATCH: '30'
       STEP_TIMEOUT: '600'
+      ENRICH_WORKER_MAX: '40'       # Wave-2 Z4-01: 8→40 (5× enrichment per cycle, finds DM/LinkedIn/email faster)
+      VERIFY_CONTACTS_BATCH: '80'   # Wave-2 Z4-01: 25→80 (more free MX/SMTP verifications per cycle)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
