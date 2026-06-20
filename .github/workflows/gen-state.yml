@@ -5,7 +5,7 @@ on:
     paths-ignore:
       - 'docs/PIPELINE-STATE.md'   # never re-trigger on our own commit
   schedule:
-    - cron: "0 6 * * *"   # 06:00 UTC daily
+    - cron: "23 * * * *"  # every hour at :23 (clear of engine :00/:30, layer3 08:47/20:47, llm-rescue 02:23/14:23)
   workflow_dispatch: {}
 permissions:
   contents: write

@@ -66,6 +66,7 @@ async function scoreWithRetry(lead, n = 2) {
       AND COALESCE(l.status,'') NOT LIKE 'touch\_%\_blocked'
       AND (l.lifecycle_stage IS NULL OR l.lifecycle_stage IN ${RESCORE_STAGES})
       AND COALESCE(l.requal_version,'') <> ${esc(REQUAL_VERSION)}   -- idempotent: skip rows already done this version
+      AND NOT (COALESCE(l.claude_cleared, FALSE) = TRUE AND l.icp_tier = 1)  -- Wave-3 clobber guard: never re-tier a cleared Tier-1
     ORDER BY l.quality_scored_at ASC NULLS FIRST, l.id ASC LIMIT ${limit}`);
   if (!raw) { console.log(`[requalify ${REQUAL_VERSION}] nothing left to re-score at this version.`); return; }
   const leads = raw.split('\n').filter(Boolean).map(j => { try { return JSON.parse(j); } catch (_e) { return null; } }).filter(Boolean);
@@ -82,6 +83,8 @@ async function scoreWithRetry(lead, n = 2) {
     }));
     for (const { lead, q, err } of _scored) {
     if (err) { console.log(`  ${lead.domain} score err (KEPT as-is, not demoted): ${err.message}`); skipped++; continue; }
+    // Wave-3 clobber guard: never re-tier a cleared Tier-1 (belt-and-braces; also excluded in the SELECT)
+    if (lead.claude_cleared === true && lead.icp_tier === 1) { console.log(`  ${String(lead.domain || '').padEnd(30)} already cleared T1 -> SKIP re-tier`); skipped++; continue; }
     // Transient-safe (QA BUG-2/3): an empty/failed homepage scan returns score 0 with no throw, which would
     // collapse a good lead to Tier 3. If the scan was weak/unreachable, never re-tier a previously-good lead —
     // leave it untouched for the next pass (idempotent) rather than mis-tier it on a blip.
