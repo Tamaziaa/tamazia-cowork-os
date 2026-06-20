@@ -22,7 +22,7 @@ const path = require('path');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
-const apollo = require('../../../lib/enrichment/apollo.js');
+let apollo = null; try { apollo = require('../../../lib/enrichment/apollo.js'); } catch (_e) {} // B10: optional — apollo.js will be deleted; null-safe call at line 256
 let _gate = null; try { _gate = require('../../../lib/gates.js'); } catch (_) {}
 function _validate(t, opts) { if (!_gate || !_gate.validateEmail) return { ...t, valid: true, gate: { ok: true, reasons: [] } }; const v = _gate.validateEmail(t.subject, t.body, opts); return { ...t, valid: v.ok, gate: v }; }
 
@@ -253,7 +253,7 @@ async function renderAll(lead_id) {
   const lead = loadLead(lead_id); if (!lead) return { error: 'lead_not_found' };
   // Apollo enrichment (org level only; people search is paid) — kept for parity with the prior renderer.
   let apolloOrg = null;
-  if (lead.domain) { try { const r = await apollo.enrichOrg(lead.domain); if (r.ok && r.org) apolloOrg = r.org; } catch (_e) {} }
+  if (lead.domain && apollo) { try { const r = await apollo.enrichOrg(lead.domain); if (r.ok && r.org) apolloOrg = r.org; } catch (_e) {} }
 
   const code = campaignCodeFor(lead.sector_code, lead.sector);
   const campaign = loadCampaign(code);
