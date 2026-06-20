@@ -1,0 +1,43 @@
+name: Rebuild ENV_B64
+on:
+  workflow_dispatch:
+
+jobs:
+  update-env:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Append new vars and update ENV_B64
+        env:
+          CURRENT_ENV: ${{ secrets.ENV_B64 }}
+          GH_TOKEN_PAT: ${{ secrets.GH_ACTIONS_PAT }}
+          GH_DEPLOY_PAT: ${{ secrets.GH_DEPLOY_PAT }}
+        run: |
+          echo "$CURRENT_ENV" | base64 -d > current.env
+          echo "Current line count: $(wc -l < current.env)"
+          
+          grep -v "^NOTION_LEADS_DB_ID=" current.env | \
+          grep -v "^CAL_WEBHOOK_SECRET=" | \
+          grep -v "^PUBLIC_POSTHOG_KEY=" | \
+          grep -v "^PUBLIC_POSTHOG_HOST=" | \
+          grep -v "^GH_PAT=" > updated.env 2>/dev/null || cp current.env updated.env
+          
+          echo "NOTION_LEADS_DB_ID=02e175e995a640bba0be8234c5bebb6f" >> updated.env
+          echo "CAL_WEBHOOK_SECRET=0bee0b0cf2ec2afc70e718dc8d92b29331a5f299810a5b7c039d8efcb2a2c51a" >> updated.env
+          echo "PUBLIC_POSTHOG_KEY=phc_pomkfksdN8yRV4hUfNnqkgBLwHXpxxVsQFq4KpugkAr4" >> updated.env
+          echo "PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com" >> updated.env
+          echo "GH_PAT=${GH_DEPLOY_PAT}" >> updated.env
+          
+          echo "Updated line count: $(wc -l < updated.env)"
+          cat updated.env | base64 | tr -d '\n' > new_b64.txt
+          
+          (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y)) \
+          && sudo mkdir -p -m 755 /etc/apt/keyrings \
+          && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+          && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+          && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+          && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+          && sudo apt update && sudo apt install gh -y
+          
+          echo "$GH_TOKEN_PAT" | gh auth login --with-token
+          gh secret set ENV_B64 < new_b64.txt -R Tamaziaa/tamazia-cowork-os
+          echo "ENV_B64 updated successfully"
