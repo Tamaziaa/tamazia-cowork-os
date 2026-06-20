@@ -44,7 +44,13 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
       -- 388 of 614 icp_tier=1 leads were stranded at 'pending' (never deliverability-checked) and so could not
       -- become send-ready. free-verify.js only ever emits valid/risky/invalid/unknown, so re-checking a 'pending'
       -- row is correct (it was never actually verified). prioritise Tier-1 so send-ready depth fills first.
-      AND COALESCE(verify_status,'') IN ('', 'pending')
+      -- Z1-01/Wave-1: by default only ''/'pending' (first verify). With VERIFY_REOON_RETRY=1 ALSO re-select leads
+      -- stranded at 'unknown' that Reoon has NEVER tried (reoon_status IS NULL) — these are the port-25 casualties:
+      -- free MX/SMTP couldn't decide on the GHA runner, so they sit 'unknown' forever and never reach Reoon. Re-running
+      -- them lets the free path return 'unknown' again -> the paid Reoon fallback fires once (cap-respected) -> a 'valid'
+      -- verdict flips deliverability='valid' -> dmEmailVerified -> smtpVerifiedPersonal -> Tier-1 promote. The unfreeze.
+      AND ( COALESCE(verify_status,'') IN ('', 'pending')
+            ${process.env.VERIFY_REOON_RETRY === '1' ? "OR (verify_status = 'unknown' AND reoon_status IS NULL)" : ''} )
     ORDER BY (icp_tier = 1) DESC NULLS LAST, priority_score DESC NULLS LAST, id DESC LIMIT ${limit}`);
   if (!raw) { console.log('[verify] nothing to verify.'); return; }
   const rows = raw.split('\n').filter(Boolean).map(l => { const [id, email] = l.split('\t'); return { id: Number(id), email }; });
