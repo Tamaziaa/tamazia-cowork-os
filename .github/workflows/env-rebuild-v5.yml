@@ -1,0 +1,33 @@
+name: ENV secret rebuild v5
+on:
+  workflow_dispatch:
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rebuild ENV_B64
+        env:
+          CURRENT_ENV: ${{ secrets.ENV_B64 }}
+          GH_TOKEN_PAT: ${{ secrets.GH_ACTIONS_PAT }}
+          GH_DEPLOY_PAT: ${{ secrets.GH_DEPLOY_PAT }}
+        run: |
+          pip install PyNaCl -q
+
+          echo "$CURRENT_ENV" | base64 -d > current.env
+          echo "Lines before: $(wc -l < current.env)"
+
+          grep -v "^NOTION_LEADS_DB_ID=" current.env \
+            | grep -v "^CAL_WEBHOOK_SECRET=" \
+            | grep -v "^PUBLIC_POSTHOG_KEY=" \
+            | grep -v "^PUBLIC_POSTHOG_HOST=" \
+            | grep -v "^GH_PAT=" > updated.env 2>/dev/null || cp current.env updated.env
+
+          echo "NOTION_LEADS_DB_ID=02e175e995a640bba0be8234c5bebb6f" >> updated.env
+          echo "CAL_WEBHOOK_SECRET=0bee0b0cf2ec2afc70e718dc8d92b29331a5f299810a5b7c039d8efcb2a2c51a" >> updated.env
+          echo "PUBLIC_POSTHOG_KEY=phc_pomkfksdN8yRV4hUfNnqkgBLwHXpxxVsQFq4KpugkAr4" >> updated.env
+          echo "PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com" >> updated.env
+          printf 'GH_PAT=%s\n' "$GH_DEPLOY_PAT" >> updated.env
+          echo "Lines after: $(wc -l < updated.env)"
+
+          echo "aW1wb3J0IGJhc2U2NCwganNvbiwgdXJsbGliLnJlcXVlc3QsIG9zCmZyb20gbmFjbCBpbXBvcnQgZW5jb2RpbmcsIHB1YmxpYwoKcGF0ID0gb3MuZW52aXJvblsnR0hfVE9LRU5fUEFUJ10KCndpdGggb3BlbigndXBkYXRlZC5lbnYnLCAncmInKSBhcyBmOgogICAgZW52X2J5dGVzID0gZi5yZWFkKCkKCm5ld19iNjQgPSBiYXNlNjQuYjY0ZW5jb2RlKGVudl9ieXRlcykuZGVjb2RlKCkucmVwbGFjZSgnXG4nLCAnJykKcHJpbnQoZidOZXcgRU5WX0I2NCBsZW5ndGg6IHtsZW4obmV3X2I2NCl9IGNoYXJzJykKCnJlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QoCiAgICAnaHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9UYW1hemlhYS90YW1hemlhLWNvd29yay1vcy9hY3Rpb25zL3NlY3JldHMvcHVibGljLWtleScsCiAgICBoZWFkZXJzPXsnQXV0aG9yaXphdGlvbic6ICd0b2tlbiAnICsgcGF0LCAnQWNjZXB0JzogJ2FwcGxpY2F0aW9uL3ZuZC5naXRodWIranNvbid9CikKcGsgPSBqc29uLmxvYWQodXJsbGliLnJlcXVlc3QudXJsb3BlbihyZXEpKQpwdWJfa2V5ID0gcHVibGljLlB1YmxpY0tleShwa1sna2V5J10uZW5jb2RlKCksIGVuY29kaW5nLkJhc2U2NEVuY29kZXIoKSkKYm94ID0gcHVibGljLlNlYWxlZEJveChwdWJfa2V5KQplbmMgPSBiYXNlNjQuYjY0ZW5jb2RlKGJveC5lbmNyeXB0KG5ld19iNjQuZW5jb2RlKCkpKS5kZWNvZGUoKQoKcGF5bG9hZCA9IGpzb24uZHVtcHMoeydlbmNyeXB0ZWRfdmFsdWUnOiBlbmMsICdrZXlfaWQnOiBwa1sna2V5X2lkJ119KS5lbmNvZGUoKQpwdXQgPSB1cmxsaWIucmVxdWVzdC5SZXF1ZXN0KAogICAgJ2h0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3MvVGFtYXppYWEvdGFtYXppYS1jb3dvcmstb3MvYWN0aW9ucy9zZWNyZXRzL0VOVl9CNjQnLAogICAgZGF0YT1wYXlsb2FkLAogICAgbWV0aG9kPSdQVVQnLAogICAgaGVhZGVycz17J0F1dGhvcml6YXRpb24nOiAndG9rZW4gJyArIHBhdCwgJ0NvbnRlbnQtVHlwZSc6ICdhcHBsaWNhdGlvbi9qc29uJywgJ0FjY2VwdCc6ICdhcHBsaWNhdGlvbi92bmQuZ2l0aHViK2pzb24nfQopCnRyeToKICAgIHIgPSB1cmxsaWIucmVxdWVzdC51cmxvcGVuKHB1dCkKICAgIHByaW50KCdTVUNDRVNTOiBFTlZfQjY0IHVwZGF0ZWQsIEhUVFAgJyArIHN0cihyLnN0YXR1cykpCmV4Y2VwdCB1cmxsaWIuZXJyb3IuSFRUUEVycm9yIGFzIGU6CiAgICBwcmludCgnRkFJTEVEOiAnICsgc3RyKGUuY29kZSkgKyAnICcgKyBlLnJlYWQoKS5kZWNvZGUoKSkK" | base64 -d > /tmp/push_secret.py
+          python3 /tmp/push_secret.py
