@@ -80,3 +80,7 @@ jobs:
           # GAP-LEDGER #98: sector_code NULL (2,390 leads) → map from lead.sector via HINT_TO_CODE.
           # Pure in-memory + one UPDATE; no network, no paid APIs, idempotent.
           node scripts/backfill-sector-code.js || true
+          # GAP-LEDGER #96: 8,279 Tier-2 leads stuck in pending_approval with no advance path.
+          # Auto-approve the top-scored ones (score≥40, has domain, not consent_required) → qualified
+          # so they enter the LLM-rescue + enrich flow and can be promoted to Tier-1. 500/night.
+          node scripts/backfill-auto-approve.js --max 500 || true
