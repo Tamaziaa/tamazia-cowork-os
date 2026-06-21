@@ -45,6 +45,14 @@ async function main() {
       FROM leads WHERE ${DRAINABLE}
       GROUP BY 1 ORDER BY 2 DESC`).split('\n').filter(Boolean)) { const [s, c] = ln.split('\t'); bySector[s] = n(c); }
 
+  // ---- 1b) Mint pipeline depth (GAP-LEDGER #63) — how many audits are queued vs drained
+  let mintPending = 0, mintMinted = 0, mintError = 0, tier1Unminted = 0;
+  try {
+    const mq = pg(`SELECT status, count(*) FROM minting_queue GROUP BY status`);
+    for (const ln of (mq || '').split('\n').filter(Boolean)) { const [s, c] = ln.split('\t'); if (s === 'pending') mintPending = n(c); else if (s === 'minted') mintMinted = n(c); else if (s === 'error') mintError = n(c); }
+    tier1Unminted = n(pg(`SELECT count(*) FROM leads WHERE icp_tier=1 AND governor_released_at IS NOT NULL AND (audit_url IS NULL OR COALESCE(audit_verified,FALSE)=FALSE)`));
+  } catch (_e) {}
+
   // ---- 2) Live Mystrika capacity per campaign (read-only summary calls)
   const camps = [];
   let capDailyTotal = 0, loadedTotal = 0, oppTotal = 0, sentTodayTotal = 0;
@@ -68,6 +76,7 @@ async function main() {
   const out = {
     as_of_utc: pg(`SELECT now() AT TIME ZONE 'UTC'`),
     funnel: { total, tier1, quality_fit: qfit, qualified, pending_approval: pending, governor_released: released, audit_verified: auditV, claude_cleared: cleared, mystrika_pushed: pushed, db_ready_pool: readyPool },
+    mint_pipeline: { queue_pending: mintPending, queue_minted: mintMinted, queue_error: mintError, tier1_released_unminted: tier1Unminted },
     ready_pool_by_sector: bySector,
     mystrika: { campaigns: camps.length, daily_send_capacity_total: capDailyTotal, sent_today_total: sentTodayTotal, loaded_total: loadedTotal, opportunity_total: oppTotal, per_campaign: camps },
     maths: {
@@ -89,6 +98,10 @@ async function main() {
   console.log('  claude_cleared ........ ' + cleared + '   (Layer-3 gate)');
   console.log('  mystrika_pushed ....... ' + pushed);
   console.log('  DB READY-POOL ......... ' + readyPool + '   (cleared + audit-verified + not pushed = the drain queue)');
+  console.log(bar);
+  console.log('MINT PIPELINE:');
+  console.log('  queue pending ......... ' + mintPending + '   minted ' + mintMinted + '   errors ' + mintError);
+  console.log('  Tier-1 released+unminted ' + tier1Unminted + '   (governor-released but no verified audit_url yet)');
   console.log(bar);
   console.log('MYSTRIKA CAPACITY (live API): ' + camps.length + ' campaigns');
   console.log('  total daily send capacity (now, warming) .. ' + capDailyTotal + '/day   sent today ' + sentTodayTotal);
