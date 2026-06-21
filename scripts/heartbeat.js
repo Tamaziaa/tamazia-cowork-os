@@ -48,7 +48,11 @@ function start(job, host) {
   ensure();
   reap(job);
   const r = pg(`INSERT INTO engine_runs (job,host,status) VALUES (${esc(job)},${esc(host || HOST)},'running') RETURNING id`);
-  return r ? (r.split('\n')[0] || '').trim() : '';
+  const id = r ? (r.split('\n')[0] || '').trim() : '';
+  // GAP-LEDGER #81: if the INSERT returned no id (DB error / empty result), log a warning so the failure
+  // is observable in the Actions log rather than silently leaving an open 'running' row.
+  if (!id) console.warn(`[heartbeat] WARNING: start(${job}) — engine_runs INSERT returned no id; finish() will no-op`);
+  return id;
 }
 
 function finish(id, status, processed, errors, lastError) {

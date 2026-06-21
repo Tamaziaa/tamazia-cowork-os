@@ -22,6 +22,8 @@ jobs:
     env:
       VERIFY_REOON_RETRY: "1"     # re-select stranded 'unknown' (reoon_status IS NULL) so Reoon retries them
       REOON_DAILY_CAP: "10000"    # 10k extra credits loaded — run unlimited (was 500)
+      # GAP-LEDGER #10: pin Node 24 so GitHub never runs this on EOL Node 20 (exit-127 regression)
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v4
       - name: ENV_B64 lint
