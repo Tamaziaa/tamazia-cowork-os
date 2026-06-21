@@ -24,6 +24,10 @@ jobs:
       REOON_DAILY_CAP: "10000"    # 10k extra credits loaded — run unlimited (was 500)
     steps:
       - uses: actions/checkout@v4
+      - name: ENV_B64 lint
+        env:
+          ENV_B64: ${{ secrets.ENV_B64 }}
+        run: bash scripts/lint-env.sh || true
       - uses: actions/setup-node@v4
         with: { node-version: '24' }
       - uses: actions/setup-python@v5

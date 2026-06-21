@@ -38,6 +38,10 @@ jobs:
       VERIFY_CONTACTS_BATCH: '80'   # Wave-2 Z4-01: 25→80 (more free MX/SMTP verifications per cycle)
     steps:
       - uses: actions/checkout@v4
+      - name: ENV_B64 lint
+        env:
+          ENV_B64: ${{ secrets.ENV_B64 }}
+        run: bash scripts/lint-env.sh || true
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
