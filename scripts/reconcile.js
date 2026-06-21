@@ -72,7 +72,22 @@ function runScript(rel) {
     auditBackfillN = (ab.match(/\n/g) || []).length + (ab ? 1 : 0);
   } catch (_e) {}
 
+  // 6. audit_slug/hash backfill (GAP-LEDGER #91): 164 legacy leads have audit_url but no audit_slug/hash
+  //    (minted before F1 FIX in mint-worker.js). Extract slug+hash from the URL path so reconcile orphan-cleaner
+  //    and verify-audits HMAC check can operate on them. Additive only; skips leads already stamped.
+  let slugBackfillN = 0;
+  try {
+    const sb = pg(`UPDATE leads SET
+      audit_slug  = SUBSTRING(audit_url FROM '/audit/([^/?]+)/'),
+      audit_hash  = SUBSTRING(audit_url FROM '/audit/[^/?]+/([^/?]+)'),
+      updated_at  = NOW()
+    WHERE COALESCE(audit_url,'') LIKE '%/audit/%'
+      AND (audit_slug IS NULL OR audit_hash IS NULL)
+    RETURNING 1`);
+    slugBackfillN = (sb.match(/\n/g) || []).length + (sb ? 1 : 0);
+  } catch (_e) {}
+
   // snapshot for the log
   const ready = pg(`SELECT COUNT(*)::int FROM leads WHERE lifecycle_stage='qualified' AND COALESCE(audit_url,'')<>'' AND COALESCE(audit_verified,FALSE)=TRUE`);
-  console.log(`[reconcile] booked-from-cal +${bookedN} · orphan-audit cleared ${orphanN} · audit_pages backfill +${auditBackfillN} · email-ready(verified) ${ready}`);
+  console.log(`[reconcile] booked-from-cal +${bookedN} · orphan-audit cleared ${orphanN} · audit_pages backfill +${auditBackfillN} · slug-hash backfill +${slugBackfillN} · email-ready(verified) ${ready}`);
 })().catch(e => { console.error('[reconcile] error (non-fatal):', e.message); process.exit(0); });

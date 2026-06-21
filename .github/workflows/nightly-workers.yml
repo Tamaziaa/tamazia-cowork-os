@@ -74,3 +74,9 @@ jobs:
           node scripts/backfill-legal-name.js || true
           # GAP-LEDGER (Z16-11): country NULL → infer from domain TLD + jurisdiction (additive).
           node scripts/backfill-country.js || true
+          # GAP-LEDGER #36: name_status='unverified' (4,520 leads) → Phase-2 live homepage resolve.
+          # Bounded at 150/night so the nightly run never overruns; drains the backlog in ~30 nights.
+          node scripts/backfill-name-status.js --max 150 || true
+          # GAP-LEDGER #98: sector_code NULL (2,390 leads) → map from lead.sector via HINT_TO_CODE.
+          # Pure in-memory + one UPDATE; no network, no paid APIs, idempotent.
+          node scripts/backfill-sector-code.js || true

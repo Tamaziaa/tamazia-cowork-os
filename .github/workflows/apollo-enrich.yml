@@ -1,13 +1,8 @@
 name: Apollo contact enrichment (priority sectors)
-# Searches Apollo for named decision-makers on Tier-2/qualified leads in priority sectors that are
-# missing a contact_name. Writes contact_name, contact_linkedin, contact_email, qa_status, and
-# re-runs decideTier so the lead can be re-tiered if the contact push tips it to Tier-1.
-#
-# KILL SWITCH: APOLLO_KEY must be set in ENV_B64. If absent the script exits 0 with a log notice.
-# Limit: 100 leads per run (Apollo free plan). Fail-open: no result = skip + move on.
+# Apollo is PERMANENTLY REMOVED (founder decision 2026-06-19). APOLLO_KEY is not in ENV_B64;
+# the script exits 0 immediately when the key is absent. The daily schedule was removed to stop
+# wasting a workflow slot every morning. workflow_dispatch kept for historical manual dispatch only.
 on:
-  schedule:
-    - cron: '0 5 * * *'   # 05:00 UTC daily
   workflow_dispatch:
     inputs:
       max:
