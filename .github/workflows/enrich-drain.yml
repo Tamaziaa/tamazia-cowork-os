@@ -1,0 +1,73 @@
+name: Enrich drain (Z4-01 · continuous DM/LinkedIn/email find)
+# Wave-2 dedicated enrichment drain. Runs enrich-worker.js --once --max 120 every 20 min to continuously
+# fill in decision-maker name, LinkedIn, and contact email for the sourced-but-unenriched leads. Without
+# this, the engine cycle was the only enrichment trigger (~8 leads/cycle × 48 cycles/day = ~384/day MAX,
+# often less because the step shares time with qualify/mint/push). A dedicated drain at 3×/hour × 120/run
+# = up to 8,640 enrichments/day — enough to drain the backlog in days rather than weeks.
+#
+# Slot: 9-59/20 (fires at :09, :29, :49 UTC) — interleaves between engine-cycle :00/:30 ticks.
+# Concurrency: own group (enrich-drain). Does NOT share engine-db-work with the heavy re-tier writers
+# because enrichment only writes the enrichment/contact/social columns (never icp_tier/lifecycle_stage),
+# so no tier-write race requires engine-db-work coordination.
+#
+# Cost: £0 — all enrichment is free-first (Companies House officers, site scrape, SRA/FCA/CQC registers,
+# Apify OFF by default). Apify stays gated by APIFY_ENABLE (default OFF).
+on:
+  schedule:
+    - cron: '9,29,49 * * *'   # :09/:29/:49 UTC — clear of engine-cycle :00/:30 ticks
+  workflow_dispatch:
+    inputs:
+      max:
+        description: 'Max leads to enrich this run'
+        required: false
+        default: '120'
+      dry:
+        description: 'Dry run (print, no DB write)'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: enrich-drain
+  cancel-in-progress: false
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      ENRICH_CONCURRENCY: "6"      # 6 parallel enrichments per tick
+      APIFY_ENABLE: ""             # stays OFF — free waterfall only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install Node deps
+        run: npm install --omit=dev || npm install || true
+      - name: Install Python deps (pg8000 shim)
+        run: python -m pip install --quiet -r requirements.txt
+      - name: Materialise .env from secret
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: DB preflight (fail loud on dead Neon)
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          node scripts/db-preflight.js
+      - name: Enrich backlog (DM / LinkedIn / email — free waterfall, no Apify)
+        env:
+          DRY: ${{ github.event.inputs.dry || 'false' }}
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          MAX="${{ github.event.inputs.max || '120' }}"
+          [ "$DRY" = "true" ] && DRY_FLAG="--dry" || DRY_FLAG=""
+          node scripts/heartbeat.js wrap enrich-drain -- \
+            node scripts/enrich-worker.js --once --max "$MAX" $DRY_FLAG
+      - name: Alert on failure
+        if: failure()
+        run: |
+          set +e; source .env 2>/dev/null
+          [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && \
+            curl -s --max-time 15 -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d chat_id="$TELEGRAM_CHAT_ID" \
+            -d text="🔴 enrich-drain failed (run ${{ github.run_id }}). Check the Actions tab." >/dev/null || true

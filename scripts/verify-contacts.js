@@ -65,7 +65,7 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
   // advances and a refunded row is not endlessly re-hit. Free MX/SMTP verify is UNCAPPED and continues for the
   // day even after Reoon's 500 is spent — only the paid fallback stops. A per-run cap (ENRICH_VERIFY_CAP) is
   // kept as a secondary, smaller bound so a single wave can't drain the whole daily allowance at once.
-  const REOON_DAILY_CAP = Math.max(0, Number(process.env.REOON_DAILY_CAP || 500));
+  const REOON_DAILY_CAP = Math.max(0, Number(process.env.REOON_DAILY_CAP || 10000));
   let reoonToday = 0;
   try { reoonToday = Number(pg(`SELECT COUNT(*) FROM leads WHERE reoon_status IS NOT NULL AND reoon_checked_at::date = CURRENT_DATE`)) || 0; } catch (_e) { reoonToday = 0; }
   const dailyHeadroom = Math.max(0, REOON_DAILY_CAP - reoonToday);

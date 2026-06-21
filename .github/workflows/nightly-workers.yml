@@ -64,3 +64,11 @@ jobs:
           # Run it nightly, fail-open (|| true) so a probe hiccup never reds the workflow; it self-alerts
           # to Telegram/Slack on _overall=fail. Cheap, high-value observability (no writes beyond health row).
           node scripts/heartbeat.js wrap health-check -- node scripts/health-check.js || true
+      - name: Backfill entity_type (GAP-LEDGER #34 — 8,617 NULL entity_type leads)
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # Classify entity_type IS NULL leads from company name heuristic (additive, protect predicate:
+          # consent_required IS NOT TRUE, mystrika_pushed_at IS NULL, governor_released_at IS NULL,
+          # audit_url_minted_at IS NULL — never re-flags sent/minted/released leads). Limit 3000/night.
+          # Fail-open so a classification hiccup never reds the workflow.
+          node scripts/heartbeat.js wrap entity-type-backfill -- node scripts/backfill-entity-type.js || true

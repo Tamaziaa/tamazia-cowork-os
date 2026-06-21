@@ -62,7 +62,7 @@ function isEnabled() { return /^(1|true|yes|on)$/i.test(String(process.env.LLM_Q
 // the agency layer reads/writes. We NEVER read or write the audit engine's scanner_budget_state. The table is
 // self-provisioned lazily (CREATE TABLE IF NOT EXISTS) on first use — and the whole wave is OFF by default
 // (LLM_QA_ENABLED), so this touches Neon only once the founder/cron enables the layer. Daily cap is env-tunable.
-const AGENCY_LLM_DAILY_CAP_MICRO = Number(process.env.LLM_QA_DAILY_CAP_MICRO || 500000); // default $0.50/day, agency-owned
+const AGENCY_LLM_DAILY_CAP_MICRO = Number(process.env.LLM_QA_DAILY_CAP_MICRO || 5000000); // default $5.00/day, agency-owned (raised from $0.50 — free-first routing means actual spend ~$0 on most waves)
 let _agencyBudgetReady = false;
 function _ensureAgencyBudget() {
   if (_agencyBudgetReady) return;

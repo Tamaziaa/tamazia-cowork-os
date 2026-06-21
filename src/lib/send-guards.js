@@ -47,6 +47,15 @@ function canSendNow(leadId, opts = {}) {
     recordAbort({ lead_id: leadId, stage, reason: 'recent_classification_within_24h', payload: { replied, status, lastReply } });
     return { ok: false, reason: 'recent_classification_within_24h', layer: 3 };
   }
+  // Layer 4 (GAP-LEDGER #86): suppression registry check — defence in depth, push/governor also check this.
+  const emailRow = pg(`SELECT COALESCE(NULLIF(primary_email,''), NULLIF(contact_email,''), email) FROM leads WHERE id = ${leadId}`);
+  if (emailRow) {
+    const suppressed = pg(`SELECT 1 FROM suppression WHERE lower(email)=lower('${String(emailRow).trim().replace(/'/g, "''")}') LIMIT 1`);
+    if (suppressed) {
+      recordAbort({ lead_id: leadId, stage, reason: 'suppressed_registry', payload: { email: emailRow } });
+      return { ok: false, reason: 'suppressed_registry', layer: 4 };
+    }
+  }
   return { ok: true };
 }
 

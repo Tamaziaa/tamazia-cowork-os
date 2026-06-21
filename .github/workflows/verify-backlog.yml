@@ -1,17 +1,17 @@
 name: Verify backlog (Z1-03 · Reoon drain → unfreeze Tier-1 lift)
 # Wave-1 of the finishing plan. The Tier-1 promotion gate (lead-quality.js:230-231) needs a verified PERSONAL
 # DM email (smtpVerifiedPersonal). The free MX/SMTP probe needs port 25, which GitHub Actions blocks, so named-DM
-# leads sit at verify_status='unknown' forever and Layer-3 lifts 0. Reoon (paid API, 100k credits, 500/day cap)
+# leads sit at verify_status='unknown' forever and Layer-3 lifts 0. Reoon (paid API, 110k credits, 10k/day cap)
 # is ALREADY wired (verify-contacts.js → deliverability='valid' → smtpVerifiedPersonal=true). This workflow just
 # RUNS it at scale: with VERIFY_REOON_RETRY=1 it re-selects the stranded 'unknown' leads so Reoon gets its first
-# shot. Reoon stays ≤500/day (counted off Neon across all waves); catch-all → 'risky' → do-not-send preserved.
+# shot. Reoon stays ≤10000/day (counted off Neon across all waves); catch-all → 'risky' → do-not-send preserved.
 # SEND stays OFF. Own non-clashing slot. db-preflight gate fails the run loud on a dead Neon.
 on:
   schedule:
     - cron: '37 1,3,5,7,9,11,13,15,17,19,21,23 * * *'   # odd hours :37 — clear of engine */30, nightly 02:30, backup 03:15
   workflow_dispatch:
     inputs:
-      limit: { description: 'leads to verify this run', default: '300' }
+      limit: { description: 'leads to verify this run', default: '800' }
 concurrency:
   group: verify-backlog
   cancel-in-progress: false
@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 30
     env:
       VERIFY_REOON_RETRY: "1"     # re-select stranded 'unknown' (reoon_status IS NULL) so Reoon retries them
-      REOON_DAILY_CAP: "500"      # Reoon plan cap, counted off Neon across all waves
+      REOON_DAILY_CAP: "10000"    # 10k extra credits loaded — run unlimited (was 500)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,7 +41,7 @@ jobs:
       - name: Verify backlog (free MX/SMTP first, Reoon for unknown, cap-respected)
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          node scripts/heartbeat.js wrap verify-backlog -- node scripts/verify-contacts.js "${{ github.event.inputs.limit || '300' }}"
+          node scripts/heartbeat.js wrap verify-backlog -- node scripts/verify-contacts.js "${{ github.event.inputs.limit || '800' }}"
       - name: Alert on failure
         if: failure()
         run: |
