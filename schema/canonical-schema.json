@@ -4618,6 +4618,18 @@
         "type": "TIMESTAMPTZ",
         "nullable": true,
         "default": null
+      },
+      "claude_blocked": {
+        "type": "boolean",
+        "default": "false",
+        "notnull": false,
+        "identity": false
+      },
+      "claude_blocked_reason": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
       }
     },
     "pk": [

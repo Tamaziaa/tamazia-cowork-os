@@ -23,6 +23,9 @@
 //   --clear-audit <id>             Set claude_audit_cleared=TRUE (+ stamp reviewed_at + batch + merge note).
 //   --clear-touch <id>             Set claude_touch_cleared=TRUE (+ stamp reviewed_at + batch + merge note).
 //   --finalize <id>                Atomically set claude_cleared = (lead AND audit AND touch) in ONE UPDATE.
+//   --block <id>                   Set claude_blocked=TRUE + claude_blocked_reason (from --note.reason).
+//                                  Permanently excludes the lead from --pull and from the send path. Use when
+//                                  a lead is definitively unfixable (fabricated name, wrong company, etc.).
 //   --batch <id>                   Tag the batch (stamped into claude_review_batch; --pull skips this batch).
 //   --note '<json>'                JSON object merged into claude_review_notes (jsonb || jsonb). Optional.
 //   --dry                          Print the SQL instead of executing it (no DB write/read side effects).
@@ -76,6 +79,7 @@ function pullSql(n, batch) {
       AND COALESCE(l.audit_verified, FALSE) = TRUE
       AND l.governor_released_at IS NOT NULL
       AND COALESCE(l.claude_cleared, FALSE) = FALSE${batchGuard}
+      AND COALESCE(l.claude_blocked, FALSE) = FALSE
       AND l.entity_type IS NOT NULL
       AND COALESCE(l.legal_name,'') <> ''
       AND COALESCE(l.contact_name,'') <> ''
@@ -176,6 +180,24 @@ function statsFooter() {
     return;
   }
 
-  console.error('usage: claude-safeguard-batch.js --pull [N] | --clear-lead <id> | --clear-audit <id> | --clear-touch <id> | --finalize <id>  [--batch <id>] [--note \'{json}\'] [--dry]');
+  // GAP #55: block a lead that is definitively unfixable (bad data, fabricated name, wrong company).
+  // Sets claude_blocked=TRUE so --pull permanently excludes it from the clearance queue, and the send-path
+  // pre-gates (pullSql WHERE clause) also skip it. Never sets claude_cleared — the lead is permanently
+  // ineligible. Reason is stored in claude_blocked_reason for audit and potential manual review.
+  if (has('block')) {
+    const id = arg('block', null);
+    if (!id || !Number.isFinite(Number(id))) { console.error('[claude-safeguard] --block needs a numeric lead id'); process.exit(2); }
+    const reason = note ? (JSON.parse(note).reason || JSON.stringify(JSON.parse(note))) : 'blocked by claude-safeguard';
+    const sets = [`claude_blocked=TRUE`, `claude_blocked_reason=${esc(reason)}`, `claude_reviewed_at=NOW()`];
+    if (batch) sets.push(`claude_review_batch=${esc(batch)}`);
+    const sql = `UPDATE leads SET ${sets.join(', ')}, updated_at=NOW() WHERE id=${Number(id)}`;
+    if (DRY) { console.log('[claude-safeguard] DRY --block sql:', sql); return; }
+    pg(sql);
+    console.log(`[claude-safeguard] blocked id=${id} reason=${reason}${batch ? ' batch=' + batch : ''}`);
+    console.log(statsFooter());
+    return;
+  }
+
+  console.error('usage: claude-safeguard-batch.js --pull [N] | --clear-lead <id> | --clear-audit <id> | --clear-touch <id> | --finalize <id> | --block <id>  [--batch <id>] [--note \'{json}\'] [--dry]');
   process.exit(2);
 })();

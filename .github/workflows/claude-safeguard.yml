@@ -144,6 +144,10 @@ jobs:
                   ONLY if the copy is clean.
                d. FINALIZE: `--finalize <id> --batch ${{ github.run_id }}` — sets claude_cleared = all three sub-flags.
                   A lead only becomes send-eligible when all three pass.
+               e. BLOCK (last resort only): `--block <id> --batch ${{ github.run_id }} --note '{"reason":"..."}'`
+                  Use ONLY when a lead is definitively unfixable: fabricated contact name, completely wrong company,
+                  confirmed bad actor. Permanently removes it from --pull and the send path. Never block a lead
+                  that merely lacks data — those stay in queue for LLM-rescue/enrich to fix.
 
             3. If you find a SYSTEMIC engine gap (a class of bug behind a failed check, not a one-off lead), append
                it to ops/CLAUDE-GAP-LEDGER.md (one section per gap: gap, root-cause, the fix, the fixture that locks
