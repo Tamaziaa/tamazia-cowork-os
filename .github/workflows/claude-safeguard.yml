@@ -211,6 +211,17 @@ jobs:
           # Job stays GREEN — this is a one-time founder action, not a failure.
           exit 0
 
+      # GAP #53: Alert when CLAUDE_CODE_OAUTH_TOKEN is not set → Layer-3 clears 0 every wave silently.
+      # Fires on every run where the token is absent so the founder gets an actionable prompt.
+      # Fail-open — the notifier can never fail this job.
+      - name: Alert if no OAuth token (gap #53 — 0 clears per wave while token absent)
+        if: ${{ env.HAS_OAUTH != 'true' }}
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          MSG="⚠️ claude-safeguard: CLAUDE_CODE_OAUTH_TOKEN is NOT set — Layer-3 clearance inactive, 0 leads cleared this wave. Founder action (one-time, £0): add repo secret CLAUDE_CODE_OAUTH_TOKEN via 'claude setup-token' then install https://github.com/apps/claude on this repo."
+          bash scripts/notify-telegram.sh "$MSG" || true
+          echo "::warning::CLAUDE_CODE_OAUTH_TOKEN not set — Layer-3 clearance inactive (gap #53)"
+
       # Self-heal: if any step above failed, post the REAL error to Telegram + Slack so the failure is
       # never silent. Reads creds from .env (decoded from ENV_B64 above). Fail-open + `|| true` — the
       # notifier can never itself fail the job.

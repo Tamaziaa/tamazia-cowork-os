@@ -42,6 +42,13 @@ const CADENCE = {
   // any manual run. Only schedule-backed jobs belong in this map.
   'enforcement-news': 10080,
   'eval-audit': 10080,
+  // GAP #6: additional scheduled jobs now heartbeat-wrapped
+  'capacity-report': 1440,    // daily 07:00
+  'neon-backup': 1440,        // daily 03:15
+  'smatleads-sync': 1440,     // daily 06:00
+  'apply-review': 60,         // :07 and :37 every hour
+  'enrich-drain': 60,         // :09/:29/:49 every hour (~20min cadence; 60min = allow 1 skip)
+  'verify-backlog': 120,      // odd hours :37 (every 2h)
 };
 
 async function telegram(text) {

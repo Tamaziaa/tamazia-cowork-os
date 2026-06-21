@@ -91,3 +91,6 @@ jobs:
           # GAP-LEDGER #97: 351 leads stuck in sourced/enriched since 2026-05-20 (already scored but never advanced).
           # Reset quality_score=NULL so qualify-and-queue re-evaluates them with current data. 100/night.
           node scripts/reap-stuck-pipeline.js || true
+          # GAP-LEDGER #91: 164 leads with audit_url but NULL audit_slug/audit_hash (reconcile cleaner gate
+          # requires audit_slug IS NOT NULL to detect orphaned audit_pages rows and clear stale URLs).
+          node scripts/backfill-audit-slug.js || true

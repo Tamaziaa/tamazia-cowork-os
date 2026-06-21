@@ -41,7 +41,7 @@ jobs:
       - name: Run backup
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          node scripts/neon-backup.js
+          node scripts/heartbeat.js wrap neon-backup -- node scripts/neon-backup.js
       - name: Alert on failure
         if: failure()
         run: |
