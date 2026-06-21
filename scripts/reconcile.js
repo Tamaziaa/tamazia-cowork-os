@@ -58,7 +58,21 @@ function runScript(rel) {
     RETURNING 1`);
   const orphanN = (orphan.match(/\n/g) || []).length + (orphan ? 1 : 0);
 
+  // 5. Orphan audit_pages backfill (GAP-LEDGER #62): audit_pages rows with lead_id=NULL that can be
+  //    matched to a lead via domain. Additive only; skips rows that already have lead_id set.
+  let auditBackfillN = 0;
+  try {
+    const ab = pg(`UPDATE audit_pages ap SET lead_id = l.id
+      FROM leads l
+      WHERE ap.lead_id IS NULL
+        AND COALESCE(ap.domain,'') <> ''
+        AND lower(l.domain) = lower(ap.domain)
+        AND l.id IS NOT NULL
+      RETURNING 1`);
+    auditBackfillN = (ab.match(/\n/g) || []).length + (ab ? 1 : 0);
+  } catch (_e) {}
+
   // snapshot for the log
   const ready = pg(`SELECT COUNT(*)::int FROM leads WHERE lifecycle_stage='qualified' AND COALESCE(audit_url,'')<>'' AND COALESCE(audit_verified,FALSE)=TRUE`);
-  console.log(`[reconcile] booked-from-cal +${bookedN} · orphan-audit cleared ${orphanN} · email-ready(verified) ${ready}`);
+  console.log(`[reconcile] booked-from-cal +${bookedN} · orphan-audit cleared ${orphanN} · audit_pages backfill +${auditBackfillN} · email-ready(verified) ${ready}`);
 })().catch(e => { console.error('[reconcile] error (non-fatal):', e.message); process.exit(0); });

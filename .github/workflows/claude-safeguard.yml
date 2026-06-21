@@ -28,13 +28,13 @@ name: claude-safeguard (Layer-3 twice-daily lead clearance)
 # ============================================================================================================
 on:
   schedule:
-    - cron: "0 6,11 * * *"   # 06:00 + 11:00 UTC — morning + midday clearance waves
+    - cron: "0 6,11,17 * * *"   # 06:00 + 11:00 + 17:00 UTC — 3 clearance waves/day (GAP-LEDGER #49: was 2)
   workflow_dispatch:
     inputs:
       batch_max:
-        description: "Max released-but-uncleared leads to pull this run"
+        description: "Max released-but-uncleared leads to pull this run (GAP-LEDGER #49: raised 50→200)"
         required: false
-        default: "50"
+        default: "200"
       dry:
         description: "Dry run (print SQL, write nothing)"
         required: false
@@ -86,7 +86,7 @@ jobs:
         id: queue
         continue-on-error: true
         env:
-          BATCH_MAX: ${{ github.event.inputs.batch_max || '50' }}
+          BATCH_MAX: ${{ github.event.inputs.batch_max || '200' }}
           # 35-min wrap timeout: safeguard pull can take a while on large backlogs; well under 45-min job limit.
           HEARTBEAT_WRAP_TIMEOUT_MS: "2100000"
         run: |
@@ -125,7 +125,7 @@ jobs:
             A batch id is "${{ github.run_id }}". The dry flag is "${{ github.event.inputs.dry || 'false' }}".
 
             1. Pull the queue (nearest-to-send first):
-               `node scripts/claude-safeguard-batch.js --pull ${{ github.event.inputs.batch_max || '50' }} --batch ${{ github.run_id }}`
+               `node scripts/claude-safeguard-batch.js --pull ${{ github.event.inputs.batch_max || '200' }} --batch ${{ github.run_id }}`
                Each JSON line has: lead_ref, id, domain, sector, country, audit_url, contact_email, touches[].
 
             2. For EACH lead, reason (no paid API — use your own judgement + reading the audit_url page / site):
@@ -162,7 +162,7 @@ jobs:
         if: ${{ env.HAS_OAUTH == 'true' && steps.claude.outcome == 'failure' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BATCH_MAX: ${{ github.event.inputs.batch_max || '50' }}
+          BATCH_MAX: ${{ github.event.inputs.batch_max || '200' }}
           # Make sure the install alert actually goes out live, not just into the silent digest.
           NOTIFY_REALTIME: "1"
         run: |
