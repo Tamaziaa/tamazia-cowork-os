@@ -102,6 +102,21 @@ async function main() {
     console.log(`[check-stuck-jobs] ${red.length} newly red -> alert via ${sent ? 'notify-event (Slack+Telegram)' : 'inline Telegram fallback'}`);
   }
   console.log(`[check-stuck-jobs] checked ${Object.keys(CADENCE).length} jobs · ${red.length} newly red · ${alreadyRed} still red (no re-alert) · ${warn} amber`);
+
+  // GAP #13: alert on runs with errors>0 (currently only status='error' triggers alerts; errors>0 with status='ok' is silent).
+  // Rising-edge only: compare to system_health key 'engine_errors_recent' so we don't re-alert on the same batch.
+  try {
+    const recentErrors = (pg(`SELECT job, errors, last_error FROM engine_runs WHERE errors>0 AND started_at>NOW()-INTERVAL '90 minutes' ORDER BY started_at DESC LIMIT 10`) || '').trim();
+    if (recentErrors) {
+      const errKey = 'engine_errors_recent';
+      const prevHash = (pg(`SELECT detail FROM system_health WHERE check_key=${esc(errKey)}`) || '').split('\n')[0].trim();
+      const newDetail = recentErrors.slice(0, 500);
+      if (prevHash !== newDetail) {
+        pg(`INSERT INTO system_health (check_key,category,status,detail,checked_at) VALUES (${esc(errKey)},'errors','warn',${esc(newDetail)},now()) ON CONFLICT (check_key) DO UPDATE SET status=EXCLUDED.status,detail=EXCLUDED.detail,checked_at=now()`);
+        console.log(`[check-stuck-jobs] new engine errors found (gap #13):\n${recentErrors}`);
+      }
+    }
+  } catch (_e) {}
 }
 
 main();

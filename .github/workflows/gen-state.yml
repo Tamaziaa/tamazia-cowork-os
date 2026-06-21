@@ -78,6 +78,7 @@ jobs:
           git add docs/PIPELINE-STATE.md
           git diff --cached --quiet && { echo "no change"; exit 0; }
           git commit -m "chore(state): regenerate PIPELINE-STATE.md [skip ci]"
+          git pull --rebase "https://x-access-token:${GH_TOKEN}@github.com/Tamaziaa/tamazia-cowork-os.git" main 2>/dev/null || true
           git push "https://x-access-token:${GH_TOKEN}@github.com/Tamaziaa/tamazia-cowork-os.git" HEAD:main
 
       # Self-heal: post the REAL error to Telegram + Slack if any step failed. Fail-open + `|| true`.

@@ -84,3 +84,6 @@ jobs:
           # Auto-approve the top-scored ones (score≥40, has domain, not consent_required) → qualified
           # so they enter the LLM-rescue + enrich flow and can be promoted to Tier-1. 500/night.
           node scripts/backfill-auto-approve.js --max 500 || true
+          # GAP-LEDGER #97: 351 leads stuck in sourced/enriched since 2026-05-20 (already scored but never advanced).
+          # Reset quality_score=NULL so qualify-and-queue re-evaluates them with current data. 100/night.
+          node scripts/reap-stuck-pipeline.js || true
