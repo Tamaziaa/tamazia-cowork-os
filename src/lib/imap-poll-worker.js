@@ -98,9 +98,16 @@ function handleInbound({ mailbox, uid, from_email, to_email, subject, in_reply_t
   const bounce = gaps.isBounce(subject, body_plain, from_email);
   const stop = gaps.isStopKeyword(body_plain);
 
+  // GAP-LEDGER #94: no-reply/automated sender guard. A notification/system email from a noreply
+  // address that mentions "stop" in a footer context (e.g. "To stop receiving these notifications…")
+  // must NOT suppress a real lead. Automated senders have no In-Reply-To match and their address
+  // starts with noreply/notification/mailer/postmaster — classify as BOUNCE (log-only, no suppress).
+  const automatedSender = /^(noreply|no[-.]reply|notification|notifications?|alert|alerts?|mailer|postmaster|donotreply|do[-.]not[-.]reply|autoresponder|system|support-noreply|bounce)/i.test(String(from_email || '').split('@')[0]);
+  const noReplyStop = stop && automatedSender && !matched_send_id && !in_reply_to;
+
   let classification, confidence;
   if (manualFromAman) { classification = 'MANUAL_FROM_AMAN'; confidence = 0.99; }
-  else if (bounce) { classification = 'BOUNCE'; confidence = 0.95; }
+  else if (bounce || noReplyStop) { classification = 'BOUNCE'; confidence = noReplyStop ? 0.80 : 0.95; }
   else if (ooo) { classification = 'OOO'; confidence = 0.95; }
   else if (stop) { classification = 'OPT_OUT'; confidence = 0.99; }
   else {

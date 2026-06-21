@@ -164,7 +164,7 @@ if (require.main === module) (async()=>{
       SELECT MAX(CASE WHEN draft_metadata->>'touch'='0' THEN draft_subject END) t0s, MAX(CASE WHEN draft_metadata->>'touch'='0' THEN draft_body END) t0b,
              MAX(CASE WHEN draft_metadata->>'touch'='1' THEN draft_body END) t1b, MAX(CASE WHEN draft_metadata->>'touch'='2' THEN draft_body END) t2b, MAX(CASE WHEN draft_metadata->>'touch'='3' THEN draft_body END) t3b
       FROM outreach_drafts od WHERE od.lead_id=l.id AND od.channel='email') d ON TRUE
-    WHERE l.quality_fit=TRUE AND COALESCE(l.lifecycle_stage,'')='qualified' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal')
+    WHERE l.quality_fit=TRUE AND COALESCE(l.lifecycle_stage,'')='qualified' AND COALESCE(l.lead_type,'') NOT IN ('investor','institution','internal','inbound')
       AND COALESCE(l.audit_verified,FALSE)=TRUE AND COALESCE(l.audit_url,'') <> '' AND COALESCE(l.contact_email,l.email,'') <> '' AND COALESCE(l.mystrika_pushed,FALSE)=FALSE
       -- P6 [X9] GOVERNOR GATE: only push leads the governor has RELEASED today (per-sector 10x10 round-robin,
       -- 100/day Tier-1, reset 00:00 UK). Until now the governor cap was decorative (push ignored it, so 0/0
