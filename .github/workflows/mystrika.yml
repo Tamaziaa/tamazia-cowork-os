@@ -40,3 +40,8 @@ jobs:
               node scripts/push-to-mystrika.js --max "${MYSTRIKA_DRAIN_MAX:-500}"
             ';
           fi
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/notify-workflow-failure.sh "${{ github.workflow }}" "${{ github.run_id }}" || true

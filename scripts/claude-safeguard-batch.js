@@ -76,6 +76,10 @@ function pullSql(n, batch) {
       AND COALESCE(l.audit_verified, FALSE) = TRUE
       AND l.governor_released_at IS NOT NULL
       AND COALESCE(l.claude_cleared, FALSE) = FALSE${batchGuard}
+      AND l.entity_type IS NOT NULL
+      AND COALESCE(l.legal_name,'') <> ''
+      AND COALESCE(l.contact_name,'') <> ''
+      AND l.country IS NOT NULL
     ORDER BY l.governor_released_at ASC
     LIMIT ${Math.max(1, n)}`;
 }

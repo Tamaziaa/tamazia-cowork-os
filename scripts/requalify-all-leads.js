@@ -68,6 +68,7 @@ async function scoreWithRetry(lead, n = 2) {
       AND COALESCE(l.requal_version,'') <> ${esc(REQUAL_VERSION)}   -- idempotent: skip rows already done this version
       AND NOT (COALESCE(l.claude_cleared, FALSE) = TRUE AND l.icp_tier = 1)  -- Wave-3 clobber guard: never re-tier a cleared Tier-1
       AND NOT (l.reviewed_at IS NOT NULL AND l.icp_tier = 1)  -- L13 clobber guard: never re-score a human/auto-reviewed Tier-1 (apply-review sets reviewed_at on promotion)
+      AND COALESCE(l.priority_source,'') <> 'recycle'  -- GAP #93: recycled leads re-enter at qualified but must not be re-tiered (churn risk)
     ORDER BY l.quality_scored_at ASC NULLS FIRST, l.id ASC LIMIT ${limit}`);
   if (!raw) { console.log(`[requalify ${REQUAL_VERSION}] nothing left to re-score at this version.`); return; }
   const leads = raw.split('\n').filter(Boolean).map(j => { try { return JSON.parse(j); } catch (_e) { return null; } }).filter(Boolean);

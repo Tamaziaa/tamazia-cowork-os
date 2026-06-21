@@ -105,4 +105,9 @@ jobs:
           # act on any pending review verdicts (accept/auto-promote under the gate + consent; needs_info; rejected).
           node scripts/heartbeat.js wrap apply-review -- node scripts/apply-review.js --max 500 \
             || node scripts/apply-review.js --max 500 || true
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/notify-workflow-failure.sh "${{ github.workflow }}" "${{ github.run_id }}" || true
 

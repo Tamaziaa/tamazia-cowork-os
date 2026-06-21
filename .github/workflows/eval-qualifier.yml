@@ -42,3 +42,8 @@ jobs:
         run: |
           if [ -n "${{ secrets.ENV_B64 }}" ]; then echo "${{ secrets.ENV_B64 }}" | base64 -d > .env; fi
           node scripts/eval-qualifier.js --live || true
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/notify-workflow-failure.sh "${{ github.workflow }}" "${{ github.run_id }}" || true
