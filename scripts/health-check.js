@@ -107,6 +107,13 @@ function run() {
     }
   } catch (_e) {}
 
+  // GAP-LEDGER #88: governor-released Tier-1 leads with no verified audit_url.
+  // These are leads the governor already released (cleared to send) but mint hasn't caught up yet.
+  // At >20 the mint tail is falling behind the release rate; at >50 audits are blocking sends.
+  band('tier1_released_unminted', 'sla',
+    num(`SELECT COUNT(*) FROM leads WHERE icp_tier=1 AND governor_released_at IS NOT NULL AND (audit_url IS NULL OR COALESCE(audit_verified,FALSE)=FALSE)`),
+    20, 50, v => `${v} Tier-1 released leads without a verified audit_url (mint tail behind release rate)`);
+
   return persist();
 }
 

@@ -68,7 +68,13 @@ function main() {
   if (out.length > 8000) out = out.slice(0, 8000) + '\n...(truncated)\n';
   const dir = path.join(ROOT, 'docs');
   try { fs.mkdirSync(dir, { recursive: true }); } catch (_e) {}
-  fs.writeFileSync(path.join(dir, 'PIPELINE-STATE.md'), out);
+  const stateFile = path.join(dir, 'PIPELINE-STATE.md');
+  fs.writeFileSync(stateFile, out);
+  // GAP-LEDGER #79: verify the filesystem write is non-empty (a failed/empty write looks like success on disk).
+  try {
+    const written = fs.statSync(stateFile).size;
+    if (written < 100) console.warn(`[gen-state] WARNING: PIPELINE-STATE.md written but only ${written} bytes — possible empty write`);
+  } catch (e) { console.warn('[gen-state] WARNING: could not stat PIPELINE-STATE.md after write: ' + e.message); }
   // Also persist the digest to Neon so it is always readable without a repo push (branch-safe, survives a failed git push).
   // A5 root cause: the digest row was written 0 bytes (i.e. never persisted) because gen-state.yml runs neither
   // ensure-schema.js nor a CREATE here, so on any DB where system_state did not yet exist the INSERT errored and was

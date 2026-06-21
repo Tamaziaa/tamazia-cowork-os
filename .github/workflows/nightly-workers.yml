@@ -98,3 +98,7 @@ jobs:
           node scripts/backfill-verify-status.js || true
           # GAP-LEDGER #41: trim all_emails to ≤4 per lead (data minimisation cap, 200/night).
           node scripts/backfill-trim-contacts.js || true
+          # GAP-LEDGER #59: reconcile cal.com bookings from Cloudflare KV → cal_bookings Neon table.
+          # The cal.com webhook only writes KV; nothing copies to Neon, so cal_bookings=0 always.
+          # This reconcile runs nightly to drain the KV backlog into Neon (idempotent on uid).
+          node scripts/reconcile-cal-bookings.js || true
