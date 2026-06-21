@@ -46,3 +46,8 @@ jobs:
             curl -s --max-time 15 -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
               -d chat_id="$TELEGRAM_CHAT_ID" -d text="🔴 Neon backup workflow FAILED (run ${{ github.run_id }}) — SoT has NO fresh off-site copy. Check Actions." >/dev/null || true
           fi
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/notify-workflow-failure.sh "${{ github.workflow }}" "${{ github.run_id }}" || true

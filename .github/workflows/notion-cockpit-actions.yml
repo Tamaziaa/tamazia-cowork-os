@@ -63,3 +63,8 @@ jobs:
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/notion-accept-reject.js
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/notify-workflow-failure.sh "${{ github.workflow }}" "${{ github.run_id }}" || true

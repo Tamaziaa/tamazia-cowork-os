@@ -49,3 +49,8 @@ jobs:
           if [ "${{ github.event.inputs.force }}" = "true" ]; then FORCE_FLAG="--force"; fi
           if [ "${{ github.event.inputs.dry }}" = "true" ]; then DRY_FLAG="--dry"; fi
           node scripts/smatleads-sync.js --max "$MAX" $FORCE_FLAG $DRY_FLAG
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/notify-workflow-failure.sh "${{ github.workflow }}" "${{ github.run_id }}" || true
