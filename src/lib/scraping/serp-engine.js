@@ -242,8 +242,20 @@ async function scrapeSector(sector, { target = 50, queryCap = 40 } = {}) {
 }
 
 /** Count how many leads a sector already sourced TODAY (per-sector idempotency / fairness). */
-function scrapedTodayForSector(sector) {
-  return Number(pg(`SELECT COUNT(*) FROM leads WHERE scraped_at::date = CURRENT_DATE AND sector=${esc(sector)}`) || 0);
+function completeTodayForSector(sector) {
+  // Count COMPLETE leads sourced today (website + named DM + non-role email) so the idempotency guard
+  // matches what scrapeSector's `complete` gate actually produced. Counting raw inserts caused a mismatch:
+  // a sector that inserted 40 raw leads (none complete) was skipped when it still needed 50 complete.
+  const roleSet = "'info','contact','hello','admin','sales','support','enquiries','enquiry','office','mail','team','reception','hi','help','no-reply','noreply'";
+  return Number(pg(`
+    SELECT COUNT(*) FROM leads
+    WHERE scraped_at::date = CURRENT_DATE
+      AND sector=${esc(sector)}
+      AND COALESCE(website,'') NOT IN ('','NULL')
+      AND (COALESCE(contact_name,'') NOT IN ('','NULL') OR COALESCE(dm_name,'') NOT IN ('','NULL'))
+      AND COALESCE(contact_email,'') NOT IN ('','NULL')
+      AND LOWER(SPLIT_PART(contact_email,'@',1)) NOT IN (${roleSet})
+  `) || 0);
 }
 
 /**
@@ -261,12 +273,12 @@ async function runDaily({ perSector = 50, sectors = Object.keys(SECTORS) } = {})
   let total = 0;
   for (const sector of sectors) {
     // Per-sector cap: only source up to this sector's own remaining floor for today.
-    const already = scrapedTodayForSector(sector);
+    const already = completeTodayForSector(sector);
     const remaining = perSector - already;
     if (remaining <= 0) {
       const r = { sector, found: 0, queries: 0, dupes: 0, aggregators_skipped: 0, skipped: 'sector_floor_met', already };
       results.push(r);
-      console.log(`  ${sector.padEnd(22)} skip (floor met: ${already}/${perSector} today)`);
+      console.log(`  ${sector.padEnd(22)} skip (complete floor met: ${already}/${perSector} today)`);
       continue;
     }
     const r = await scrapeSector(sector, { target: remaining });

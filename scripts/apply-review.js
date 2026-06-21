@@ -106,9 +106,22 @@ async function applyOne(lead) {
     const after = await rescue.retierWith(lead, found);
     if (after && after.tier === 1) {
       // L11: stamp the verdict transition in the SAME atomic UPDATE as the promotion (was a separate pg() call).
-      const sql = promote(lead, 1, after, 'auto_promote_gate_verified', [
+      // L13: write qa_found fields back to live DB columns so future requalify runs see the same data that
+      // caused the gate to pass. Without this, contact_name/linkedin_url are missing in DB even though the
+      // in-memory retierWith saw them — requalify would then re-score with empty contact and demote to Tier-2.
+      const extraSets = [
         `review_status='applied_auto_promote'`, `reviewed_by=COALESCE(reviewed_by,'llm_auto')`, `qa_status='confirmed'`,
-      ]);
+      ];
+      if (found.dm_name) extraSets.push(`contact_name=COALESCE(NULLIF(contact_name,''), ${esc(found.dm_name)})`);
+      if (found.linkedin_url) {
+        extraSets.push(`linkedin_url=COALESCE(NULLIF(linkedin_url,''), ${esc(found.linkedin_url)})`);
+        extraSets.push(`contact_linkedin=COALESCE(NULLIF(contact_linkedin,''), ${esc(found.linkedin_url)})`);
+      }
+      if (found.email_verified) {
+        extraSets.push(`email_verified=TRUE`);
+        extraSets.push(`deliverability='good'`);
+      }
+      const sql = promote(lead, 1, after, 'auto_promote_gate_verified', extraSets);
       return { id: lead.id, action: 'promoted_tier1_auto', after_tier: 1, sql };
     }
     // gate did NOT re-pass -> do not promote automatically; hand to a human.
@@ -128,10 +141,18 @@ async function applyOne(lead) {
     // Re-run the gate to populate the component columns consistently, but a human Accept promotes regardless of the
     // gate's tier (the human is the authority for COMMERCIAL tier; the consent gate above is the only hard block).
     const q = await rescue.retierWith(lead, found);
-    // L11: stamp the verdict transition in the SAME atomic UPDATE as the promotion (was a separate pg() call).
-    const sql = promote(lead, wantTier, q, 'human_accept', [
+    // L11: stamp the verdict transition in the SAME atomic UPDATE as the promotion.
+    // L13: also write back qa_found fields (same rationale as auto_promote path — see L13 comment above).
+    const acceptSets = [
       `review_status='applied_accepted'`, `reviewed_by=COALESCE(reviewed_by,'human')`,
-    ]);
+    ];
+    if (found.dm_name) acceptSets.push(`contact_name=COALESCE(NULLIF(contact_name,''), ${esc(found.dm_name)})`);
+    if (found.linkedin_url) {
+      acceptSets.push(`linkedin_url=COALESCE(NULLIF(linkedin_url,''), ${esc(found.linkedin_url)})`);
+      acceptSets.push(`contact_linkedin=COALESCE(NULLIF(contact_linkedin,''), ${esc(found.linkedin_url)})`);
+    }
+    if (found.email_verified) { acceptSets.push(`email_verified=TRUE`); acceptSets.push(`deliverability='good'`); }
+    const sql = promote(lead, wantTier, q, 'human_accept', acceptSets);
     return { id: lead.id, action: 'promoted_human', after_tier: wantTier, sql };
   }
 

@@ -51,7 +51,9 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
       -- verdict flips deliverability='valid' -> dmEmailVerified -> smtpVerifiedPersonal -> Tier-1 promote. The unfreeze.
       AND ( COALESCE(verify_status,'') IN ('', 'pending')
             ${process.env.VERIFY_REOON_RETRY === '1' ? "OR (verify_status = 'unknown' AND reoon_status IS NULL)" : ''} )
-    ORDER BY (icp_tier = 1) DESC NULLS LAST, priority_score DESC NULLS LAST, id DESC LIMIT ${limit}`);
+    ORDER BY (icp_tier = 1) DESC NULLS LAST,
+             (contact_name IS NOT NULL AND contact_name <> '' AND linkedin_url IS NOT NULL AND linkedin_url <> '') DESC,
+             priority_score DESC NULLS LAST, id DESC LIMIT ${limit}`);
   if (!raw) { console.log('[verify] nothing to verify.'); return; }
   const rows = raw.split('\n').filter(Boolean).map(l => { const [id, email] = l.split('\t'); return { id: Number(id), email }; });
 

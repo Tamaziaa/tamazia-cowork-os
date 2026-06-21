@@ -13,12 +13,14 @@ function pg(sql) {
 const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
 
 const ALIAS = {
-  fintech: 'financial',
-  insurance: 'financial',
-  wealth: 'financial',
-  accounting: 'financial',
-  lawfirm: 'law-firms',
-  'law firm': 'law-firms',
+  fintech: 'FS',
+  insurance: 'FS',
+  wealth: 'FS',
+  accounting: 'FS',
+  financial: 'FS',      // non-canonical full-word form → 2-letter code
+  lawfirm: 'LS',
+  'law firm': 'LS',
+  'law-firms': 'LS',    // hyphenated form → 2-letter code
 };
 
 (async () => {
