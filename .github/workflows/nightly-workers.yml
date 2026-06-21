@@ -94,3 +94,7 @@ jobs:
           # GAP-LEDGER #91: 164 leads with audit_url but NULL audit_slug/audit_hash (reconcile cleaner gate
           # requires audit_slug IS NOT NULL to detect orphaned audit_pages rows and clear stale URLs).
           node scripts/backfill-audit-slug.js || true
+          # GAP-LEDGER #42: reconcile verify_status vs email_verified contradictions (idempotent).
+          node scripts/backfill-verify-status.js || true
+          # GAP-LEDGER #41: trim all_emails to ≤4 per lead (data minimisation cap, 200/night).
+          node scripts/backfill-trim-contacts.js || true
