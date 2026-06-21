@@ -75,6 +75,19 @@ jobs:
             node scripts/enqueue-leads.js ${{ inputs.mint }}             || true
             node scripts/mint-worker.js --once                            || true
           ' || true   # outer guard: a heartbeat-wrap timeout (exit 124 on a large burst, e.g. verify=400) must NOT fail this best-effort no-send drain — partial progress is kept (matches the requalify step's guard)
+      - name: Surface engine_runs errors (gap #12)
+        if: always()
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          node -e "
+            const {execFileSync}=require('child_process');
+            const NEON=process.env.NEON_URL||process.env.NEON_CONNECTION_STRING;
+            if(!NEON){process.exit(0);}
+            const pg=sql=>execFileSync('scripts/psql',[NEON,'-tA','-c',sql],{encoding:'utf8',maxBuffer:4e6}).trim();
+            try{
+              const rows=pg(\"SELECT job||' '||status||' errors='||COALESCE(errors::text,'0')||CASE WHEN last_error IS NOT NULL THEN ' last_error: '||substring(last_error,1,200) ELSE '' END FROM engine_runs WHERE job LIKE '%backlog%' AND started_at>NOW()-INTERVAL '35 minutes' ORDER BY started_at DESC LIMIT 10\");
+              console.log(rows?('[backlog-burst engine_runs]\\n'+rows):'[backlog-burst] no engine_runs rows this run');
+            }catch(_e){console.log('[backlog-burst] engine_runs query failed: '+_e.message);}" || true
       - name: Funnel summary
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
