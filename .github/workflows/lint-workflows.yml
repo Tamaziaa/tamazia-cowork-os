@@ -1,0 +1,22 @@
+name: Lint workflows (actionlint)
+# Preventive gate: type-checks every workflow on PRs that touch .github/workflows.
+# Catches the exact class of bug that bit us (malformed YAML, bad expressions, wrong inputs)
+# BEFORE merge. Informational for now (continue-on-error) because 2 legacy env-rebuild one-shots
+# still need cleanup; flip continue-on-error off once those are fixed to make it a hard gate.
+on:
+  pull_request:
+    paths: [".github/workflows/**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run actionlint
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
