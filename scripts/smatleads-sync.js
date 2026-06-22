@@ -474,8 +474,18 @@ async function notifyTelegram(msg) {
 
   await notifyTelegram(msg);
 
-  if (summary.errors > 0 && summary.new === 0) process.exit(1);
+  // FIX (2026-06-23): smatleads is a NON-CRITICAL optional GBP ingest. An external outage (auth/endpoint/
+  // budget) made every search error -> daily exit 1 -> daily red + Telegram spam. Treat an all-external-error
+  // run as a SKIP (exit 0) with ONE visible warning, so the workflow stays green and the founder still sees it.
+  if (summary.errors > 0 && summary.new === 0) {
+    try { await notifyTelegram('\u26a0\ufe0f *smatleads-sync skipped* \u2014 source errored on every search (auth/endpoint/budget?). 0 new leads. No red raised; verify the smatleads account/API if this persists.'); } catch (_) {}
+    console.warn('[smatleads-sync] all searches errored, 0 new \u2014 exiting 0 (non-critical source).');
+    process.exit(0);
+  }
 })().catch((e) => {
   console.error('[smatleads-sync] fatal:', e.message || e);
-  process.exit(1);
+  // External-source failures must not red the workflow daily; only an unexpected internal bug should.
+  const m = String((e && e.message) || e || '');
+  const external = /login failed|search-places failed|no token|fetch failed|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|429|50\d|Endpoint not found/i.test(m);
+  process.exit(external ? 0 : 1);
 });
