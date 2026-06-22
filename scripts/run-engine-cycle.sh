@@ -13,7 +13,13 @@ TS() { date +"%Y-%m-%d %H:%M:%S"; }
 # back to no-cap if coreutils `timeout` is absent (e.g. bare macOS/launchd).
 STEP_TIMEOUT="${STEP_TIMEOUT:-180}"
 if command -v timeout >/dev/null 2>&1; then TMO() { timeout -k 15 "$STEP_TIMEOUT" bash -c "$1"; }; else TMO() { bash -c "$1"; }; fi
-run() { echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}; [ "$rc" = "124" ] && echo "[$(TS)] TIMEOUT(${STEP_TIMEOUT}s): $1"; echo "[$(TS)] done: $1"; }
+# FIX (2026-06-23): global wall-clock budget. engine-cycle was hitting the 50-min job cap and GitHub
+# CANCELLED it every run (alarming the founder). Stop launching NEW steps after CYCLE_BUDGET so the
+# cycle exits cleanly (heartbeat finish runs) well before the cap. Next */30 tick runs fresh. Override
+# via CYCLE_BUDGET env. Default 2400s (40m) < the 50m job cap.
+CYCLE_BUDGET="${CYCLE_BUDGET:-2400}"; CYCLE_START="$(date +%s)"
+past_deadline() { [ "$(( $(date +%s) - CYCLE_START ))" -ge "$CYCLE_BUDGET" ]; }
+run() { if past_deadline; then echo "[$(TS)] >> SKIP (cycle budget ${CYCLE_BUDGET}s reached): $1"; echo "[$(TS)] done: $1"; return 0; fi; echo "[$(TS)] >> $1"; TMO "$1" 2>&1 | tail -3; local rc=${PIPESTATUS[0]}; [ "$rc" = "124" ] && echo "[$(TS)] TIMEOUT(${STEP_TIMEOUT}s): $1"; echo "[$(TS)] done: $1"; }
 {
   echo "===== ENGINE CYCLE $(TS) ====="
   set -a; source .env 2>/dev/null; set +a
