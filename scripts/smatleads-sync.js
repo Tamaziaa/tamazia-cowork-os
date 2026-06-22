@@ -351,8 +351,11 @@ async function notifyTelegram(msg) {
   const email = process.env.SMATLEADS_EMAIL;
   const password = process.env.SMATLEADS_PASSWORD;
   if (!email || !password) {
-    console.error('[smatleads-sync] SMATLEADS_EMAIL and SMATLEADS_PASSWORD must be set in ENV');
-    process.exit(1);
+    // FIX (2026-06-23): smatleads is a NON-CRITICAL optional GBP ingest and its creds are not in ENV_B64.
+    // Missing creds = SKIP (exit 0), not a daily red. To enable this source, add SMATLEADS_EMAIL +
+    // SMATLEADS_PASSWORD to the ENV_B64 secret. (Founder action — flagged, not failing.)
+    console.warn('[smatleads-sync] SMATLEADS_EMAIL/PASSWORD not set — skipping (non-critical source). Add them to ENV_B64 to enable.');
+    process.exit(0);
   }
 
   // Ensure tracking table exists
