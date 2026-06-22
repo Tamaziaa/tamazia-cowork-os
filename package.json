@@ -8,6 +8,6 @@
     "pulse": "node scripts/intel-pulse.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1063.0"
+    "@aws-sdk/client-s3": "^3.1074.0"
   }
 }
