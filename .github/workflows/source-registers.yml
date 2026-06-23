@@ -27,6 +27,9 @@ on:
 
 concurrency: { group: register-sourcing, cancel-in-progress: false }
 
+permissions:
+  contents: read
+
 jobs:
   source:
     runs-on: ubuntu-latest

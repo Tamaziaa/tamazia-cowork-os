@@ -25,6 +25,9 @@ concurrency:
   group: smatleads-sync
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest

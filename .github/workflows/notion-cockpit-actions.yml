@@ -27,6 +27,9 @@ concurrency:
   group: notion-cockpit-actions
   cancel-in-progress: false   # queue, never cancel — every verdict matters
 
+permissions:
+  contents: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest

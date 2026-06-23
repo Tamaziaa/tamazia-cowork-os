@@ -12,6 +12,9 @@ concurrency:
   group: notion-sync
   cancel-in-progress: true    # if two fire together, only the latest matters
 
+permissions:
+  contents: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest

@@ -10,6 +10,9 @@ concurrency:
   group: engine-db-work
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   guard:
     runs-on: ubuntu-latest

@@ -14,6 +14,9 @@ concurrency:
   group: remint-audits
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   remint:
     runs-on: ubuntu-latest

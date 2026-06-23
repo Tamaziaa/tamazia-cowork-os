@@ -16,6 +16,9 @@ on:
   schedule:
     - cron: '15 5 * * 1'   # weekly Monday 05:15 (alongside the qualifier + audit evals)
 
+permissions:
+  contents: read
+
 jobs:
   eval:
     runs-on: ubuntu-latest

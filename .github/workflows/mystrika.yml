@@ -10,6 +10,9 @@ on:
       campaign: { description: "campaign_id (for push)", default: "" }
       max: { description: "max prospects (push)", default: "200" }
 concurrency: { group: mystrika, cancel-in-progress: false }
+permissions:
+  contents: read
+
 jobs:
   run:
     runs-on: ubuntu-latest

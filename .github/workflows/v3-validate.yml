@@ -17,6 +17,9 @@ concurrency:
   group: engine-db-work          # serialise with the engine cycle so queue_rank never corrupts
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
