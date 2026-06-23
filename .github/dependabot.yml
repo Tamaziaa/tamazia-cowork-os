@@ -11,7 +11,5 @@ updates:
     commit-message:
       prefix: "deps"
       include: "scope"
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "monthly"
+# NOTE (2026-06-23): github-actions ecosystem removed — its updater errors while parsing the 2 legacy
+# malformed one-shots (rebuild-env-b64.yml / update-env-secret.yml). Re-add once those are fixed.
