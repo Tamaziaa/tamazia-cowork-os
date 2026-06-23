@@ -59,7 +59,7 @@ function reclaimStale() {
 // Atomically claim up to CONC pending rows (pending -> minting). SKIP LOCKED lets many workers run safely.
 function claimBatch() {
   const sql = `UPDATE minting_queue SET status='minting', claimed_at=now()
-    WHERE id IN (SELECT id FROM minting_queue WHERE status='pending' AND COALESCE(domain,'') <> '' ORDER BY priority ASC NULLS LAST, enqueued_at ASC LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
+    WHERE id IN (SELECT id FROM minting_queue WHERE status='pending' AND COALESCE(domain,'') <> '' AND domain NOT LIKE 'resolve:%' ORDER BY priority ASC NULLS LAST, enqueued_at ASC LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
     RETURNING id, regexp_replace(COALESCE(domain,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(sector,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(country,''),'[\t\r\n]+',' ','g'), lead_id;`;
   const out = (pg(sql) || '').trim();
   if (!out) return [];
@@ -79,8 +79,9 @@ async function resolveNames() {
   catch (_e) { return 0; } // resolver unavailable — leave name rows pending; they are not claimable, never crash
   let rows = [];
   try {
+    // Name-only rows carry a sentinel domain 'resolve:<slug>' (minting_queue.domain is NOT NULL).
     const out = (pg(`SELECT id, regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(country,''),'[\t\r\n]+',' ','g')
-      FROM minting_queue WHERE status='pending' AND COALESCE(domain,'')='' AND COALESCE(company,'')<>''
+      FROM minting_queue WHERE status='pending' AND domain LIKE 'resolve:%' AND COALESCE(company,'')<>''
       ORDER BY enqueued_at ASC LIMIT ${CONC}`) || '').trim();
     rows = out ? out.split('\n').map(l => { const [id, company, country] = l.split('\t'); return { id, company, country }; }) : [];
   } catch (_e) { return 0; }
@@ -93,11 +94,11 @@ async function resolveNames() {
       // Fill the domain only if still null (race-safe). If another queue row already holds this domain, fail
       // this one rather than create a duplicate mint.
       const taken = (pg(`SELECT 1 FROM minting_queue WHERE lower(domain)=lower('${q(dom)}') AND id<>${r.id} LIMIT 1`) || '').trim();
-      if (taken === '1') { pg(`UPDATE minting_queue SET status='failed', error='resolved domain ${q(dom)} already queued' WHERE id=${r.id} AND COALESCE(domain,'')='';`); continue; }
-      pg(`UPDATE minting_queue SET domain='${q(dom)}', error=NULL WHERE id=${r.id} AND COALESCE(domain,'')='';`);
+      if (taken === '1') { pg(`UPDATE minting_queue SET status='failed', error='resolved domain ${q(dom)} already queued' WHERE id=${r.id} AND domain LIKE 'resolve:%';`); continue; }
+      pg(`UPDATE minting_queue SET domain='${q(dom)}', error=NULL WHERE id=${r.id} AND domain LIKE 'resolve:%';`);
       filled++;
     } else {
-      pg(`UPDATE minting_queue SET status='failed', error='could not resolve a domain from company name' WHERE id=${r.id} AND COALESCE(domain,'')='';`);
+      pg(`UPDATE minting_queue SET status='failed', error='could not resolve a domain from company name' WHERE id=${r.id} AND domain LIKE 'resolve:%';`);
       console.error('  DEAD-LETTER name-resolve failed: ' + String(r.company).slice(0, 60));
     }
     await sleep(400); // gentle on the free SERP
