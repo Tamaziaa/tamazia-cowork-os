@@ -16,6 +16,10 @@ jobs:
     timeout-minutes: 15
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      # Manual fast-lane mints (cockpit Audit Search) target real, content-heavy regulated sites whose
+      # full audit (PageSpeed + site scan + LLM checks) can exceed the default 120s build cap and get
+      # killed mid-build (stuck 'minting' -> timeout). The job has 15 min, so give each build 5 min.
+      MINT_BUILD_TIMEOUT_MS: "300000"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
