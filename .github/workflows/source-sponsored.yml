@@ -17,6 +17,9 @@ on:
 
 concurrency: { group: sponsored-ad-leads, cancel-in-progress: false }
 
+permissions:
+  contents: read
+
 jobs:
   source:
     runs-on: ubuntu-latest

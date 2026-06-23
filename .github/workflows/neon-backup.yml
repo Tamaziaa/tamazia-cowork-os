@@ -6,6 +6,9 @@ on:
 concurrency:
   group: neon-backup
   cancel-in-progress: false
+permissions:
+  contents: read
+
 jobs:
   backup:
     runs-on: ubuntu-latest

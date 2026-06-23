@@ -10,6 +10,9 @@ concurrency:
   group: daily-digest
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   digest:
     runs-on: ubuntu-latest

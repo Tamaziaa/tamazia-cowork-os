@@ -15,6 +15,9 @@ concurrency:
   group: lead-scrapers
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   source:
     runs-on: ubuntu-latest

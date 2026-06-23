@@ -16,6 +16,9 @@ concurrency:
   group: apply-review
   cancel-in-progress: false   # queue, never cancel — every batch matters
 
+permissions:
+  contents: read
+
 jobs:
   apply:
     runs-on: ubuntu-latest

@@ -22,6 +22,9 @@ concurrency:
   group: engine-cycle
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   cycle:
     runs-on: ubuntu-latest

@@ -19,6 +19,9 @@ on:
 
 concurrency: { group: lead-scrapers, cancel-in-progress: false }
 
+permissions:
+  contents: read
+
 jobs:
   scrape:
     runs-on: ubuntu-latest

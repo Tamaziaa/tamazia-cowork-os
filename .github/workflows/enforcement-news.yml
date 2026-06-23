@@ -11,6 +11,9 @@ concurrency:
   group: enforcement-news
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   refresh:
     runs-on: ubuntu-latest

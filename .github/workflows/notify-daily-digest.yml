@@ -12,6 +12,9 @@ concurrency:
   group: notify-daily-digest
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   report:
     runs-on: ubuntu-latest

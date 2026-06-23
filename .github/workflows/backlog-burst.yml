@@ -31,6 +31,9 @@ concurrency:
   group: engine-db-work
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   burst:
     runs-on: ubuntu-latest
