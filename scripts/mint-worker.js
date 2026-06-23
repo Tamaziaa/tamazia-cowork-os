@@ -59,7 +59,7 @@ function reclaimStale() {
 // Atomically claim up to CONC pending rows (pending -> minting). SKIP LOCKED lets many workers run safely.
 function claimBatch() {
   const sql = `UPDATE minting_queue SET status='minting', claimed_at=now()
-    WHERE id IN (SELECT id FROM minting_queue WHERE status='pending' ORDER BY priority ASC NULLS LAST, enqueued_at ASC LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
+    WHERE id IN (SELECT id FROM minting_queue WHERE status='pending' AND COALESCE(domain,'') <> '' ORDER BY priority ASC NULLS LAST, enqueued_at ASC LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
     RETURNING id, regexp_replace(COALESCE(domain,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(sector,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(country,''),'[\t\r\n]+',' ','g'), lead_id;`;
   const out = (pg(sql) || '').trim();
   if (!out) return [];
@@ -67,6 +67,43 @@ function claimBatch() {
     const [id, domain, company, sector, country, lead_id] = l.split('\t');
     return { id, domain, company, sector, country, lead_id: lead_id && lead_id !== '' ? lead_id : null };
   });
+}
+
+// Resolve company-name-only rows (domain IS NULL, from the cockpit "audit search" name path) to a real
+// domain BEFORE they can be claimed. Reuses the same free-first SERP + accuracy guard as sourcing
+// (resolveWebsite). A row that resolves gets its domain filled (then mints normally next claim); a row that
+// can't resolve goes status='failed' with a clear reason so it is never stuck and is visible in History.
+async function resolveNames() {
+  let resolveWebsite;
+  try { ({ resolveWebsite } = require(path.join(__dirname, '..', 'src', 'skills', 'S028-sourcing-orchestrator', 'scripts', 'run.js'))); }
+  catch (_e) { return 0; } // resolver unavailable — leave name rows pending; they are not claimable, never crash
+  let rows = [];
+  try {
+    const out = (pg(`SELECT id, regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(country,''),'[\t\r\n]+',' ','g')
+      FROM minting_queue WHERE status='pending' AND COALESCE(domain,'')='' AND COALESCE(company,'')<>''
+      ORDER BY enqueued_at ASC LIMIT ${CONC}`) || '').trim();
+    rows = out ? out.split('\n').map(l => { const [id, company, country] = l.split('\t'); return { id, company, country }; }) : [];
+  } catch (_e) { return 0; }
+  if (!rows.length) return 0;
+  let filled = 0;
+  for (const r of rows) {
+    let dom = null;
+    try { dom = await resolveWebsite(r.company, r.country || ''); } catch (_e) { dom = null; }
+    if (dom) {
+      // Fill the domain only if still null (race-safe). If another queue row already holds this domain, fail
+      // this one rather than create a duplicate mint.
+      const taken = (pg(`SELECT 1 FROM minting_queue WHERE lower(domain)=lower('${q(dom)}') AND id<>${r.id} LIMIT 1`) || '').trim();
+      if (taken === '1') { pg(`UPDATE minting_queue SET status='failed', error='resolved domain ${q(dom)} already queued' WHERE id=${r.id} AND COALESCE(domain,'')='';`); continue; }
+      pg(`UPDATE minting_queue SET domain='${q(dom)}', error=NULL WHERE id=${r.id} AND COALESCE(domain,'')='';`);
+      filled++;
+    } else {
+      pg(`UPDATE minting_queue SET status='failed', error='could not resolve a domain from company name' WHERE id=${r.id} AND COALESCE(domain,'')='';`);
+      console.error('  DEAD-LETTER name-resolve failed: ' + String(r.company).slice(0, 60));
+    }
+    await sleep(400); // gentle on the free SERP
+  }
+  if (filled) console.log(`[mint-worker] resolved ${filled} company-name row(s) -> domain`);
+  return filled;
 }
 
 async function mintOne(row) {
@@ -97,13 +134,15 @@ async function mintOne(row) {
     console.log('  OK ' + row.domain + ' -> ' + r.slug + '/' + r.hash + ' (fw:' + (r.applicable_frameworks || []).length + ' pts:' + (r.pointers || []).length + ')');
   } catch (e) {
     const msg = String((e && e.message) || e).slice(0, 160);
-    pg(`UPDATE minting_queue SET status=(CASE WHEN retries+1 >= ${MAXR} THEN 'failed' ELSE 'pending' END), retries=retries+1, error='${q(msg)}' WHERE id=${row.id};`);
-    console.log('  FAIL ' + row.domain + ' ' + msg);
+    const dead = (pg(`UPDATE minting_queue SET status=(CASE WHEN retries+1 >= ${MAXR} THEN 'failed' ELSE 'pending' END), retries=retries+1, error='${q(msg)}' WHERE id=${row.id} RETURNING status;`) || '').trim();
+    if (dead === 'failed') console.error('  DEAD-LETTER mint failed (' + MAXR + ' tries): ' + row.domain + ' — ' + msg);
+    else console.log('  FAIL ' + row.domain + ' ' + msg);
   }
 }
 
 async function drainOnce() {
   reclaimStale();                 // return orphaned 'minting' claims to 'pending' before claiming new work
+  await resolveNames();           // turn company-name-only rows into domains (or fail them) before claiming
   const batch = claimBatch();
   if (!batch.length) return 0;
   await Promise.all(batch.map(mintOne)); // CONC in parallel; mints are I/O-bound (API waits)
