@@ -69,7 +69,9 @@ const SECTOR_MAP = {
 
   // Tech / SaaS (NIS2, OSA, DSA, CPRA, BIPA where biometrics)
   'saas':                 ['UK_NCSC_CYBER_ESSENTIALS', 'UK_DSIT_NIS2', 'EU_NIS2', 'EU_DSA', 'UK_OSA_2023', 'US_CPRA', 'US_VCDPA', 'US_TDPSA'],
-  'tech':                 ['UK_NCSC_CYBER_ESSENTIALS', 'EU_NIS2', 'UK_OSA_2023', 'EU_DSA', 'US_CPRA']
+  'tech':                 ['UK_NCSC_CYBER_ESSENTIALS', 'EU_NIS2', 'UK_OSA_2023', 'EU_DSA', 'US_CPRA'],
+  // Automotive: Consumer Rights Act (vehicle purchases), Trading Standards, advertising (ASA)
+  'automotive':           ['UK_CRA_2015', 'UK_TRADING_STANDARDS', 'UK_ASA_CAP', 'UK_DMCC_2024', 'UK_EQUALITY_2010']
 };
 
 // Aliases (clients describe themselves with varied terms — normalise to canonical)
@@ -93,7 +95,13 @@ const SECTOR_ALIASES = {
   'agency': 'marketing', 'creative': 'marketing', 'advertising': 'marketing',
   'shop': 'ecommerce', 'store': 'ecommerce', 'd2c': 'ecommerce', 'b2c': 'ecommerce',
   'software': 'saas', 'platform': 'saas', 'startup': 'saas',
-  'factory': 'manufacturing', 'production': 'manufacturing', 'builder': 'construction'
+  'factory': 'manufacturing', 'production': 'manufacturing', 'builder': 'construction',
+  // Missing aliases for sectors observed in audit_pages data
+  'financial-services': 'finance', 'financial': 'finance', 'financial services': 'finance',
+  'realestate': 'real-estate', 'property-management': 'real-estate',
+  'professional': 'professional-services', 'professional services': 'professional-services',
+  'crypto': 'fintech', 'cryptocurrency': 'fintech', 'blockchain': 'fintech', 'web3': 'fintech',
+  'automotive': 'automotive', 'car': 'automotive', 'vehicle': 'automotive', 'dealership': 'automotive'
 };
 
 function normaliseSector(s) {
