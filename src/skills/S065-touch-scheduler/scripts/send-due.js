@@ -52,7 +52,7 @@ function pgEsc(v) { if (v == null) return 'NULL'; return `'${String(v).replace(/
 // 1->2 = 7d, 2->3 = 11d. Touch 3 is the final touch (the breakup); after it sends the lead is marked
 // cadence_complete (see processLead) and recycle.js parks/re-enters it. There is NO touch 4: the scheduler never
 // schedules it and S064 render.js does not render it. SEND_GAP env knobs unchanged. SEND stays OFF (master gate).
-const LAST_TOUCH = 3; // index of the final touch in the cadence (the breakup). cadence_complete fires AFTER this.
+const LAST_TOUCH = 2; // index of the final touch (T0+T1+T2 = 3 emails total, days 0/3/10). No breakup email.
 const CADENCE_DAYS = [0, 3, 10, 21]; // days from Touch 0, matching campaigns/_meta.json interval_days_from_touch0
 
 function pickDueDrafts() {
@@ -226,7 +226,7 @@ async function processLead(lead) {
   if (touch === 0) pg(`UPDATE leads SET first_contacted_at = COALESCE(first_contacted_at, NOW()) WHERE id = ${lead.id}`);
   // Advance lead status + schedule next touch. D1 (founder-locked): cadence runs 0->1->2->3; cadence_complete is
   // set ONLY after the final touch (LAST_TOUCH = 3, the breakup) has sent. The gap to the next touch is read from
-  // CADENCE_DAYS [0,3,10,21] (touch0->1 = 3d, 1->2 = 7d, 2->3 = 11d). There is no touch 4.
+  // CADENCE_DAYS [0,3,10,21] — only touches 0/1/2 fire (days 0, 3, 10). Touch 3 (day 21) is not sent.
   if (touch < LAST_TOUCH) {
     const days = CADENCE_DAYS[touch + 1] - CADENCE_DAYS[touch];
     pg(`UPDATE leads SET status='touch_${touch + 1}_queued', next_touch_date = (CURRENT_DATE + INTERVAL '${days} days')::date, last_reply_received_at = NULL, updated_at = NOW() WHERE id = ${lead.id}`);
