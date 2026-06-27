@@ -650,7 +650,19 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // client-facing detected names, derived from the SAME gated code set — never the raw markets.js keyword noise.
   const _C2N = { UK: 'United Kingdom', US: 'United States', AE: 'United Arab Emirates', SA: 'Saudi Arabia', QA: 'Qatar', EU: 'European Union', FR: 'France', DE: 'Germany', IE: 'Ireland', SG: 'Singapore', IN: 'India', CA: 'Canada', AU: 'Australia', NL: 'Netherlands', ES: 'Spain', IT: 'Italy' };
   const detectedJurisdictions = Array.from(new Set(allJurisdictions.map((c) => _C2N[c] || _regName || c)));
-  const effectiveSector = (firmProfile && firmProfile.primary_sector) || sector;
+  // R-1 sector guard: prefer the ICP-classified lead sector when it is a regulated domain
+  // and the LLM returned a generic/unrelated sector (e.g. 'ecommerce' for a wealth manager).
+  // The leads table sector comes from our scraper+ICP classifier; the LLM infers from sparse
+  // corpus text and mis-classifies SPA/JS-heavy sites where regulated terms are JS-rendered.
+  const _REGULATED_SECTORS = new Set(['finance','fintech','healthcare','aesthetic','aesthetics','dental','law-firms','law-firm','barristers','insurance','real-estate','charity','education','higher-education','accounting','pharma','aviation','energy']);
+  const _GENERIC_LLM_SECTORS = new Set(['ecommerce','retail','tech','saas','professional-services','food','media','transport','manufacturing','construction','marketing','general']);
+  const _llmDetectedSec = (firmProfile && firmProfile.primary_sector) ? String(firmProfile.primary_sector).toLowerCase() : null;
+  const _normLeadSec = normaliseSectorAlias(String(sector || ''));  // 'financial-services'→'finance', 'legal'→'law-firms'
+  const effectiveSector = (
+    _REGULATED_SECTORS.has(_normLeadSec) && _llmDetectedSec && _GENERIC_LLM_SECTORS.has(_llmDetectedSec)
+      ? _normLeadSec   // regulated ICP sector wins when LLM says generic
+      : (_llmDetectedSec || _normLeadSec || sector)
+  );
   // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
   let frameworks;
   try {
