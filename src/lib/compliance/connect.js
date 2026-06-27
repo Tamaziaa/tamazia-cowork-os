@@ -12,7 +12,10 @@ function normJuris(j) { j = String(j || '').toUpperCase().trim(); if (j === 'GB'
 // Frameworks that apply to EVERY sector (privacy, cookies, consumer protection, equality, advertising, Google).
 const UNIVERSAL_FW = new Set([
   'GOOGLE_EEAT',
-  'UK_GDPR_A13','UK_PECR','UK_ICO_COOKIES','UK_DPA_2018','UK_DMCC_2024','UK_COMPANIES_ACT','UK_EQUALITY_2010','UK_CRA_2015','UK_CMA','UK_TRADING_STANDARDS','UK_ASA_CAP','UK_MODERN_SLAVERY',
+  'UK_GDPR_A13','UK_PECR','UK_ICO_COOKIES','UK_DPA_2018','UK_DMCC_2024','UK_COMPANIES_ACT','UK_EQUALITY_2010','UK_CRA_2015','UK_CMA','UK_TRADING_STANDARDS','UK_ASA_CAP',
+  // UK_MODERN_SLAVERY removed from UNIVERSAL: MSA s.54 only binds commercial organisations with UK turnover ≥£36M.
+  // It now lives only in the sector map (manufacturing, construction, transport, energy) — so SME clinics/schools/
+  // law firms never get it, while large supply-chain sectors still do. (F-1 fix / 5-of-9 false-positive class)
   'EU_GDPR','EU_EPRIVACY','EU_AI_ACT','EU_EAA_2025','EU_DSA',
   'US_FTC','US_CPRA','US_CCPA','US_FTC_ENDORSE','US_ADA','US_TCPA','US_VCDPA','US_TDPSA',
   'US_STATE_PRIVACY','UAE_PDPL','DIFC_DPL','ADGM_DPR','SAUDI_PDPL','QATAR_PDPPL','DE_BDSG','FR_CNIL_2025',
