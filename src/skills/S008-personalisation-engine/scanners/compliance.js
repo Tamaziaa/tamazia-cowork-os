@@ -732,6 +732,25 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // Most severe first
   findings.sort((a, b) => sevRank(a.severity) - sevRank(b.severity));
 
+  // ── D-6 POSITIVE COMPLIANCE SIGNALS (detected from corpus, never fabricated) ────────────────────────
+  // When a firm DISPLAYS their regulatory registration number / badge, that is evidence of compliance.
+  // These signals credit the grade so a legitimately registered firm is not graded F by absence of findings.
+  // Detection is literal pattern-match only — no inference. Any error → all false (fail-open).
+  const positive_compliance = { ico_number: false, sra_number: false, fca_frn: false, cqc_registered: false, companies_house: false, any: false };
+  try {
+    // ICO registration number: "ZA123456" (UK data controller registration) — displayed = GDPR Article 30-compliant disclosure
+    positive_compliance.ico_number = /\bICO\s+(?:registration\s+)?(?:number|no\.?|ref(?:erence)?)\s*[:\s]\s*Z[A-Z]\d{5,7}\b/i.test(corpusText) || /\b(?:ICO|data\s+protection)\s+(?:reg|ref)(?:istration|erence)?\s*[:\s]\s*Z[A-Z]\d{5,7}/i.test(corpusText);
+    // SRA number: Solicitors Regulation Authority — displayed = SRA Transparency Rules (Rule 4 badge + number)
+    positive_compliance.sra_number = /\bSRA\s+(?:number|no\.?|ID|authoris(?:ed|ation)|reg(?:istration)?)\s*[:\s]\s*\d{5,7}\b/i.test(corpusText) || /\bauthorised\s+and\s+regulated\s+by\s+the\s+Solicitors\s+Regulation\s+Authority\b/i.test(corpusText);
+    // FCA FRN: Financial Conduct Authority — displayed = FCA authorisation evidence
+    positive_compliance.fca_frn = /\bFRN\s*[:\s]\s*\d{6}\b/i.test(corpusText) || /\bFCA\s+(?:reference\s+number|authoris(?:ed|ation)\s+number|FRN)\s*[:\s]\s*\d{6}\b/i.test(corpusText) || /\bauthorised\s+and\s+regulated\s+by\s+the\s+Financial\s+Conduct\s+Authority\b/i.test(corpusText);
+    // CQC registration: Care Quality Commission — rated firm displays their CQC status
+    positive_compliance.cqc_registered = /\bCQC\s+(?:registered|regulated|inspected)\b/i.test(corpusText) && /\bCQC\s+(?:rating|rated|inspection|report|certificate|registration)\b/i.test(corpusText);
+    // Companies House: displayed registered company number — meets Companies Act s.82 obligation
+    try { const { extractRegNumber } = require('../../../lib/sourcing/firmographics.js'); positive_compliance.companies_house = !!(extractRegNumber(corpusText)); } catch (_e2) {}
+    positive_compliance.any = Object.entries(positive_compliance).some(([k, v]) => k !== 'any' && v === true);
+  } catch (_pce) {}
+
   const payload = {
     domain, sector, country, ok: true, reachable: true,
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
@@ -743,6 +762,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     p1_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P1').length,
     p2_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P2').length,
     corpus_pages: corpus.map(c => ({ url: c.url, status: c.status, bytes: c.bytes, fetch_ms: c.fetch_ms })),
+    positive_compliance,
     findings
   };
   writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: cache_max_age });
