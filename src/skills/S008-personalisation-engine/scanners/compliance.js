@@ -9,7 +9,7 @@ const fs = require('fs');
 const { execFileSync } = require('child_process');
 const _crypto = require('crypto');
 const { fetchWithRetry, getCached, writeCache } = require('../lib/http.js');
-const { routeJurisdictions } = require('../../../lib/compliance/jurisdiction-router.js');
+const { routeJurisdictions, normaliseSector: normaliseSectorAlias } = require('../../../lib/compliance/jurisdiction-router.js');
 const { buildCorpusIndex, scanRuleGlobal } = require('./corpus-index.js'); // B2 — every-page/every-word matcher
 const SCANNER = 'compliance';
 
@@ -618,17 +618,23 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   }
   let rules = loadRules({ frameworks });
   // ── SECTOR SUB-GATE (kills cross-sector false positives) ────────────────────────────────────────
-  // ABPI (pharmaceutical-company promotion / PMCPA), GPHC (pharmacy regulator) and MHRA (medicines
-  // advertising) apply ONLY to sites that ARE a pharmacy / pharma company or actually sell or advertise
-  // medicines. A dental practice or private clinic must NOT inherit drug-promotion disclosure rules just
-  // because it is tagged "healthcare". Gate these frameworks on real medicine/pharmacy corpus signals.
+  // ABPI (pharmaceutical-company promotion / PMCPA) and GPHC (pharmacy regulator) apply ONLY to
+  // pharmacy / pharma companies. MHRA applies to pharmacies AND aesthetics clinics advertising POMs
+  // (botulinum toxin, lip fillers with POM components) — so UK_MHRA is kept for aesthetics/aesthetic
+  // sectors even without pharmacy signals. All three require a corpus signal for non-aesthetic healthcare.
   {
+    const _isAesthetics = /^aesthetic/.test(String(effectiveSector || sector || '').toLowerCase());
+    // Botox/filler/toxin = POM advertising signals that keep MHRA for aesthetic clinics.
+    const _aestheticPomSig = /\b(botox|botulinum|anti.wrinkle|toxin|filler|aesthetic (treat|inj|procedure|clinic)|cosmetic inj|lip enhance|dermal|thread lift|rhinoplasty|medspa|med.spa|skin clinic|injectable)\b/i;
     const _medSig = /\b(pharmac(y|ies|ist)|dispensing chemist|online pharmacy|prescription[- ]only medicine|marketing authorisation|summary of product characteristics|\bSmPC\b|patient information leaflet|\bGPhC\b|superintendent pharmacist|buy[a-z ]{0,25}medicines?|over[- ]the[- ]counter medicine)\b/i;
+    const _keepMhra = _medSig.test(corpusText) || (_isAesthetics && _aestheticPomSig.test(corpusText));
     if (!_medSig.test(corpusText)) {
-      const PHARMA_FW = new Set(['UK_ABPI','UK_GPHC','UK_MHRA']);
+      const PHARMA_ONLY_FW = new Set(['UK_ABPI', 'UK_GPHC']); // MHRA excluded — kept for aesthetics
       const _before = rules.length;
-      rules = rules.filter(r => !PHARMA_FW.has(r.framework_short));
-      if (rules.length !== _before) frameworks = frameworks.filter(f => !PHARMA_FW.has(f));
+      rules = rules.filter(r => !(PHARMA_ONLY_FW.has(r.framework_short) || (!_keepMhra && r.framework_short === 'UK_MHRA')));
+      const _removedFw = new Set(PHARMA_ONLY_FW);
+      if (!_keepMhra) _removedFw.add('UK_MHRA');
+      if (rules.length !== _before) frameworks = frameworks.filter(f => !_removedFw.has(f));
     }
   }
   if (!rules.length) {
@@ -642,11 +648,11 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const _homeText = _stripTxt((corpus[0] && corpus[0].body) || '').slice(0, 2600);
   const findings = [];
   let hits = 0, misses = 0, suppressedPrivacy = 0;
-  // The rule-level sector gate (ruleCheck) MUST use the SAME detected sector as the framework router (effectiveSector
-  // = firmProfile.primary_sector, the 30-slug vocabulary that rule.sector_relevance is keyed on) — never the raw scan
-  // input, which may be empty/mismatched and would silently BYPASS the gate (`sector && …`). This alignment is what
-  // makes the per-rule sector gate actually fire (e.g. drops UK_TRADING_STANDARDS/TS1.1 "unit pricing" on a law firm).
-  const normSector = String(effectiveSector || sector || '').toLowerCase();
+  // The rule-level sector gate (ruleCheck) MUST use the canonical sector — run effectiveSector through
+  // normaliseSectorAlias so 'aesthetic'→'aesthetics' and 'legal'→'law-firms' before matching rule.sectors.
+  // sector_relevance in Neon uses the SECTOR_MAP canonical keys; without this alias step rules with
+  // sector_relevance=['aesthetics'] would silently skip when effectiveSector='aesthetic'. (sector-alias-gate)
+  const normSector = normaliseSectorAlias(String(effectiveSector || sector || ''));
   // B2 — build the every-page/every-word index ONCE (strip each page once, not per rule×page) so prohibit rules can
   // flag every offending line across the whole site (blogs included) and evidence stays verbatim + located.
   const corpusIndex = buildCorpusIndex(corpus);
