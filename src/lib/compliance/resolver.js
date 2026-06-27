@@ -123,6 +123,9 @@ function overlayDrop(law, { jurSet, employeeBand = 'unknown', trig, sector, fram
   if (carveDropped(law, jurSet)) return 'freezone_carveout';
   if (sectorExcluded(law, framework, sector)) return 'out_of_sector';       // the structural sector gate (no wrong law for any sector)
   if (trig && (law.excluded_when || []).some((f) => trig.has(f))) return 'excluded';
+  // F-2/F-1 fix: applies_when non-employee flags must be present in active triggers (mirrors resolveLaws line 69).
+  // High-threshold laws (MSA uk_turnover_36m_plus, HFSS employees_250_plus) drop when the signal is absent.
+  if (trig && (law.applies_when || []).some((f) => !/employees?_/.test(f) && !trig.has(f))) return 'applies_when_trigger_absent';
   if (thresholdOk(law, employeeBand) === false) return 'below_employee_threshold';
   return null;
 }
