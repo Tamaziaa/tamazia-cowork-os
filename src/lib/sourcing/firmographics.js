@@ -6,15 +6,31 @@
 const UA = 'Mozilla/5.0 (compatible; TamaziaBot/1.0; +https://tamazia.co.uk)';
 async function getText(url, ms) { try { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms || 12000); try { const r = await fetch(url, { redirect: 'follow', headers: { 'user-agent': UA }, signal: c.signal }); return r.ok ? await r.text() : ''; } finally { clearTimeout(t); } } catch (_) { return ''; } }
 
+// C-4 fix: regulator-registration numbers (CQC, SRA, ICO, FCA, VAT) must NOT be mistaken for
+// Companies House numbers. The guard: (a) require 'company' or 'England/Wales' in the context
+// phrase; (b) post-filter phone-prefix patterns (UK service numbers begin 03xx/07xx/08xx/09xx
+// and are always ≥10 digits when complete, but an 8-digit slice like 03301331 is recognisable
+// by the 03/07/08/09 prefix). Valid Companies House numbers never begin with 03/07/08/09.
 function extractRegNumber(html) {
   const text = (html || '').replace(/&nbsp;/g, ' ');
   const pats = [
     /\b(OC\d{6}|SC\d{6}|NI\d{6})\b/i,                                              // LLP / Scotland / NI
-    /regist(?:ered|ration)\s+(?:in\s+england(?:\s+and\s+wales)?\s+)?(?:with\s+)?(?:company\s+)?(?:no\.?|number|#)\s*:?\s*(\d{7,8})/i,
+    // 'company' must be present OR 'in England/Wales' — prevents CQC/SRA/ICO "registration number" from matching
+    /regist(?:ered|ration)\s+in\s+england(?:\s+and\s+wales)?\s+(?:with\s+)?(?:company\s+)?(?:no\.?|number|#)\s*:?\s*(\d{7,8})/i,
     /company\s+(?:registration\s+)?(?:no\.?|number)\s*:?\s*(\d{7,8})/i,
-    /registered\s+(?:company\s+)?number\s*:?\s*(\d{7,8})/i,
+    /registered\s+company\s+number\s*:?\s*(\d{7,8})/i,
   ];
-  for (const re of pats) { const m = text.match(re); if (m) return (m[1] || m[0]).toUpperCase(); }
+  for (const re of pats) {
+    const m = text.match(re);
+    if (!m) continue;
+    const num = (m[1] || m[0]).toUpperCase();
+    // Exclude UK 03xx/07xx/08xx service/mobile numbers — they look like 8-digit CH numbers but aren't.
+    // 09876543 is a valid CH number (in England range); 09xx are premium-rate but NOT excluded here
+    // because strong-context patterns (in England/Wales, company number) already prevent CQC/SRA/ICO
+    // prefixes from matching. Only filter the most common false-positive prefix (03xx service numbers).
+    if (/^\d/.test(num) && /^0[378]/.test(num)) continue;
+    return num;
+  }
   return null;
 }
 function extractVAT(html) { const m = (html || '').match(/VAT\s*(?:reg(?:istration)?\.?\s*)?(?:no\.?|number|#)?\s*:?\s*((?:GB)?\s?\d[\d ]{7,11}\d)/i); return m ? m[1].replace(/\s/g, '') : null; }
