@@ -10,7 +10,9 @@ const EU_MEMBER_STATES = new Set([
 // 27 sectors with frameworks (verified against UK + EU + US regulator landscape, May 2026)
 const SECTOR_MAP = {
   // Legal & professional services
-  'law-firms':            ['UK_SRA_COC', 'UK_EQUALITY_2010'],
+  // UK_SRA_TRANSPARENCY = SRA Transparency Rules 2018 (price, complaints, badge — applies to ALL SRA-regulated firms)
+  // UK_SRA_COC = SRA Code of Conduct for Firms 2019 (advertising, client care)
+  'law-firms':            ['UK_SRA_TRANSPARENCY', 'UK_SRA_COC', 'UK_EQUALITY_2010'],
   'barristers':           ['UK_BSB', 'UK_EQUALITY_2010'],
   'accounting':           ['UK_ICAEW', 'UK_ACCA', 'UK_FRC', 'UK_HMRC_AML', 'EU_WHISTLEBLOWER'],
   'professional-services':['UK_ICAEW', 'EU_WHISTLEBLOWER', 'UK_EQUALITY_2010'],
