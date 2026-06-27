@@ -1,0 +1,37 @@
+name: Mint cycle (drain pending every 2 hrs)
+# Safety-net drain. Oracle VM pm2 tz-mint is the primary 24/7 worker; this catches up when the
+# VM is down or slow. Runs every 2 hours — uses ~1440 GH Actions min/month (within free tier).
+# mint-now.yml handles immediate cockpit dispatches; this covers steady-state backlog.
+# --once exits in <5s when queue is empty so idle runs are cheap after the 3-min setup.
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: mint-cycle
+  cancel-in-progress: false
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      MINT_BUILD_TIMEOUT_MS: "180000"
+      MINT_RECLAIM_AFTER_MIN: "16"
+      MINT_CONCURRENCY: "15"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: npm install --omit=dev || npm install || true
+      - run: python -m pip install --quiet -r requirements.txt
+      - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Drain the mint queue
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          node scripts/ensure-schema.js || true
+          node scripts/mint-worker.js --once --reclaim-startup
