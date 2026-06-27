@@ -12623,7 +12623,7 @@
   "regulator": "UK Modern Slavery Act 2015 — Transparency in Supply Chains",
   "category": "sector_specific",
   "website_obligation": "",
-  "applies_when": [],
+  "applies_when": ["uk_turnover_36m_plus"],
   "excluded_when": [],
   "where_on_site": [
    "homepage",

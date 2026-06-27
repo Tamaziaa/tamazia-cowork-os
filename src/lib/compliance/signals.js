@@ -65,6 +65,8 @@ const TRIGGER_RX = {
   sends_marketing_email: /newsletter|subscribe|email updates|mailing list|marketing email/i,
   is_financial_promotion: /invest|return on investment|\bAPR\b|interest rate|capital at risk|financial promotion/i,
   serves_eu: /\b(eu|european union|eea|europe|gdpr)\b/i,
+  // F-1/F-2: MSA s.54 + HFSS turnover gate — triggers only for firms that self-disclose large-company status.
+  uk_turnover_36m_plus: /\b(annual (turnover|revenue).{0,20}(£|gbp|million|m\b)|turnover (exceeds?|of) £\d|section 54 (statement|compliance)|ftse (100|250|350|all[- ]share)|transparency in supply chain(s)?|group (companies|annual report)|(?:£|gbp)\s?(?:3[6-9]|[4-9]\d|\d{3})\s*(?:m(?:illion)?|bn))\b/i,
 };
 function deriveTriggers(corpusText = '', baseline = []) {
   const t = new Set(baseline);
