@@ -102,7 +102,11 @@ function secMatches(sectors, sec) {
 
 // catalogue = { frameworks:[{framework_short,jurisdiction}], rules:[{framework_short,sector_relevance[],rule_type,trigger_pattern,...}] }
 function connect({ catalogue, jurisdictions, sector, signals, text }) {
-  const sec = String(sector || '').toLowerCase().trim();
+  // Normalise variant sector names before routing so 'aesthetic' → 'aesthetics', 'legal' → 'law-firms', etc.
+  // This makes the SECTOR_MAP lookup direct rather than relying only on the SECTOR_PARENTS chain.
+  let _rawSec = String(sector || '').toLowerCase().trim();
+  try { const { normaliseSector: _ns } = require('./jurisdiction-router.js'); if (_ns) _rawSec = _ns(_rawSec) || _rawSec; } catch (_) {}
+  const sec = _rawSec;
   const sig = signals || {};
   const t = String(text || '').toLowerCase();
   const J = expandJurisdictions(jurisdictions);
