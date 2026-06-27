@@ -614,7 +614,9 @@ async function build({ lead_id, domain, sector, country, company, env }) {
 
   // A4i — pg() (psql shim) takes no params, so every caller-influenced literal is escaped AND the free-text
   // ones pass a mandatory charset allow-list (sector can arrive from minting_queue / detected_sector free text).
-  const sectorE  = String(sector || '').toLowerCase().replace(/[^a-z0-9 &/-]/g, '').slice(0, 40).replace(/'/g, "''");
+  // Use payload.detected_sector (the profiler-corrected sector) over the raw 'sector' arg so the audit_pages
+  // row always reflects the REAL detected sector, not the stale lead-row label (e.g. 'general' → 'aesthetic').
+  const sectorE  = String(payload.detected_sector || payload.sector || sector || '').toLowerCase().replace(/[^a-z0-9 &/-]/g, '').slice(0, 40).replace(/'/g, "''");
   const countryE = String(country || 'UK').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'UK';
   const leadIdN  = Number(lead_id);
   const fwE      = String(payload.framework_version || '').replace(/[^0-9A-Za-z._-]/g, '').slice(0, 24);
