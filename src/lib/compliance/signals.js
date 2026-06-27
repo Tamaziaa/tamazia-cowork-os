@@ -87,11 +87,23 @@ function employeeBand(emp) {
 // the country ('AE'), so a DIFC/ADGM firm would otherwise lose (or wrongly gain) free-zone-specific data laws. Detect
 // the zone from the firm's OWN corpus: a real DIFC firm (e.g. Al Tamimi) names DIFC/ADGM on its site; an onshore café
 // never does. This makes the resolver carve-out correct in both directions (keep for DIFC firms, drop for onshore).
-function augmentFreezones(jurSet, corpusText = '') {
-  if (jurSet.has('MENA-AE')) {
-    if (/\bDIFC\b|dubai international financial (?:centre|center)/i.test(corpusText)) jurSet.add('MENA-AE-DIFC');
-    if (/\bADGM\b|abu dhabi global market/i.test(corpusText)) jurSet.add('MENA-AE-ADGM');
+// R-3 fix: zone code must be tied to ESTABLISHMENT (the firm is registered/licensed there) not just a SERVICE mention
+// (the firm helps clients SET UP there). A firm selling "DIFC company formation" services is not itself DIFC-registered.
+// Heuristic: the zone term must co-occur with an establishment phrase and NOT a pure service-offer verb.
+const _ESTAB_RX = /\b(our office|our address|registered (?:in|with|at)|licensed (?:by|in|with)|authorised by|based in|located in|headquartered|principal place|our (company|firm) is|we are (?:registered|licensed|authorised|based))\b/i;
+const _SERVE_RX = /\b(help you|assist you|set up|setup|incorporate|company formation|register for you|we (?:help|assist|advise) (?:you|clients?)|structure (?:your|a)|advisory|consulting services|for clients|for our clients)\b/i;
+function _zoneEstablished(term, lc) {
+  const rx = new RegExp('([^.!?\\n]{0,100}' + term + '[^.!?\\n]{0,100})', 'gi');
+  for (const m of (lc.match(rx) || [])) {
+    if (_ESTAB_RX.test(m) && !_SERVE_RX.test(m)) return true;
   }
+  return false;
+}
+function augmentFreezones(jurSet, corpusText = '') {
+  if (!jurSet.has('MENA-AE')) return jurSet;
+  const lc = String(corpusText || '').toLowerCase();
+  if (/\bdifc\b|dubai international financial (?:centre|center)/i.test(lc) && _zoneEstablished('difc', lc)) jurSet.add('MENA-AE-DIFC');
+  if (/\badgm\b|abu dhabi global market/i.test(lc) && _zoneEstablished('adgm', lc)) jurSet.add('MENA-AE-ADGM');
   return jurSet;
 }
 

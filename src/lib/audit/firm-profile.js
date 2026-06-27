@@ -21,9 +21,47 @@ const N2C = { 'United Kingdom': 'UK', 'United States': 'US', 'United Arab Emirat
 function _cleanSector(s) { const v = String(s || '').toLowerCase().trim().replace(/\s+/g, '-'); return SECTORS.includes(v) ? v : null; }
 function _code(name) { return COUNTRY_CODE[String(name || '').toLowerCase().trim()] || null; }
 
+// R-1/R-2 fix: deterministic keyword classifier used when LLM fails or returns an unrecognised sector (e.g. "General").
+// Ordered most-specific first. Returns a SECTORS-list value or null (genuinely unknown — do not fabricate).
+// Never emits "general": unknown sector → null so downstream gating signals low-confidence, not wrong pack.
+const _SECTOR_KW = [
+  [/\bsolicit|barrister|\bllp\b|law firm|sra number|legal service|conveyancing|litigation|employment law|immigration law/i, 'law-firms'],
+  [/\bbarrister|chambers\b|inn of court/i, 'barristers'],
+  [/\bgmc\b|cqc register|cosmetic (surgery|procedure)|botox|anti.wrinkle|dermal filler|aesthetic (clinic|treatment)|medspa|med.spa|skin clinic|filler treatment|lip filler|rhinoplasty|breast augmentation|plastic surgeon|aesthetic practitioner/i, 'aesthetic'],
+  [/\bdentist|dental (practice|clinic|implant)|orthodont|gdc\b|nhs dental/i, 'dental'],
+  [/\bclinic|medical centre|healthcare|gp practice|physiotherap|care home|nhs trust|hospital|medical (practice|group)|cqc registered/i, 'healthcare'],
+  [/\bfca register|\bifa\b|financial advice|wealth management|investment advice|pension advice|chartered financial|independent financial adviser/i, 'finance'],
+  [/\bfintech|payment (gateway|processor)|open banking|embedded finance|neobank|crypto exchange/i, 'fintech'],
+  [/\binsur(ance|er)\b|underwr|reinsur|lloyds market/i, 'insurance'],
+  [/\bestate agent|letting agent|property (for sale|to let)|rightmove|zoopla|\brics\b|naea|arla|tpo|sstc/i, 'real-estate'],
+  [/\bofsted|state school|academy trust|sixth form|gcse|a.level|primary school|secondary school|independent school\b/i, 'education'],
+  [/\buniversity|higher education|degree programme|undergraduate|postgraduate|student (union|halls)|ofs\b/i, 'higher-education'],
+  [/\bcharity|charitable (organisation|trust)|registered charity|fundrais|donation|gift aid/i, 'charity'],
+  [/\bhotel|restaurant|cafe|pub\b|bar\b|nightclub|hospitality group|food (service|delivery)|catering/i, 'hospitality'],
+  [/\bgym\b|fitness (club|studio)|personal trainer|yoga studio|pilates|crossfit|membership (gym|fitness)/i, 'fitness'],
+  [/\bmanufactur|production facility|factory|assembly line|industrial supplier/i, 'manufacturing'],
+  [/\bconstruction|housebuilder|house builder|civil engineering|building contractor|planning permission/i, 'construction'],
+  [/\becommerce|e.commerce|online (shop|store)|shopify|woocommerce|direct.to.consumer/i, 'ecommerce'],
+  [/\bretail (store|brand|outlet)|high.street retail|department store/i, 'retail'],
+  [/\bsaas\b|software.as.a.service|b2b software|cloud (platform|software)|subscription software/i, 'saas'],
+  [/\btechnology|tech (startup|company)|software development|app development|it services|digital agency/i, 'tech'],
+];
+function _detectSectorFromCorpus(corpusText, fallbackSector) {
+  const c = String(corpusText || '').toLowerCase();
+  for (const [rx, sector] of _SECTOR_KW) {
+    if (rx.test(c)) return sector;
+  }
+  // Try the fallback sector string itself — but never accept "general"
+  const cleaned = _cleanSector(fallbackSector);
+  if (cleaned && cleaned !== 'general') return cleaned;
+  return null;
+}
+
 async function profileFirm({ corpus = '', domain = '', country = '', sector = '', env = process.env } = {}) {
   const text = String(corpus || '').replace(/\s+/g, ' ').trim().slice(0, 12000);
-  const fallback = { primary_sector: _cleanSector(sector) || sector || null, sectors: sector ? [sector] : [], hq_country: country || null, office_countries: [], serves: [], source: 'fallback' };
+  // R-1/R-2: deterministic keyword-first resolution. Never emit the raw "General" sector — use corpus keywords instead.
+  const deterministicSector = _detectSectorFromCorpus(text, sector);
+  const fallback = { primary_sector: deterministicSector || null, sectors: deterministicSector ? [deterministicSector] : [], hq_country: country || null, office_countries: [], serves: [], source: 'fallback' };
   if (!text || text.length < 200) return fallback;
   const prompt = `You are a meticulous compliance analyst. From the WEBSITE TEXT below, extract ONLY what the text actually evidences — never guess or infer beyond it.
 Return STRICT JSON only:
@@ -42,9 +80,12 @@ ${text}`;
   if (!p || typeof p !== 'object') return fallback;
   const offices = (Array.isArray(p.office_countries) ? p.office_countries : []).map((o) => ({ country: o && o.country, code: _code(o && o.country), evidence: String((o && o.evidence) || '').slice(0, 160) })).filter((o) => o.code);
   const serves = (Array.isArray(p.served_markets) ? p.served_markets : []).map((o) => ({ country: o && o.country, code: _code(o && o.country), evidence: String((o && o.evidence) || '').slice(0, 160) })).filter((o) => o.code);
+  // R-1: if LLM returns null/unrecognised sector, fall back to deterministic corpus classifier (never "General").
+  const llmSector = _cleanSector(p.primary_sector);
+  const resolvedSector = llmSector || deterministicSector || null;
   return {
-    primary_sector: _cleanSector(p.primary_sector) || _cleanSector(sector) || sector || null,
-    sectors: Array.from(new Set([_cleanSector(p.primary_sector), ...(Array.isArray(p.secondary_sectors) ? p.secondary_sectors.map(_cleanSector) : [])].filter(Boolean))),
+    primary_sector: resolvedSector,
+    sectors: Array.from(new Set([resolvedSector, ...(Array.isArray(p.secondary_sectors) ? p.secondary_sectors.map(_cleanSector) : [])].filter(Boolean))),
     hq_country: p.hq_country || country || null,
     office_countries: offices, serves, source: 'llm',
   };
