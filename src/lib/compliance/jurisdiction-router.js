@@ -17,6 +17,8 @@ const SECTOR_MAP = {
 
   // Healthcare & pharma
   'healthcare':           ['UK_CQC', 'UK_MHRA', 'EU_MDR', 'UK_EQUALITY_2010', 'US_HIPAA'],
+  // P-H: Aesthetic clinics (botulinum/filler/skin) inherit CQC + MHRA + equality, plus aesthetic-specific CAP/GMC rules.
+  'aesthetics':           ['UK_CQC', 'UK_MHRA', 'UK_ASA_CAP', 'UK_EQUALITY_2010', 'UK_GMC'],
   'pharma':               ['UK_MHRA', 'UK_GPHC', 'UK_ABPI', 'EU_MDR'],
   'dental':               ['UK_GDC', 'UK_CQC'],
 
@@ -74,6 +76,7 @@ const SECTOR_ALIASES = {
   'attorney': 'law-firms', 'law': 'law-firms', 'litigation': 'law-firms',
   'medical': 'healthcare', 'clinic': 'healthcare', 'nhs': 'healthcare', 'hospital': 'healthcare',
   'gp': 'healthcare', 'practice': 'healthcare', 'care-home': 'healthcare',
+  'aesthetic': 'aesthetics', 'cosmetic': 'aesthetics', 'medspa': 'aesthetics', 'med-spa': 'aesthetics', 'skin-clinic': 'aesthetics',
   'bank': 'finance', 'banking': 'finance', 'wealth': 'finance', 'lender': 'finance',
   'broker': 'insurance', 'underwriter': 'insurance', 'mga': 'insurance',
   'property': 'real-estate', 'estate-agent': 'real-estate', 'lettings': 'real-estate',
