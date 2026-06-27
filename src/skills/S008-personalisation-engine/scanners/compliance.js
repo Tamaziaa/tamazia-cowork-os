@@ -659,8 +659,12 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const _llmDetectedSec = (firmProfile && firmProfile.primary_sector) ? String(firmProfile.primary_sector).toLowerCase() : null;
   const _normLeadSec = normaliseSectorAlias(String(sector || ''));  // 'financial-services'→'finance', 'legal'→'law-firms'
   const effectiveSector = (
-    _REGULATED_SECTORS.has(_normLeadSec) && _llmDetectedSec && _GENERIC_LLM_SECTORS.has(_llmDetectedSec)
-      ? _normLeadSec   // regulated ICP sector wins when LLM says generic
+    _REGULATED_SECTORS.has(_normLeadSec) && _llmDetectedSec && (
+      _GENERIC_LLM_SECTORS.has(_llmDetectedSec) ||      // LLM said generic (ecommerce, tech, saas…)
+      (!_REGULATED_SECTORS.has(_llmDetectedSec) &&       // LLM said non-regulated sector (hospitality…)
+       _llmDetectedSec !== _normLeadSec)                 // and it disagrees with ICP sector
+    )
+      ? _normLeadSec   // regulated ICP sector wins when LLM mis-classifies
       : (_llmDetectedSec || _normLeadSec || sector)
   );
   // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
