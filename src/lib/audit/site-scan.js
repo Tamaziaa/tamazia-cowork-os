@@ -141,32 +141,42 @@ function _parsePsi(d, strategy) {
     };
   } catch (_e) { return null; }
 }
-// One PSI strategy (mobile|desktop): cache-first, then 3 attempts with backoff (PSI/Lighthouse intermittently 429s
-// or returns an empty run). Validates lighthouseResult is present + write-through caches so re-mints never drop SEO.
+// One PSI strategy (mobile|desktop): cache-first, then up to 2 attempts (retry ONLY on 429/5xx, not on
+// network error or missing lighthouseResult). Per-attempt cap = 20s so worst-case PSI cost is bounded:
+// 2 × 20s + 2s backoff = 42s max per strategy. Mobile+desktop run in parallel → 42s total for PSI.
+// Network errors / slow sites return null immediately (no retry) so a heavy site never blocks the build.
 async function _pageSpeedOne(domain, key, strategy) {
   try {
     const dir = process.env.PSI_CACHE_DIR;
     if (dir) {
       const fs = require('fs');
-      // per-strategy cache key; fall back to the legacy <domain>.json (mobile-only) for back-compat
       const cands = [dir + '/' + domain + '-' + strategy + '.json'].concat(strategy === 'mobile' ? [dir + '/' + domain + '.json'] : []);
       for (const f of cands) if (fs.existsSync(f)) return _parsePsi(JSON.parse(fs.readFileSync(f, 'utf8')), strategy);
     }
   } catch (_e) {}
   if (!key) return null;
   const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=${strategy}&category=performance&category=seo&category=accessibility&category=best-practices&key=${key}`;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
+    let status = 0;
     try {
-      const r = await timed((signal) => fetch(u, { signal }), 40000);
+      const r = await timed((signal) => fetch(u, { signal }), 20000);
+      status = r.status;
       if (r.ok) {
         const j = await r.json();
         if (j && j.lighthouseResult && j.lighthouseResult.audits) {
           try { const dir = process.env.PSI_CACHE_DIR; if (dir) { const fs = require('fs'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(dir + '/' + domain + '-' + strategy + '.json', JSON.stringify(j)); } } catch (_e) {}
           return _parsePsi(j, strategy);
         }
-      } else if (r.status === 429 || r.status >= 500) { /* rate-limited / server error: backoff + retry */ }
-    } catch (_e) { /* transient: retry */ }
-    if (i < 2) await new Promise(res => setTimeout(res, 1800 * (i + 1)));
+        // Got a response but no lighthouseResult — PSI glitch, not a slow site. No retry benefit.
+        return null;
+      }
+    } catch (_e) {
+      // Network error / AbortError (timeout) — site is slow or unreachable. No retry; return null immediately.
+      return null;
+    }
+    // Only retry on rate-limit or server error (429/5xx). Any other status: give up.
+    if (status !== 429 && status < 500) return null;
+    if (i < 1) await new Promise(res => setTimeout(res, 2000));
   }
   return null;
 }

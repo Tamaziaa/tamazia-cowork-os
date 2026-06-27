@@ -202,7 +202,16 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
   let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
-  try { scan = await scanSite({ domain, sector, env }); } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
+  // 90s hard cap on scanSite: PSI (42s max) + remaining probes (wikidata, spell, extra-scanners) all finish
+  // well within 90s. If a site somehow stalls every probe, we fail-open and mint with compliance data only.
+  try {
+    let _scanTo;
+    scan = await Promise.race([
+      scanSite({ domain, sector, env }),
+      new Promise((_, rej) => { _scanTo = setTimeout(() => rej(new Error('scanSite hard timeout')), 90000); }),
+    ]);
+    clearTimeout(_scanTo);
+  } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
   try { scan = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'crawl-escalation.js')).maybeEscalateCrawl(scan, { domain, env: env || process.env }); } catch (_e) {} // Apify crawl fallback (default-OFF, self-contained)
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
