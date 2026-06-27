@@ -543,7 +543,50 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // then expand framework routing to include every detected jurisdiction.
   const _cg = await gatherCorpus({ domain });
   const corpus = _cg.corpus || [];
-  const corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+  let corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+  // C-1: sector-term rescue — corpus has content (escaped the SPA fallback) but sector-critical keywords are
+  // absent because JS-rendered service/treatment pages weren't captured (static HTML had nav/footer >500 chars
+  // but the actual service terms live in JS components). Re-fetch up to 3 sector-specific pages via Jina so
+  // MHRA/CQC/SRA/FCA trigger-then-check rules fire on aesthetic/healthcare/law-firm/finance sites.
+  const _c1SectorTerms = {
+    aesthetics: /botox|anti.?wrinkle|dermal.fill|botulinum|lip.fill|thread.lift|laser.hair|skin.treat|cryotherapy/i,
+    aesthetic: /botox|anti.?wrinkle|dermal.fill|botulinum|lip.fill|thread.lift|laser.hair|skin.treat|cryotherapy/i,
+    healthcare: /cqc.registered|cqc.regulated|registered.with.cqc|gmc.registered|gmc.number|nhs|clinical.service|medical.service|patient.care/i,
+    'law-firms': /solicitor|barrister|sra.number|sra.regulated|regulated.by.the.sra|practising.certificate|legal.advice/i,
+    'law-firm': /solicitor|barrister|sra.number|sra.regulated|regulated.by.the.sra|practising.certificate|legal.advice/i,
+    finance: /fca.regulated|authorised.by.the.fca|financial.conduct.authority|frn\s*\d{6}|ifa|wealth.manag|financial.adviser|financial.plan/i,
+    fintech: /fca.regulated|authorised.by.the.fca|frn\s*\d{6}|e-money|payment.institution|emi\b/i,
+  };
+  const _c1SectorPages = {
+    aesthetics: ['/treatments', '/services', '/about', '/our-treatments'],
+    aesthetic: ['/treatments', '/services', '/about', '/our-treatments'],
+    healthcare: ['/services', '/about', '/our-team', '/clinics', '/what-we-do'],
+    'law-firms': ['/services', '/practice-areas', '/our-team', '/about'],
+    'law-firm': ['/services', '/practice-areas', '/our-team', '/about'],
+    finance: ['/services', '/about', '/what-we-do', '/investment-management'],
+    fintech: ['/services', '/about', '/what-we-do', '/payments'],
+  };
+  const _normSec = String(sector || '').toLowerCase().replace(/\s+/g, '-');
+  const _c1Pattern = _c1SectorTerms[_normSec];
+  const _c1Pages = _c1SectorPages[_normSec];
+  if (_c1Pattern && _c1Pages && corpus.length > 0 && !_c1Pattern.test(corpusText)) {
+    const base = 'https://' + domain;
+    const seenUrls = new Set(corpus.map(c => c.url));
+    try {
+      for (const pg of _c1Pages.slice(0, 3)) {
+        const ru = base + pg;
+        if (seenUrls.has(ru)) continue;
+        const txt = await _renderViaReader(ru);
+        if (txt && txt.replace(/\s+/g, '').length > 200) {
+          const sig = _crypto.createHash('sha1').update(txt).digest('hex');
+          const dup = corpus.some(c => { try { return _crypto.createHash('sha1').update(c.body||'').digest('hex')===sig; } catch(_){return false;} });
+          if (!dup) { corpus.push({ url: ru, body: txt, status: 200, fetch_ms: 0, bytes: Buffer.byteLength(txt), rendered: true }); seenUrls.add(ru); }
+          if (_c1Pattern.test(txt)) break;
+        }
+      }
+      corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+    } catch (_e) {}
+  }
   // CREDIBILITY GUARD: an empty/unreadable corpus (site blocked our crawler, JS-only, or down) cannot support
   // any 'missing disclosure' finding. Asserting 50+ must_appear misses against no text is a false-positive. Bail.
   if (!corpus.length || corpusText.replace(/\s+/g, '').length < 500) {
