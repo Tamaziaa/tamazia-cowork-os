@@ -45,6 +45,17 @@ const _SECTOR_KW = [
   [/\bretail (store|brand|outlet)|high.street retail|department store/i, 'retail'],
   [/\bsaas\b|software.as.a.service|b2b software|cloud (platform|software)|subscription software/i, 'saas'],
   [/\btechnology|tech (startup|company)|software development|app development|it services|digital agency/i, 'tech'],
+  // Additional sector keyword patterns (R-1 coverage for LLM-fallback sectors)
+  [/\baccountant|chartered accountant|accounting (firm|practice|services)|\bicaew\b|\bacca\b|\bcima\b|certified public accountant|bookkeeping|payroll service|vat return/i, 'accounting'],
+  [/\bpharma|pharmaceutical (company|group|manufacturer)|drug (manufacturer|company)|\bfda\b.*drug|\bmhra.*medicine|clinical (trial|research|development)|biotech|life sciences|prescription (drug|medicine)/i, 'pharma'],
+  [/\bprofessional (services|consulting|consultancy)|management consulting|business consultancy|strategic consultant|mckinsey|deloitte|pwc|kpmg|ey\.com|ernst.young|accenture|\bbig four\b/i, 'professional-services'],
+  [/\bmedia (company|group|agency|house)|news(paper|room|letter)|\bbroadcast|television (network|channel|studio)|\bmagazine|publisher|\bpublishing (house|group)|\bjournalism|\bpodcast (network|studio)|radio (station|network)/i, 'media'],
+  [/\bdigital (marketing|advertising|agency)|marketing agency|performance marketing|seo agency|paid media|ppc (agency|management)|content (marketing|agency)|social media (agency|management)|pr agency|public relations|advertising agency/i, 'marketing'],
+  [/\bfood (producer|manufacturer|supplier|brand|company|group)|bakery|butcher|delicatessen|\bdeli\b|artisan (food|bread|cheese|meat)|\bfmcg\b|grocery (brand|manufacturer)|food (wholesale|distribution)|farm (shop|food|produce)|organic (food|farm)/i, 'food'],
+  [/\benergy (company|group|supplier)|electricity (supplier|provider|network)|gas (supplier|network)|utility (company|provider|group)|renewable energy|solar (energy|power|panels?)|wind (energy|farm|turbine)|ofgem|smart (meter|energy)/i, 'energy'],
+  [/\btransport (company|group|logistics)|freight (company|services|forwarding)|logistics (company|provider|group)|haulage|shipping (company|line)|courier (service|company)|fleet (management|operator)|\bhgv\b|supply chain management/i, 'transport'],
+  [/\bairline|airport|aviation (company|services|group)|\bflight (school|training)|aircraft (maintenance|leasing)|chartered flight|private jet|\biata\b|\bcaa\b.*aviation|air (cargo|freight|charter)/i, 'aviation'],
+  [/\bcar (dealership|dealer|showroom|group|leasing)|vehicle (dealer|leasing|fleet)|automotive (group|manufacturer|supplier)|used car|new car sales|\bmot\b service|car finance|electric vehicle dealer|\bevs?\b.*dealer/i, 'automotive'],
 ];
 function _detectSectorFromCorpus(corpusText, fallbackSector) {
   const c = String(corpusText || '').toLowerCase();
