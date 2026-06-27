@@ -79,9 +79,18 @@ function signalSatisfiesTrigger(triggerPattern, signals) {
 // on its live site — a real structured signal OR an explicit on-page mention. A clinic with no AI system is
 // not subject to the EU AI Act; a firm that markets no medical device is not subject to EU MDR. This stops
 // universal/jurisdiction attachment from inflating exposure (e.g. the AI Act's GBP30m ceiling) with no basis.
+// F-4 fix: UK_CRA_2015 (Consumer Rights Act) applies ONLY to B2C traders — pure B2B advisory firms are
+// legally exempt. Detect B2C via payment signals OR consumer-facing language. Removes false positives on
+// law firms, finance advisers, B2B SaaS platforms etc.
 const CAP_GATE = {
-  EU_AI_ACT: { sig: 'uses_ai', rx: /\b(automated decision[- ]?making|\bA\.?I\.? system|machine learning model|generative a\.?i\.?|large language model|recommendation engine|facial recognition|biometric (identification|categorisation)|predictive analytics|virtual assistant|chatbot)\b/i },
-  EU_MDR:    { sig: null,      rx: /\b(medical device|ce[- ]?mark(ed|ing)?|in[- ]vitro|implantable|class ii[ab]|software as a medical device|\bSaMD\b|notified body)\b/i },
+  EU_AI_ACT:   { sig: 'uses_ai',  rx: /\b(automated decision[- ]?making|\bA\.?I\.? system|machine learning model|generative a\.?i\.?|large language model|recommendation engine|facial recognition|biometric (identification|categorisation)|predictive analytics|virtual assistant|chatbot)\b/i },
+  EU_MDR:      { sig: null,       rx: /\b(medical device|ce[- ]?mark(ed|ing)?|in[- ]vitro|implantable|class ii[ab]|software as a medical device|\bSaMD\b|notified body)\b/i },
+  UK_CRA_2015:      { sig: 'payments', rx: /\b(consumer|checkout|cart|buy now|add to (cart|basket)|subscribe|order online|shop now|statutory rights|consumer rights|14.{0,3}day|cooling.{0,3}off|refund policy|returns policy|membership plan|pricing plan|subscription plan)\b/i },
+  // F-5 fix: UK Companies Act s.82 registration-display obligations apply ONLY to incorporated entities
+  // (Ltd/LLP/PLC/CIC). Sole traders, partnerships, and non-UK entities have no registered company number.
+  // Gate on detecting a corporate entity signal in the corpus — if the firm is not a registered company,
+  // the absence-of-number finding is a false positive.
+  UK_COMPANIES_ACT: { sig: null, rx: /\b(ltd\.?|limited|llp\b|plc\b|incorporated|co\.? reg\.?|company (no|number|reg|registration)|registered (in|with) (england|scotland|wales|northern ireland)|registered office|companies house)\b/i },
 };
 
 function secMatches(sectors, sec) {
