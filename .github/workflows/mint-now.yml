@@ -1,8 +1,10 @@
 name: Mint now (drain minting_queue fast)
-# Lightweight, on-demand minter for the cockpit Audit Search bar. Dispatched by the website's
-# /api/admin/audits/mint after it enqueues a domain. Drains the WHOLE pending queue, so a batch of
-# pasted URLs all mint in the first run; extra dispatches are cheap no-ops. Far faster + less failure-
-# prone than dispatching the full engine cycle.
+# On-demand minter for the cockpit Audit Search bar AND scheduled fallback drain.
+# Dispatched by /api/admin/audits/mint after enqueuing domains; also dispatched by mint-cycle.yml
+# every 30 min as a safety net when the Oracle VM pm2 worker is slow or down.
+# Drains the WHOLE pending queue in one run (--once exits when empty). Job timeout = 360 min
+# (GH Actions max) so even a large batch of 200+ domains finishes without being SIGKILLed.
+# Prior to this fix the 15-min timeout killed workers mid-build leaving 'minting' zombies forever.
 on:
   workflow_dispatch: {}
 permissions:
@@ -13,13 +15,18 @@ concurrency:
 jobs:
   mint:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 360
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-      # Manual fast-lane mints (cockpit Audit Search) target real, content-heavy regulated sites whose
-      # full audit (PageSpeed + site scan + LLM checks) can exceed the default 120s build cap and get
-      # killed mid-build (stuck 'minting' -> timeout). The job has 15 min, so give each build 5 min.
-      MINT_BUILD_TIMEOUT_MS: "300000"
+      # Per-build cap: PSI fix (PR #138) bounds scanSite at 90s; compliance + formatters add ~60s.
+      # 3 min is a safe ceiling. Previous 5-min cap let a single slow site hold up the batch.
+      MINT_BUILD_TIMEOUT_MS: "180000"
+      # Reclaim zombie 'minting' rows left by any worker killed >16 min ago. Set below the old 30 min
+      # default so that zombies from a previously killed GH Actions job (any run that used the old
+      # 15-min timeout) are cleaned up immediately at the start of this run.
+      MINT_RECLAIM_AFTER_MIN: "16"
+      # Push concurrency to 15: with 3-min build cap, 15 concurrent = 300 audits/hour from GH Actions.
+      MINT_CONCURRENCY: "15"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,4 +40,4 @@ jobs:
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ensure-schema.js || true
-          node scripts/mint-worker.js --once
+          node scripts/mint-worker.js --once --reclaim-startup

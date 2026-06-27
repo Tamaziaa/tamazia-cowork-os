@@ -31,11 +31,36 @@ const RECLAIM_MIN = Math.max(1, parseInt(process.env.MINT_RECLAIM_AFTER_MIN || '
 const BUILD_TIMEOUT_MS = Math.max(30000, parseInt(process.env.MINT_BUILD_TIMEOUT_MS || '120000', 10));
 const ONCE = process.argv.includes('--once');
 const DRY = process.argv.includes('--dry');
+// --reclaim-startup: force-reclaim ALL stale 'minting' rows at boot, ignoring RECLAIM_MIN TTL.
+// Used by mint-now.yml so every new GH Actions run immediately cleans up orphans left by the
+// previous job (which was SIGKILLed at the job timeout before rows could be released).
+// Safe under concurrency: a live Oracle VM worker's fresh claims are <1 min old; we only reset
+// rows >2 min old here to avoid stomping an actively-running sibling worker.
+const RECLAIM_STARTUP = process.argv.includes('--reclaim-startup');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Additive, fail-open: a claim timestamp so reclaimStale() can age claims. Legacy rows (and rows a not-yet-
 // upgraded worker claims) have claimed_at NULL — those are aged by enqueued_at instead (see reclaimStale).
 function ensureClaimedAt() { try { pg(`ALTER TABLE minting_queue ADD COLUMN IF NOT EXISTS claimed_at timestamptz`); } catch (_e) {} }
+
+// Startup reclaim: used with --reclaim-startup (mint-now.yml). Force-resets ALL 'minting' rows
+// claimed >2 min ago to 'pending' (retries=0), regardless of RECLAIM_MIN. The 2-min floor avoids
+// stomping a sibling Oracle VM worker that just claimed a fresh batch. Any row older than 2 min is
+// an orphan from a killed worker — safe to reset. Retries are zeroed so the domain gets a fresh
+// attempt with the current (fixed) code rather than burning toward MAXR on zombie kills.
+function reclaimStartup() {
+  try {
+    const out = (pg(`UPDATE minting_queue
+        SET status='pending', retries=0,
+            error='reclaimed at startup: orphan from previous killed worker'
+        WHERE status='minting'
+          AND claimed_at < now() - interval '2 minutes'
+        RETURNING domain;`) || '').trim();
+    const n = out ? out.split('\n').filter(Boolean).length : 0;
+    if (n) console.log(`[mint-worker] startup-reclaim: reset ${n} orphaned 'minting' row(s) -> pending (retries=0)`);
+    return n;
+  } catch (e) { console.error('[mint-worker] startup-reclaim error (continue):', String(e.message || e).slice(0, 120)); return 0; }
+}
 
 // Reaper: return rows orphaned in 'minting' (claim never resolved) back to 'pending', retry-counted so a row
 // that repeatedly kills a worker eventually goes 'failed' instead of looping. Gated by TTL on claimed_at, OR
@@ -158,8 +183,9 @@ async function drainOnce() {
 
 (async () => {
   if (!NEON) { console.error('no NEON_URL'); process.exit(1); }
-  console.log(`[mint-worker] start conc=${CONC} idle=${IDLE}ms once=${ONCE} dry=${DRY} reclaimAfter=${RECLAIM_MIN}m`);
+  console.log(`[mint-worker] start conc=${CONC} idle=${IDLE}ms once=${ONCE} dry=${DRY} reclaimAfter=${RECLAIM_MIN}m startupReclaim=${RECLAIM_STARTUP}`);
   ensureClaimedAt();              // additive claim-timestamp column (idempotent, fail-open)
+  if (RECLAIM_STARTUP) reclaimStartup(); // reset orphans from previous killed worker before claiming
   let total = 0;
   for (;;) {
     let n = 0;
