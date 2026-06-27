@@ -55,7 +55,7 @@ const SECTOR_MAP = {
   'construction':         ['UK_HSE', 'UK_CITB', 'UK_MODERN_SLAVERY'],
 
   // Hospitality & food
-  'hospitality':          ['UK_FSA', 'UK_FOOD_INFO_2014', 'UK_LICENSING_ACT', 'UK_HSE', 'UK_DMCC_2024'],
+  'hospitality':          ['UK_FSA', 'UK_FOOD_INFO_2014', 'UK_LICENSING_ACT', 'UK_HSE', 'UK_DMCC_2024', 'EU_OMNIBUS'],
   'food':                 ['UK_FSA', 'UK_FOOD_INFO_2014'],
 
   // Fitness / leisure (membership auto-renewal + pricing = DMCC/CMA; accessibility = Equality; equipment = HSE).
@@ -64,8 +64,8 @@ const SECTOR_MAP = {
   'fitness':              ['UK_DMCC_2024', 'UK_CMA', 'UK_EQUALITY_2010', 'UK_HSE'],
 
   // E-commerce & retail (DMCC, OSA where UGC, DSA, EAA, CPRA, TCPA, VCDPA, TDPSA, FTC endorse, CRA, Equality, France, Germany)
-  'ecommerce':            ['UK_CMA', 'UK_TRADING_STANDARDS', 'UK_ASA_CAP', 'UK_DMCC_2024', 'UK_OSA_2023', 'UK_CRA_2015', 'UK_EQUALITY_2010', 'EU_DSA', 'EU_EAA_2025', 'FR_CNIL_2025', 'DE_BDSG', 'US_CPRA', 'US_TCPA', 'US_TDPSA', 'US_VCDPA', 'US_BIPA', 'US_FTC_ENDORSE'],
-  'retail':               ['UK_CMA', 'UK_TRADING_STANDARDS', 'UK_DMCC_2024', 'UK_CRA_2015', 'UK_EQUALITY_2010', 'EU_DSA', 'EU_EAA_2025', 'FR_CNIL_2025', 'DE_BDSG', 'US_CPRA', 'US_TCPA', 'US_TDPSA', 'US_VCDPA', 'US_FTC_ENDORSE'],
+  'ecommerce':            ['UK_CMA', 'UK_TRADING_STANDARDS', 'UK_ASA_CAP', 'UK_DMCC_2024', 'UK_OSA_2023', 'UK_CRA_2015', 'UK_EQUALITY_2010', 'EU_DSA', 'EU_EAA_2025', 'EU_OMNIBUS', 'FR_CNIL_2025', 'DE_BDSG', 'US_CPRA', 'US_TCPA', 'US_TDPSA', 'US_VCDPA', 'US_BIPA', 'US_FTC_ENDORSE'],
+  'retail':               ['UK_CMA', 'UK_TRADING_STANDARDS', 'UK_DMCC_2024', 'UK_CRA_2015', 'UK_EQUALITY_2010', 'EU_DSA', 'EU_EAA_2025', 'EU_OMNIBUS', 'FR_CNIL_2025', 'DE_BDSG', 'US_CPRA', 'US_TCPA', 'US_TDPSA', 'US_VCDPA', 'US_FTC_ENDORSE'],
 
   // Tech / SaaS (NIS2, OSA, DSA, CPRA, BIPA where biometrics)
   'saas':                 ['UK_NCSC_CYBER_ESSENTIALS', 'UK_DSIT_NIS2', 'EU_NIS2', 'EU_DSA', 'UK_OSA_2023', 'US_CPRA', 'US_VCDPA', 'US_TDPSA'],
