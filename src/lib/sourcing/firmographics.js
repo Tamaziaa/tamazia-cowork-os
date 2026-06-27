@@ -35,11 +35,28 @@ function extractRegNumber(html) {
 }
 function extractVAT(html) { const m = (html || '').match(/VAT\s*(?:reg(?:istration)?\.?\s*)?(?:no\.?|number|#)?\s*:?\s*((?:GB)?\s?\d[\d ]{7,11}\d)/i); return m ? m[1].replace(/\s/g, '') : null; }
 
+// R-4 fix: detect US-based firms on .com domains — requires BOTH US entity type (LLC/Inc/Corp)
+// AND a US address pattern (state abbreviation + ZIP), so a UK firm mentioning a US office
+// does NOT get reclassified. Both signals together = high-confidence US registration.
+function _detectUSFromCorpus(html) {
+  const t = String(html || '');
+  const hasUsEntity = /\b(?:LLC\b|L\.L\.C\.|\bInc\.\s|Incorporated|\bCorporation\b|\bCorp\.\s|\bL\.P\.\b|\bPLLC\b)/.test(t);
+  if (!hasUsEntity) return false;
+  const stateRx = /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
+  const hasUsZip = /\b\d{5}(-\d{4})?\b/.test(t) && stateRx.test(t);
+  return hasUsEntity && hasUsZip;
+}
 function jurisdictionFromReg(reg, html, domain) {
   if (!reg) {
     if (/\.co\.uk$|\.uk$/i.test(domain)) return { jurisdiction: 'gb', country: 'United Kingdom' };
     if (/\.ae$/i.test(domain)) return { jurisdiction: 'ae', country: 'United Arab Emirates' };
     if (/\.ie$/i.test(domain)) return { jurisdiction: 'ie', country: 'Ireland' };
+    if (/\.au$/i.test(domain)) return { jurisdiction: 'au', country: 'Australia' };
+    if (/\.ca$/i.test(domain)) return { jurisdiction: 'ca', country: 'Canada' };
+    if (/\.de$/i.test(domain)) return { jurisdiction: 'de', country: 'Germany' };
+    if (/\.fr$/i.test(domain)) return { jurisdiction: 'fr', country: 'France' };
+    // R-4: .com firm with US entity type + US ZIP + state abbreviation → US, not default UK.
+    if (/\.com$/i.test(domain) && _detectUSFromCorpus(html)) return { jurisdiction: 'us', country: 'United States' };
     return { jurisdiction: '', country: '' };
   }
   if (/^SC/i.test(reg)) return { jurisdiction: 'gb-sct', country: 'United Kingdom (Scotland)' };
