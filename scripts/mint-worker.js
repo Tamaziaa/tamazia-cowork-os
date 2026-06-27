@@ -57,15 +57,16 @@ function reclaimStale() {
 }
 
 // Atomically claim up to CONC pending rows (pending -> minting). SKIP LOCKED lets many workers run safely.
+// source is returned so mintOne() can apply a source-aware build timeout (manual rows get more time).
 function claimBatch() {
   const sql = `UPDATE minting_queue SET status='minting', claimed_at=now()
     WHERE id IN (SELECT id FROM minting_queue WHERE status='pending' AND COALESCE(domain,'') <> '' AND domain NOT LIKE 'resolve:%' ORDER BY priority ASC NULLS LAST, enqueued_at ASC LIMIT ${CONC} FOR UPDATE SKIP LOCKED)
-    RETURNING id, regexp_replace(COALESCE(domain,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(sector,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(country,''),'[\t\r\n]+',' ','g'), lead_id;`;
+    RETURNING id, regexp_replace(COALESCE(domain,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(company,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(sector,''),'[\t\r\n]+',' ','g'), regexp_replace(COALESCE(country,''),'[\t\r\n]+',' ','g'), lead_id, COALESCE(source,'auto');`;
   const out = (pg(sql) || '').trim();
   if (!out) return [];
   return out.split('\n').map((l) => {
-    const [id, domain, company, sector, country, lead_id] = l.split('\t');
-    return { id, domain, company, sector, country, lead_id: lead_id && lead_id !== '' ? lead_id : null };
+    const [id, domain, company, sector, country, lead_id, source] = l.split('\t');
+    return { id, domain, company, sector, country, lead_id: lead_id && lead_id !== '' ? lead_id : null, source: source || 'auto' };
   });
 }
 
@@ -109,6 +110,11 @@ async function resolveNames() {
 
 async function mintOne(row) {
   if (DRY) { console.log('  DRY would mint ' + row.domain + ' (' + row.sector + ')'); return; }
+  // Manual cockpit mints (source='manual') target real, content-heavy sites whose PSI audit can outlast
+  // the default BUILD_TIMEOUT_MS even when set via env. Give them at least 10 minutes regardless of the
+  // env var so the Oracle VM pm2 worker (default 120s) and any other worker both honour the same floor.
+  // Auto/pipeline rows keep the env-configured cap (default 120s) which is fine for lighter sourced sites.
+  const effectiveTimeout = (row.source === 'manual') ? Math.max(BUILD_TIMEOUT_MS, 600000) : BUILD_TIMEOUT_MS;
   try {
     let _to;
     const r = await Promise.race([
@@ -117,7 +123,7 @@ async function mintOne(row) {
         domain: row.domain, sector: row.sector || 'general', country: row.country || 'UK',
         company: row.company || null, env: process.env,
       }),
-      new Promise((_, rej) => { _to = setTimeout(() => rej(new Error('mint build timeout after ' + BUILD_TIMEOUT_MS + 'ms')), BUILD_TIMEOUT_MS); }),
+      new Promise((_, rej) => { _to = setTimeout(() => rej(new Error('mint build timeout after ' + effectiveTimeout + 'ms')), effectiveTimeout); }),
     ]);
     clearTimeout(_to);
     pg(`UPDATE minting_queue SET status='done', slug='${q(r.slug)}', hash='${q(r.hash)}', minted_at=now(), error=NULL WHERE id=${row.id};`);
