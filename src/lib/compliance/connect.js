@@ -20,6 +20,23 @@ const UNIVERSAL_FW = new Set([
   'US_FTC','US_CPRA','US_CCPA','US_FTC_ENDORSE','US_ADA','US_TCPA','US_VCDPA','US_TDPSA',
   'US_STATE_PRIVACY','UAE_PDPL','DIFC_DPL','ADGM_DPR','SAUDI_PDPL','QATAR_PDPPL','DE_BDSG','FR_CNIL_2025',
 ]);
+// SECTOR_PARENTS: signals.js SECTOR_RX and jurisdiction-router.js SECTOR_MAP use different vocab for the
+// same sector. This bridges them so GATE B0 + GATE B rule matching works correctly end-to-end.
+// Also maps child sectors (aesthetics → healthcare) so inherited regulator rules fire correctly.
+const SECTOR_PARENTS = {
+  // signals.js → SECTOR_MAP canonical name
+  'legal':      ['law-firms'],        // signals: 'legal' → SECTOR_MAP: 'law-firms'
+  'financial':  ['finance'],          // signals: 'financial' → SECTOR_MAP: 'finance'
+  'realestate': ['real-estate'],      // signals: 'realestate' → SECTOR_MAP: 'real-estate'
+  'wellness':   ['fitness'],          // signals: 'wellness' → SECTOR_MAP: 'fitness'
+  'fb':         ['hospitality', 'food'], // signals: 'fb' → SECTOR_MAP: 'hospitality'/'food'
+  // child → parent (inherits parent's regulator stack)
+  'aesthetics': ['healthcare'],       // aesthetic clinics inherit CQC/MHRA from healthcare
+  'aesthetic':  ['healthcare'],
+  'dental':     ['healthcare'],       // dental inherits MHRA/CQC from healthcare
+  'barristers': ['law-firms'],        // barristers inherit SRA-adjacent rules
+};
+
 let _fwToSectors = null;
 function fwToSectors() {
   if (_fwToSectors) return _fwToSectors;
@@ -28,13 +45,16 @@ function fwToSectors() {
   return _fwToSectors;
 }
 // GATE B0 (framework sector): a framework applies to a sector if it is universal, OR the curated sector map
-// lists it for that sector, OR it has a rule whose sector_relevance explicitly names the sector.
+// lists it for that sector (direct or via parent alias), OR it has a rule whose sector_relevance names the sector.
 function fwSectorOK(fw, sector, rulesForFw) {
   if (!sector) return true;                         // unknown sector: do not over-filter
   if (UNIVERSAL_FW.has(fw)) return true;
   const m = fwToSectors()[fw];
   if (m && m.has(sector)) return true;
-  if ((rulesForFw || []).some(r => Array.isArray(r.sector_relevance) && r.sector_relevance.includes(sector))) return true;
+  // check parent sectors — if 'healthcare' maps to this fw and sector='aesthetics', allow it
+  const parents = SECTOR_PARENTS[sector] || [];
+  if (parents.some(p => m && m.has(p))) return true;
+  if ((rulesForFw || []).some(r => Array.isArray(r.sector_relevance) && (r.sector_relevance.includes(sector) || parents.some(p => r.sector_relevance.includes(p))))) return true;
   return false;                                     // sector-specific framework for a different sector -> excluded
 }
 
@@ -64,6 +84,13 @@ const CAP_GATE = {
   EU_MDR:    { sig: null,      rx: /\b(medical device|ce[- ]?mark(ed|ing)?|in[- ]vitro|implantable|class ii[ab]|software as a medical device|\bSaMD\b|notified body)\b/i },
 };
 
+function secMatches(sectors, sec) {
+  if (!sectors.length || !sec) return true;
+  if (sectors.includes(sec)) return true;
+  const parents = SECTOR_PARENTS[sec] || [];
+  return parents.some(p => sectors.includes(p));
+}
+
 // catalogue = { frameworks:[{framework_short,jurisdiction}], rules:[{framework_short,sector_relevance[],rule_type,trigger_pattern,...}] }
 function connect({ catalogue, jurisdictions, sector, signals, text }) {
   const sec = String(sector || '').toLowerCase().trim();
@@ -89,8 +116,8 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     let anyRule = false, triggerHeld = false, sectorHeld = false;
     for (const r of byFw[fw]) {
       const sectors = Array.isArray(r.sector_relevance) ? r.sector_relevance : [];
-      // GATE B · SECTOR: empty sector list = universal; else firm sector must be listed.
-      if (sectors.length && sec && !sectors.includes(sec)) { sectorHeld = true; continue; }
+      // GATE B · SECTOR: empty sector list = universal; else firm sector must match (direct or parent alias).
+      if (!secMatches(sectors, sec)) { sectorHeld = true; continue; }
       // GATE C · TRIGGER: trigger_then_check rules only connect when the trigger is present (text or signal).
       if (r.rule_type === 'trigger_then_check' && r.trigger_pattern) {
         let trig = false;
