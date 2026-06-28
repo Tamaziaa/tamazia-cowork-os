@@ -76,11 +76,13 @@ async function profileFirm({ corpus = '', domain = '', country = '', sector = ''
   if (!text || text.length < 200) return fallback;
   const prompt = `You are a meticulous compliance analyst. From the WEBSITE TEXT below, extract ONLY what the text actually evidences — never guess or infer beyond it.
 Return STRICT JSON only:
-{"primary_sector": one value from [${SECTORS.join(', ')}] — the firm's OWN business, NOT its clients' industry,
- "secondary_sectors": [zero or more from the same list, only if clearly evidenced],
- "hq_country": the single country where the firm is headquartered or registered (full country name),
- "office_countries": [{"country": full name, "evidence": a short verbatim phrase from the text showing the office/address}],
- "served_markets": [{"country": full name, "evidence": a short verbatim phrase showing it serves clients there}]}
+{"own_activity": a short phrase describing what THIS firm itself does (its own product/service),
+ "client_industries": [industries the firm SELLS TO or SERVES — these are NOT the firm's own sector; list them so they are excluded],
+ "primary_sector": one value from [${SECTORS.join(', ')}] — the firm's OWN business from own_activity, NEVER any value in client_industries,
+ "secondary_sectors": [zero or more from the same list, only if the firm itself also operates in them],
+ "hq_country": the country of the firm's LEGAL HEADQUARTERS / registered entity (full name). Distinguish the HQ from branch/representative/regional offices — the HQ is where it is incorporated or states its head office, NOT merely where it has a branch,
+ "office_countries": [{"country": full name, "evidence": verbatim phrase, "role": "headquarters" | "branch" | "subsidiary" | "representative"}],
+ "served_markets": [{"country": full name, "evidence": verbatim phrase showing it serves/targets clients there}]}
 Rules: primary_sector = what THIS firm itself does, never the sector of the customers it sells to or serves. A
 compliance/RegTech software vendor selling to banks is 'saas' or 'tech' (NOT 'finance'/'fintech'); an accountancy
 firm whose clients are charities is 'accounting' (NOT 'charity'); a consultancy advising hotels is 'professional-
