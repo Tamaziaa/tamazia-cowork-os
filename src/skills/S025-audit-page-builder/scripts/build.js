@@ -207,10 +207,22 @@ const _N2C_HOME = { 'United Kingdom': 'UK', 'United States': 'US', 'United Arab 
 const _TLD_HOME = [[/\.co\.uk$|\.org\.uk$|\.uk$/i, 'UK'], [/\.ae$/i, 'AE'], [/\.us$/i, 'US'], [/\.ca$/i, 'CA'], [/\.com\.au$|\.au$/i, 'AU'], [/\.ie$/i, 'IE'], [/\.fr$/i, 'FR'], [/\.de$/i, 'DE'], [/\.es$/i, 'ES'], [/\.it$/i, 'IT'], [/\.nl$/i, 'NL'], [/\.sa$/i, 'SA'], [/\.qa$/i, 'QA'], [/\.sg$/i, 'SG'], [/\.ch$/i, 'CH']];
 function resolveHomeCountry(domain, markets, passedCountry) {
   const p = String(passedCountry || '').trim().toUpperCase().replace('GB', 'UK').replace('GBR', 'UK').replace('USA', 'US').replace('UAE', 'AE').replace('KSA', 'SA');
-  if (p) return p;
   const d = String(domain || '').toLowerCase();
-  for (const [rx, c] of _TLD_HOME) if (rx.test(d)) return c;
   const conf = (markets && markets.confidence) || {}; const strong = (markets && markets.strong_markets) || [];
+  const _isCcTld = _TLD_HOME.some(([rx]) => rx.test(d));
+  if (p) {
+    // ccTLD is a definitive registration signal -> always trust. For non-ccTLD (.com/.org/.io etc.) the passed
+    // lead.country can be stale/wrong (e.g. a US firm mis-tagged UK). Override it ONLY when the live site gives
+    // ZERO support for the passed country yet a STRONG signal (named regulator / stated office / postcode) for a
+    // different one — high-confidence correction that cannot flip a genuinely-supported registration. (cert: workfusion)
+    if (!_isCcTld) {
+      const _pName = Object.keys(_N2C_HOME).find(k => _N2C_HOME[k] === p);
+      let best = null, bs = -1; for (const cc of strong) { const s = conf[cc] || 0; if (s > bs) { bs = s; best = cc; } }
+      if (best && _N2C_HOME[best] && _N2C_HOME[best] !== p && bs >= 3 && (conf[_pName] || 0) === 0) return _N2C_HOME[best];
+    }
+    return p;
+  }
+  for (const [rx, c] of _TLD_HOME) if (rx.test(d)) return c;
   // (a) strongest STRONG market (named regulator / stated office / registered TLD / postcode) — highest trust.
   let best = null, bs = -1;
   for (const c of strong) { const s = conf[c] || 0; if (s > bs) { bs = s; best = c; } }
