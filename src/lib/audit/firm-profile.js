@@ -57,8 +57,26 @@ const _SECTOR_KW = [
   [/\bairline|airport|aviation (company|services|group)|\bflight (school|training)|aircraft (maintenance|leasing)|chartered flight|private jet|\biata\b|\bcaa\b.*aviation|air (cargo|freight|charter)/i, 'aviation'],
   [/\bcar (dealership|dealer|showroom|group|leasing)|vehicle (dealer|leasing|fleet)|automotive (group|manufacturer|supplier)|used car|new car sales|\bmot\b service|car finance|electric vehicle dealer|\bevs?\b.*dealer/i, 'automotive'],
 ];
+// HIGH-PRECISION own-business self-identification. When the corpus unambiguously states what THIS firm IS
+// (its own regulated profession / service model), that wins over any client-industry keyword. Conservative:
+// every pattern is anchored to a self-describing phrase ("firm of", "we are a", "our platform"), never a
+// passing mention, so a client term (charity/hotel/bank) in the body can't flip the result. Runs in BOTH the
+// deterministic and LLM paths (cert fix: the LLM is frequently off at mint, so the override must not depend on it).
+function _selfIdOverride(lc) {
+  if (/(chartered (certified )?accountants?|accountancy (firm|practice|services)|firm of accountants|\bacca\b qualified|\bicaew\b|registered auditors?|tax advisers? and accountants)/.test(lc)) return 'accounting';
+  if (/\b(housing association|registered provider of social housing|registered social landlord)\b/.test(lc)) return 'real-estate';
+  // own-firm = a consultancy/advisory practice (advising client sectors like hotels/health is NOT being in them)
+  if (/\b((we are|we're) (a|an) [a-z ]{0,24}(consultancy|advisory (firm|practice)|consulting firm)|(management|strategy|business|hospitality|advisory) consultancy\b|advisory firm\b|consulting (firm|practice)\b|we (advise|consult for|provide advisory))/.test(lc)) return 'professional-services';
+  // own-firm = a software/platform vendor (selling software TO banks/clinics is NOT being a bank/clinic)
+  if (/\b((our|the) (software|saas|platform|product) (platform |solution )?(helps|enables|automates|powers|delivers)|we (build|develop|provide|offer) (a |our )?(software|saas|platform)|(ai|automation|software) platform for|enterprise software (company|vendor|provider))/.test(lc)) return 'saas';
+  // own-firm = a marketing/creative agency (marketing FOR clinics/charities is NOT healthcare/charity)
+  if (/\b((we are|we're) (a|an) [a-z -]{0,30}(marketing|advertising|creative|digital|branding|seo|pr) agency|full.service [a-z -]{0,20}agency|digital marketing agency|creative agency|advertising agency)/.test(lc)) return 'marketing';
+  return null;
+}
 function _detectSectorFromCorpus(corpusText, fallbackSector) {
   const c = String(corpusText || '').toLowerCase();
+  const ov = _selfIdOverride(c);
+  if (ov) return ov;
   for (const [rx, sector] of _SECTOR_KW) {
     if (rx.test(c)) return sector;
   }
@@ -103,10 +121,7 @@ ${text}`;
   // name keyword (charity-accountants→charity, RegTech vendor→fintech, hotel consultancy→hospitality). When the
   // corpus unambiguously self-identifies the firm's OWN regulated profession/structure, that wins over the LLM.
   // Conservative: only fires on strong self-identifying phrases, never on a passing mention.
-  const _lc = String(text || '').toLowerCase();
-  let _override = null;
-  if (/\b(chartered (certified )?accountant|accountancy (firm|practice|services)|firm of accountants|\bacca\b qualified|\bicaew\b|registered auditor|tax advisers? and accountants)\b/.test(_lc)) _override = 'accounting';
-  else if (/\b(housing association|registered provider of social housing|registered social landlord)\b/.test(_lc)) _override = 'real-estate';
+  const _override = _selfIdOverride(String(text || '').toLowerCase());
   const resolvedSector = _override || llmSector || deterministicSector || null;
   return {
     primary_sector: resolvedSector,
