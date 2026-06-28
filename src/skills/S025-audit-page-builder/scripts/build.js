@@ -211,9 +211,21 @@ function resolveHomeCountry(domain, markets, passedCountry) {
   const d = String(domain || '').toLowerCase();
   for (const [rx, c] of _TLD_HOME) if (rx.test(d)) return c;
   const conf = (markets && markets.confidence) || {}; const strong = (markets && markets.strong_markets) || [];
+  // (a) strongest STRONG market (named regulator / stated office / registered TLD / postcode) — highest trust.
   let best = null, bs = -1;
   for (const c of strong) { const s = conf[c] || 0; if (s > bs) { bs = s; best = c; } }
   if (best && _N2C_HOME[best]) return _N2C_HOME[best];
+  // (b) completeness fallback: the single DOMINANT operating country by confidence. A firm's own homepage
+  // (city + national phone code + currency) pins its home even without a regulator name, so a US restaurant
+  // resolves to US (not blank → GOOGLE_EEAT-only). The registered country, if it had any strong signal, already
+  // won in (a); this only fires when no market is "strong", so it cannot override a genuine registration.
+  const ops = (markets && markets.operating_countries) || [];
+  let ob = null, obs = -1;
+  for (const c of ops) { const s = conf[c] || 0; if (s > obs) { obs = s; ob = c; } }
+  if (ob && _N2C_HOME[ob]) return _N2C_HOME[ob];
+  // (c) currency as a last hint when only one national currency is present (USD→US, AED→AE, GBP→UK).
+  const cur = (markets && markets.currencies) || [];
+  if (cur.length === 1) { const m = { USD: 'US', AED: 'AE', GBP: 'UK' }[cur[0]]; if (m) return m; }
   return '';
 }
 
