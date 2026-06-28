@@ -149,8 +149,11 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
       const sectors = Array.isArray(r.sector_relevance) ? r.sector_relevance : [];
       // GATE B · SECTOR: empty sector list = universal; else firm sector must match (direct or parent alias).
       if (!secMatches(sectors, sec)) { sectorHeld = true; continue; }
-      // GATE C · TRIGGER: trigger_then_check rules only connect when the trigger is present (text or signal).
-      if (r.rule_type === 'trigger_then_check' && r.trigger_pattern) {
+      // GATE C · TRIGGER: trigger_then_check AND prohibited rules only connect when their trigger is present
+      // (text or signal). Prohibited rules carry a trigger naming the subject area (e.g. botox|filler, review|
+      // testimonial); without it the framework was attaching on sector alone — leaking e.g. the Botox-Children
+      // Act onto a dental firm or the FTC fake-reviews rule onto a firm with no reviews. Gating both fixes that.
+      if ((r.rule_type === 'trigger_then_check' || r.rule_type === 'prohibited') && r.trigger_pattern) {
         let trig = false;
         try { trig = new RegExp(r.trigger_pattern, 'i').test(t); } catch (_e) { gates.regex_invalid.push(r.rule_id); }
         if (!trig) trig = signalSatisfiesTrigger(r.trigger_pattern, sig);
