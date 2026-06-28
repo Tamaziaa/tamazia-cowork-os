@@ -40,7 +40,7 @@ const SECTOR_MAP = {
   'charity':              ['UK_CHARITY_COMMISSION', 'UK_FUNDRAISING_REG', 'UK_HMRC_GIFTAID'],
 
   // Energy & utilities
-  'energy':               ['UK_OFGEM', 'UK_HSE_ENERGY', 'EU_NIS2', 'UK_MODERN_SLAVERY'],
+  'energy':               ['UK_OFGEM', 'EU_NIS2', 'UK_MODERN_SLAVERY'],
 
   // Transport
   'transport':            ['UK_CAA', 'UK_ORR', 'UK_DVSA', 'EU_NIS2', 'UK_MODERN_SLAVERY'],
