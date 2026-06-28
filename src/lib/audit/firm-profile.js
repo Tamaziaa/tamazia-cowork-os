@@ -76,12 +76,16 @@ async function profileFirm({ corpus = '', domain = '', country = '', sector = ''
   if (!text || text.length < 200) return fallback;
   const prompt = `You are a meticulous compliance analyst. From the WEBSITE TEXT below, extract ONLY what the text actually evidences — never guess or infer beyond it.
 Return STRICT JSON only:
-{"primary_sector": one value from [${SECTORS.join(', ')}],
+{"primary_sector": one value from [${SECTORS.join(', ')}] — the firm's OWN business, NOT its clients' industry,
  "secondary_sectors": [zero or more from the same list, only if clearly evidenced],
  "hq_country": the single country where the firm is headquartered or registered (full country name),
  "office_countries": [{"country": full name, "evidence": a short verbatim phrase from the text showing the office/address}],
  "served_markets": [{"country": full name, "evidence": a short verbatim phrase showing it serves clients there}]}
-Rules: office_countries = ONLY countries with a stated office, address, or "based in / headquartered in". served_markets = countries it explicitly says it advises/serves clients in. A country mentioned only inside a case study, a news item, or a single passing reference is NOT an office or a served market — omit it. Use full country names. Output JSON only.
+Rules: primary_sector = what THIS firm itself does, never the sector of the customers it sells to or serves. A
+compliance/RegTech software vendor selling to banks is 'saas' or 'tech' (NOT 'finance'/'fintech'); an accountancy
+firm whose clients are charities is 'accounting' (NOT 'charity'); a consultancy advising hotels is 'professional-
+services' (NOT 'hospitality'); a marketing agency for clinics is 'marketing' (NOT 'healthcare'). Ignore words in
+the company NAME — classify by the actual service described. office_countries = ONLY countries with a stated office, address, or "based in / headquartered in". served_markets = countries it explicitly says it advises/serves clients in. A country mentioned only inside a case study, a news item, or a single passing reference is NOT an office or a served market — omit it. Use full country names. Output JSON only.
 WEBSITE TEXT:
 ${text}`;
   let raw;
