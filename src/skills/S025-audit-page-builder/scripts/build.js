@@ -209,20 +209,20 @@ function resolveHomeCountry(domain, markets, passedCountry) {
   const p = String(passedCountry || '').trim().toUpperCase().replace('GB', 'UK').replace('GBR', 'UK').replace('USA', 'US').replace('UAE', 'AE').replace('KSA', 'SA');
   const d = String(domain || '').toLowerCase();
   const conf = (markets && markets.confidence) || {}; const strong = (markets && markets.strong_markets) || [];
-  const _isCcTld = _TLD_HOME.some(([rx]) => rx.test(d));
+  // ccTLD is a DEFINITIVE registration signal and must win over the passed lead.country, which can be a stale/wrong
+  // scraped value (cert: lawyerdubai.ae and kimshealth.ae carried lead.country='UK' and were resolving to UK even
+  // though .ae unambiguously registers them in the UAE). Check it FIRST so a conflicting passed country can't preempt.
+  for (const [rx, c] of _TLD_HOME) if (rx.test(d)) return c;
   if (p) {
-    // ccTLD is a definitive registration signal -> always trust. For non-ccTLD (.com/.org/.io etc.) the passed
-    // lead.country can be stale/wrong (e.g. a US firm mis-tagged UK). Override it ONLY when the live site gives
-    // ZERO support for the passed country yet a STRONG signal (named regulator / stated office / postcode) for a
-    // different one — high-confidence correction that cannot flip a genuinely-supported registration. (cert: workfusion)
-    if (!_isCcTld) {
-      const _pName = Object.keys(_N2C_HOME).find(k => _N2C_HOME[k] === p);
-      let best = null, bs = -1; for (const cc of strong) { const s = conf[cc] || 0; if (s > bs) { bs = s; best = cc; } }
-      if (best && _N2C_HOME[best] && _N2C_HOME[best] !== p && bs >= 3 && (conf[_pName] || 0) === 0) return _N2C_HOME[best];
-    }
+    // non-ccTLD (.com/.org/.io etc.): the passed lead.country can be stale/wrong (e.g. a US firm mis-tagged UK).
+    // Override it ONLY when the live site gives ZERO support for the passed country yet a STRONG signal (named
+    // regulator / stated office / postcode) for a different one — a correction that cannot flip a genuinely-supported
+    // registration. (cert: workfusion)
+    const _pName = Object.keys(_N2C_HOME).find(k => _N2C_HOME[k] === p);
+    let best = null, bs = -1; for (const cc of strong) { const s = conf[cc] || 0; if (s > bs) { bs = s; best = cc; } }
+    if (best && _N2C_HOME[best] && _N2C_HOME[best] !== p && bs >= 3 && (conf[_pName] || 0) === 0) return _N2C_HOME[best];
     return p;
   }
-  for (const [rx, c] of _TLD_HOME) if (rx.test(d)) return c;
   // (a) strongest STRONG market (named regulator / stated office / registered TLD / postcode) — highest trust.
   let best = null, bs = -1;
   for (const c of strong) { const s = conf[c] || 0; if (s > bs) { bs = s; best = c; } }
@@ -710,4 +710,4 @@ if (require.main === module) {
   build(opts).then(r => console.log(JSON.stringify(r, null, 2))).catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { buildCompetitiveBenchmark, build, slugify, generateHash, signUrl, verifySignedUrl, buildPayload };
+module.exports = { buildCompetitiveBenchmark, build, slugify, generateHash, signUrl, verifySignedUrl, buildPayload, resolveHomeCountry };
