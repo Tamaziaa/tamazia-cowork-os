@@ -248,7 +248,24 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concur
   const base = 'https://' + domain;
   const corpus = []; const seenBody = new Set(); const used = new Set();
   // 1) homepage first (and a source of internal links)
-  const home = await fetchWithRetry(base + '/', { timeout: 10000, retries: 1 });
+  let home = await fetchWithRetry(base + '/', { timeout: 10000, retries: 1 });
+  // RESIDENTIAL-PROXY RESCUE (Phase 7): a homepage block fails the whole site. When the datacenter fetch is
+  // missing/challenged/empty, retry once through the residential proxy (Apify RESIDENTIAL credits, already paid),
+  // which defeats datacenter-IP Cloudflare/WAF blocks. Only adopt it if the body is real and not itself a challenge.
+  {
+    const _txtLen = (b) => String(b || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, '').length;
+    const _homeBad = !home || !home.ok || home.challenge || _txtLen(home.body) < 500;
+    if (_homeBad) {
+      try {
+        const { residentialGet } = require('../../../lib/scraping/residential-fetch.js');
+        const { detectChallenge } = require('../lib/http.js');
+        const rg = await residentialGet(base + '/', { timeout: 15000 });
+        if (rg && rg.ok && rg.body && _txtLen(rg.body) >= 500 && !detectChallenge(rg.body)) {
+          home = { ok: true, status: rg.status || 200, body: rg.body, challenge: false, via_residential: true };
+        }
+      } catch (_e) { /* fail-open: keep the datacenter result */ }
+    }
+  }
   const candidates = [base + '/'];
   // The set of registrable domains we treat as THIS site: the input + any canonical alternate the homepage declares
   // (alias/landing shell that 404s its own sub-paths, e.g. taylorrose.co.uk → taylor-rose.co.uk). Subdomains of any
