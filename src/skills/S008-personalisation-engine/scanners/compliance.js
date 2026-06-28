@@ -333,9 +333,14 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concur
     }
   } catch (_e) {}
   const _anyChallengePre = (home && home.challenge) || results.some(r => r && r.challenge);
-  // JS-render fallback: nothing readable, no challenge, homepage answered 200 -> likely a client-rendered SPA.
-  if (!corpus.length && !_anyChallengePre && home && (home.status === 200 || home.ok)) {
-    const renderTargets = [base + '/', ...guessed.filter(u => /privacy|terms|cookie/i.test(u)).slice(0, 2)];
+  // JS-RENDER / WALL-BYPASS fallback (Phase-7 regression fix): when nothing readable was fetched — whether the site
+  // is a client-rendered SPA OR sits behind an anti-bot challenge — render via the reader (CRAWL_RENDER_URL if set,
+  // else the free Jina reader r.jina.ai). Jina EXECUTES JS *and* bypasses most datacenter/Cloudflare walls in ~1s,
+  // so it MUST run even when a challenge was detected. Previously this was gated to !challenge, which silently sent
+  // every walled site straight to stale Wayback or a blocked audit — the root cause of the ~"sites no longer crawl"
+  // regression (verified: thehandbook.com was challenge-blocked yet Jina returns full content in <1s).
+  if (!corpus.length && home) {
+    const renderTargets = [base + '/', ...guessed.filter(u => /privacy|terms|cookie|about|service/i.test(u)).slice(0, 3)];
     for (const ru of renderTargets) {
       const txt = await _renderViaReader(ru);
       if (txt && txt.replace(/\s+/g, '').length > 500) {
