@@ -97,7 +97,15 @@ ${text}`;
   const serves = (Array.isArray(p.served_markets) ? p.served_markets : []).map((o) => ({ country: o && o.country, code: _code(o && o.country), evidence: String((o && o.evidence) || '').slice(0, 160) })).filter((o) => o.code);
   // R-1: if LLM returns null/unrecognised sector, fall back to deterministic corpus classifier (never "General").
   const llmSector = _cleanSector(p.primary_sector);
-  const resolvedSector = llmSector || deterministicSector || null;
+  // HIGH-CONFIDENCE deterministic sector override (cert fix): the LLM sometimes adopts the CLIENTS' industry or a
+  // name keyword (charity-accountants→charity, RegTech vendor→fintech, hotel consultancy→hospitality). When the
+  // corpus unambiguously self-identifies the firm's OWN regulated profession/structure, that wins over the LLM.
+  // Conservative: only fires on strong self-identifying phrases, never on a passing mention.
+  const _lc = String(text || '').toLowerCase();
+  let _override = null;
+  if (/\b(chartered (certified )?accountant|accountancy (firm|practice|services)|firm of accountants|\bacca\b qualified|\bicaew\b|registered auditor|tax advisers? and accountants)\b/.test(_lc)) _override = 'accounting';
+  else if (/\b(housing association|registered provider of social housing|registered social landlord)\b/.test(_lc)) _override = 'real-estate';
+  const resolvedSector = _override || llmSector || deterministicSector || null;
   return {
     primary_sector: resolvedSector,
     sectors: Array.from(new Set([resolvedSector, ...(Array.isArray(p.secondary_sectors) ? p.secondary_sectors.map(_cleanSector) : [])].filter(Boolean))),
