@@ -195,7 +195,7 @@ const _RELEVANT = /privacy|cookie|terms|legal|gdpr|data[- ]protection|accessibil
 // JS-render fallback (free, no infra, no key): the public reader executes JavaScript and returns plain text.
 // Used ONLY for a 200 empty-shell SPA (never for challenge walls, never for normal server-rendered sites).
 async function _renderViaReader(url) {
-  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 22000);
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 12000);   // Jina answers in ~1-5s; 12s caps the tail so the corpus fallback can't blow the mint build timeout
   try {
     const r = await fetch('https://r.jina.ai/' + url, { headers: { 'x-respond-with': 'text', 'accept': 'text/plain' }, signal: ctl.signal });
     clearTimeout(t);
@@ -259,7 +259,7 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concur
       try {
         const { residentialGet } = require('../../../lib/scraping/residential-fetch.js');
         const { detectChallenge } = require('../lib/http.js');
-        const rg = await residentialGet(base + '/', { timeout: 15000 });
+        const rg = await residentialGet(base + "/", { timeout: 8000 });
         if (rg && rg.ok && rg.body && _txtLen(rg.body) >= 500 && !detectChallenge(rg.body)) {
           home = { ok: true, status: rg.status || 200, body: rg.body, challenge: false, via_residential: true };
         }
@@ -340,9 +340,13 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concur
   // every walled site straight to stale Wayback or a blocked audit — the root cause of the ~"sites no longer crawl"
   // regression (verified: thehandbook.com was challenge-blocked yet Jina returns full content in <1s).
   if (!corpus.length && home) {
-    const renderTargets = [base + '/', ...guessed.filter(u => /privacy|terms|cookie|about|service/i.test(u)).slice(0, 3)];
-    for (const ru of renderTargets) {
-      const txt = await _renderViaReader(ru);
+    // PARALLEL with a hard deadline: homepage + up to 2 key pages rendered concurrently, total <=14s, so the
+    // wall-bypass fallback adds bounded latency (was sequential 4x12s = up to 48s, which blew the mint timeout on
+    // hard sites — leightonpark/domirealestate failed at the 120/300s build cap).
+    const renderTargets = [base + '/', ...guessed.filter(u => /privacy|terms|about/i.test(u)).slice(0, 2)];
+    const rendered = await _pool(renderTargets, renderTargets.length, 14000, (ru) => _renderViaReader(ru));
+    for (let i = 0; i < renderTargets.length; i++) {
+      const txt = rendered[i]; const ru = renderTargets[i];
       if (txt && txt.replace(/\s+/g, '').length > 500) {
         const sig = _crypto.createHash('sha1').update(txt).digest('hex');
         if (seenBody.has(sig)) continue; seenBody.add(sig);
