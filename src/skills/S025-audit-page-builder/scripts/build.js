@@ -557,7 +557,17 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   const _corpusAdequate = _assessable && !(comp && comp.challenge);
   let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class, jurisdictions: (comp && comp.jurisdictions) || [], sector });
   try { _classified = await verifyTopFindings(_classified, env || process.env); } catch (_e) {}
-  const _confirmed = _ft.confirmed(_classified);
+  // FINDING-INTEGRITY GATE (legal-QA P0 fabricated-finding, 14 hits): never render a legal finding that is
+  // unmapped or textless. A compliance-bucket finding with no framework_short, or any finding whose title/fact
+  // is blank, is unverifiable noise (renders as an empty bullet or a fine with no law) — drop it fail-closed.
+  const _integrityOK = (f) => {
+    if (!f) return false;
+    const hasText = !!String(f.fact || f.title || f.layman_explanation || '').trim();
+    if (!hasText) return false;
+    if (f.bucket === 'compliance' && !String(f.framework_short || f.citation || '').trim()) return false;
+    return true;
+  };
+  const _confirmed = _ft.confirmed(_classified).filter(_integrityOK);
   const _needsReview = _ft.needsReview(_classified);
   // UNIQUE Tamazia-fix language — rewrite each confirmed finding's fix so no two repeat (founder: never
   // repeat lines). Transform-only, fail-open per item. Runs on the confirmed set before quota/render. (F-uniquefix)
