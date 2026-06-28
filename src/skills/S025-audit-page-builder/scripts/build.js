@@ -198,6 +198,25 @@ function buildCompetitiveBenchmark(aic, km) {
   return out;
 }
 
+// HOME-JURISDICTION RESOLVER (C-jur fix): a blank country must NOT default to 'UK' — that injected the full
+// UK framework stack onto every US/AE/EU firm with no UK nexus (35/80 golden-matrix jurisdiction failures).
+// Resolution order: (1) explicit passed country, (2) ccTLD = definitive registration, (3) the single strongest
+// detected strong-market (named regulator / stated office / postcode), (4) '' = unknown → only GOOGLE_EEAT +
+// genuinely-detected markets attach, never a UK default. Returns an uppercase code or '' (never guesses UK).
+const _N2C_HOME = { 'United Kingdom': 'UK', 'United States': 'US', 'United Arab Emirates': 'AE', 'Saudi Arabia': 'SA', Qatar: 'QA', France: 'FR', Germany: 'DE', Spain: 'ES', Italy: 'IT', Netherlands: 'NL', Ireland: 'IE', Belgium: 'BE', Canada: 'CA', Australia: 'AU', Singapore: 'SG', Switzerland: 'CH' };
+const _TLD_HOME = [[/\.co\.uk$|\.org\.uk$|\.uk$/i, 'UK'], [/\.ae$/i, 'AE'], [/\.us$/i, 'US'], [/\.ca$/i, 'CA'], [/\.com\.au$|\.au$/i, 'AU'], [/\.ie$/i, 'IE'], [/\.fr$/i, 'FR'], [/\.de$/i, 'DE'], [/\.es$/i, 'ES'], [/\.it$/i, 'IT'], [/\.nl$/i, 'NL'], [/\.sa$/i, 'SA'], [/\.qa$/i, 'QA'], [/\.sg$/i, 'SG'], [/\.ch$/i, 'CH']];
+function resolveHomeCountry(domain, markets, passedCountry) {
+  const p = String(passedCountry || '').trim().toUpperCase().replace('GB', 'UK').replace('GBR', 'UK').replace('USA', 'US').replace('UAE', 'AE').replace('KSA', 'SA');
+  if (p) return p;
+  const d = String(domain || '').toLowerCase();
+  for (const [rx, c] of _TLD_HOME) if (rx.test(d)) return c;
+  const conf = (markets && markets.confidence) || {}; const strong = (markets && markets.strong_markets) || [];
+  let best = null, bs = -1;
+  for (const c of strong) { const s = conf[c] || 0; if (s > bs) { bs = s; best = c; } }
+  if (best && _N2C_HOME[best]) return _N2C_HOME[best];
+  return '';
+}
+
 async function buildPayload({ domain, sector, country, lead_id, env }) {
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
@@ -213,9 +232,13 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     clearTimeout(_scanTo);
   } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
   try { scan = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'crawl-escalation.js')).maybeEscalateCrawl(scan, { domain, env: env || process.env }); } catch (_e) {} // Apify crawl fallback (default-OFF, self-contained)
+  // C-jur: resolve the REAL home jurisdiction from TLD + detected strong-markets when country is blank, instead of
+  // blind-defaulting to 'UK'. effCountry feeds every jurisdiction-bearing call below so a US/AE firm never inherits
+  // the UK framework stack. '' (unknown) means only GOOGLE_EEAT + genuinely-detected markets attach.
+  const effCountry = resolveHomeCountry(domain, scan.markets, country);
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
-  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: country || 'UK', signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) {}
+  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) {}
   // PER-MINT FAIL-CLOSED GUARD (last line of defence before this audit is assembled): drop any compliance finding
   // whose law is not servable (proven) or not jurisdiction-covered, so a wrong/unproven law can NEVER reach a
   // client even if an upstream gate regressed. The engine overlay already enforces this — this drops nothing in the
@@ -309,7 +332,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   ]);
   const frameworks = (comp.frameworks && comp.frameworks.length)
     ? comp.frameworks
-    : (router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country, sector, signals: scan.signals }) : router.routeJurisdictions({ country, sector }));
+    : (router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country: effCountry, sector, signals: scan.signals }) : router.routeJurisdictions({ country: effCountry, sector }));
   const _gbp = (n) => n == null ? null : (n >= 1e6 ? '£' + (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1e3 ? '£' + Math.round(n / 1e3) + 'k' : '£' + Math.round(n));
   // Best-practice / GEO signals (Google E-E-A-T, schema, robots for AI engines) are NOT regulatory laws — they
   // carry no statutory penalty and must NEVER appear in the regulatory section with a fine. Re-bucket them to
@@ -499,7 +522,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     payload_geo_visuals = { ai_engine_grid: _v.aiEngineGrid(engines), ai_radar: _v.aiRadar(radarAxes), entity_web_map: _v.entityWebMap({ you: (domain || '').replace(/^www\./, '').split('.')[0], nodes }) };
     payload_screenshots = _sc.screenshotUrls({ domain, query: (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '') });
   } catch (_e) {}
-  try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: country, company: (domain || '').replace(/^www\./, '').split('.')[0] }); } catch (_e) {}
+  try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: effCountry, company: (domain || '').replace(/^www\./, '').split('.')[0] }); } catch (_e) {}
   let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings, ..._aiReadyFindings, ..._geoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // ── REACHABILITY RECONCILIATION (anti-fabrication red line) ──────────────────────────────────
   // Two independent corpus paths can disagree: site-scan's direct fetch + PSI may fail (timeout / bot-block)
@@ -549,7 +572,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     schema_version: 'v2',
     domain,
     sector,
-    country,
+    country: effCountry,
     lead_id: lead_id || null,
     framework_version: fv,
     framework_last_reviewed: lr,
@@ -598,7 +621,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     if (!exists) break;
     hash = generateHash();
   }
-  const payload = await buildPayload({ domain, sector, country: country || 'UK', lead_id, env: env || process.env });
+  const payload = await buildPayload({ domain, sector, country, lead_id, env: env || process.env });
 
   // R2 storage offload (AUDIT_PAYLOAD_STORE: 'neon' | 'both' | 'r2'; default 'neon' keeps current behaviour).
   // Lazy-require r2.js (pulls @aws-sdk) ONLY when R2 storage is actually used, so a neon-mode mint never depends
@@ -617,7 +640,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // Use payload.detected_sector (the profiler-corrected sector) over the raw 'sector' arg so the audit_pages
   // row always reflects the REAL detected sector, not the stale lead-row label (e.g. 'general' → 'aesthetic').
   const sectorE  = String(payload.detected_sector || payload.sector || sector || '').toLowerCase().replace(/[^a-z0-9 &/-]/g, '').slice(0, 40).replace(/'/g, "''");
-  const countryE = String(country || 'UK').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'UK';
+  const countryE = String(payload.country || country || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'XX';
   const leadIdN  = Number(lead_id);
   const fwE      = String(payload.framework_version || '').replace(/[^0-9A-Za-z._-]/g, '').slice(0, 24);
   const payloadJsonE = JSON.stringify(neonPayload).replace(/'/g, "''");
