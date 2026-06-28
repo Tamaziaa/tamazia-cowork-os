@@ -29,7 +29,7 @@ const _SECTOR_KW = [
   [/\bbarrister|chambers\b|inn of court/i, 'barristers'],
   [/\bgmc\b|cqc register|cosmetic (surgery|procedure)|botox|anti.wrinkle|dermal filler|aesthetic (clinic|treatment)|medspa|med.spa|skin clinic|filler treatment|lip filler|rhinoplasty|breast augmentation|plastic surgeon|aesthetic practitioner/i, 'aesthetic'],
   [/\bdentist|dental (practice|clinic|implant)|orthodont|gdc\b|nhs dental/i, 'dental'],
-  [/\bclinic|medical centre|healthcare|gp practice|physiotherap|care home|nhs trust|hospital|medical (practice|group)|cqc registered/i, 'healthcare'],
+  [/\bclinic|medical centre|healthcare|gp practice|physiotherap|care home|nhs trust|\bhospitals?\b|medical (practice|group)|cqc registered/i, 'healthcare'],
   [/\bfca register|\bifa\b|financial advice|wealth management|investment advice|pension advice|chartered financial|independent financial adviser/i, 'finance'],
   [/\bfintech|payment (gateway|processor)|open banking|embedded finance|neobank|crypto exchange/i, 'fintech'],
   [/\binsur(ance|er)\b|underwr|reinsur|lloyds market/i, 'insurance'],
@@ -63,10 +63,10 @@ const _SECTOR_KW = [
 // passing mention, so a client term (charity/hotel/bank) in the body can't flip the result. Runs in BOTH the
 // deterministic and LLM paths (cert fix: the LLM is frequently off at mint, so the override must not depend on it).
 function _selfIdOverride(lc) {
-  if (/(chartered (certified )?accountants?|accountancy (firm|practice|services)|firm of accountants|\bacca\b qualified|\bicaew\b|registered auditors?|tax advisers? and accountants)/.test(lc)) return 'accounting';
+  if (/(chartered (certified )?accountants?|\baccountanc(y|ies)\b|firm of accountants|\bacca\b|\bicaew\b|registered auditors?|tax advisers? and accountants|specialist accountants|bookkeeping (services|firm))/.test(lc)) return 'accounting';
   if (/\b(housing association|registered provider of social housing|registered social landlord)\b/.test(lc)) return 'real-estate';
   // own-firm = a consultancy/advisory practice (advising client sectors like hotels/health is NOT being in them)
-  if (/\b((we are|we're) (a|an) [a-z ]{0,24}(consultancy|advisory (firm|practice)|consulting firm)|(management|strategy|business|hospitality|advisory) consultancy\b|advisory firm\b|consulting (firm|practice)\b|we (advise|consult for|provide advisory))/.test(lc)) return 'professional-services';
+  if (/\b((we are|we're) (a|an) [a-z -]{0,30}(consultancy|advisory (firm|practice)|consulting firm)|\bconsultanc(y|ies)\b|(management|strategy|business|hospitality|advisory|boutique) consult|consulting (firm|practice|group|services|company)|(advisory|consulting) activities\b|pioneer in [a-z ]{0,20}consulting|team of [a-z0-9 ]{0,20}consultants|we (advise|consult for|provide advisory))/.test(lc)) return 'professional-services';
   // own-firm = a software/platform vendor (selling software TO banks/clinics is NOT being a bank/clinic)
   if (/\b((our|the) (software|saas|platform|product) (platform |solution )?(helps|enables|automates|powers|delivers)|we (build|develop|provide|offer) (a |our )?(software|saas|platform)|(ai|automation|software) platform for|enterprise software (company|vendor|provider))/.test(lc)) return 'saas';
   // own-firm = a marketing/creative agency (marketing FOR clinics/charities is NOT healthcare/charity)
@@ -89,8 +89,9 @@ function _detectSectorFromCorpus(corpusText, fallbackSector) {
 async function profileFirm({ corpus = '', domain = '', country = '', sector = '', env = process.env } = {}) {
   const text = String(corpus || '').replace(/\s+/g, ' ').trim().slice(0, 12000);
   // R-1/R-2: deterministic keyword-first resolution. Never emit the raw "General" sector — use corpus keywords instead.
+  const _ovr = _selfIdOverride(String(text || '').toLowerCase());   // high-confidence own-business self-ID (wins over stale ICP)
   const deterministicSector = _detectSectorFromCorpus(text, sector);
-  const fallback = { primary_sector: deterministicSector || null, sectors: deterministicSector ? [deterministicSector] : [], hq_country: country || null, office_countries: [], serves: [], source: 'fallback' };
+  const fallback = { primary_sector: deterministicSector || null, sectors: deterministicSector ? [deterministicSector] : [], hq_country: country || null, office_countries: [], serves: [], source: 'fallback', sector_self_id: !!_ovr };
   if (!text || text.length < 200) return fallback;
   const prompt = `You are a meticulous compliance analyst. From the WEBSITE TEXT below, extract ONLY what the text actually evidences — never guess or infer beyond it.
 Return STRICT JSON only:
@@ -121,13 +122,15 @@ ${text}`;
   // name keyword (charity-accountants→charity, RegTech vendor→fintech, hotel consultancy→hospitality). When the
   // corpus unambiguously self-identifies the firm's OWN regulated profession/structure, that wins over the LLM.
   // Conservative: only fires on strong self-identifying phrases, never on a passing mention.
-  const _override = _selfIdOverride(String(text || '').toLowerCase());
-  const resolvedSector = _override || llmSector || deterministicSector || null;
+  const resolvedSector = _ovr || llmSector || deterministicSector || null;
   return {
     primary_sector: resolvedSector,
     sectors: Array.from(new Set([resolvedSector, ...(Array.isArray(p.secondary_sectors) ? p.secondary_sectors.map(_cleanSector) : [])].filter(Boolean))),
     hq_country: p.hq_country || country || null,
     office_countries: offices, serves, source: 'llm',
+    // self-ID override fired → high confidence. OR the LLM ran successfully (own-vs-client prompt) and returned a
+    // sector: trust that over a stale scraped ICP label (which is often the CLIENT industry, e.g. RegTech→fintech).
+    sector_self_id: !!_ovr, sector_from_llm: !!llmSector,
   };
 }
 
