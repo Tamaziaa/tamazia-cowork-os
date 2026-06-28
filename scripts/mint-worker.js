@@ -92,6 +92,32 @@ function reclaimStale() {
   } catch (e) { console.error('[mint-worker] reclaim error (continue):', String(e.message || e).slice(0, 120)); return 0; }
 }
 
+// RECOVERY (production resilience): a build timeout / network drop is TRANSIENT (load- or site-dependent),
+// not a permanent defect — those rows must not dead-letter forever or coverage silently caps below 100%.
+// recoverTransient() returns transient-failed rows to 'pending' with a fresh retry budget, bounded by
+// recovery_count<MAX_RECOVERY so a genuinely-broken site eventually stays failed (no infinite loop). A row
+// is only recovered once its last failure is RECOVER_COOLDOWN_MIN old, so a hammered site gets a real rest.
+// The recovery_count column is added idempotently; legacy rows treat NULL as 0. (every-site-mints goal)
+const MAX_RECOVERY = Math.max(0, parseInt(process.env.MINT_MAX_RECOVERY || '5', 10));
+const RECOVER_COOLDOWN_MIN = Math.max(1, parseInt(process.env.MINT_RECOVER_COOLDOWN_MIN || '20', 10));
+const _TRANSIENT_RX = "(timeout|ECONNRESET|ETIMEDOUT|EPIPE|socket|network|other side closed|terminated|ENOTFOUND|EAI_AGAIN|503|502|429|reclaimed|challenge|anti-bot)";
+function ensureRecoveryCol() { try { pg(`ALTER TABLE minting_queue ADD COLUMN IF NOT EXISTS recovery_count int DEFAULT 0;`); } catch (_e) {} }
+function recoverTransient() {
+  if (MAX_RECOVERY <= 0) return 0;
+  try {
+    const out = (pg(`UPDATE minting_queue
+        SET status='pending', retries=0, recovery_count=COALESCE(recovery_count,0)+1, error=NULL
+        WHERE status='failed'
+          AND COALESCE(recovery_count,0) < ${MAX_RECOVERY}
+          AND COALESCE(error,'') ~* '${_TRANSIENT_RX}'
+          AND COALESCE(minted_at, enqueued_at) < now() - interval '${RECOVER_COOLDOWN_MIN} minutes'
+        RETURNING id;`) || '').trim();
+    const n = out ? out.split('\n').filter(Boolean).length : 0;
+    if (n) console.log(`[mint-worker] recovered ${n} transient-failed row(s) -> pending (bounded by recovery_count<${MAX_RECOVERY})`);
+    return n;
+  } catch (e) { console.error('[mint-worker] recover error (continue):', String(e.message || e).slice(0, 120)); return 0; }
+}
+
 // Atomically claim up to CONC pending rows (pending -> minting). SKIP LOCKED lets many workers run safely.
 // source is returned so mintOne() can apply a source-aware build timeout (manual rows get more time).
 function claimBatch() {
@@ -185,6 +211,7 @@ async function mintOne(row) {
 
 async function drainOnce() {
   reclaimStale();                 // return orphaned 'minting' claims to 'pending' before claiming new work
+  recoverTransient();             // return transient-failed (timeout/network) rows to 'pending' (bounded) so no avoidable failure is terminal
   await resolveNames();           // turn company-name-only rows into domains (or fail them) before claiming
   const batch = claimBatch();
   if (!batch.length) return 0;
@@ -196,6 +223,7 @@ async function drainOnce() {
   if (!NEON) { console.error('no NEON_URL'); process.exit(1); }
   console.log(`[mint-worker] start conc=${CONC} idle=${IDLE}ms once=${ONCE} dry=${DRY} reclaimAfter=${RECLAIM_MIN}m startupReclaim=${RECLAIM_STARTUP}`);
   ensureClaimedAt();              // additive claim-timestamp column (idempotent, fail-open)
+  ensureRecoveryCol();            // additive recovery-counter column (idempotent, fail-open)
   if (RECLAIM_STARTUP) reclaimStartup(); // reset orphans from previous killed worker before claiming
   let total = 0;
   for (;;) {
