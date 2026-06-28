@@ -546,6 +546,30 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
   };
 }
 
+// SITE-INTEGRITY / COMPROMISE DETECTOR (legal-QA P2 integrity-blindspot): a hacked site serving injected
+// SEO-spam (gambling/pharma/replica/adult/loan clusters) is the single highest real-world finding, yet the
+// engine only checked for ABSENT compliance elements. Flag injected off-topic spam INCONGRUENT with the firm's
+// sector as a P0 security finding (no fine — urgent remediation). Gated to avoid false positives: needs a
+// cluster (>=6 hits, >=2 distinct terms) and exempts firms whose sector legitimately uses those terms.
+const _SPAM_RX = /\b(1xbet|melbet|betway|casino|slots?\b|sportsbook|\bbetting\b|payday loan|viagra|cialis|tadalafil|replica (watch|rolex|handbag|bag)|\bescort(s)?\b|porn|adult cam|crypto (giveaway|airdrop|doubler)|forex signals|essay writing service|cbd gummies|\bsex\b)\b/gi;
+function _detectCompromise(corpus, sector) {
+  if (/gambl|casino|\bbet\b|betting|adult|pharma|crypto|cannabis|cbd/i.test(String(sector || ''))) return null; // legit use of these terms
+  let hits = 0; const samples = new Set();
+  for (const c of (corpus || [])) {
+    const m = String(c.body || '').match(_SPAM_RX);
+    if (m) { hits += m.length; m.slice(0, 4).forEach(x => samples.add(x.toLowerCase().trim())); }
+  }
+  if (hits < 6 || samples.size < 2) return null;
+  const ex = Array.from(samples).slice(0, 5);
+  return {
+    status: 'miss', severity: 'P0', framework: 'SITE_INTEGRITY', code: 'SUSPECTED_COMPROMISE', bucket: 'security',
+    description: 'Suspected site compromise: injected spam / off-topic content',
+    layman_explanation: 'Your website appears to be serving injected spam content (' + ex.join(', ') + ') unrelated to your business — a strong indicator the site has been hacked or hit by an SEO-spam injection. This poisons your Google reputation, can trigger a manual penalty / "this site may be hacked" label, and exposes visitors to harm.',
+    tamazia_fix_short: 'Urgent: scan for malware/injected content, remove the spam, patch and harden the CMS/plugins, rotate credentials, then request a Google security review.',
+    evidence_quote: ex.join(', '), penalty_basis: 'non_monetary', penalty_note: 'urgent security remediation (reputational + Google manual-action risk)',
+  };
+}
+
 async function scan({ domain, sector, country, cache_max_age = 86400, signals = {} }) {
   domain = String(domain || '').toLowerCase();
   if (!domain) return { ok: false, error: 'domain_required' };
@@ -740,6 +764,8 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     }
     // Drop irrelevant rules — trigger_absent, not_applicable_to_sector, no_prohibited_pattern.
   }
+  // SITE-INTEGRITY pass: flag a hacked/spam-injected site as a P0 security finding (highest real-world risk).
+  try { const _ci = _detectCompromise(corpus, effectiveSector || sector); if (_ci) { misses++; findings.push(_ci); } } catch (_e) {}
   // One honest finding in place of the suppressed granular breaches: JS-only legal content is a real AI-visibility + verification gap.
   if (suppressedPrivacy > 0) {
     misses++;
