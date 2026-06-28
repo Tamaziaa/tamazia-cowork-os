@@ -263,6 +263,20 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
   try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) {}
+  // HQ RECONCILIATION (Phase-7): the LLM firm-profiler (now reliable via the Cloudflare-first router) determines the
+  // registered LEGAL HQ from the corpus. resolveHomeCountry runs BEFORE the profile exists and a .com firm can fall to
+  // a TLD/market-derived scalar country that contradicts the real HQ (cert: pkfhospitality is London-HQ but .com made
+  // the scalar country US, so the audit said "registered in the United States"). Frameworks are unaffected (already
+  // multi-jurisdiction); we only correct the SCALAR display country + jurisdiction statement, and ONLY when the HQ is
+  // corroborated by the two-signal-gated detected_jurisdictions set, so a profiler slip can't flip a sound country.
+  const displayCountry = (() => {
+    const _N2C = { 'united kingdom': 'UK', britain: 'UK', england: 'UK', scotland: 'UK', wales: 'UK', 'united states': 'US', usa: 'US', america: 'US', 'united arab emirates': 'AE', uae: 'AE', dubai: 'AE', 'saudi arabia': 'SA', qatar: 'QA', france: 'FR', germany: 'DE', spain: 'ES', italy: 'IT', netherlands: 'NL', ireland: 'IE', canada: 'CA', australia: 'AU', singapore: 'SG', switzerland: 'CH', iran: 'IR' };
+    const hq = comp && comp.firm_profile && comp.firm_profile.hq_country;
+    const hqCode = hq ? (_N2C[String(hq).toLowerCase().trim()] || null) : null;
+    const detected = (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [];
+    if (hqCode && hqCode !== effCountry && detected.includes(hqCode)) return hqCode;   // corroborated HQ overrides TLD/market default
+    return effCountry;
+  })();
   // PER-MINT FAIL-CLOSED GUARD (last line of defence before this audit is assembled): drop any compliance finding
   // whose law is not servable (proven) or not jurisdiction-covered, so a wrong/unproven law can NEVER reach a
   // client even if an upstream gate regressed. The engine overlay already enforces this — this drops nothing in the
@@ -547,7 +561,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     payload_geo_visuals = { ai_engine_grid: _v.aiEngineGrid(engines), ai_radar: _v.aiRadar(radarAxes), entity_web_map: _v.entityWebMap({ you: (domain || '').replace(/^www\./, '').split('.')[0], nodes }) };
     payload_screenshots = _sc.screenshotUrls({ domain, query: (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '') });
   } catch (_e) {}
-  try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: effCountry, company: (domain || '').replace(/^www\./, '').split('.')[0] }); } catch (_e) {}
+  try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: displayCountry, company: (domain || '').replace(/^www\./, '').split('.')[0] }); } catch (_e) {}
   let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings, ..._aiReadyFindings, ..._geoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // ── REACHABILITY RECONCILIATION (anti-fabrication red line) ──────────────────────────────────
   // Two independent corpus paths can disagree: site-scan's direct fetch + PSI may fail (timeout / bot-block)
@@ -607,7 +621,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     schema_version: 'v2',
     domain,
     sector,
-    country: effCountry,
+    country: displayCountry,
     lead_id: lead_id || null,
     framework_version: fv,
     framework_last_reviewed: lr,
