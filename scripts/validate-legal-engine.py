@@ -68,4 +68,19 @@ check("20. P3 severity on a turnover-percentage (major-fine) framework", q("SELE
 check("21. framework jurisdiction not routable", q("SELECT framework_short||'='||jurisdiction FROM framework_versions fv WHERE EXISTS(SELECT 1 FROM compliance_rules cr WHERE cr.framework_short=fv.framework_short AND cr.active) AND jurisdiction NOT IN ('UK','US','EU','AE','SA','QA','GLOBAL','DE','FR','GB')"))
 check("22. duplicate-statute frameworks (same name key, both active)", q("SELECT string_agg(framework_short,', ') FROM framework_versions fv WHERE EXISTS(SELECT 1 FROM compliance_rules cr WHERE cr.framework_short=fv.framework_short AND cr.active) GROUP BY lower(regexp_replace(framework_name,'[^a-zA-Z]','','g')) HAVING count(*)>1"))
 
+# --- detection-coherence gates (catch sector/jurisdiction mis-detection deterministically, low LLM dependence) ---
+check("23. recent regulated-sector audit MISSING its core regulator (detection/mapping mismatch)", q("""
+SELECT domain||' ('||(payload_json->>'detected_sector')||')' FROM audit_pages ap
+WHERE generated_at>now()-interval '2 days' AND COALESCE(payload_json->>'reachable','')<>'false'
+  AND (
+   (payload_json->>'detected_sector' ~* 'financ|fintech' AND NOT (payload_json->'applicable_frameworks' ?| array['UK_FCA_CONDUCT','UK_FCA_CONC25','UK_FSMA_S21','UK_SMCR','US_SEC_REG_FD','US_FINRA_2210','EU_MIFID_II','AE_DFSA_COB']))
+   OR (payload_json->>'detected_sector' ~* 'healthcare|dental|aesthetic|fertility|pharmacy' AND NOT (payload_json->'applicable_frameworks' ?| array['UK_CQC','UK_GDC','UK_MHRA','UK_HFEA','US_HIPAA','UAE_DHA','UAE_DOH','US_MEDICAL_BOARD','UK_CQC_FUNDAMENTAL_STANDARDS','UK_GPHC']))
+   OR (payload_json->>'detected_sector' ~* 'law|legal|solicit' AND NOT (payload_json->'applicable_frameworks' ?| array['UK_SRA_COC','UK_SRA_TRANSPARENCY','UK_BSB','US_ATTORNEY_ADVERTISING']))
+  ) LIMIT 12"""))
+check("24. recent audit jurisdiction conflicts with domain ccTLD", q("""
+SELECT domain||' country='||COALESCE(country,'') FROM audit_pages WHERE generated_at>now()-interval '2 days'
+  AND ((domain ILIKE '%.co.uk' AND country NOT IN ('UK','GB','GBR','')) OR (domain ILIKE '%.ae' AND country NOT IN ('AE','UAE','')) OR (domain ILIKE '%.uk' AND country NOT IN ('UK','GB','GBR',''))) LIMIT 12"""))
+check("25. recent reachable audit with no detected_sector (classification failure)", q("""
+SELECT domain FROM audit_pages WHERE generated_at>now()-interval '2 days' AND COALESCE(payload_json->>'reachable','')='true' AND COALESCE(payload_json->>'detected_sector','')='' LIMIT 12"""))
+
 print(f"\n=== {checks-fails}/{checks} checks PASS, {fails} FAIL ===")
