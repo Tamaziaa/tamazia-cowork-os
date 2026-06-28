@@ -10,6 +10,17 @@
 const { execFileSync } = require('child_process');
 const path = require('path');
 const { build } = require(path.join(__dirname, '..', 'src', 'skills', 'S025-audit-page-builder', 'scripts', 'build.js'));
+
+// ROBUSTNESS (every-site-mints): build() fetches live sites via raw fetch()/undici. A site that drops the
+// connection mid-stream can emit an unhandled 'error' on the HTTP/2 stream (UND_ERR_SOCKET / ECONNRESET /
+// "other side closed") with no owning promise — that crashes the ENTIRE worker, killing every concurrent
+// mint, not just the bad domain. The per-domain try/catch + race-timeout in mintOne already handle real
+// failures (the row goes to retry/dead-letter). This net swallows ONLY benign async network noise so the
+// 24/7 drain never dies on one hostile site; anything else exits non-zero for a clean pm2/Actions restart.
+const _BENIGN_NET = /UND_ERR_SOCKET|ECONNRESET|ETIMEDOUT|EPIPE|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|other side closed|socket hang up|terminated|HPE_|stream (closed|destroyed)|Premature close/i;
+function _isBenignNet(e) { const s = String((e && (e.code || e.message)) || e || ''); return _BENIGN_NET.test(s); }
+process.on('unhandledRejection', (e) => { if (_isBenignNet(e)) { console.warn('  (ignored benign net rejection: ' + String((e && e.message) || e).slice(0, 80) + ')'); return; } console.error('FATAL unhandledRejection:', e); process.exit(1); });
+process.on('uncaughtException', (e) => { if (_isBenignNet(e)) { console.warn('  (ignored benign net exception: ' + String((e && e.message) || e).slice(0, 80) + ')'); return; } console.error('FATAL uncaughtException:', e); process.exit(1); });
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING || process.env.NEON_DATABASE_URL;
 const PSQL = path.join(__dirname, 'psql');
 function pg(sql) { return execFileSync(PSQL, [NEON, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }); }
