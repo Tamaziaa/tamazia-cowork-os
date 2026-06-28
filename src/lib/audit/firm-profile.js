@@ -73,6 +73,20 @@ function _selfIdOverride(lc) {
   if (/\b((we are|we're) (a|an) [a-z -]{0,30}(marketing|advertising|creative|digital|branding|seo|pr) agency|full.service [a-z -]{0,20}agency|digital marketing agency|creative agency|advertising agency)/.test(lc)) return 'marketing';
   return null;
 }
+// DOMAIN-NAME self-ID: a firm names itself after what it IS, not after its clients — so an unambiguous profession
+// noun in the registered domain is a high-confidence own-business signal, and it survives even when the visible
+// crawled text is dominated by the CLIENT sector or the profession word lives only in an image/alt (cert case:
+// charityaccountants.co.uk — visible body is all "charity", "accountancy" only in the logo alt). Scoped to
+// profession nouns people actually put in domains and almost never use to mean a client.
+function _domainProfession(domain) {
+  const d = String(domain || '').toLowerCase().replace(/^www\./, '').split('.')[0];   // registrable label only
+  if (!d) return null;
+  if (/(accountant|accountanc|accounting|bookkeep)/.test(d)) return 'accounting';
+  if (/(solicitor|lawfirm|lawyers?|legalservices)/.test(d)) return 'law-firms';
+  if (/(dentist|dental|orthodont)/.test(d)) return 'dental';
+  if (/(chartered ?surveyor|estateagent|lettingagent)/.test(d)) return 'real-estate';
+  return null;
+}
 function _detectSectorFromCorpus(corpusText, fallbackSector) {
   const c = String(corpusText || '').toLowerCase();
   const ov = _selfIdOverride(c);
@@ -89,8 +103,8 @@ function _detectSectorFromCorpus(corpusText, fallbackSector) {
 async function profileFirm({ corpus = '', domain = '', country = '', sector = '', env = process.env } = {}) {
   const text = String(corpus || '').replace(/\s+/g, ' ').trim().slice(0, 12000);
   // R-1/R-2: deterministic keyword-first resolution. Never emit the raw "General" sector — use corpus keywords instead.
-  const _ovr = _selfIdOverride(String(text || '').toLowerCase());   // high-confidence own-business self-ID (wins over stale ICP)
-  const deterministicSector = _detectSectorFromCorpus(text, sector);
+  const _ovr = _selfIdOverride(String(text || '').toLowerCase()) || _domainProfession(domain);   // high-confidence own-business self-ID (corpus phrase OR domain profession) — wins over stale ICP
+  const deterministicSector = _ovr || _detectSectorFromCorpus(text, sector);
   const fallback = { primary_sector: deterministicSector || null, sectors: deterministicSector ? [deterministicSector] : [], hq_country: country || null, office_countries: [], serves: [], source: 'fallback', sector_self_id: !!_ovr };
   if (!text || text.length < 200) return fallback;
   const prompt = `You are a meticulous compliance analyst. From the WEBSITE TEXT below, extract ONLY what the text actually evidences — never guess or infer beyond it.
