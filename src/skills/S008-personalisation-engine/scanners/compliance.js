@@ -698,13 +698,23 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const _GENERIC_LLM_SECTORS = new Set(['ecommerce','retail','tech','saas','professional-services','food','media','transport','manufacturing','construction','marketing','general']);
   const _llmDetectedSec = (firmProfile && firmProfile.primary_sector) ? String(firmProfile.primary_sector).toLowerCase() : null;
   const _normLeadSec = normaliseSectorAlias(String(sector || ''));  // 'financial-services'→'finance', 'legal'→'law-firms'
+  // OWN-VS-CLIENT FIX: the scraped ICP `sector` is frequently the CLIENT industry, not the firm's own business
+  // (a RegTech vendor serving banks is scraped 'fintech'; a hospitality consultancy is scraped 'hospitality').
+  // So the ICP-regulated-wins guard must NOT override the profiler when the profiler is high-confidence:
+  //   (a) a strong own-business self-ID phrase fired (sector_self_id), OR
+  //   (b) the LLM profiler ran successfully with the own-vs-client prompt (sector_from_llm) — its judgment that
+  //       the firm's OWN sector is generic beats a stale scraped label.
+  // The guard still applies as a safety net only when the profiler fell back to deterministic keywords on a thin
+  // (e.g. JS-rendered) corpus, where the LLM couldn't see the regulated terms.
+  const _profilerHighConf = !!(firmProfile && (firmProfile.sector_self_id || firmProfile.sector_from_llm));
   const effectiveSector = (
+    !_profilerHighConf &&
     _REGULATED_SECTORS.has(_normLeadSec) && _llmDetectedSec && (
       _GENERIC_LLM_SECTORS.has(_llmDetectedSec) ||      // LLM said generic (ecommerce, tech, saas…)
       (!_REGULATED_SECTORS.has(_llmDetectedSec) &&       // LLM said non-regulated sector (hospitality…)
        _llmDetectedSec !== _normLeadSec)                 // and it disagrees with ICP sector
     )
-      ? _normLeadSec   // regulated ICP sector wins when LLM mis-classifies
+      ? _normLeadSec   // regulated ICP sector wins ONLY when profiler is low-confidence fallback
       : (_llmDetectedSec || _normLeadSec || sector)
   );
   // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
