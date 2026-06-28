@@ -384,7 +384,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
       absence_evidence: f.absence_evidence || null,   // A3 — real nearest-miss context (page + what's there vs missing)
       rule_type: f.rule_type || null,
       fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
-      penalty_basis: f.penalty_basis || null, penalty_note: f.penalty_note || null,
+      penalty_basis: f.penalty_basis || null, penalty_note: f.penalty_note || null, enforce_typical_low_gbp: f.enforce_typical_low_gbp || null, enforce_typical_high_gbp: f.enforce_typical_high_gbp || null, enforce_methodology: f.enforce_methodology || null, enforce_context: f.enforce_context || null, enforce_max_rare: !!f.enforce_max_rare,
       verify_context: f.verify_context || null,
       enforcement_example: f.enforcement_example || null,
       // ── B2/B3 backend→frontend sync: the per-breach panel + every-word locations (for the rich render) ──

@@ -65,14 +65,19 @@ function loadRules({ frameworks }) {
            COALESCE(pricing_tier, 'Authority') AS pricing_tier,
            COALESCE(enforcement_example, '') AS enforcement_example,
            COALESCE(penalty_basis, '') AS penalty_basis,
-           COALESCE(penalty_note, '') AS penalty_note
+           COALESCE(penalty_note, '') AS penalty_note,
+           COALESCE(enforce_typical_low_gbp::text,'') AS enf_low,
+           COALESCE(enforce_typical_high_gbp::text,'') AS enf_high,
+           COALESCE(enforce_methodology,'') AS enf_method,
+           COALESCE(enforce_context,'') AS enf_ctx,
+           COALESCE(enforce_max_rare::text,'') AS enf_rare
     FROM compliance_rules
     WHERE framework_short IN (${inList}) AND active = TRUE
     ORDER BY CASE severity WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 ELSE 2 END, framework_short, rule_id`;
   const raw = pg(sql);
   if (!raw) return [];
   return raw.split('\n').filter(Boolean).map(line => {
-    const [id, fw, rid, desc, pat, urlCheck, sev, cite, ruleType, triggerPat, sectorsStr, fineLow, fineHigh, layman, tamaziaFix, svcPath, tier, enforcement, penaltyBasis, penaltyNote] = line.split('\t');
+    const [id, fw, rid, desc, pat, urlCheck, sev, cite, ruleType, triggerPat, sectorsStr, fineLow, fineHigh, layman, tamaziaFix, svcPath, tier, enforcement, penaltyBasis, penaltyNote, enfLow, enfHigh, enfMethod, enfCtx, enfRare] = line.split('\t');
     return {
       id: Number(id), framework_short: fw, rule_id: rid, description: desc,
       regex_pattern: pat === '' || pat === 'NULL' ? null : pat,
@@ -89,7 +94,12 @@ function loadRules({ frameworks }) {
       pricing_tier: tier || 'Authority',
       enforcement_example: enforcement && enforcement !== 'NULL' ? enforcement : null,
       penalty_basis: penaltyBasis && penaltyBasis !== 'NULL' ? penaltyBasis : null,
-      penalty_note: penaltyNote && penaltyNote !== 'NULL' ? penaltyNote : null
+      penalty_note: penaltyNote && penaltyNote !== 'NULL' ? penaltyNote : null,
+      enforce_typical_low_gbp: enfLow ? Number(enfLow) : null,
+      enforce_typical_high_gbp: enfHigh ? Number(enfHigh) : null,
+      enforce_methodology: enfMethod || null,
+      enforce_context: enfCtx || null,
+      enforce_max_rare: enfRare === 't' || enfRare === 'true'
     };
   });
 }
@@ -495,7 +505,7 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
     for (const c of corpus) { if (c.body.match(re)) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'hit_after_trigger', trigger_evidence: triggerEvidence }; }
     // Trigger present but disclosure missing → real breach. Carry the real nearest-miss absence evidence too, so the
     // render shows WHAT is on the page vs the missing element (not "inspected your homepage") for trigger breaches as well.
-    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: triggerEvidence?.url, evidence_quote: triggerEvidence?.quote, trigger_evidence: triggerEvidence, checked_urls: corpus.map(c => c.url), absence_evidence: _absenceEvidence(corpus, corpus, rule) };
+    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, enforce_typical_low_gbp: rule.enforce_typical_low_gbp, enforce_typical_high_gbp: rule.enforce_typical_high_gbp, enforce_methodology: rule.enforce_methodology, enforce_context: rule.enforce_context, enforce_max_rare: rule.enforce_max_rare, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: triggerEvidence?.url, evidence_quote: triggerEvidence?.quote, trigger_evidence: triggerEvidence, checked_urls: corpus.map(c => c.url), absence_evidence: _absenceEvidence(corpus, corpus, rule) };
   }
   // prohibit: breach if pattern IS present anywhere on the site (e.g. "no GLP-1 on consumer pages").
   if (rule.rule_type === 'prohibit') {
@@ -504,12 +514,12 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
     const occ = (corpusIndex && corpusIndex.segments && corpusIndex.segments.length) ? scanRuleGlobal(re, corpusIndex, { proseOnly: true, max: 50 }) : [];
     if (occ.length) {
       const first = occ[0];
-      return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: first.url, evidence_snippet: first.matched, evidence_quote: first.line, occurrence_count: occ.length, occurrences: occ };
+      return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, enforce_typical_low_gbp: rule.enforce_typical_low_gbp, enforce_typical_high_gbp: rule.enforce_typical_high_gbp, enforce_methodology: rule.enforce_methodology, enforce_context: rule.enforce_context, enforce_max_rare: rule.enforce_max_rare, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: first.url, evidence_snippet: first.matched, evidence_quote: first.line, occurrence_count: occ.length, occurrences: occ };
     }
     // Fallback: the pattern hit raw markup (not visible prose) — keep the legacy first-page behaviour so status never regresses.
     for (const c of corpus) {
       const m = c.body.match(re);
-      if (m) { const q = _extractQuote(c.body, re); return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: c.url, evidence_snippet: (q && q.matched) || m[0].slice(0, 80), evidence_quote: q && q.quote }; }
+      if (m) { const q = _extractQuote(c.body, re); return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, enforce_typical_low_gbp: rule.enforce_typical_low_gbp, enforce_typical_high_gbp: rule.enforce_typical_high_gbp, enforce_methodology: rule.enforce_methodology, enforce_context: rule.enforce_context, enforce_max_rare: rule.enforce_max_rare, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: c.url, evidence_snippet: (q && q.matched) || m[0].slice(0, 80), evidence_quote: q && q.quote }; }
     }
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'no_prohibited_pattern' };
   }
@@ -527,7 +537,7 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
   return {
     rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity,
     status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url,
-    fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note,
+    fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, enforce_typical_low_gbp: rule.enforce_typical_low_gbp, enforce_typical_high_gbp: rule.enforce_typical_high_gbp, enforce_methodology: rule.enforce_methodology, enforce_context: rule.enforce_context, enforce_max_rare: rule.enforce_max_rare,
     layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short,
     service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example,
     checked_urls: pool.map(c => c.url),
