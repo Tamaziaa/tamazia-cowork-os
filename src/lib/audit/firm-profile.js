@@ -6,6 +6,26 @@
 // international firms without ever hallucinating a law attachment. Registered country is always primary.
 // Fail-open: any error/empty → deterministic fallback. (Founder directive: merge + cross-reference → 100% correct.)
 const { askLLM } = require('./llm.js');
+// Phase-7 reliability: prefer the Cloudflare-first router (free 10k/day on a quota SEPARATE from Groq) so the
+// firm profiler stops falling to the weaker deterministic path ~49% of the time under batch load (Groq 429 cascade).
+// Fail-open: if the router module/path is unavailable we transparently use askLLM as before.
+let _router = null; try { _router = require('../llm/router.js'); } catch (_e) { /* fail-open to askLLM */ }
+const _PROFILE_CHAIN = [
+  { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' }, // free 10k/day, own quota
+  { provider: 'groq', model: 'llama-3.3-70b-versatile' },                        // backstop
+  { provider: 'gemini', model: 'gemini-2.0-flash' },                             // final backstop
+];
+async function _profileLLM(prompt, env) {
+  // 1) Cloudflare-first router (separate quota, won't 429 with Groq-heavy mint load)
+  if (_router && _router.run) {
+    try {
+      const r = await _router.run({ chain: _PROFILE_CHAIN, role: 'extract', system: 'You are a meticulous compliance analyst. Output ONLY valid JSON, no prose.', prompt, max_tokens: 700, temperature: 0, json: true });
+      if (r && r.ok && r.text && String(r.text).trim()) return r.text;
+    } catch (_e) { /* fall through to askLLM */ }
+  }
+  // 2) Legacy askLLM chain (Groq -> NIM -> DeepSeek -> Perplexity -> OpenAI -> Gemini)
+  try { const r2 = await askLLM(prompt, { temperature: 0, maxTokens: 700, json: true }, env); return r2 && r2.text; } catch (_e) { return null; }
+}
 
 const COUNTRY_CODE = {
   'united kingdom': 'UK', uk: 'UK', britain: 'UK', england: 'UK', scotland: 'UK', wales: 'UK',
@@ -123,8 +143,7 @@ services' (NOT 'hospitality'); a marketing agency for clinics is 'marketing' (NO
 the company NAME — classify by the actual service described. office_countries = ONLY countries with a stated office, address, or "based in / headquartered in". served_markets = countries it explicitly says it advises/serves clients in. A country mentioned only inside a case study, a news item, or a single passing reference is NOT an office or a served market — omit it. Use full country names. Output JSON only.
 WEBSITE TEXT:
 ${text}`;
-  let raw;
-  try { const _r = await askLLM(prompt, { temperature: 0, maxTokens: 700, json: true }, env); raw = _r && _r.text; } catch (_e) { return fallback; }
+  const raw = await _profileLLM(prompt, env);
   if (!raw) return fallback;
   let p; try { p = JSON.parse(String(raw || '').replace(/^[\s\S]*?\{/, '{').replace(/```/g, '').replace(/\}[^}]*$/, '}')); } catch (_e) { return fallback; }
   if (!p || typeof p !== 'object') return fallback;
