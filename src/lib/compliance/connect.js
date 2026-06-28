@@ -98,8 +98,11 @@ const CAP_GATE = {
   // governed solely by Federal PDPL (Decree-Law 45/2021). Without these gates every AE firm wrongly inherited all
   // three (24 false positives in QA). Gate each free-zone regime on an explicit establishment signal; mainland
   // PDPL (UAE_PDPL, no gate) is the default. Saudi/Qatar federal regimes gate on their own national nexus.
-  DIFC_DPL:    { sig: null, rx: /\b(DIFC|dubai international financial centre|gate (village|district|avenue)|difc[- ]registered|licen[cs]ed (in|by) (the )?difc|dfsa)\b/i },
-  ADGM_DPR:    { sig: null, rx: /\b(ADGM|abu dhabi global market|al maryah island|adgm[- ]registered|licen[cs]ed (in|by) (the )?adgm|fsra)\b/i },
+  // Free-zone gates require ESTABLISHMENT context, not the bare zone name — a mainland firm that merely SELLS
+  // "DIFC company setup" services must NOT inherit DIFC data law (it is not established there). Match an
+  // establishment phrase co-located with the zone, a physical DIFC/ADGM address, or zone-registration wording.
+  DIFC_DPL:    { sig: null, rx: /(registered|licen[cs]ed|authorised|regulated|based|established|incorporated|headquarter|domiciled|our (office|firm|practice)|principal place)[^.]{0,40}(difc|dubai international financial centre|dfsa)|(difc|dfsa)[^.]{0,40}(registered|licen[cs]ed|authorised|regulated|established|based)|gate (village|district|avenue)|difc[- ]registered/i },
+  ADGM_DPR:    { sig: null, rx: /(registered|licen[cs]ed|authorised|regulated|based|established|incorporated|headquarter|domiciled|our (office|firm|practice)|principal place)[^.]{0,40}(adgm|abu dhabi global market|fsra)|(adgm|fsra)[^.]{0,40}(registered|licen[cs]ed|authorised|regulated|established|based)|al maryah island|adgm[- ]registered/i },
   SAUDI_PDPL:  { sig: null, rx: /\b(saudi arabia|\bKSA\b|riyadh|jeddah|dammam|\.sa\b|sdaia|commercial registration .*saudi)\b/i },
   QATAR_PDPPL: { sig: null, rx: /\b(qatar|doha|\.qa\b|qfc|qatar financial centre)\b/i },
   // CONSUMER-NEXUS GATING (legal-QA P0): DMCCA 2024 Part 4, CMA enforcement, CRA 2015 and Trading Standards bind
