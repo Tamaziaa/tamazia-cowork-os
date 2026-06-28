@@ -18,7 +18,9 @@ const UNIVERSAL_FW = new Set([
   // law firms never get it, while large supply-chain sectors still do. (F-1 fix / 5-of-9 false-positive class)
   'EU_GDPR','EU_EPRIVACY','EU_AI_ACT','EU_EAA_2025','EU_DSA',
   'US_FTC','US_CPRA','US_CCPA','US_FTC_ENDORSE','US_ADA','US_TCPA','US_VCDPA','US_TDPSA',
-  'US_STATE_PRIVACY','UAE_PDPL','DIFC_DPL','ADGM_DPR','SAUDI_PDPL','QATAR_PDPPL','DE_BDSG','FR_CNIL_2025',
+  // US_STATE_PRIVACY removed (legal-QA P1): non-citable catch-all that duplicated the named state acts
+  // (CCPA/CPRA/VCDPA/TDPSA). The named, citable statutes carry the obligation; the catch-all only added noise.
+  'UAE_PDPL','DIFC_DPL','ADGM_DPR','SAUDI_PDPL','QATAR_PDPPL','DE_BDSG','FR_CNIL_2025',
 ]);
 // SECTOR_PARENTS: signals.js SECTOR_RX and jurisdiction-router.js SECTOR_MAP use different vocab for the
 // same sector. This bridges them so GATE B0 + GATE B rule matching works correctly end-to-end.
@@ -91,6 +93,22 @@ const CAP_GATE = {
   // Gate on detecting a corporate entity signal in the corpus — if the firm is not a registered company,
   // the absence-of-number finding is a false positive.
   UK_COMPANIES_ACT: { sig: null, rx: /\b(ltd\.?|limited|llp\b|plc\b|incorporated|co\.? reg\.?|company (no|number|reg|registration)|registered (in|with) (england|scotland|wales|northern ireland)|registered office|companies house)\b/i },
+  // FREE-ZONE GATING (legal-QA P0): UAE free zones are distinct legal jurisdictions. DIFC DPL No.5/2020 Art.6
+  // binds only DIFC-established entities; ADGM DPR 2021 reg.6 only ADGM-licensed entities. A mainland UAE firm is
+  // governed solely by Federal PDPL (Decree-Law 45/2021). Without these gates every AE firm wrongly inherited all
+  // three (24 false positives in QA). Gate each free-zone regime on an explicit establishment signal; mainland
+  // PDPL (UAE_PDPL, no gate) is the default. Saudi/Qatar federal regimes gate on their own national nexus.
+  DIFC_DPL:    { sig: null, rx: /\b(DIFC|dubai international financial centre|gate (village|district|avenue)|difc[- ]registered|licen[cs]ed (in|by) (the )?difc|dfsa)\b/i },
+  ADGM_DPR:    { sig: null, rx: /\b(ADGM|abu dhabi global market|al maryah island|adgm[- ]registered|licen[cs]ed (in|by) (the )?adgm|fsra)\b/i },
+  SAUDI_PDPL:  { sig: null, rx: /\b(saudi arabia|\bKSA\b|riyadh|jeddah|dammam|\.sa\b|sdaia|commercial registration .*saudi)\b/i },
+  QATAR_PDPPL: { sig: null, rx: /\b(qatar|doha|\.qa\b|qfc|qatar financial centre)\b/i },
+  // CONSUMER-NEXUS GATING (legal-QA P0): DMCCA 2024 Part 4, CMA enforcement, CRA 2015 and Trading Standards bind
+  // a trader only in a TRADER-TO-CONSUMER transaction. They were universal with no consumer gate, so pure-B2B
+  // advisory/institutional firms got the full consumer stack (~30 FPs). Gate on a real B2C commerce signal; a
+  // B2B-only firm (no consumer pricing/booking/checkout) no longer inherits consumer law. (UK_CRA already gated.)
+  UK_CMA:               { sig: 'payments', rx: /\b(book (online|now|an?|your)|online booking|appointment|consultation|price list|our prices|prices? from|£\s?\d{2,}|per (session|treatment|night|room|month|person)|reservation|table for \d|add to (cart|basket|bag)|checkout|buy now|shop now|subscribe|membership (from|plan|fee)|enrol|admissions|tuition|donate|gift aid|customers?)\b/i },
+  UK_DMCC_2024:         { sig: 'payments', rx: /\b(book (online|now|an?|your)|online booking|appointment|consultation|price list|our prices|prices? from|£\s?\d{2,}|per (session|treatment|night|room|month|person)|reservation|table for \d|add to (cart|basket|bag)|checkout|buy now|shop now|subscribe|membership (from|plan|fee)|enrol|admissions|tuition|donate|gift aid|reviews?|countdown|sale ends)\b/i },
+  UK_TRADING_STANDARDS: { sig: 'payments', rx: /\b(book (online|now|an?|your)|online booking|appointment|price list|our prices|prices? from|£\s?\d{2,}|per (session|treatment|night|room|month|person)|reservation|add to (cart|basket|bag)|checkout|buy now|shop now|subscribe|membership (from|plan|fee)|enrol|admissions|tuition)\b/i },
 };
 
 function secMatches(sectors, sec) {
