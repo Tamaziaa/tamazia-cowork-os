@@ -81,6 +81,7 @@ const SECTOR_ALIASES = {
   'medical': 'healthcare', 'clinic': 'healthcare', 'nhs': 'healthcare', 'hospital': 'healthcare',
   'gp': 'healthcare', 'practice': 'healthcare', 'care-home': 'healthcare',
   'aesthetic': 'aesthetics', 'cosmetic': 'aesthetics', 'medspa': 'aesthetics', 'med-spa': 'aesthetics', 'skin-clinic': 'aesthetics',
+  'fertility': 'healthcare', 'ivf': 'healthcare', 'fertility-clinic': 'healthcare', 'reproductive': 'healthcare', 'fertility clinic': 'healthcare',
   'bank': 'finance', 'banking': 'finance', 'wealth': 'finance', 'lender': 'finance',
   'broker': 'insurance', 'underwriter': 'insurance', 'mga': 'insurance',
   'property': 'real-estate', 'estate-agent': 'real-estate', 'lettings': 'real-estate',
