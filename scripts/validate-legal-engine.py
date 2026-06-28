@@ -60,4 +60,12 @@ WHERE ap.generated_at>now()-interval '2 days' AND ap.domain LIKE '%.co.uk'
 check("17. recent audits have a resolved country (not empty)", q("""
 SELECT domain FROM audit_pages WHERE generated_at>now()-interval '2 days' AND COALESCE(country,'') IN ('','XX') LIMIT 10"""))
 
+# --- comprehensive gap-scan checks (promoted from adversarial gap discovery) ---
+_UNIV="'GOOGLE_EEAT','UK_GDPR_A13','UK_PECR','UK_ICO_COOKIES','UK_DPA_2018','UK_EQUALITY_2010','UK_DMCC_2024','UK_COMPANIES_ACT','UK_CMA','UK_TRADING_STANDARDS','UK_ASA_CAP','UK_CRA_2015','EU_GDPR','EU_EPRIVACY','EU_AI_ACT','EU_EAA_2025','EU_DSA','US_FTC','US_CPRA','US_CCPA','US_FTC_ENDORSE','US_ADA','US_TCPA','US_VCDPA','US_TDPSA','UAE_PDPL','DIFC_DPL','ADGM_DPR','SAUDI_PDPL','QATAR_PDPPL','DE_BDSG','FR_CNIL_2025'"
+check("18. framework w/ rules but unroutable (no sector_relevance, not universal)", q(f"SELECT DISTINCT framework_short FROM compliance_rules cr WHERE active AND framework_short NOT IN ({_UNIV}) AND NOT EXISTS (SELECT 1 FROM compliance_rules c2 WHERE c2.framework_short=cr.framework_short AND c2.active AND array_length(c2.sector_relevance,1)>0)"))
+check("19. must_appear rule with an ignored trigger_pattern (over-attach risk)", q("SELECT framework_short||'/'||rule_id FROM compliance_rules WHERE active AND rule_type='must_appear' AND COALESCE(trigger_pattern,'')<>''"))
+check("20. P3 severity on a turnover-percentage (major-fine) framework", q("SELECT framework_short||'/'||rule_id FROM compliance_rules WHERE active AND severity='P3' AND penalty_basis='turnover_pct'"))
+check("21. framework jurisdiction not routable", q("SELECT framework_short||'='||jurisdiction FROM framework_versions fv WHERE EXISTS(SELECT 1 FROM compliance_rules cr WHERE cr.framework_short=fv.framework_short AND cr.active) AND jurisdiction NOT IN ('UK','US','EU','AE','SA','QA','GLOBAL','DE','FR','GB')"))
+check("22. duplicate-statute frameworks (same name key, both active)", q("SELECT string_agg(framework_short,', ') FROM framework_versions fv WHERE EXISTS(SELECT 1 FROM compliance_rules cr WHERE cr.framework_short=fv.framework_short AND cr.active) GROUP BY lower(regexp_replace(framework_name,'[^a-zA-Z]','','g')) HAVING count(*)>1"))
+
 print(f"\n=== {checks-fails}/{checks} checks PASS, {fails} FAIL ===")
