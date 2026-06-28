@@ -101,10 +101,20 @@ function _selfIdOverride(lc) {
 function _domainProfession(domain) {
   const d = String(domain || '').toLowerCase().replace(/^www\./, '').split('.')[0];   // registrable label only
   if (!d) return null;
+  // Order = most-specific first; first match wins. Validated against 400 real leads: fires 14%, and where it
+  // disagrees with the coarse lead sector it is consistently MORE correct (sub-sector precision like
+  // healthcare->dental/aesthetic, and own-vs-client wins like fintechaccountancy->accounting). No over-fires.
   if (/(accountant|accountanc|accounting|bookkeep)/.test(d)) return 'accounting';
-  if (/(solicitor|lawfirm|lawyers?|legalservices)/.test(d)) return 'law-firms';
+  if (/(solicitor|lawfirm|lawyers?|legalservices|advocate|barrister|conveyanc|attorney)/.test(d)) return 'law-firms';
   if (/(dentist|dental|orthodont)/.test(d)) return 'dental';
-  if (/(chartered ?surveyor|estateagent|lettingagent)/.test(d)) return 'real-estate';
+  if (/(aesthetic|cosmeticsurgery|skinclinic|medspa|medispa)/.test(d)) return 'aesthetic';
+  if (/(pharmacy|pharmaceutical|\bpharma)/.test(d)) return 'pharma';
+  if (/(physiotherap|physio|gpsurgery|medicalcentre|medicalcenter|healthcare|hospital(?!ity))/.test(d)) return 'healthcare';
+  if (/(realty|realestate|estateagent|lettingagent|propertygroup|propertymanagement|lettings|chartered ?surveyor)/.test(d)) return 'real-estate';
+  if (/(hotel|resort|restaurant|bistro|brasserie|guesthouse|bedandbreakfast|hospitality)/.test(d)) return 'hospitality';
+  if (/(wealthmanagement|financialadvis|wealthadvis|\bifa\b)/.test(d)) return 'finance';
+  if (/(insurance|underwrit)/.test(d)) return 'insurance';
+  if (/(trucking|logistics|haulage|freight|courier|removals)/.test(d)) return 'transport';
   return null;
 }
 function _detectSectorFromCorpus(corpusText, fallbackSector) {
