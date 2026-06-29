@@ -12,7 +12,8 @@ const { askLLM } = require('./llm.js');
 let _router = null; try { _router = require('../llm/router.js'); } catch (_e) { /* fail-open to askLLM */ }
 const _PROFILE_CHAIN = [
   { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' }, // free 10k/day, own quota
-  { provider: 'groq', model: 'llama-3.3-70b-versatile' },                        // backstop
+  { provider: 'groq', model: 'llama-3.3-70b-versatile' },                        // backstop, separate quota
+  ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct' }] : []), // dormant free capacity, separate quota
   { provider: 'gemini', model: 'gemini-2.0-flash' },                             // final backstop
 ];
 async function _profileLLM(prompt, env) {

@@ -149,12 +149,36 @@ async function callGemini({ system, prompt, model, max_tokens, temperature }) {
   return { ok: true, text, latency_ms: latency, prompt_tokens: usage.promptTokenCount || 0, completion_tokens: usage.candidatesTokenCount || 0 };
 }
 
-// Default chain: free first, paid last.
+// NVIDIA NIM — free, OpenAI-compatible, Llama-3.3-70B, on a SEPARATE quota from Cloudflare/Groq. Dormant capacity:
+// NIM_API_KEY is set but the router never used it (only the legacy askLLM did). Adding it multiplies free headroom
+// so a Cloudflare/Groq concurrency-429 falls over to a provider that is NOT also saturated by the same burst.
+async function callNIM({ system, prompt, model, max_tokens, temperature, json }) {
+  const t0 = Date.now();
+  const body = { model, messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }], max_tokens: max_tokens || 1024, temperature: typeof temperature === 'number' ? temperature : 0.2 };
+  if (json) body.response_format = { type: 'json_object' };
+  let res;
+  try {
+    res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST', headers: { 'Authorization': `Bearer ${process.env.NIM_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(LLM_TIMEOUT_MS)
+    });
+  } catch (e) { return { ok: false, latency_ms: Date.now() - t0, error: `nim_fetch_${String(e && e.name || e).slice(0,40)}` }; }
+  const latency = Date.now() - t0;
+  const data = await res.json().catch(() => null);
+  if (!res.ok) return { ok: false, latency_ms: latency, error: `nim_http_${res.status}_${JSON.stringify(data).slice(0,200)}` };
+  const text = data.choices?.[0]?.message?.content || '';
+  const usage = data.usage || {};
+  return { ok: true, text, latency_ms: latency, prompt_tokens: usage.prompt_tokens || 0, completion_tokens: usage.completion_tokens || 0 };
+}
+
+// Default chain: free first, paid last. NIM inserted as an extra free, separate-quota tier before Gemini.
+const _NIM_MODEL = process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct';
 const DEFAULT_CHAIN = [
   { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
   { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct' },
   { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
   { provider: 'groq',       model: 'llama-3.1-8b-instant' },
+  ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
   { provider: 'gemini',     model: 'gemini-2.0-flash' }
 ];
 
@@ -201,6 +225,7 @@ async function run(args) {
   const _callRaw = async (step) => {
     if (step.provider === 'cloudflare') return callCloudflare({ system, prompt, model: step.model, max_tokens, temperature, json });
     if (step.provider === 'groq') return callGroq({ system, prompt, model: step.model, max_tokens, temperature, json });
+    if (step.provider === 'nim') return callNIM({ system, prompt, model: step.model, max_tokens, temperature, json });
     if (step.provider === 'gemini') return callGemini({ system, prompt, model: step.model, max_tokens, temperature });
     return null;
   };
