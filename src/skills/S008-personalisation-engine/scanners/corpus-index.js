@@ -42,6 +42,19 @@ function splitSentences(text) {
   return String(text || '').split(/[.!?•\n␞]+/).map(s => s.trim()).filter(Boolean);
 }
 
+// Extract the visible TEXT of testimonial/review regions from RAW HTML (before stripping), so the index can mark which
+// sentences are a CUSTOMER'S words. A prohibit/claims rule (e.g. "guaranteed", "Harvard-approved") must never quote a
+// review as if the FIRM made the claim — that was the misattributed-quote bug. Conservative: only well-known
+// review-container markup + schema.org Review. (testimonial-guard-20260629)
+function _testimonialText(html) {
+  const h = String(html || ''); const out = []; let m, guard = 0;
+  const rx = /<(blockquote|figure|div|section|article|li|aside|span)[^>]*(?:class|id|itemprop|itemtype)\s*=\s*["'][^"']*(?:testimonial|reviews?|rating|feedback|client-?say|patient-?say|customer-?say|what-?(?:our-)?\w+-?say|trustpilot|google-?review|wp-block-quote|quote-author|review-?body|star-?rating)[^"']*["'][^>]*>([\s\S]{0,3000}?)<\/\1>/gi;
+  while ((m = rx.exec(h)) && guard++ < 120) out.push(_stripText(m[2]));
+  const rx2 = /"@type"\s*:\s*"Review"[\s\S]{0,1800}?"reviewBody"\s*:\s*"([^"]{0,900})"/gi;
+  while ((m = rx2.exec(h)) && guard++ < 200) out.push(_stripText(m[1]));
+  return out.join(' ␞ ').toLowerCase();
+}
+
 // Build the per-site word index ONCE (right after the corpus is gathered).
 function buildCorpusIndex(corpus) {
   const segments = []; const parts = []; let gLen = 0; let capped = false;
@@ -49,6 +62,7 @@ function buildCorpusIndex(corpus) {
   // to the index (the every-page guarantee). A per-page budget bounds any one huge page from crowding the rest out.
   for (let p = 0; p < (corpus || []).length && gLen < JOIN_CAP; p++) {
     const url = corpus[p].url;
+    const tText = _testimonialText(corpus[p].body || '');   // customer-review text on this page (lowercased)
     const lines = splitSentences(_stripText(corpus[p].body || ''));
     let pageLen = 0;
     for (let li = 0; li < lines.length; li++) {
@@ -57,7 +71,9 @@ function buildCorpusIndex(corpus) {
       const gStart = gLen;
       const piece = line + ' ';
       parts.push(piece); gLen += piece.length; pageLen += piece.length;
-      segments.push({ pageIdx: p, url, lineIdx: li, gStart, gEnd: gLen, text: line, prose: _isProse(line) });
+      // A sentence ≥20 chars that appears verbatim inside the page's testimonial regions is a customer's words.
+      const testimonial = line.length >= 20 && tText.length > 0 && tText.includes(line.toLowerCase());
+      segments.push({ pageIdx: p, url, lineIdx: li, gStart, gEnd: gLen, text: line, prose: _isProse(line), testimonial });
       if (gLen >= JOIN_CAP) { capped = true; break; } // absolute ceiling only
     }
     parts.push(RS); gLen += RS.length; // page boundary so no quote crosses pages
@@ -79,7 +95,7 @@ function locateSegment(segments, offset) {
 
 // Run a rule's regex across the WHOLE site in one pass; return every located occurrence (capped for safety).
 // `proseOnly` keeps only genuine sentences (drops nav/footer boilerplate) for client-facing evidence.
-function scanRuleGlobal(re, index, { max = 500, proseOnly = false } = {}) {
+function scanRuleGlobal(re, index, { max = 500, proseOnly = false, skipTestimonial = false } = {}) {
   let rx;
   // force a clean GLOBAL flag set — drop any sticky('y') or duplicate 'g' so lastIndex stepping can't anchor/mis-scan
   try { rx = new RegExp(re.source, 'g' + String(re.flags || '').replace(/[gy]/g, '')); } catch (_e) { return []; }
@@ -87,7 +103,8 @@ function scanRuleGlobal(re, index, { max = 500, proseOnly = false } = {}) {
   while ((m = rx.exec(index.joined)) && guard++ < 200000) {
     if (m.index === rx.lastIndex) rx.lastIndex++; // zero-width-match guard
     const seg = locateSegment(index.segments, m.index);
-    if (seg && (!proseOnly || seg.prose)) out.push({ url: seg.url, line_index: seg.lineIdx, matched: String(m[0]).slice(0, 80), line: seg.text, prose: seg.prose });
+    // skipTestimonial: never attribute a customer's review sentence to the firm (claims/prohibit rules).
+    if (seg && (!proseOnly || seg.prose) && !(skipTestimonial && seg.testimonial)) out.push({ url: seg.url, line_index: seg.lineIdx, matched: String(m[0]).slice(0, 80), line: seg.text, prose: seg.prose });
     if (out.length >= max) break;
   }
   return out;
