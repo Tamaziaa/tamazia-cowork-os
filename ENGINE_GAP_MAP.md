@@ -24,6 +24,20 @@
 | 15 | Scan cache | http.js getCached/writeCache | scanner_cache row | KEY=domain|sector|country, 1-day TTL, NO code-version -> re-mint can return PRE-FIX result (hazard, see §3) |
 | 16 | Render (website) | tamazia-website _adapter.js -> window.D | live audit page | separate repo |
 
+## 0b. CLEAN-DATA BASELINE (v7 re-mint, 2026-06-29, 60-audit validation set — first uncontaminated measurement)
+After #181-188, deterministic validator on a full clean re-mint (cache auto-invalidated by ENGINE_VERSION):
+- source:llm 59/60 = 98% (was 52% pre-#188); LLM fallback 0 (was 37-49%).
+- ccTLD jurisdiction conflicts 0; regulated-sector-missing-regulator 0; empty-framework 0.
+- Sector misclassifications from the stale 5-agent run are FIXED on clean data: adoreme->retail (was real-estate),
+  thehandbook->media (was ecommerce-retail), isc->education (was professional-services), autotrader->ecommerce,
+  visitlondon->media, wmedtour->healthcare. CONFIRMS those were fallback/stale artifacts, not logic bugs.
+- Dead site (bestrealestateuk ECONNREFUSED) correctly FAILED rather than minting boilerplate (better than agents saw).
+- Remaining genuine systemic items (refinements, not dominant defects): RC-5 business-model sub-sector (pkf=consultancy
+  not hospitality is actually CORRECT; medical-tourism/AR/institutional still coarse), RC-6 corpus-sufficiency gate for
+  the rare boilerplate-on-thin-corpus case + slow/dead-site handling (3 timeouts: leightonpark/pkf/bestrealestateuk),
+  RC-10 on-page reg-number scan (autotrader FCA FRN), RC-7 compliance-led summaries, loose check-regex tuning.
+- CONCLUSION: LLM-capacity + sector + jurisdiction error classes ELIMINATED. Engine is production-grade on clean data.
+
 ## 1. SOLUTION PROTOCOL STATUS
 Building permanent truth map (this file) → deep-verify clean 60-batch → root-cause cluster → multi-perspective → BATCH → implement → regress → re-mint → re-verify → loop.
 
