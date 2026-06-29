@@ -1,8 +1,8 @@
--- Phase 4.1 — VERIFIED recent enforcement actions for the framework-intelligence catalogue.
+-- Phase 4.1, VERIFIED recent enforcement actions for the framework-intelligence catalogue.
 -- Each row below was independently researched and cross-checked against the regulator's own publication or reputable
 -- press; the source URL is stored for provenance. Frameworks with NO verifiable recent action are deliberately left
 -- NULL (UK_COMPANIES_ACT s.82, UK_FCA_CONSUMER_DUTY [no completed Duty fine exists yet], UK_FOS_FSCS, UK_ARLA,
--- UAE_PDPL [executive regulations pending], US_FTC_FAKE_REVIEWS [Rytr order vacated Dec 2025]) — the render falls back
+-- UAE_PDPL [executive regulations pending], US_FTC_FAKE_REVIEWS [Rytr order vacated Dec 2025]), the render falls back
 -- to honest generic prose for those. No enforcement claim is stored unverified. ADDITIVE update of existing rows only.
 UPDATE framework_intelligence AS fi SET
   recent_enforcement = v.enf,
@@ -103,7 +103,7 @@ FROM (VALUES
  'https://pre.hillingdon.gov.uk/news/article/59/uxbridge-restaurant-fined-more-than-40-000-after-allergen-contamination-led-to-customer-being-hospitalised'),
 
 ('US_FTC',
- 'In 2024 the FTC, via a DOJ referral, charged security-camera maker Verkada over sending more than 30 million commercial emails that failed to honour unsubscribe requests and omitted a physical address, resulting in a US$2.95m civil penalty — its largest CAN-SPAM penalty.',
+ 'In 2024 the FTC, via a DOJ referral, charged security-camera maker Verkada over sending more than 30 million commercial emails that failed to honour unsubscribe requests and omitted a physical address, resulting in a US$2.95m civil penalty, its largest CAN-SPAM penalty.',
  'https://www.ftc.gov/news-events/news/press-releases/2024/08/ftc-takes-action-against-security-camera-firm-verkada-over-charges-it-failed-secure-videos-other'),
 
 ('US_FTC_ENDORSE',

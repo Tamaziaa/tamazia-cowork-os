@@ -1,4 +1,4 @@
--- Phase 4.1 follow-up — additional curated framework-intelligence rows for golden-set coverage gaps
+-- Phase 4.1 follow-up, additional curated framework-intelligence rows for golden-set coverage gaps
 -- (DIFC data protection, FOS/FSCS disclosure, FCA high-risk-investment promotions, UAE ICT/health-data law).
 -- ADDITIVE; same table as 20260629_framework_intelligence.sql. recent_enforcement filled by the verified pass.
 INSERT INTO framework_intelligence (framework_short, key_obligations, regulator_focus, recent_guidance, reviewed_at) VALUES

@@ -1,4 +1,4 @@
--- Phase 4.1 — Curated regulatory-intelligence catalogue (ADDITIVE: new table, touches no existing audit-engine table).
+-- Phase 4.1, Curated regulatory-intelligence catalogue (ADDITIVE: new table, touches no existing audit-engine table).
 -- One row per framework_short. Powers the screened/applicable regulatory-intelligence block in the audit render:
 -- 5-7 key obligations the regulator assesses + the regulator's review focus + a recent legislative/guidance change.
 -- recent_enforcement is filled SEPARATELY by a verified research pass (no enforcement claim is stored unverified).
@@ -229,7 +229,7 @@ Hold and display client-money-protection scheme membership.
 Provide material information on property listings and avoid misleading descriptions.
 Handle client money and deposits in line with the scheme rules.',
 'National Trading Standards'' estate and letting agency team and Propertymark focus on fee transparency, client-money protection and material information on listings.',
-'National Trading Standards has issued phased guidance (Parts A-C) requiring "material information" — including price, tenure and known issues — on all property listings.',
+'National Trading Standards has issued phased guidance (Parts A-C) requiring "material information", including price, tenure and known issues, on all property listings.',
 '2026-06-29'),
 
 ('UK_TPO',
