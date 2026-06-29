@@ -14,7 +14,7 @@ const GOLDEN = [
   { domain: 'coutts.com',          sector: 'finance',    country: 'UK', expect: ['UK_FCA_CONDUCT', 'UK_DPA_2018', 'UK_PECR'],            issuer: false, child: false },
   { domain: 'towerclinicuae.com',  sector: 'dental',     country: 'AE', expect: ['UAE_DHA', 'UAE_PDPL'],                                 issuer: false, child: false },
   { domain: 'royalarmouriesevents.co.uk', sector: 'hospitality', country: 'UK', expect: ['UK_DPA_2018', 'UK_PECR', 'UK_CMA'],            issuer: false, child: false },
-  { domain: 'bnsluxury.com',       sector: 'real-estate', country: 'US', expect: ['US_FAIR_HOUSING', 'US_CPRA'],                         issuer: false, child: false },
+  { domain: 'bnsluxury.com',       sector: 'real-estate', country: 'US', expect: ['US_FAIR_HOUSING', 'US_FTC'],                          issuer: false, child: false },
 ];
 const NON_FINING = /EQUALITY|GOOGLE_EEAT|ASA|RICS|ABI|GMC|GDC|VOLUNTARY|ACCA|ICAEW|CE_PLUS/i;
 
