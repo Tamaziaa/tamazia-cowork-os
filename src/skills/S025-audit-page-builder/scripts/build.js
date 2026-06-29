@@ -12,6 +12,17 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+
+// MINT RESILIENCE: a site behind a WAF (e.g. Azure-fronted bank sites) can RESET an HTTP/2 stream mid-crawl. Because
+// PSI fetches mobile+desktop as PARALLEL HTTP/2 streams, the non-awaited stream then emits an 'error' on an orphaned
+// body with no listener, which crashes the ENTIRE mint (observed on coutts.com: UND_ERR_SOCKET, identical byte offset
+// both attempts). These are non-critical crawl fetches whose absence the render already tolerates (partial PSI). Swallow
+// ONLY benign network/stream errors so the mint completes with what it gathered; re-throw everything else so real bugs
+// still surface. (mint-resilience-20260629)
+const _BENIGN_NET = /UND_ERR_SOCKET|ECONNRESET|ERR_HTTP2|other side closed|terminated|socket hang up|EPIPE|ECONNREFUSED|ETIMEDOUT|UND_ERR_CONNECT/i;
+const _isBenignNet = (e) => { try { return _BENIGN_NET.test(String((e && (e.code || e.message)) || '')); } catch (_) { return false; } };
+process.on('uncaughtException', (e) => { if (_isBenignNet(e)) { try { console.error('[mint] swallowed benign network error:', (e && (e.code || e.message))); } catch (_) {} return; } throw e; });
+process.on('unhandledRejection', (e) => { if (_isBenignNet(e)) { try { console.error('[mint] swallowed benign rejection:', (e && (e.code || e.message))); } catch (_) {} return; } throw e; });
 const { scanSite } = require(require('path').resolve(__dirname, '..', '..', '..', '..', 'src', 'lib', 'audit', 'site-scan.js'));
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
