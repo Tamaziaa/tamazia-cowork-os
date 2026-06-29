@@ -853,6 +853,10 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       // Suppress unverifiable privacy-disclosure misses when the policy is JS-rendered/embedded (false-positive guard).
       if (privacyUnreadable && PRIVACY_FW.has(r.framework_short) && (r.rule_type === 'must_appear' || !r.rule_type)) { suppressedPrivacy++; continue; }
       if (out.fine_low_gbp || out.fine_high_gbp) { out.verify_context = ((PRIVACY_FW.has(out.framework) && _policyText) ? _policyText : _homeText) || _homeText; }
+      // Grounding guarantee (single chokepoint): every miss reaching a client must carry evidence — a quote, or an
+      // absence_evidence with a state ("what's on your page vs what's missing"). If a rule's nearest-miss search came
+      // back empty, record an honest requirement_absent state so no finding is ever shown without grounding.
+      if (!String(out.evidence_quote || '').trim()) { const ae = out.absence_evidence || {}; if (!ae.nearest_quote && !ae.state) { ae.state = 'requirement_absent'; ae.requirement = out.description || ''; ae.pages_checked = (corpus || []).length; out.absence_evidence = ae; } }
       misses++; findings.push(out);
     }
     // Drop irrelevant rules — trigger_absent, not_applicable_to_sector, no_prohibited_pattern.
