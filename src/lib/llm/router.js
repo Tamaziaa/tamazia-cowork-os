@@ -19,6 +19,23 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
+
+// Process-global LLM concurrency gate. Free providers (Cloudflare Workers AI, Groq) 429 on simultaneous requests, so
+// a burst of parallel mints each making several LLM calls saturates them. This semaphore caps in-flight LLM requests
+// to a small width (default 2) so calls are serialised into separate time slices; combined with retry+backoff in run()
+// it converts the concurrency-429 storm into near-100% success. Tunable via LLM_MAX_CONCURRENCY.
+const _LLM_CONC = Math.max(1, parseInt(process.env.LLM_MAX_CONCURRENCY || '2', 10));
+let _llmActive = 0;
+const _llmQueue = [];
+function _llmAcquire() {
+  if (_llmActive < _LLM_CONC) { _llmActive++; return Promise.resolve(); }
+  return new Promise((resolve) => _llmQueue.push(resolve));
+}
+function _llmRelease() {
+  _llmActive--;
+  const next = _llmQueue.shift();
+  if (next) { _llmActive++; next(); }
+}
 // Per-provider network timeout. Without it, a stalled LLM socket hangs the whole chain (no fallover).
 const LLM_TIMEOUT_MS = Math.max(1000, Number(process.env.LLM_TIMEOUT_MS || 30000));
 function pgPath() { return path.resolve(ROOT, 'scripts', 'psql'); }
@@ -174,13 +191,34 @@ async function run(args) {
     return { ok: false, error: 'budget_exhausted_for_today', text: '' };
   }
 
+  // Free providers (Cloudflare Workers AI, Groq) rate-limit hard on CONCURRENCY — a burst of simultaneous mints all
+  // get HTTP 429 even though the daily VOLUME quota is nowhere near exhausted, and a 429 clears in ~1s. Without retry
+  // a single 429 falls straight through the whole chain to empty -> source:fallback (measured ~50% under load). So we
+  // retry each provider a few times with JITTERED exponential backoff; the jitter de-synchronises the burst so the
+  // retries land in different time slices and most succeed. Paid/quota providers (gemini) get a single attempt.
+  const _retryable = (e) => /_429_|_5\d\d_|timeout|fetch_|AbortError|capacity|overloaded/i.test(String(e || ''));
+  const _sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  const _callRaw = async (step) => {
+    if (step.provider === 'cloudflare') return callCloudflare({ system, prompt, model: step.model, max_tokens, temperature, json });
+    if (step.provider === 'groq') return callGroq({ system, prompt, model: step.model, max_tokens, temperature, json });
+    if (step.provider === 'gemini') return callGemini({ system, prompt, model: step.model, max_tokens, temperature });
+    return null;
+  };
+  // CONCURRENCY GATE: the free providers 429 on simultaneous requests (burst of CONC mints x several LLM calls each),
+  // and retrying without limiting concurrency just re-collides. A process-global semaphore serialises LLM calls to a
+  // small width so each request lands in its own slice and the daily-volume quota (not concurrency) is the only limit.
+  const _callStep = async (step) => { await _llmAcquire(); try { return await _callRaw(step); } finally { _llmRelease(); } };
   let lastErr = null;
   for (const step of chain) {
-    let r;
-    if (step.provider === 'cloudflare') r = await callCloudflare({ system, prompt, model: step.model, max_tokens, temperature, json });
-    else if (step.provider === 'groq')  r = await callGroq({ system, prompt, model: step.model, max_tokens, temperature, json });
-    else if (step.provider === 'gemini') r = await callGemini({ system, prompt, model: step.model, max_tokens, temperature });
-    else continue;
+    let r = null;
+    const maxAttempts = step.provider === 'gemini' ? 1 : 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      r = await _callStep(step);
+      if (!r) break;
+      if ((r.ok && r.text && String(r.text).trim()) || !_retryable(r.error) || attempt === maxAttempts - 1) break;
+      await _sleep(400 + attempt * 700 + Math.floor(Math.random() * 800)); // jittered backoff: ~0.4-1.2s, 1.1-1.9s
+    }
+    if (!r) continue;
 
     const cost = ledger({
       provider: step.provider, model: step.model,
