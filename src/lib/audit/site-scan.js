@@ -159,7 +159,7 @@ async function _pageSpeedOne(domain, key, strategy) {
   for (let i = 0; i < 2; i++) {
     let status = 0;
     try {
-      const r = await timed((signal) => fetch(u, { signal }), 20000);
+      const r = await timed((signal) => fetch(u, { signal }), 28000);  // Phase 5.3: 20s->28s so slow sites' PSI completes
       status = r.status;
       if (r.ok) {
         const j = await r.json();

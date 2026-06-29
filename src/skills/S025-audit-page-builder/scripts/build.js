@@ -256,13 +256,14 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
   let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
-  // 90s hard cap on scanSite: PSI (42s max) + remaining probes (wikidata, spell, extra-scanners) all finish
-  // well within 90s. If a site somehow stalls every probe, we fail-open and mint with compliance data only.
+  // 120s hard cap on scanSite (Phase 5.3): PSI (now ~58s max per the 28s/strategy raise) + remaining probes (wikidata,
+  // spell, extra-scanners) finish within it, so both mobile+desktop PSI populate on slow sites. If a site stalls every
+  // probe, we fail-open and mint with compliance data only. Throughput stays well above the >2000/day target.
   try {
     let _scanTo;
     scan = await Promise.race([
       scanSite({ domain, sector, env }),
-      new Promise((_, rej) => { _scanTo = setTimeout(() => rej(new Error('scanSite hard timeout')), 90000); }),
+      new Promise((_, rej) => { _scanTo = setTimeout(() => rej(new Error('scanSite hard timeout')), 120000); }),
     ]);
     clearTimeout(_scanTo);
   } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
