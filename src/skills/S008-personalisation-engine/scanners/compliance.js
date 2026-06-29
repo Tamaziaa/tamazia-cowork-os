@@ -71,14 +71,17 @@ function loadRules({ frameworks }) {
            COALESCE(enforce_methodology,'') AS enf_method,
            COALESCE(enforce_context,'') AS enf_ctx,
            COALESCE(enforce_max_rare::text,'') AS enf_rare,
-           COALESCE(statutory_citation,'') AS stat_cite
+           COALESCE(statutory_citation,'') AS stat_cite,
+           COALESCE(check_style,'') AS check_style,
+           COALESCE(regex_elements::text,'') AS regex_elements,
+           COALESCE(page_scope,'') AS page_scope
     FROM compliance_rules
     WHERE framework_short IN (${inList}) AND active = TRUE
     ORDER BY CASE severity WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 ELSE 2 END, framework_short, rule_id`;
   const raw = pg(sql);
   if (!raw) return [];
   return raw.split('\n').filter(Boolean).map(line => {
-    const [id, fw, rid, desc, pat, urlCheck, sev, cite, ruleType, triggerPat, sectorsStr, fineLow, fineHigh, layman, tamaziaFix, svcPath, tier, enforcement, penaltyBasis, penaltyNote, enfLow, enfHigh, enfMethod, enfCtx, enfRare, statCite] = line.split('\t');
+    const [id, fw, rid, desc, pat, urlCheck, sev, cite, ruleType, triggerPat, sectorsStr, fineLow, fineHigh, layman, tamaziaFix, svcPath, tier, enforcement, penaltyBasis, penaltyNote, enfLow, enfHigh, enfMethod, enfCtx, enfRare, statCite, checkStyle, regexElements, pageScope] = line.split('\t');
     return {
       id: Number(id), framework_short: fw, rule_id: rid, description: desc,
       regex_pattern: pat === '' || pat === 'NULL' ? null : pat,
@@ -101,7 +104,10 @@ function loadRules({ frameworks }) {
       enforce_methodology: enfMethod || null,
       enforce_context: enfCtx || null,
       enforce_max_rare: enfRare === 't' || enfRare === 'true',
-      statutory_citation: statCite || null
+      statutory_citation: statCite || null,
+      check_style: checkStyle && checkStyle !== 'NULL' ? checkStyle : null,
+      regex_elements: (() => { try { return regexElements && regexElements !== '' && regexElements !== 'NULL' ? JSON.parse(regexElements) : null; } catch (_e) { return null; } })(),
+      page_scope: pageScope && pageScope !== 'NULL' ? (pageScope || null) : null
     };
   });
 }
@@ -113,7 +119,12 @@ const POLICY_PATHS = [
   '/careers', '/case-studies', '/news', '/press', '/investors', '/sustainability',
   '/security', '/accessibility', '/global', '/locations', '/offices', '/team',
   '/leadership', '/clients', '/services', '/sectors', '/markets', '/regions',
-  '/why-us', '/work', '/insights', '/blog'
+  '/why-us', '/work', '/insights', '/blog',
+  // Phase 3a — fee/pricing/checkout pages (the SRA price-transparency / consumer drip-pricing surface) that were
+  // never guessed before, so element-checklist rules can assess the page they actually live on.
+  '/fees', '/our-fees', '/pricing', '/prices', '/price', '/costs', '/fees-and-pricing',
+  '/fees-pricing', '/our-pricing', '/pricing-and-fees', '/tariff', '/quote', '/get-a-quote',
+  '/checkout', '/cart', '/basket', '/book', '/booking'
 ];
 
 function _sameHost(u, domain) {
@@ -504,10 +515,49 @@ function _absenceEvidence(pool, corpus, rule) {
   };
 }
 
+// Scope a rule to the page type(s) it should be assessed on (page_scope = a regex matched against the URL, e.g.
+// 'fees|pricing|price|cost'). Falls back to the whole corpus when no scoped page exists, so the assessment is never
+// silently skipped — an element genuinely absent everywhere is still a real miss. (Phase 3a)
+function _scopePool(corpus, scope) {
+  if (!scope) return corpus;
+  let rx; try { rx = new RegExp(scope, 'i'); } catch (_e) { return corpus; }
+  const scoped = corpus.filter(c => rx.test(c.url));
+  return scoped.length ? scoped : corpus;
+}
+
 function ruleCheck(rule, corpus, sector, corpusIndex) {
   // Sector relevance gate: if the rule has a sector list and our sector isn't in it, skip.
   if (rule.sectors && rule.sectors.length > 0 && sector && !rule.sectors.includes(sector)) {
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'not_applicable_to_sector' };
+  }
+  // ELEMENT CHECKLIST (Phase 3a): one rule, MULTIPLE required elements on a page type. Reports which elements are
+  // present (with a verbatim quote as proof) and which are missing — the "you show A and B but not VAT or timescales"
+  // evidence a real lawyer raises, instead of a single pass/fail regex. Optional trigger_pattern gates relevance
+  // (e.g. only assess price-transparency when the firm actually publishes fees).
+  if (rule.check_style === 'element_checklist' && Array.isArray(rule.regex_elements) && rule.regex_elements.length) {
+    let triggerEvidence = null;
+    if (rule.trigger_pattern) {
+      let trRe = null; try { trRe = new RegExp(rule.trigger_pattern, 'i'); } catch (_e) { trRe = null; }
+      if (trRe) {
+        let triggered = false;
+        for (const c of corpus) { const m = c.body.match(trRe); if (m) { triggered = true; const q = _extractQuote(c.body, trRe); triggerEvidence = { url: c.url, quote: q && q.quote, snippet: (q && q.matched) || m[0].slice(0, 80) }; break; } }
+        if (!triggered) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'trigger_absent' };
+      }
+    }
+    const pool = _scopePool(corpus, rule.page_scope);
+    const elements = [];
+    for (const el of rule.regex_elements) {
+      let elRe = null; try { elRe = new RegExp(el.pattern, 'i'); } catch (_e) { elRe = null; }
+      let present = false, quote = null, url = null;
+      if (elRe) { for (const c of pool) { const m = c.body.match(elRe); if (m) { present = true; const q = _extractQuote(c.body, elRe); quote = (q && q.quote) || m[0].slice(0, 140); url = c.url; break; } } }
+      elements.push({ label: el.label, present, quote: present ? quote : null, url });
+    }
+    const missing = elements.filter(e => !e.present).map(e => e.label);
+    const present = elements.filter(e => e.present).map(e => e.label);
+    if (!missing.length) {
+      return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'hit', description: rule.description, citation_url: rule.citation_url, elements, present_elements: present, evidence_url: (elements.find(e => e.url) || {}).url };
+    }
+    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: 'element_checklist', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, enforce_typical_low_gbp: rule.enforce_typical_low_gbp, enforce_typical_high_gbp: rule.enforce_typical_high_gbp, enforce_methodology: rule.enforce_methodology, enforce_context: rule.enforce_context, enforce_max_rare: rule.enforce_max_rare, statutory_citation: rule.statutory_citation, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, elements, present_elements: present, missing_elements: missing, evidence_url: (elements.find(e => e.url) || {}).url, evidence_quote: (elements.find(e => e.present && e.quote) || {}).quote || null, trigger_evidence: triggerEvidence, checked_urls: pool.map(c => c.url), absence_evidence: _absenceEvidence(pool, corpus, rule) };
   }
   if (!rule.regex_pattern) {
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'unknown', description: rule.description, citation_url: rule.citation_url };
@@ -605,7 +655,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v7-2026-06-29';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v8-2026-06-29-elements';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
@@ -920,4 +970,4 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { scan, ruleCheck, gatherCorpus };
+module.exports = { scan, ruleCheck, gatherCorpus, loadRules };
