@@ -874,7 +874,8 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       layman_explanation: 'Your privacy/cookie policy loads only when JavaScript runs, so search engines, AI assistants (ChatGPT, Claude, Perplexity, Google AI) and many privacy tools cannot read it as text. We therefore could not verify it carries the GDPR Article 13 essentials (controller identity, purposes, lawful basis, retention, data-subject rights, the right to complain to the ICO). JavaScript-only legal content is also invisible to AI search engines that increasingly answer "is this firm trustworthy" questions.',
       tamazia_fix_short: 'Tamazia serves the privacy and cookie policy as crawlable server-rendered text and confirms every GDPR Article 13 disclosure is present.',
       evidence_url: (corpus.find(c => /privacy|data-protection/i.test(c.url)) || {}).url || ('https://' + domain + '/privacy'),
-      evidence: 'policy page present, only ' + _privacyAnchors + ' privacy anchor terms in static text (JS-rendered/embedded)' });
+      evidence: 'policy page present, only ' + _privacyAnchors + ' privacy anchor terms in static text (JS-rendered/embedded)',
+      absence_evidence: { state: 'page_unreadable', requirement: 'GDPR Article 13 disclosures rendered as crawlable static text', target_url: (corpus.find(c => /privacy|data-protection/i.test(c.url)) || {}).url || null, pages_checked: (corpus || []).length } });
   }
   // P2.2 cookie-policy vs actual-tracker diff (UK/EU only, so no cross-region leakage). Self-incriminating: undeclared trackers.
   try {
