@@ -419,6 +419,11 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
       evidence_quote: f.evidence_quote || null,
       checked_urls: Array.isArray(f.checked_urls) ? f.checked_urls.slice(0, 6) : null,
       absence_evidence: f.absence_evidence || null,   // A3 — real nearest-miss context (page + what's there vs missing)
+      // Element-checklist (Phase 3a): which required elements are present (with a quote) vs missing on the page, so the
+      // render can show "you show price and VAT but not timescales, key stages or who does the work".
+      elements: Array.isArray(f.elements) ? f.elements.slice(0, 12) : null,
+      missing_elements: Array.isArray(f.missing_elements) ? f.missing_elements : null,
+      present_elements: Array.isArray(f.present_elements) ? f.present_elements : null,
       rule_type: f.rule_type || null,
       fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
       penalty_basis: f.penalty_basis || null, penalty_note: f.penalty_note || null, enforce_typical_low_gbp: f.enforce_typical_low_gbp || null, enforce_typical_high_gbp: f.enforce_typical_high_gbp || null, enforce_methodology: f.enforce_methodology || null, enforce_context: f.enforce_context || null, enforce_max_rare: !!f.enforce_max_rare, statutory_citation: f.statutory_citation || null,

@@ -67,6 +67,13 @@ const TRIGGER_RX = {
   serves_eu: /\b(eu|european union|eea|europe|gdpr)\b/i,
   // F-1/F-2: MSA s.54 + HFSS turnover gate — triggers only for firms that self-disclose large-company status.
   uk_turnover_36m_plus: /\b(annual (turnover|revenue).{0,20}(£|gbp|million|m\b)|turnover (exceeds?|of) £\d|section 54 (statement|compliance)|ftse (100|250|350|all[- ]share)|transparency in supply chain(s)?|group (companies|annual report)|(?:£|gbp)\s?(?:3[6-9]|[4-9]\d|\d{3})\s*(?:m(?:illion)?|bn))\b/i,
+  // Entity-regulation flags — applies_when triggers for sector laws (SRA/FCA/CQC/GDC). Detected from the firm's own
+  // corpus so a genuinely-regulated firm passes the overlay's applies_when gate while an unregulated one is still
+  // gated. Conservative: a clear textual signal only. (entity-trigger-detect-20260629)
+  is_sra_regulated_firm: /solicitors regulation authority|\bsra\b[^a-z]{0,6}(no\b|number|id\b|ref|reg|authoris)|regulated by the (solicitors|sra)\b|sra[\s-]?(regulated|authoris)/i,
+  is_fca_regulated: /financial conduct authority|\bfca\b[^a-z]{0,6}(no\b|number|frn|ref|reg|authoris)|\bfrn\b[^a-z]{0,4}\d|regulated by the (financial conduct|fca)\b|authorised and regulated by the financial conduct authority/i,
+  is_cqc_registered: /care quality commission|\bcqc\b[^a-z]{0,6}(registered|regulated|rating|rated|inspect|provider id)/i,
+  is_gdc_registered: /general dental council|\bgdc\b[^a-z]{0,6}(no\b|number|registr)|gdc[\s-]?registered/i,
 };
 function deriveTriggers(corpusText = '', baseline = []) {
   const t = new Set(baseline);

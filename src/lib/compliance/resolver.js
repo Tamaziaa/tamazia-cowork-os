@@ -98,6 +98,17 @@ function _sectorAuthority() {
   try { const c = require('./connect.js'); _SECTOR_AUTH.uni = c.UNIVERSAL_FW || new Set(); _SECTOR_AUTH.rev = c.fwToSectors() || {}; } catch (_e) {}
   return _SECTOR_AUTH;
 }
+// The framework→sectors authority (connect.fwToSectors) uses the connect taxonomy ('law-firms', 'finance', …) while
+// buildSignals normalises to its own taxonomy ('legal', 'financial-services', …). Comparing the two raw was a silent
+// mismatch that dropped every sector-specific finding (e.g. SRA: rev='law-firms' vs sig.sector='legal') as
+// out_of_sector. Reconcile by also testing the jurisdiction-router's canonical form, which both taxonomies map to.
+let _normSec = null;
+function _canonSectorForms(sector) {
+  const forms = new Set([sector]);
+  try { if (_normSec === null) _normSec = require('./jurisdiction-router.js').normaliseSector || false; } catch (_e) { _normSec = false; }
+  if (_normSec) { try { forms.add(_normSec(sector)); } catch (_e) {} }
+  return forms;
+}
 function sectorExcluded(law, framework, sector) {
   if (!sector) return false;                       // unknown sector → never over-filter
   const { uni, rev } = _sectorAuthority();
@@ -105,7 +116,8 @@ function sectorExcluded(law, framework, sector) {
   if (framework) fws.push(framework);
   if (law && law.neon_framework_short) for (const t of String(law.neon_framework_short).split(',').map((s) => s.trim()).filter(Boolean)) fws.push(t);
   if (!fws.length) return false;                   // unknown framework → KEEP
-  for (const fw of fws) { if (uni.has(fw)) return false; const m = rev[fw]; if (m && m.has(sector)) return false; } // any universal/covering fw → KEEP
+  const forms = _canonSectorForms(sector);         // tolerate both sector taxonomies (legal ≡ law-firms)
+  for (const fw of fws) { if (uni.has(fw)) return false; const m = rev[fw]; if (m && [...forms].some((s) => m.has(s))) return false; } // any universal/covering fw → KEEP
   const known = fws.some((fw) => rev[fw] && rev[fw].size); // only DROP when the framework's sectors are actually known
   return known;                                    // sector-specific framework whose sector set excludes this firm
 }
@@ -124,7 +136,9 @@ function overlayDrop(law, { jurSet, employeeBand = 'unknown', trig, sector, fram
   if (sectorExcluded(law, framework, sector)) return 'out_of_sector';       // the structural sector gate (no wrong law for any sector)
   if (trig && (law.excluded_when || []).some((f) => trig.has(f))) return 'excluded';
   // F-2/F-1 fix: applies_when non-employee flags must be present in active triggers (mirrors resolveLaws line 69).
-  // High-threshold laws (MSA uk_turnover_36m_plus, HFSS employees_250_plus) drop when the signal is absent.
+  // High-threshold laws (MSA uk_turnover_36m_plus, HFSS employees_250_plus) drop when the signal is absent. Entity
+  // flags (is_sra_regulated_firm, …) are detected by buildSignals from the corpus, so a genuine SRA firm passes here
+  // while a non-regulated firm is still gated. (Keep this gate as-is; the sector-taxonomy fix above is the real bug.)
   if (trig && (law.applies_when || []).some((f) => !/employees?_/.test(f) && !trig.has(f))) return 'applies_when_trigger_absent';
   if (thresholdOk(law, employeeBand) === false) return 'below_employee_threshold';
   return null;
