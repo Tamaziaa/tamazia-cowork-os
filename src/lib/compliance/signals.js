@@ -117,12 +117,24 @@ function augmentFreezones(jurSet, corpusText = '') {
 }
 
 function buildSignals({ jurisdictions = [], sector, corpusText = '', employees, baseline = [] } = {}) {
-  return {
-    jurSet: augmentFreezones(toCanonicalJurisdictions(jurisdictions), corpusText),
-    sector: normalizeSector(sector, corpusText),
-    trig: deriveTriggers(corpusText, baseline),
-    employeeBand: employeeBand(employees),
-  };
+  const jurSet = augmentFreezones(toCanonicalJurisdictions(jurisdictions), corpusText);
+  const sec = normalizeSector(sector, corpusText);
+  const trig = deriveTriggers(corpusText, baseline);
+  // Jurisdiction/sector-aware applies_when flags, named to match the catalogue's flag vocabulary, so a genuinely
+  // applicable finding is not dropped by the overlay's applies_when gate (e.g. PECR needs sets_cookies_or_emarkets +
+  // serves_uk_users; UAE health-ad needs is_uae_healthcare_facility). Set ONLY on a clear signal. (applies-when-vocab)
+  const lc = String(corpusText || '').toLowerCase();
+  const arrHas = (rx) => (jurisdictions || []).some((j) => rx.test(String(j)));
+  const inUK = jurSet.has('UK') || arrHas(/united kingdom|britain|\buk\b|england|scotland|wales/i);
+  const inAE = jurSet.has('MENA-AE') || jurSet.has('AE') || arrHas(/united arab emirates|\buae\b|dubai|abu dhabi/i);
+  const inEU = jurSet.has('EU') || arrHas(/european union|\beea\b|europe/i);
+  if (trig.has('sets_cookies') || trig.has('sends_marketing_email') || /cookie|tracking|analytics|newsletter|marketing email/i.test(lc)) trig.add('sets_cookies_or_emarkets');
+  if (inUK) { trig.add('serves_uk_users'); trig.add('serves_uk'); }
+  if (inAE) { trig.add('serves_uae_users'); trig.add('serves_uae'); }
+  if (inEU) trig.add('serves_eu_users');
+  const MED = /aesthetic|dental|dentist|health|clinic|cosmetic|surgery|dermatolog|medical|patient|pharma/;
+  if (inAE && (MED.test(sec) || MED.test(lc))) trig.add('is_uae_healthcare_facility');
+  return { jurSet, sector: sec, trig, employeeBand: employeeBand(employees) };
 }
 
 module.exports = { buildSignals, toCanonicalJurisdictions, augmentFreezones, normalizeSector, deriveTriggers, employeeBand, JUR_MAP };
