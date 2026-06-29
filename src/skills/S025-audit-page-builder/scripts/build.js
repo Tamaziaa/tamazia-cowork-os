@@ -645,6 +645,10 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     trust_summary: { confirmed: _confirmed.length, needs_review: _needsReview.length },
     exec_summary,
     news_map: (() => { const nm = {}; const want = new Set((frameworks||[]).map(f=>String(f))); try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) { const fw = ln.slice(0, i); if (!want.size || want.has(fw)) nm[fw] = ln.slice(i + 1); } } } catch (_e) {} return nm; })(),
+    // Curated regulatory-intelligence per framework (obligations the regulator assesses + focus + a verified recent
+    // enforcement action + recent guidance). Returned as one JSON blob keyed by framework_short; the render attaches
+    // it to each framework card (breached or screened). Whole table (~35 rows) so screened + baseline laws are covered.
+    framework_intel: (() => { try { const r = pg("SELECT COALESCE(json_object_agg(framework_short, json_build_object('obligations', key_obligations, 'focus', regulator_focus, 'enforcement', recent_enforcement, 'enforcement_url', recent_enforcement_url, 'guidance', recent_guidance))::text, '{}') FROM framework_intelligence"); return r ? JSON.parse(r) : {}; } catch (_e) { return {}; } })(),
     keyword_map: keyword_map && keyword_map.ok ? keyword_map : null,
     ai_citation: ai_citation && ai_citation.ok ? ai_citation : null,
     scan: { scanned_at: scan.scanned_at, reachable: _assessable, site_scan_reachable: !!(scan && scan.reachable), final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
