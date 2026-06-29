@@ -601,7 +601,12 @@ function _detectCompromise(corpus, sector) {
 async function scan({ domain, sector, country, cache_max_age = 86400, signals = {} }) {
   domain = String(domain || '').toLowerCase();
   if (!domain) return { ok: false, error: 'domain_required' };
-  const cacheKey = `${domain}|${sector}|${country}`;
+  // ENGINE_VERSION in the cache key: scanner_cache stores the WHOLE scan (firm_profile + frameworks + findings), so a
+  // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
+  // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
+  // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v7-2026-06-29';
+  const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
 

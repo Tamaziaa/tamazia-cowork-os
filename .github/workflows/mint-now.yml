@@ -28,7 +28,7 @@ jobs:
       # Concurrency 5 (was 15): a 2-core GH runner starves at 15 concurrent builds (each does PSI 42s + LLM +
       # multi-page crawl), blowing the per-build clock — 53/80 golden re-mints timed out at 15. 5 concurrent x
       # 5-min cap drains reliably (~60-100/hr), far above the 200/day target. Reliability over raw burst.
-      MINT_CONCURRENCY: "5"
+      MINT_CONCURRENCY: "3"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
