@@ -158,6 +158,7 @@ function buildSignals({ jurisdictions = [], sector, corpusText = '', employees, 
   if (trig.has('b2c')) { trig.add('sells_to_consumers'); trig.add('has_commercial_content'); }
   if (trig.has('sends_marketing_email')) { trig.add('sends_commercial_email'); trig.add('markets_commercially'); }
   if (trig.has('takes_payment') || trig.has('b2c')) { trig.add('is_commercial_site'); trig.add('provides_online_service_or_sells'); }
+  try { const { derivePredicates } = require('./registry/predicates.js'); for (const p of derivePredicates({ sector: sec, jurSet, corpusText, trig })) trig.add(p); } catch (_e) {}
   return { jurSet, sector: sec, trig, employeeBand: employeeBand(employees) };
 }
 
