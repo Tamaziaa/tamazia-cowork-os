@@ -143,6 +143,7 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     if (!jurOK) { gates.jurisdiction_filtered.push(fw); continue; }
     // GATE B0 · framework-sector applicability (stops pharma/accounting/energy frameworks leaking into, say, a law firm)
     if (!fwSectorOK(fw, sec, byFw[fw])) { gates.sector_filtered.push(fw); continue; }
+    if (require('./registry/sector.js').subSectorExcludes(fw, sec, t)) { gates.sector_filtered.push(fw); continue; }
     // CAPABILITY GATE: capability-scoped frameworks require a real on-site signal or explicit mention.
     const _cap = CAP_GATE[fw];
     if (_cap && !((_cap.sig && sig[_cap.sig]) || (_cap.rx && _cap.rx.test(t)))) { gates.trigger_filtered.push(fw); continue; }

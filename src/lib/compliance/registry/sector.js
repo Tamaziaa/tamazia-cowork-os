@@ -58,5 +58,22 @@ function resolveSubSector(sector, corpusText=''){ const lc=String(corpusText||''
   for(const parent of order){ const node=TREE[parent]; for(const [subId,s] of Object.entries(node.sub)) if(s.detect.test(lc)) return { parent, sub:subId, regulators:node.regulators, predicates:s.predicates||[], frameworks:s.frameworks||[] }; }
   return p?{ parent:p, sub:null, regulators:TREE[p].regulators, predicates:[], frameworks:[] }:null; }
 function subSectorPredicates(sector, corpusText=''){ const r=resolveSubSector(sector,corpusText); return r?r.predicates:[]; }
+// Sub-sector-EXCLUSIVE frameworks (legally verified): each binds ONE sub-sector and must never attach to a sibling.
+// ABI = voluntary insurer trade body (V1 B7); HFEA = fertility regulator; SRA = solicitors; BSB = barristers.
+const SUB_EXCLUSIVE = {
+  UK_ABI:{parent:'finance',sub:'insurance'},
+  UK_HFEA:{parent:'healthcare',sub:'fertility-ivf'},
+  UK_BSB:{parent:'law-firms',sub:'barristers'},
+  UK_SRA_TRANSPARENCY:{parent:'law-firms',sub:'solicitors'},
+  UK_SRA_COC:{parent:'law-firms',sub:'solicitors'},
+};
+// true iff `framework` is sub-exclusive to a sub-sector that is a SIBLING of the firm's resolved sub-sector
+// (same parent, different sub). Conservative: never fires when the firm's sub is unknown or a different parent.
+function subSectorExcludes(framework, sector, corpusText='') {
+  const node = SUB_EXCLUSIVE[framework]; if (!node) return false;
+  const firm = resolveSubSector(sector, corpusText); if (!firm || !firm.sub) return false;
+  if (firm.parent !== node.parent) return false;
+  return firm.sub !== node.sub;
+}
 const SUB_SECTOR_IDS = Object.entries(TREE).flatMap(([p,n])=>Object.keys(n.sub).map(s=>p+'/'+s));
-module.exports = { TREE, resolveSubSector, subSectorPredicates, parentOf, SUB_SECTOR_IDS };
+module.exports = { TREE, resolveSubSector, subSectorPredicates, parentOf, subSectorExcludes, SUB_EXCLUSIVE, SUB_SECTOR_IDS };
