@@ -5,21 +5,8 @@
 
 // Engine code (markets.js / firm-profile) → canonical-law jurisdiction code(s). A country inside the EU also carries
 // the generic 'EU' so EU-wide laws (GDPR) attach; the country-specific code (EU-DE …) attaches its national laws.
-const JUR_MAP = {
-  UK: ['UK'], GB: ['UK'], GBR: ['UK'], EN: ['UK'],
-  US: ['USA'], USA: ['USA'],
-  EU: ['EU'], EEA: ['EU'],
-  FR: ['EU', 'EU-FR'], DE: ['EU', 'EU-DE'], ES: ['EU', 'EU-ES'], IT: ['EU', 'EU-IT'],
-  IE: ['EU'], NL: ['EU'], BE: ['EU'], PT: ['EU'], AT: ['EU'], PL: ['EU'], SE: ['EU'], DK: ['EU'], FI: ['EU'],
-  AE: ['MENA-AE'], UAE: ['MENA-AE'], DIFC: ['MENA-AE', 'MENA-AE-DIFC'], ADGM: ['MENA-AE', 'MENA-AE-ADGM'],
-  SA: ['MENA-SA'], KSA: ['MENA-SA'], QA: ['MENA-QA'], BH: ['MENA-BH'], KW: ['MENA-KW'],
-  OM: ['MENA-OM'], EG: ['MENA-EG'], JO: ['MENA-JO'], IL: ['MENA-IL'],
-};
-function toCanonicalJurisdictions(codes = []) {
-  const out = new Set();
-  for (const c of codes) for (const m of (JUR_MAP[String(c || '').toUpperCase()] || [])) out.add(m);
-  return out; // GLOBAL is implicitly covered by jurCovered(); no need to add it.
-}
+const { JUR_MAP } = require('./registry/jurisdiction.js');
+function toCanonicalJurisdictions(codes = []) { return require('./registry/jurisdiction.js').toCanonical(codes); }
 
 // Engine sector tag → one of the 20 canonical mapping sectors (best-effort; only used for the mapping-driven
 // resolveLaws sub-sector path + observability — the live overlay does not gate on sector).

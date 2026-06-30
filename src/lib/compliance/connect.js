@@ -6,8 +6,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 
-const EU_ISO = new Set(['AT','BE','BG','CY','CZ','DE','DK','EE','ES','FI','FR','GR','HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE','SI','SK']);
-function normJuris(j) { j = String(j || '').toUpperCase().trim(); if (j === 'GB' || j === 'GBR') return 'UK'; if (j === 'USA') return 'US'; if (j === 'UAE') return 'AE'; return j; }
+const { EU_ISO, normJuris } = require('./registry/jurisdiction.js');
 
 // Frameworks that apply to EVERY sector (privacy, cookies, consumer protection, equality, advertising, Google).
 const UNIVERSAL_FW = new Set([
