@@ -13,6 +13,8 @@ jobs:
         with: { node-version: '20' }
       - name: Legal-QA harness (blocks regressions vs golden baseline)
         run: node eval/guardrails.js --check
+      - name: Sub-sector tree assertions
+        run: node eval/subsector.test.js
       - name: Registry detector assertions
         run: node eval/registry.test.js
       - name: Producer assertions
