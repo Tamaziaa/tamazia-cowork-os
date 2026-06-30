@@ -1,0 +1,37 @@
+{
+ "id": "firm-05",
+ "region": "UK",
+ "sector": "healthcare",
+ "detected_sector": "healthcare",
+ "country": "UK",
+ "registered": "UK",
+ "operating_regions": [
+  "UK"
+ ],
+ "engine_jurisdictions": [],
+ "applicable_frameworks": [
+  "UK_GDPR_A13",
+  "UK_PECR",
+  "UK_ICO_COOKIES",
+  "UK_DPA_2018",
+  "GOOGLE_EEAT",
+  "UK_DMCC_2024",
+  "UK_COMPANIES_ACT",
+  "UK_CQC",
+  "UK_MHRA",
+  "UK_EQUALITY_2010"
+ ],
+ "jurisdiction_regimes": [
+  "UK GDPR + PECR",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 0,
+  "p2": 0,
+  "total": 0
+ },
+ "compliance_findings": [],
+ "trap": "S1,S40/S8"
+}

@@ -1,0 +1,98 @@
+{
+ "id": "firm-14",
+ "region": "US",
+ "sector": "real-estate",
+ "detected_sector": "real-estate",
+ "country": "US",
+ "registered": "US",
+ "operating_regions": [
+  "UK",
+  "EU",
+  "US",
+  "Middle East",
+  "Global"
+ ],
+ "engine_jurisdictions": [
+  "US",
+  "EU"
+ ],
+ "applicable_frameworks": [
+  "DE_BDSG",
+  "EU_EAA_2025",
+  "EU_EPRIVACY",
+  "EU_GDPR",
+  "FR_CNIL_2025",
+  "GOOGLE_EEAT",
+  "US_ADA",
+  "US_CCPA",
+  "US_FTC",
+  "US_FTC_ENDORSE",
+  "US_TCPA",
+  "US_VCDPA"
+ ],
+ "jurisdiction_regimes": [
+  "UK GDPR + PECR",
+  "EU GDPR + ePrivacy + EAA",
+  "CCPA/CPRA + ADA",
+  "UAE PDPL / DIFC DP",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 7,
+  "p2": 29,
+  "total": 36
+ },
+ "compliance_findings": [
+  {
+   "citation": "US_VCDPA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P3",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia adds the VCDPA rights and appeal process.",
+   "fact": "Virginia consumer rights + mandatory appeal process",
+   "enforcement_example": true
+  },
+  {
+   "citation": "EU GDPR + ePrivacy (cross-border)",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia implements an EU-grade consent gate and data-protection notice.",
+   "fact": "Serves EU clients but has no detectable EU-grade consent mechanism.",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US CCPA/CPRA",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P2",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia adds a CCPA-compliant notice and opt-out.",
+   "fact": "Serves US clients with no clear privacy/opt-out notice.",
+   "enforcement_example": true
+  },
+  {
+   "citation": "Multi-jurisdiction posture",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P2",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia maps each market to its regime and closes the gaps.",
+   "fact": "Operates across 5 regions (UK, EU, US, Middle East, Global) on one-size-fits-all compliance.",
+   "enforcement_example": true
+  }
+ ],
+ "trap": "S30"
+}

@@ -1,0 +1,143 @@
+{
+ "id": "firm-09",
+ "region": "ME",
+ "sector": "real-estate",
+ "detected_sector": "real-estate",
+ "country": "UAE",
+ "registered": "UAE",
+ "operating_regions": [
+  "Middle East"
+ ],
+ "engine_jurisdictions": [
+  "AE"
+ ],
+ "applicable_frameworks": [
+  "ADGM_DPR",
+  "DIFC_DPL",
+  "GOOGLE_EEAT",
+  "UAE_PDPL",
+  "UAE_RERA"
+ ],
+ "jurisdiction_regimes": [
+  "UAE PDPL / DIFC DP",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 6,
+  "p2": 40,
+  "total": 46
+ },
+ "compliance_findings": [
+  {
+   "citation": "UAE_RERA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 5000,
+   "fine_high_gbp": 50000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"RERA Law No. 7 of 2013 broker registration disclosure\" on your site so it satisfies RERA / DLD rules.",
+   "fact": "RERA Law No. 7 of 2013 broker registration disclosure",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UAE_RERA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 5000,
+   "fine_high_gbp": 50000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Trakheesi permit number visible on every advertised listing\" on your site so it satisfies RERA / DLD rules.",
+   "fact": "Trakheesi permit number visible on every advertised listing",
+   "enforcement_example": true
+  },
+  {
+   "citation": "DIFC_DPL",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": 40000,
+   "fine_high_gbp": 79000,
+   "fine_withheld": false,
+   "fix": "Tamazia confirms and evidences your DIFC Commissioner registration.",
+   "fact": "Registration with the DIFC Commissioner of Data Protection",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UAE_PDPL",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia documents each processing purpose and its PDPL legal basis in the notice.",
+   "fact": "Purposes and legal basis of processing stated",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UAE_RERA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia adds the Trakheesi permit number to every listing and wires it into your publishing flow.",
+   "fact": "Valid Trakheesi permit number on every property advertisement",
+   "enforcement_example": true
+  },
+  {
+   "citation": "DIFC_DPL",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": 40000,
+   "fine_high_gbp": 79000,
+   "fine_withheld": false,
+   "fix": "Tamazia adds a DIFC-compliant rights section and request workflow.",
+   "fact": "DIFC data subject rights disclosed",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UAE_PDPL",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia documents your international transfers and the PDPL safeguards.",
+   "fact": "Cross-border transfer of personal data outside the UAE disclosed",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UAE_PDPL",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P3",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia appoints/names a DPO and publishes the contact.",
+   "fact": "Data Protection Officer where required + contact",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK PECR + UK GDPR · cookie consent",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia installs a consent platform that blocks every non-essential tracker until opt-in, with a Reject-All button as prominent as Accept-All.",
+   "fact": "3 non-essential tracker(s) load with no detectable consent mechanism: Google Analytics (sets _ga, _gali, _ga_ — Analytics, controller Google); Google Tag Manage…",
+   "enforcement_example": true
+  }
+ ],
+ "trap": "S6/S7"
+}

@@ -1,0 +1,32 @@
+{
+ "id": "firm-06",
+ "region": "ME",
+ "sector": "media",
+ "detected_sector": "media",
+ "country": "UAE",
+ "registered": "UAE",
+ "operating_regions": [
+  "US",
+  "Middle East"
+ ],
+ "engine_jurisdictions": [
+  "AE"
+ ],
+ "applicable_frameworks": [
+  "GOOGLE_EEAT"
+ ],
+ "jurisdiction_regimes": [
+  "CCPA/CPRA + ADA",
+  "UAE PDPL / DIFC DP",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 2,
+  "p2": 31,
+  "total": 33
+ },
+ "compliance_findings": [],
+ "trap": "S6/S7,S40/S8"
+}

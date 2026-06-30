@@ -1,0 +1,122 @@
+[
+ {
+  "id": "firm-01",
+  "region": "UK",
+  "sector": "hospitality",
+  "country": "UK",
+  "frameworks": 13,
+  "findings": 9
+ },
+ {
+  "id": "firm-02",
+  "region": "UK",
+  "sector": "healthcare",
+  "country": "UK",
+  "frameworks": 22,
+  "findings": 9
+ },
+ {
+  "id": "firm-03",
+  "region": "UK",
+  "sector": "healthcare",
+  "country": "UK",
+  "frameworks": 10,
+  "findings": 0
+ },
+ {
+  "id": "firm-04",
+  "region": "UK",
+  "sector": "hospitality",
+  "country": "UK",
+  "frameworks": 10,
+  "findings": 4
+ },
+ {
+  "id": "firm-05",
+  "region": "UK",
+  "sector": "healthcare",
+  "country": "UK",
+  "frameworks": 10,
+  "findings": 0
+ },
+ {
+  "id": "firm-06",
+  "region": "ME",
+  "sector": "media",
+  "country": "UAE",
+  "frameworks": 1,
+  "findings": 0
+ },
+ {
+  "id": "firm-07",
+  "region": "ME",
+  "sector": "real-estate",
+  "country": "AE",
+  "frameworks": 6,
+  "findings": 0
+ },
+ {
+  "id": "firm-08",
+  "region": "ME",
+  "sector": "real-estate",
+  "country": "AE",
+  "frameworks": 11,
+  "findings": 0
+ },
+ {
+  "id": "firm-09",
+  "region": "ME",
+  "sector": "real-estate",
+  "country": "UAE",
+  "frameworks": 5,
+  "findings": 9
+ },
+ {
+  "id": "firm-10",
+  "region": "ME",
+  "sector": "real-estate",
+  "country": "AE",
+  "frameworks": 7,
+  "findings": 2
+ },
+ {
+  "id": "firm-11",
+  "region": "US",
+  "sector": "healthcare",
+  "country": "USA",
+  "frameworks": 11,
+  "findings": 20
+ },
+ {
+  "id": "firm-12",
+  "region": "US",
+  "sector": "real-estate",
+  "country": "US",
+  "frameworks": 11,
+  "findings": 5
+ },
+ {
+  "id": "firm-13",
+  "region": "US",
+  "sector": "real-estate",
+  "country": "USA",
+  "frameworks": 7,
+  "findings": 21
+ },
+ {
+  "id": "firm-14",
+  "region": "US",
+  "sector": "real-estate",
+  "country": "US",
+  "frameworks": 12,
+  "findings": 4
+ },
+ {
+  "id": "firm-15",
+  "region": "EU",
+  "sector": "law-firms",
+  "country": "NL",
+  "frameworks": 3,
+  "findings": 2
+ }
+]

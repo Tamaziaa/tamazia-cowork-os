@@ -23,3 +23,7 @@ db/seeds/*.upsert.sql
 .cache/
 node_modules
 .preflight_status
+
+# golden-set raw payloads (shadow oracle) + identity map — never commit
+eval/golden/.raw/
+eval/golden/_identities.local.json

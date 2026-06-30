@@ -1,0 +1,35 @@
+{
+ "id": "firm-07",
+ "region": "ME",
+ "sector": "real-estate",
+ "detected_sector": "real-estate",
+ "country": "AE",
+ "registered": "AE",
+ "operating_regions": [
+  "Middle East"
+ ],
+ "engine_jurisdictions": [
+  "AE"
+ ],
+ "applicable_frameworks": [
+  "GOOGLE_EEAT",
+  "UAE_AML_2018",
+  "UAE_ENV_2024",
+  "UAE_MOHRE",
+  "UAE_PDPL",
+  "UAE_RERA"
+ ],
+ "jurisdiction_regimes": [
+  "UAE PDPL / DIFC DP",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 0,
+  "p2": 0,
+  "total": 0
+ },
+ "compliance_findings": [],
+ "trap": "S6/S7,S40/S8"
+}
