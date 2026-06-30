@@ -13,5 +13,7 @@ jobs:
         with: { node-version: '20' }
       - name: Legal-QA harness (blocks regressions vs golden baseline)
         run: node eval/guardrails.js --check
+      - name: Producer assertions
+        run: node eval/producers.test.js
       - name: Predicate-producibility gate (informational until ledger 3.3)
         run: node eval/predicate-gate.js || echo "::warning::orphan predicates present (expected until phase 3.2 adds producers)"

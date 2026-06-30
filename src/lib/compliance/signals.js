@@ -134,6 +134,30 @@ function buildSignals({ jurisdictions = [], sector, corpusText = '', employees, 
   if (inEU) trig.add('serves_eu_users');
   const MED = /aesthetic|dental|dentist|health|clinic|cosmetic|surgery|dermatolog|medical|patient|pharma/;
   if (inAE && (MED.test(sec) || MED.test(lc))) trig.add('is_uae_healthcare_facility');
+  // PREDICATE PRODUCERS (ledger 3.2, 2026-06-30): recover silently-dropped laws. Each derives ONLY from a signal
+  // the engine already proved (a canonical jurisdiction code or a base trigger), so no new false-attach risk beyond
+  // the base signal. Threshold-gated US-state predicates (meets_ccpa_threshold, serves_us_state_residents) are
+  // intentionally NOT produced here so CCPA/VCDPA stay correctly held until volume detection lands. (V1 A1; 3.1.1)
+  const inUS = jurSet.has('USA') || jurSet.has('US') || arrHas(/united states|\bu\.?s\.?a?\b|america/i);
+  if (inUS) trig.add('serves_us_users');
+  if (jurSet.has('EU-FR')) trig.add('serves_french_users');
+  if (jurSet.has('EU-DE')) trig.add('serves_german_users');
+  if (jurSet.has('EU-ES')) trig.add('serves_spanish_users');
+  if (jurSet.has('EU-IT')) trig.add('serves_italian_users');
+  if (inAE) { trig.add('processes_uae_resident_data'); trig.add('publishes_content_uae'); }
+  if (jurSet.has('MENA-SA')) trig.add('processes_saudi_resident_data');
+  if (jurSet.has('MENA-QA')) trig.add('processes_qatar_resident_data');
+  if (jurSet.has('MENA-BH')) trig.add('processes_bahrain_resident_data');
+  if (jurSet.has('MENA-KW')) trig.add('processes_kuwait_data');
+  if (jurSet.has('MENA-OM')) trig.add('processes_oman_resident_data');
+  if (jurSet.has('MENA-EG')) trig.add('processes_egypt_resident_data');
+  if (jurSet.has('MENA-JO')) trig.add('processes_jordan_resident_data');
+  if (jurSet.has('MENA-IL')) trig.add('processes_israeli_resident_data');
+  if (jurSet.has('MENA-AE-DIFC')) trig.add('is_difc_registered_entity');
+  if (jurSet.has('MENA-AE-ADGM')) trig.add('is_adgm_registered_entity');
+  if (trig.has('b2c')) { trig.add('sells_to_consumers'); trig.add('has_commercial_content'); }
+  if (trig.has('sends_marketing_email')) { trig.add('sends_commercial_email'); trig.add('markets_commercially'); }
+  if (trig.has('takes_payment') || trig.has('b2c')) { trig.add('is_commercial_site'); trig.add('provides_online_service_or_sells'); }
   return { jurSet, sector: sec, trig, employeeBand: employeeBand(employees) };
 }
 
