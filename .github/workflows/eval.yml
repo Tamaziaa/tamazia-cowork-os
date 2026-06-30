@@ -17,6 +17,7 @@ jobs:
         run: node eval/e2e-engine.test.js
       - name: Universal-obligation layer assertions
         run: node eval/obligations.test.js
+        run: node eval/framework-intel.test.js
       - name: Sub-sector tree assertions
         run: node eval/subsector.test.js
       - name: Registry detector assertions

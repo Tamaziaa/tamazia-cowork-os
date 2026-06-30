@@ -168,7 +168,9 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     else if (triggerHeld) gates.trigger_filtered.push(fw);
     else if (sectorHeld) gates.sector_filtered.push(fw);
   }
-  return { frameworks: Array.from(connectedFw).sort(), rules: connectedRules, jurisdictions: Array.from(J), gates };
+  const _fwArr = Array.from(connectedFw).sort();
+  const _bind = {}; { const _i = require('./registry/framework-intel.js'); for (const _f of _fwArr) { const _b = _i.bindingStatus(_f); if (_b) _bind[_f] = _b; } }
+  return { frameworks: _fwArr, rules: connectedRules, jurisdictions: Array.from(J), gates, binding: _bind };
 }
 
 // --- Neon catalogue loader (engine use). Cached in-process. ---

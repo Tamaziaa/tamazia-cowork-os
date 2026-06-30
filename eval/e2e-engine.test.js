@@ -41,7 +41,7 @@ const S = [
  { n:'UK insurer (ABI MUST attach)', jur:['GB'], sec:'insurance',
    corpus:'We are an insurance company; we underwrite home and car insurance policies. We process personal data; privacy policy.',
    has:['UK'], not:[], sub:'finance/insurance', preds:['sells_insurance'],
-   fwHas:['UK_ABI'], fwNot:[] },
+   fwHas:['UK_ABI'], fwNot:[], bindingHas:{UK_ABI:'voluntary_code'} },
  { n:'Bahrain firm (new ME law, distinct)', jur:['BH'], sec:'b2b',
    corpus:'Manama consultancy; we collect personal data via our contact form and use cookies; privacy policy.',
    has:['MENA-BH'], not:['MENA-AE','MENA-SA'], sub:null, preds:['processes_bahrain_resident_data'],
@@ -58,9 +58,10 @@ for (const t of S) {
   if (t.sub!==ssId) e.push('sub got '+ssId+' want '+t.sub);
   for (const p of t.preds) if(!sg.trig.has(p)) e.push('pred missing '+p);
   let fws=[];
-  if (cat) { try { fws=connect({catalogue:cat,jurisdictions:t.jur,sector:t.sec,signals:SIG,text:t.corpus}).frameworks||[]; } catch(err){ e.push('connect CRASHED: '+err.message); } }
+  if (cat) { try { const _r=connect({catalogue:cat,jurisdictions:t.jur,sector:t.sec,signals:SIG,text:t.corpus}); fws=_r.frameworks||[]; t._binding=_r.binding||{}; } catch(err){ e.push('connect CRASHED: '+err.message); } }
   if (cat) { for (const f of t.fwHas) if(!fws.includes(f)) e.push('framework missing '+f+' (got '+fws.slice(0,10)+')');
-             for (const f of t.fwNot) if(fws.includes(f)) e.push('framework CROSS-BLEED '+f); }
+             for (const f of t.fwNot) if(fws.includes(f)) e.push('framework CROSS-BLEED '+f);
+             if (t.bindingHas) for (const [f,b] of Object.entries(t.bindingHas)) if((t._binding||{})[f]!==b) e.push('binding '+f+' got '+((t._binding||{})[f])+' want '+b); }
   if (e.length){ fail++; console.log('FAIL '+t.n+'\n   '+e.join('\n   ')); }
   else console.log('PASS '+t.n+'  [jur '+[...sg.jurSet].join(',')+' · sub '+ssId+' · fw '+fws.length+': '+fws.slice(0,6).join(',')+']');
 }
