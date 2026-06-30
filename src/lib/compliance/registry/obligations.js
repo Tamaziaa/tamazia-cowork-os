@@ -11,8 +11,8 @@ const OBLIGATIONS = {
     trigger_predicate: 'processes_personal_data',
     detect: { deterministic: ['/privacy or /privacy-policy reachable (200)', 'footer privacy link', 'any form collecting name/email/phone', 'newsletter/contact/account forms'], llm_fallback: 'policy completeness vs Art.13/14 elements' },
     evidence: 'a reachable privacy policy disclosing purposes + lawful basis + rights + controller/DPO identity',
-    jurisdictions: { UK:['UK_GDPR_A13','UK_DPA_2018'], EU:['EU_GDPR'], US:['US_CCPA','US_CPRA','US_VCDPA','US_TDPSA'], AE:['UAE_PDPL'], SA:['SAUDI_PDPL'], QA:['QATAR_PDPPL'] },
-    regulators: { UK:'ICO', EU:'national DPAs / EDPB', US:'state Attorneys General', AE:'UAE Data Office', SA:'SDAIA', QA:'NCGAA' },
+    jurisdictions: { UK:['UK_GDPR_A13','UK_DPA_2018'], EU:['EU_GDPR'], US:['US_CCPA','US_CPRA','US_VCDPA','US_TDPSA'], AE:['UAE_PDPL'], SA:['SAUDI_PDPL'], QA:['QATAR_PDPPL'], BH:['BAHRAIN_PDPL'], OM:['OMAN_PDPL'], EG:['EGYPT_PDPL'], JO:['JORDAN_PDPL'], IL:['ISRAEL_PPL'] },
+    regulators: { UK:'ICO', EU:'national DPAs / EDPB', US:'state Attorneys General', AE:'UAE Data Office', SA:'SDAIA', QA:'NCGAA', BH:'PDPA', OM:'MTCIT', EG:'PDPC', JO:'Data Protection Council (MoDEE)', IL:'PPA' },
     exclusions: ['no_personal_data_collected'],
     special_category_overlay: { EU:['EU_GDPR_ART9'] },
   },
@@ -86,7 +86,7 @@ const OBLIGATIONS = {
 };
 // resolver: given a firm's jurisdiction codes, which obligations apply and which catalogue frameworks instance them.
 function obligationFrameworks(jurisdictionCodes = []) {
-  const norm = c => { c=String(c||'').toUpperCase(); if(c.startsWith('MENA-AE'))return 'AE'; if(c.startsWith('MENA-SA'))return 'SA'; if(c.startsWith('MENA-QA'))return 'QA'; if(c==='USA')return 'US'; if(c==='GB'||c==='GBR')return 'UK'; if(c==='UAE')return 'AE'; return c; };
+  const norm = c => { c=String(c||'').toUpperCase(); if(c.startsWith('MENA-AE'))return 'AE'; if(c.startsWith('MENA-'))return c.slice(5); if(c==='USA')return 'US'; if(c==='GB'||c==='GBR')return 'UK'; if(c==='UAE')return 'AE'; return c; };
   const jurs = new Set(jurisdictionCodes.map(norm));
   const out = {};
   for (const [concept, o] of Object.entries(OBLIGATIONS)) {

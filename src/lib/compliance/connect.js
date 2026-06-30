@@ -19,7 +19,7 @@ const UNIVERSAL_FW = new Set([
   'US_FTC','US_CPRA','US_CCPA','US_FTC_ENDORSE','US_ADA','US_TCPA','US_VCDPA','US_TDPSA',
   // US_STATE_PRIVACY removed (legal-QA P1): non-citable catch-all that duplicated the named state acts
   // (CCPA/CPRA/VCDPA/TDPSA). The named, citable statutes carry the obligation; the catch-all only added noise.
-  'UAE_PDPL','DIFC_DPL','ADGM_DPR','SAUDI_PDPL','QATAR_PDPPL','DE_BDSG','FR_CNIL_2025',
+  'UAE_PDPL','DIFC_DPL','ADGM_DPR','SAUDI_PDPL','QATAR_PDPPL','BAHRAIN_PDPL','OMAN_PDPL','EGYPT_PDPL','JORDAN_PDPL','ISRAEL_PPL','DE_BDSG','FR_CNIL_2025',
 ]);
 // SECTOR_PARENTS: signals.js SECTOR_RX and jurisdiction-router.js SECTOR_MAP use different vocab for the
 // same sector. This bridges them so GATE B0 + GATE B rule matching works correctly end-to-end.
