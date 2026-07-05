@@ -103,6 +103,52 @@ function augmentFreezones(jurSet, corpusText = '') {
   return jurSet;
 }
 
+// TYPED NEXUS DETECTION (Master Framework §7.1; GDPR Art 3 / EDPB Guidelines 3/2018). Generalises the free-zone
+// establishment-vs-serving test (_ESTAB_RX/_SERVE_RX) to all jurisdictions. Produces, per jurisdiction family, the
+// three typed relations with evidence. ADDITIVE: added to buildSignals return; no consumer yet (connect wires it in P2.2).
+const NEXUS_PROFILE = {
+  UK:  { term:/\buk\b|united kingdom|britain|england|scotland|wales/i,
+         estab:/registered (in|at|with)[^.]{0,20}(england|wales|scotland|uk|companies house)|companies house (no|number|registration)|\bcompany (no|number)\b|our (uk )?office|based in the uk|headquartered in (the )?uk|\bltd\b|limited company/i,
+         currency:/£|\bgbp\b|pounds? sterling/i, cctld:/\.co\.uk|\.org\.uk|\.uk\b/i,
+         serve:/(serve|serving|for)[^.]{0,20}(uk|united kingdom|britain) (clients|customers|market)|ship(ping)?[^.]{0,12}(uk|united kingdom)|uk[- ](wide|based) (clients|customers)|clients across the uk/i,
+         phone:/\+44\b|\b0044\b/ },
+  EU:  { term:/european union|\beea\b|\beurope\b|\bgdpr\b/i,
+         estab:/registered in (the )?(eu|europe|germany|france|spain|italy|netherlands|ireland)|eu (establishment|entity|office|subsidiary)|based in (germany|france|spain|italy|netherlands|ireland)/i,
+         currency:/€|\beur\b|euros?/i, cctld:/\.eu\b|\.de\b|\.fr\b|\.es\b|\.it\b|\.nl\b|\.ie\b/i,
+         serve:/(serve|serving|for)[^.]{0,20}(eu|europe|european) (clients|customers|market)|ship(ping)?[^.]{0,12}(eu|europe)|european (clients|customers)/i,
+         phone:/\+3[0-9]\b|\+4[0-8]\b/ },
+  USA: { term:/united states|\bu\.?s\.?a?\b|america/i,
+         estab:/incorporated in|\bllc\b|\binc\.?\b|\bein\b|registered in (delaware|nevada|california|new york|texas)|headquartered in the (us|usa|united states)/i,
+         currency:/\bus\$|\busd\b/i, cctld:/\.us\b/i,
+         serve:/(serve|serving|for)[^.]{0,20}(us|usa|united states|american) (clients|customers|market)|ship(ping)?[^.]{0,12}(us|usa|united states)|american (clients|customers)/i,
+         phone:/\+1\b/ },
+  AE:  { term:/united arab emirates|\buae\b|dubai|abu dhabi/i,
+         estab:/registered in[^.]{0,12}(uae|dubai|abu dhabi)|\btrn\b|trade licen[cs]e|free[- ]?zone licen[cs]e|based in (dubai|abu dhabi|the uae)/i,
+         currency:/\baed\b|dirhams?/i, cctld:/\.ae\b/i,
+         serve:/(serve|serving|for)[^.]{0,20}(uae|dubai|abu dhabi|emirates) (clients|customers|market)/i,
+         phone:/\+971\b/ },
+};
+const _NEXUS_FAM = { 'UK':'UK','EU':'EU','EU-FR':'EU','EU-DE':'EU','EU-ES':'EU','EU-IT':'EU','USA':'USA','US':'USA','MENA-AE':'AE','MENA-AE-DIFC':'AE','MENA-AE-ADGM':'AE' };
+const _TRACK_RX = /cookie|analytics|_ga\b|gtm|\bpixel\b|hotjar|tracking|remarketing|behavioural ad/i;
+function detectNexus(jurSet, corpusText = '') {
+  const lc = String(corpusText || '').toLowerCase(); const out = {};
+  const fams = new Set(); for (const j of jurSet) if (_NEXUS_FAM[j]) fams.add(_NEXUS_FAM[j]);
+  for (const fam of fams) {
+    const p = NEXUS_PROFILE[fam]; if (!p) continue; const ev = [];
+    const estab = p.estab.test(lc); if (estab) ev.push('establishment');
+    let factors = 0;
+    if (p.currency.test(lc)) { factors++; ev.push('currency'); }
+    if (p.cctld.test(lc)) { factors++; ev.push('cctld'); }
+    if (p.serve.test(lc)) { factors++; ev.push('targets-customers'); }
+    if (p.phone.test(lc)) { factors++; ev.push('phone-code'); }
+    const serves = factors >= 2;                                   // EDPB: combination of factors, never one alone
+    const tracks = _TRACK_RX.test(lc);
+    const processes = tracks && (serves || estab || p.term.test(lc)); // Art 3(2)(b): monitoring + a real J nexus
+    out[fam] = { established_in: estab, serves_customers_in: serves, processes_residents_of: processes, factors, evidence: ev };
+  }
+  return out;
+}
+
 function buildSignals({ jurisdictions = [], sector, corpusText = '', employees, baseline = [] } = {}) {
   const jurSet = augmentFreezones(toCanonicalJurisdictions(jurisdictions), corpusText);
   const sec = normalizeSector(sector, corpusText);
@@ -146,7 +192,7 @@ function buildSignals({ jurisdictions = [], sector, corpusText = '', employees, 
   if (trig.has('sends_marketing_email')) { trig.add('sends_commercial_email'); trig.add('markets_commercially'); }
   if (trig.has('takes_payment') || trig.has('b2c')) { trig.add('is_commercial_site'); trig.add('provides_online_service_or_sells'); }
   try { const { derivePredicates } = require('./registry/predicates.js'); for (const p of derivePredicates({ sector: sec, jurSet, corpusText, trig })) trig.add(p); } catch (_e) {}
-  return { jurSet, sector: sec, trig, employeeBand: employeeBand(employees) };
+  return { jurSet, sector: sec, trig, employeeBand: employeeBand(employees), nexus: detectNexus(jurSet, corpusText) };
 }
 
 module.exports = { buildSignals, toCanonicalJurisdictions, augmentFreezones, normalizeSector, deriveTriggers, employeeBand, JUR_MAP };

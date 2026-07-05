@@ -33,6 +33,8 @@ jobs:
         run: node eval/sector-coverage.test.js
       - name: Nexus SSOT invariants
         run: node eval/nexus.test.js
+      - name: Typed nexus detection (Art 3 / EDPB)
+        run: node eval/nexus-signals.test.js
       - name: Controlled-vocabulary SSOT invariants
         run: node eval/vocab.test.js
       - name: Tagged-law schema integrity
