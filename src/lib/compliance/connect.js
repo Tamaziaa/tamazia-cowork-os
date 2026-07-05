@@ -138,6 +138,25 @@ function connectSelfTest(frameworks, jSet, sec, fvJuris, text) {
   return true;
 }
 
+// Phase 2.4 — conformal review band (ADDITIVE, off by default). A cohort-frequency prior calibrated on 9,166 golden
+// firms (db/seeds/cohort-frequencies.json, tau at the 10th percentile => ~10% review rate) gives each attachment a
+// confidence. UNIVERSAL/GLOBAL frameworks are always high-confidence. review_candidates = attached frameworks whose
+// confidence < tau. The `frameworks` (attach) set is UNCHANGED (shadow-identity holds); a renderer may suppress
+// review_candidates. Fail-open: no calibration file => no confidence, empty review list, zero behaviour change.
+let _cohort = undefined;
+function _cohortCal() {
+  if (_cohort !== undefined) return _cohort;
+  try { _cohort = require('../../../db/seeds/cohort-frequencies.json'); } catch (_e) { _cohort = null; }
+  return _cohort;
+}
+function _confidence(fw, sec, universalSet) {
+  if (universalSet.has(fw)) return 1.0;                 // jurisdiction-universal law: always applies
+  const cal = _cohortCal(); if (!cal) return 1.0;       // fail-open
+  const bySec = (cal.by_sector && cal.by_sector[String(sec||'').toLowerCase()]) || {};
+  const p = (bySec[fw] !== undefined) ? bySec[fw] : ((cal.global && cal.global[fw]) || 0);
+  return p;
+}
+
 function connect({ catalogue, jurisdictions, sector, signals, text }) {
   // Normalise variant sector names before routing so 'aesthetic' → 'aesthetics', 'legal' → 'law-firms', etc.
   // This makes the SECTOR_MAP lookup direct rather than relying only on the SECTOR_PARENTS chain.
@@ -203,7 +222,11 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
   const _fwArr = Array.from(connectedFw).sort();
   connectSelfTest(_fwArr, J, sec, fvJuris, t);   // fail-closed guardrail
   const _bind = {}; { const _i = require('./registry/framework-intel.js'); for (const _f of _fwArr) { const _b = _i.bindingStatus(_f); if (_b) _bind[_f] = _b; } }
-  return { frameworks: _fwArr, rules: connectedRules, jurisdictions: Array.from(J), gates, binding: _bind };
+  // conformal review band (additive): confidence per attachment + review candidates; attach set unchanged.
+  const _cal = _cohortCal(); const _tau = (_cal && typeof _cal.tau === 'number') ? _cal.tau : 0;
+  const _conf = {}; const _review = [];
+  for (const _f of _fwArr) { const _c = _confidence(_f, sec, UNIVERSAL_FW); _conf[_f] = _c; if (_cal && _c < _tau) _review.push(_f); }
+  return { frameworks: _fwArr, rules: connectedRules, jurisdictions: Array.from(J), gates, binding: _bind, confidence: _conf, review_candidates: _review, review_tau: _tau };
 }
 
 // --- Neon catalogue loader (engine use). Cached in-process. ---
