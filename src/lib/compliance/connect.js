@@ -35,7 +35,11 @@ const SECTOR_PARENTS = {
   'aesthetics': ['healthcare'],       // aesthetic clinics inherit CQC/MHRA from healthcare
   'aesthetic':  ['healthcare'],
   'dental':     ['healthcare'],       // dental inherits MHRA/CQC from healthcare
-  'barristers': ['law-firms'],        // barristers inherit SRA-adjacent rules
+  // NOTE: barristers is DELIBERATELY not bridged. Barristers/chambers are a distinct regulated node (BSB),
+  // NOT a child of solicitors (SRA). Bridging them to 'law-firms' made every non-node-exclusive law-firm
+  // framework leak onto chambers (a domain error). sector.js (own TREE parent) + jurisdiction-router SECTOR_MAP
+  // already treat them separately; this keeps connect() consistent. UK_BSB attaches via its direct 'barristers'
+  // sector_relevance; UK_SRA_* are correctly sector-filtered here.
 };
 
 let _fwToSectors = null;
