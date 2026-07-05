@@ -34,7 +34,8 @@ function buildEvidenceLedger(connectResult, findings, sector, opts = {}) {
     });
   }
   // deterministic order: violated first, then by confidence desc, then law_ref
-  ledger.sort((a, b) => (Number(b.violated) - Number(a.violated)) || ((b.confidence || 0) - (a.confidence || 0)) || a.law_ref.localeCompare(b.law_ref));
+  // FIX-A1: null confidence (not assessed) must sort DISTINCTLY from 0.0 (assessed as zero) -> use ?? -1 so unknown ranks last.
+  ledger.sort((a, b) => (Number(b.violated) - Number(a.violated)) || ((b.confidence ?? -1) - (a.confidence ?? -1)) || a.law_ref.localeCompare(b.law_ref));
   return ledger;
 }
 module.exports = { buildEvidenceLedger };
