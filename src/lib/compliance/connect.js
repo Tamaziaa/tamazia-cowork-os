@@ -107,6 +107,12 @@ const CAP_GATE = {
   DIFC_DPL:    { sig: null, rx: /(registered|licen[cs]ed|authorised|regulated|based|established|incorporated|headquarter|domiciled|our (office|firm|practice)|principal place)[^.]{0,40}(difc|dubai international financial centre|dfsa)|(difc|dfsa)[^.]{0,40}(registered|licen[cs]ed|authorised|regulated|established|based)|gate (village|district|avenue)|difc[- ]registered/i },
   ADGM_DPR:    { sig: null, rx: /(registered|licen[cs]ed|authorised|regulated|based|established|incorporated|headquarter|domiciled|our (office|firm|practice)|principal place)[^.]{0,40}(adgm|abu dhabi global market|fsra)|(adgm|fsra)[^.]{0,40}(registered|licen[cs]ed|authorised|regulated|established|based)|al maryah island|adgm[- ]registered/i },
   SAUDI_PDPL:  { sig: null, rx: /\b(saudi arabia|\bKSA\b|riyadh|jeddah|dammam|\.sa\b|sdaia|commercial registration .*saudi)\b/i },
+  // Emirate gating (healthcare regulators): DHA binds Dubai-based providers, DOH Abu Dhabi. Without this all three
+  // coarse-'AE' authorities attached to every UAE clinic (a Dubai clinic wrongly got the Abu Dhabi regulator and
+  // vice-versa). MOHAP (federal) stays the ungated default for the other emirates.
+  UAE_DHA:     { sig: null, rx: /\b(dubai|dha|dubai health authority)\b/i },
+  UAE_DOH:     { sig: null, rx: /\b(abu dhabi|doh|department of health\b|\bhaad\b)\b/i },
+
   QATAR_PDPPL: { sig: null, rx: /\b(qatar|doha|\.qa\b|qfc|qatar financial centre)\b/i },
   // CONSUMER-NEXUS GATING (legal-QA P0): DMCCA 2024 Part 4, CMA enforcement, CRA 2015 and Trading Standards bind
   // a trader only in a TRADER-TO-CONSUMER transaction. They were universal with no consumer gate, so pure-B2B
