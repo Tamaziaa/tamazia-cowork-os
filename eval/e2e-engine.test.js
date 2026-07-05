@@ -8,6 +8,13 @@ const { resolveSubSector } = require('../src/lib/compliance/registry/sector.js')
 let connect, cat=null;
 try { const c=require('../src/lib/compliance/connect.js'); connect=c.connect; cat=c.loadCatalogue(); }
 catch(e){ console.log('NOTE: catalogue unavailable ('+e.message+') — connect skipped'); }
+// DB-backed: this end-to-end test needs the live Neon catalogue. When NEON_URL is absent (e.g. CI without the DB
+// secret), loadCatalogue() returns an empty catalogue and every scenario would spuriously 'fail'. Skip cleanly
+// instead — consistent with the other DB-backed evals (framework-record/calibration/etc.).
+if (!cat || !Array.isArray(cat.frameworks) || cat.frameworks.length === 0) {
+  console.log('e2e-engine skipped — live catalogue unavailable (NEON_URL not set).');
+  process.exit(0);
+}
 const SIG = { processes_personal_data:true, takes_payment:true, sets_cookies:true };
 const S = [
  { n:'UK law firm', jur:['GB'], sec:'legal',
