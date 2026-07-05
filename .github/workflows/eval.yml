@@ -59,6 +59,8 @@ jobs:
         run: node eval/llm-extractor.test.js
       - name: LLM sector auto-tagging (Phase 3.3)
         run: node eval/sector-autotagger.test.js
+      - name: feed change-detection (Phase 3.1)
+        run: node eval/feed-registry.test.js
       - name: element-checklist candidate correctness
         run: node eval/element-checklist-candidates.test.js
       - name: NAICS crosswalk coverage
