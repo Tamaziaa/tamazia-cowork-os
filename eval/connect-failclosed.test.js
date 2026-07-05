@@ -13,5 +13,8 @@ chk('jurisdiction leak throws', t1);
 // node-exclusion leak -> throws (SRA on a barristers firm)
 let t2 = false; try { connectSelfTest(['UK_SRA_TRANSPARENCY'], new Set(['UK']), 'barristers', { UK_SRA_TRANSPARENCY: 'UK' }, 'commercial chambers, our barristers, direct access'); } catch (e) { t2 = e.guardrail === 'node_exclusion_leak'; }
 chk('node-exclusion leak throws', t2);
+// nexus leak -> throws (establishment-only framework surviving when established elsewhere)
+let t3 = false; try { connectSelfTest(['UK_SRA_TRANSPARENCY'], new Set(['UK']), 'law-firms', { UK_SRA_TRANSPARENCY: 'UK' }, '', { fvReq: { UK_SRA_TRANSPARENCY: ['established_in'] }, nexus: { USA: { established_in: true }, UK: { established_in: false } } }); } catch (e) { t3 = e.guardrail === 'nexus_leak'; }
+chk('nexus leak throws', t3);
 if (fail) { console.error('\n' + fail + ' fail-closed assertion(s) FAILED.'); process.exit(1); }
 console.log('connect fail-closed guardrail OK: passes valid, throws on jurisdiction + node-exclusion leaks.');

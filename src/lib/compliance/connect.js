@@ -128,12 +128,21 @@ function secMatches(sectors, sec) {
 // FAIL-CLOSED self-test (resolveLaws rigor applied to the live engine, Branch 5): every attached framework MUST be
 // jurisdiction-valid (GLOBAL or an operated jurisdiction) and NOT node-excluded. A violation means a gate was bypassed
 // -> throw, so the mint path halts with a flag rather than silently shipping a leaked framework.
-function connectSelfTest(frameworks, jSet, sec, fvJuris, text) {
+function connectSelfTest(frameworks, jSet, sec, fvJuris, text, opts) {
   const _sx = require('./registry/sector.js');
+  const fvReq = (opts && opts.fvReq) || {}; const nx = (opts && opts.nexus) || {};
+  const estabAnywhere = Object.keys(nx).some(k => nx[k] && nx[k].established_in);
+  const FAM_OF = j => { j=String(j||'').toUpperCase(); if(j==='UK')return 'UK'; if(j==='EU'||j.indexOf('EU-')===0)return 'EU'; if(j==='US'||j==='USA')return 'USA'; if(j==='AE'||j.indexOf('MENA-AE')===0||j.indexOf('AE-')===0)return 'AE'; return null; };
   for (const fw of (frameworks || [])) {
     const jz = (fvJuris && fvJuris[fw]) || '';
     if (!(jz === 'GLOBAL' || jSet.has(jz))) { const e = new Error('connect_self_test:jurisdiction_leak:' + fw + '(' + jz + ')'); e.guardrail = 'jurisdiction_leak'; throw e; }
     if (_sx.subSectorExcludes(fw, sec, text || '')) { const e = new Error('connect_self_test:node_exclusion_leak:' + fw); e.guardrail = 'node_exclusion_leak'; throw e; }
+    // nexus consistency: an establishment-only framework must NOT survive when the firm is established in another
+    // family but not this one (mirrors the NEXUS GATE; guarantees the guard and the gate cannot diverge).
+    const req = fvReq[fw];
+    if (estabAnywhere && Array.isArray(req) && req.length === 1 && req[0] === 'established_in') {
+      const fam = FAM_OF(jz); if (fam && !(nx[fam] && nx[fam].established_in)) { const e = new Error('connect_self_test:nexus_leak:' + fw); e.guardrail = 'nexus_leak'; throw e; }
+    }
   }
   return true;
 }
@@ -220,7 +229,7 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     else if (sectorHeld) gates.sector_filtered.push(fw);
   }
   const _fwArr = Array.from(connectedFw).sort();
-  connectSelfTest(_fwArr, J, sec, fvJuris, t);   // fail-closed guardrail
+  connectSelfTest(_fwArr, J, sec, fvJuris, t, { fvReq, nexus: _nx });   // fail-closed guardrail (jurisdiction+node+nexus)
   const _bind = {}; { const _i = require('./registry/framework-intel.js'); for (const _f of _fwArr) { const _b = _i.bindingStatus(_f); if (_b) _bind[_f] = _b; } }
   // conformal review band (additive): confidence per attachment + review candidates; attach set unchanged.
   const _cal = _cohortCal(); const _tau = (_cal && typeof _cal.tau === 'number') ? _cal.tau : 0;
