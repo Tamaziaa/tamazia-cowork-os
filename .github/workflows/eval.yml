@@ -27,6 +27,8 @@ jobs:
         run: node eval/node-exclusive.test.js
       - name: NAICS crosswalk coverage
         run: node eval/crosswalk.test.js
+      - name: No under-audited sector (>=1 law each)
+        run: node eval/sector-law-coverage.test.js
       - name: Sector coverage-integrity (canonical reconciliation)
         run: node eval/sector-coverage.test.js
       - name: Nexus SSOT invariants
