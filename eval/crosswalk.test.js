@@ -1,17 +1,21 @@
 'use strict';
-// Phase 1.3.9 — the NAICS firm-sector crosswalk must cover EVERY canonical sector with valid codes (offline).
-// Locks the free sector spine: a sector added later without a NAICS mapping fails here.
-const path = require('path');
+// Phase 1.3.9-1.3.13 — the consolidated sector-taxonomy crosswalk must cover EVERY canonical sector across all spines
+// (NAICS firm-side, EuroVoc EU-law-side, CFR US-law-side) + firm-code bridges (NACE/UK-SIC -> NAICS). Offline.
 const { CANONICAL_SECTORS } = require('../src/lib/compliance/registry/sector.js');
-const NAICS = require('../src/lib/compliance/registry/crosswalks/naics.json');
+const X = require('../src/lib/compliance/registry/crosswalks/sector-taxonomies.json');
 let fail = 0; const bad = m => { console.error('  FAIL: ' + m); fail++; };
 const canon = [...CANONICAL_SECTORS];
-for (const s of canon) if (!NAICS[s]) bad('canonical sector "' + s + '" has NO NAICS mapping');
-for (const s of Object.keys(NAICS)) if (!CANONICAL_SECTORS.has(s)) bad('NAICS entry "' + s + '" is not a canonical sector');
-for (const [s, v] of Object.entries(NAICS)) {
-  if (!Array.isArray(v.naics) || !v.naics.length) bad(s + ' missing naics[]');
-  if (!v.label) bad(s + ' missing label');
-  for (const c of (v.naics || [])) if (!/^\d{2,6}$/.test(c)) bad(s + ' invalid NAICS code "' + c + '"');
+for (const s of canon) {
+  const e = X.sectors[s];
+  if (!e) { bad('sector "' + s + '" absent from crosswalk'); continue; }
+  if (!Array.isArray(e.naics) || !e.naics.length) bad(s + ' missing naics');
+  if (!Array.isArray(e.eurovoc) || !e.eurovoc.length) bad(s + ' missing eurovoc');
+  if (!Array.isArray(e.cfr)) bad(s + ' missing cfr array');
+  for (const c of e.naics) if (!/^\d{2,6}$/.test(c)) bad(s + ' bad NAICS ' + c);
+  for (const c of e.eurovoc) if (!/^\d{2}$/.test(c)) bad(s + ' bad EuroVoc domain ' + c);
+  for (const c of e.cfr) if (!/^\d{1,2}$/.test(c)) bad(s + ' bad CFR title ' + c);
 }
+for (const s of Object.keys(X.sectors)) if (!CANONICAL_SECTORS.has(s)) bad('crosswalk entry "' + s + '" not canonical');
+if (!X.nace_to_naics || !X.uksic_to_naics) bad('missing NACE/UK-SIC bridges');
 if (fail) { console.error('\n' + fail + ' crosswalk assertion(s) FAILED.'); process.exit(1); }
-console.log('NAICS crosswalk OK (' + canon.length + '/' + canon.length + ' canonical sectors mapped, codes valid, no orphans).');
+console.log('sector-taxonomy crosswalk OK (' + canon.length + ' sectors x NAICS+EuroVoc+CFR, NACE/UK-SIC bridges, no orphans).');

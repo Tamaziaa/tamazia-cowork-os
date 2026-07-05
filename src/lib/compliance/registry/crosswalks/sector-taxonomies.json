@@ -1,0 +1,510 @@
+{
+  "sectors": {
+    "law-firms": {
+      "naics": [
+        "5411"
+      ],
+      "label": "Legal Services",
+      "eurovoc": [
+        "12"
+      ],
+      "cfr": []
+    },
+    "barristers": {
+      "naics": [
+        "5411"
+      ],
+      "label": "Legal Services (advocacy; profession distinct from solicitors)",
+      "eurovoc": [
+        "12"
+      ],
+      "cfr": []
+    },
+    "accounting": {
+      "naics": [
+        "5412"
+      ],
+      "label": "Accounting, Tax Prep, Bookkeeping",
+      "eurovoc": [
+        "40",
+        "24"
+      ],
+      "cfr": [
+        "26"
+      ]
+    },
+    "professional-services": {
+      "naics": [
+        "5416",
+        "5419"
+      ],
+      "label": "Management/Scientific/Technical Consulting & other professional services",
+      "eurovoc": [
+        "40"
+      ],
+      "cfr": []
+    },
+    "healthcare": {
+      "naics": [
+        "621",
+        "622"
+      ],
+      "label": "Ambulatory & Hospital Health Care",
+      "eurovoc": [
+        "28"
+      ],
+      "cfr": [
+        "21",
+        "42",
+        "45"
+      ]
+    },
+    "pharma": {
+      "naics": [
+        "3254"
+      ],
+      "label": "Pharmaceutical & Medicine Manufacturing",
+      "eurovoc": [
+        "28",
+        "64"
+      ],
+      "cfr": [
+        "21"
+      ]
+    },
+    "pharmacy": {
+      "naics": [
+        "456110"
+      ],
+      "label": "Pharmacies & Drug Retailers",
+      "eurovoc": [
+        "28"
+      ],
+      "cfr": [
+        "21"
+      ]
+    },
+    "dental": {
+      "naics": [
+        "6212"
+      ],
+      "label": "Offices of Dentists",
+      "eurovoc": [
+        "28"
+      ],
+      "cfr": [
+        "21"
+      ]
+    },
+    "aesthetics": {
+      "naics": [
+        "621399",
+        "812112"
+      ],
+      "label": "Aesthetic/cosmetic clinics & beauty services",
+      "eurovoc": [
+        "28"
+      ],
+      "cfr": [
+        "21"
+      ]
+    },
+    "fertility": {
+      "naics": [
+        "621410"
+      ],
+      "label": "Family Planning / Fertility Centers",
+      "eurovoc": [
+        "28"
+      ],
+      "cfr": [
+        "42"
+      ]
+    },
+    "telemedicine": {
+      "naics": [
+        "621999"
+      ],
+      "label": "Ambulatory Health Care (remote/telehealth)",
+      "eurovoc": [
+        "28"
+      ],
+      "cfr": [
+        "42",
+        "45"
+      ]
+    },
+    "care-homes": {
+      "naics": [
+        "623"
+      ],
+      "label": "Nursing & Residential Care Facilities",
+      "eurovoc": [
+        "28"
+      ],
+      "cfr": [
+        "42"
+      ]
+    },
+    "finance": {
+      "naics": [
+        "52",
+        "523"
+      ],
+      "label": "Finance (securities, advice, investment)",
+      "eurovoc": [
+        "24"
+      ],
+      "cfr": [
+        "12",
+        "17"
+      ]
+    },
+    "fintech": {
+      "naics": [
+        "522320",
+        "5223"
+      ],
+      "label": "Financial transactions processing & activities related to credit intermediation",
+      "eurovoc": [
+        "24",
+        "64"
+      ],
+      "cfr": [
+        "12",
+        "17"
+      ]
+    },
+    "insurance": {
+      "naics": [
+        "524"
+      ],
+      "label": "Insurance Carriers & Related Activities",
+      "eurovoc": [
+        "24"
+      ],
+      "cfr": [
+        "31"
+      ]
+    },
+    "real-estate": {
+      "naics": [
+        "531"
+      ],
+      "label": "Real Estate",
+      "eurovoc": [
+        "16"
+      ],
+      "cfr": [
+        "24",
+        "12"
+      ]
+    },
+    "education": {
+      "naics": [
+        "61"
+      ],
+      "label": "Educational Services",
+      "eurovoc": [
+        "32"
+      ],
+      "cfr": [
+        "34"
+      ]
+    },
+    "charity": {
+      "naics": [
+        "813"
+      ],
+      "label": "Religious, Grantmaking, Civic, Professional Organizations",
+      "eurovoc": [
+        "28"
+      ],
+      "cfr": [
+        "26"
+      ]
+    },
+    "energy": {
+      "naics": [
+        "2211",
+        "221"
+      ],
+      "label": "Electric Power & Utilities",
+      "eurovoc": [
+        "66"
+      ],
+      "cfr": [
+        "10",
+        "18"
+      ]
+    },
+    "transport": {
+      "naics": [
+        "484",
+        "488",
+        "492"
+      ],
+      "label": "Transportation, Logistics & Couriers",
+      "eurovoc": [
+        "48"
+      ],
+      "cfr": [
+        "49"
+      ]
+    },
+    "aviation": {
+      "naics": [
+        "481"
+      ],
+      "label": "Air Transportation",
+      "eurovoc": [
+        "48"
+      ],
+      "cfr": [
+        "14"
+      ]
+    },
+    "media": {
+      "naics": [
+        "512",
+        "516",
+        "519"
+      ],
+      "label": "Information / Media / Broadcasting / Publishing",
+      "eurovoc": [
+        "32"
+      ],
+      "cfr": [
+        "47"
+      ]
+    },
+    "marketing": {
+      "naics": [
+        "5418"
+      ],
+      "label": "Advertising, PR & Related Services",
+      "eurovoc": [
+        "20"
+      ],
+      "cfr": [
+        "16"
+      ]
+    },
+    "manufacturing": {
+      "naics": [
+        "31",
+        "32",
+        "33"
+      ],
+      "label": "Manufacturing",
+      "eurovoc": [
+        "68"
+      ],
+      "cfr": [
+        "16"
+      ]
+    },
+    "construction": {
+      "naics": [
+        "23"
+      ],
+      "label": "Construction",
+      "eurovoc": [
+        "68"
+      ],
+      "cfr": [
+        "29"
+      ]
+    },
+    "hospitality": {
+      "naics": [
+        "721"
+      ],
+      "label": "Accommodation",
+      "eurovoc": [
+        "20"
+      ],
+      "cfr": [
+        "16"
+      ]
+    },
+    "food": {
+      "naics": [
+        "722",
+        "445"
+      ],
+      "label": "Food Services & Food/Beverage Retail",
+      "eurovoc": [
+        "60"
+      ],
+      "cfr": [
+        "9",
+        "21"
+      ]
+    },
+    "ecommerce": {
+      "naics": [
+        "4541"
+      ],
+      "label": "Electronic Shopping & Mail-Order Houses",
+      "eurovoc": [
+        "20"
+      ],
+      "cfr": [
+        "16"
+      ]
+    },
+    "retail": {
+      "naics": [
+        "44",
+        "45"
+      ],
+      "label": "Retail Trade",
+      "eurovoc": [
+        "20"
+      ],
+      "cfr": [
+        "16"
+      ]
+    },
+    "saas": {
+      "naics": [
+        "5112",
+        "518"
+      ],
+      "label": "Software Publishers / Computing Infrastructure",
+      "eurovoc": [
+        "64"
+      ],
+      "cfr": [
+        "16"
+      ]
+    },
+    "tech": {
+      "naics": [
+        "5415"
+      ],
+      "label": "Computer Systems Design & Related Services",
+      "eurovoc": [
+        "64"
+      ],
+      "cfr": [
+        "16"
+      ]
+    },
+    "fitness": {
+      "naics": [
+        "713940"
+      ],
+      "label": "Fitness & Recreational Sports Centers",
+      "eurovoc": [
+        "28"
+      ],
+      "cfr": [
+        "16"
+      ]
+    },
+    "automotive": {
+      "naics": [
+        "441",
+        "8111"
+      ],
+      "label": "Motor Vehicle Dealers & Automotive Repair",
+      "eurovoc": [
+        "68"
+      ],
+      "cfr": [
+        "49"
+      ]
+    },
+    "recruitment": {
+      "naics": [
+        "5613"
+      ],
+      "label": "Employment Services",
+      "eurovoc": [
+        "44"
+      ],
+      "cfr": [
+        "29"
+      ]
+    },
+    "ai": {
+      "naics": [
+        "5415",
+        "541511"
+      ],
+      "label": "AI / Computer Systems Design",
+      "eurovoc": [
+        "64"
+      ],
+      "cfr": [
+        "16"
+      ]
+    },
+    "gambling": {
+      "naics": [
+        "7132"
+      ],
+      "label": "Gambling Industries",
+      "eurovoc": [
+        "20"
+      ],
+      "cfr": [
+        "31"
+      ]
+    },
+    "gaming": {
+      "naics": [
+        "7132",
+        "513210"
+      ],
+      "label": "Gambling / interactive gaming (ambiguous: gambling vs games software)",
+      "eurovoc": [
+        "20"
+      ],
+      "cfr": [
+        "16"
+      ]
+    }
+  },
+  "nace_to_naics": {
+    "A": "11",
+    "B": "21",
+    "C": "31",
+    "D": "22",
+    "E": "22",
+    "F": "23",
+    "G": "44",
+    "H": "48",
+    "I": "72",
+    "J": "51",
+    "K": "52",
+    "L": "53",
+    "M": "54",
+    "N": "56",
+    "P": "61",
+    "Q": "62",
+    "R": "71",
+    "S": "81"
+  },
+  "uksic_to_naics": {
+    "10": "31",
+    "35": "22",
+    "41": "23",
+    "45": "44",
+    "47": "44",
+    "49": "48",
+    "51": "48",
+    "58": "51",
+    "62": "54",
+    "64": "52",
+    "65": "52",
+    "68": "53",
+    "69": "54",
+    "85": "61",
+    "86": "62",
+    "93": "71",
+    "01": "11"
+  }
+}
