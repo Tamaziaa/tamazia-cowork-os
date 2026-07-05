@@ -23,6 +23,8 @@ jobs:
         run: node eval/rulecheck-detection.test.js
       - name: Sub-sector tree assertions
         run: node eval/subsector.test.js
+      - name: Sector coverage-integrity (canonical reconciliation)
+        run: node eval/sector-coverage.test.js
       - name: Registry detector assertions
         run: node eval/registry.test.js
       - name: Producer assertions

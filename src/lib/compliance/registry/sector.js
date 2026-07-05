@@ -76,4 +76,32 @@ function subSectorExcludes(framework, sector, corpusText='') {
   return firm.sub !== node.sub;
 }
 const SUB_SECTOR_IDS = Object.entries(TREE).flatMap(([p,n])=>Object.keys(n.sub).map(s=>p+'/'+s));
-module.exports = { TREE, resolveSubSector, subSectorPredicates, parentOf, subSectorExcludes, SUB_EXCLUSIVE, SUB_SECTOR_IDS };
+// ─── CANONICAL SECTOR RECONCILIATION (Branch 4 / V2 DUP-3) ──────────────────────────────────────────
+// Every sector vocabulary in the engine (catalogue sector_relevance = 54 tags, SECTOR_MAP, SECTOR_RX,
+// firm-profile SECTORS) collapses to ONE canonical set here, so no firm loses coverage to a spelling split.
+// Merge decisions are GROUNDED in live catalogue rule-overlap (2026-07-05): a PROVEN subset (only_X=0) is an
+// alias that recovers the richer set; a near-disjoint split of the SAME real sector is unioned; genuinely
+// distinct sectors stay separate. Fixes live coverage bugs: `aesthetic` firms reached 9 fw not 29; `legal`
+// and `law-firms` were disjoint (SRA vs Legal-Ombudsman rules each lost half).
+const SECTOR_ALIASES = {
+  aesthetic:'aesthetics', health:'healthcare', technology:'tech', 'financial-services':'finance',
+  legal:'law-firms', law:'law-firms', financial:'finance', realestate:'real-estate', 'higher-education':'education',
+  wellness:'healthcare', fb:'hospitality', clinic:'healthcare', cosmetic:'aesthetics', dermatology:'aesthetics',
+  'medical-aesthetics':'aesthetics', 'plastic-surgery':'aesthetics', wealth:'finance', investment:'finance',
+  lending:'fintech', crypto:'fintech', travel:'hospitality'
+};
+const CANONICAL_SECTORS = new Set([
+  'law-firms','barristers','accounting','professional-services',
+  'healthcare','pharma','pharmacy','dental','aesthetics','fertility','telemedicine','care-homes',
+  'finance','fintech','insurance','real-estate',
+  'education','charity','energy','transport','aviation','media','marketing','manufacturing','construction',
+  'hospitality','food','ecommerce','retail','saas','tech','fitness','automotive','recruitment','ai','gambling','gaming'
+]);
+// Resolve ANY sector string to its ONE canonical sector. alias -> richer target; known -> itself; else structural parent; else null.
+function canonicalSector(sector){
+  let x = String(sector||'').toLowerCase().trim().replace(/\s+/g,'-');
+  if (SECTOR_ALIASES[x]) x = SECTOR_ALIASES[x];
+  if (CANONICAL_SECTORS.has(x)) return x;
+  return parentOf(x) || null;
+}
+module.exports = { TREE, BRIDGE, resolveSubSector, subSectorPredicates, parentOf, subSectorExcludes, SUB_EXCLUSIVE, SUB_SECTOR_IDS, SECTOR_ALIASES, CANONICAL_SECTORS, canonicalSector };
