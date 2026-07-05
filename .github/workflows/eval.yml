@@ -29,6 +29,8 @@ jobs:
         run: node eval/crosswalk.test.js
       - name: No under-audited sector (>=1 law each)
         run: node eval/sector-law-coverage.test.js
+      - name: Catalogue-derived SECTOR_MAP coverage
+        run: node eval/sector-map-catalogue.test.js
       - name: Sector coverage-integrity (canonical reconciliation)
         run: node eval/sector-coverage.test.js
       - name: Nexus SSOT invariants

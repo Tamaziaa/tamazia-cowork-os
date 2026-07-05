@@ -54,6 +54,16 @@ function deriveSectorParents() {
   return out;
 }
 
+// ===== (2b) deriveSectorMapFromCatalogue(pairs) — the CATALOGUE-BACKED SECTOR_MAP (Plan 1.3.14). The reframe:
+// the catalogue (compliance_rules.sector_relevance) is the framework-per-sector TRUTH; the legacy hardcoded SECTOR_MAP
+// is retired via the shadow-gated repoint (Phase 2.6). pairs = [{tag, framework}]; aliases merged via canonicalSector.
+function deriveSectorMapFromCatalogue(pairs) {
+  const map = {};
+  for (const pr of (pairs || [])) { const c = sector.canonicalSector(pr.tag); if (!c) continue; (map[c] = map[c] || new Set()).add(pr.framework); }
+  const out = {}; for (const k of Object.keys(map)) out[k] = [...map[k]].sort();
+  return out;
+}
+
 // ===== (2) deriveSectorMap() -> jurisdiction-router.js SECTOR_MAP ({ canonicalSector: [framework...] }) =====
 // Registry binds frameworks to a NODE. To reproduce the flat legacy map we UNION every sub-node's frameworks
 // under a parent, and also emit each sub-node as its own "parent/sub" key.
@@ -100,4 +110,4 @@ function deriveSectorRx() {
   return out;
 }
 
-module.exports = { deriveSectorRx, deriveSectorMap, deriveSectorParents, _readBridge, TREE, BRIDGE };
+module.exports = { deriveSectorMapFromCatalogue, deriveSectorRx, deriveSectorMap, deriveSectorParents, _readBridge, TREE, BRIDGE };
