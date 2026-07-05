@@ -116,6 +116,10 @@ function loadRules({ frameworks }) {
 const POLICY_PATHS = [
   '/', '/privacy', '/privacy-policy', '/cookies', '/cookie-policy', '/cookie-settings',
   '/terms', '/terms-and-conditions', '/legal', '/contact', '/about', '/about-us',
+  // Regulatory/professional-body disclosure pages (SRA/BSB/CQC/GMC/FCA 'authorised and regulated by' text lives here on
+  // large firms, not the homepage): law firms + regulated professions publish it on a dedicated legal-notices page.
+  '/legal-notices', '/legal-notice', '/regulatory-information', '/regulatory', '/regulatory-notices', '/disclaimer',
+  '/legal-and-regulatory', '/terms-of-use', '/complaints', '/complaints-procedure', '/compliance', '/regulatory-disclosures',
   '/careers', '/case-studies', '/news', '/press', '/investors', '/sustainability',
   '/security', '/accessibility', '/global', '/locations', '/offices', '/team',
   '/leadership', '/clients', '/services', '/sectors', '/markets', '/regions',

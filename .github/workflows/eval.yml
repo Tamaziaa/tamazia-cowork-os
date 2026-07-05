@@ -75,6 +75,8 @@ jobs:
         run: node eval/coverage-classify-edge.test.js
       - name: CrUX PSI fallback wiring
         run: node eval/crux-fallback.test.js
+      - name: rules_count sync (legal/health audit)
+        run: node eval/rules-count-sync.test.js
       - name: red-team adversarial fixtures (Phase 4.1.2)
         run: node eval/redteam.test.js
       - name: citation-verification gate (Phase 4.1.3)
