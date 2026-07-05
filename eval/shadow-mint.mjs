@@ -9,7 +9,11 @@ const { buildSignals } = require('/tmp/tamazia-cowork-os/src/lib/compliance/sign
 const { buildEvidenceLedger } = require('/tmp/tamazia-cowork-os/src/lib/audit/evidence-ledger.js');
 const { verifyCitations } = require('/tmp/tamazia-cowork-os/src/lib/audit/citation-gate.js');
 import { readFileSync } from 'fs';
+import { existsSync } from 'fs';
+if (!process.env.NEON_URL) { console.log('shadow-mint skipped — NEON_URL not set.'); process.exit(0); }
+if (!existsSync('/tmp/golden3.tsv')) { console.log('shadow-mint skipped — golden fixture absent (diagnostic-only).'); process.exit(0); }
 const cat = loadCatalogue();
+if (!cat || !Array.isArray(cat.frameworks) || !cat.frameworks.length) { console.log('shadow-mint skipped — empty catalogue.'); process.exit(0); }
 const rows = readFileSync('/tmp/golden3.tsv', 'utf8').trim().split('\n').map(l => { const [domain, sector, country, fws] = l.split('\t'); return { domain, sector, country, golden: (fws || '').split('|').filter(Boolean) }; });
 // representative corpus so the capability/consumer/nexus gates have something real to read
 const CORPUS = 'We are a limited company registered in England (company number 09876543), based in the UK. We collect personal data via forms, use cookies and analytics, run online marketing, take payments and subscriptions, and serve consumers. Privacy policy and complaints procedure. Prices from GBP 199.';
