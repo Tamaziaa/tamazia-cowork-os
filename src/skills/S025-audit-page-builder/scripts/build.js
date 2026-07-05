@@ -302,8 +302,20 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
       const _sect = (comp.detected_sector || sector || '').toString().toLowerCase();  // 30-slug vocab — matches the sector gate
       const sig = { jurSet, employeeBand: 'unknown', sector: _sect };
       const before = comp.findings.length;
-      comp.findings = comp.findings.filter(f => { if (f.status !== 'miss') return true; const law = idx.get(f.framework) || idx.get(f.framework_short); return law ? !overlayDrop(law, Object.assign({}, sig, { framework: f.framework || f.framework_short })) : true; });
-      if (comp.findings.length !== before) console.error(`[mint-gate] dropped ${before - comp.findings.length} non-compliant finding(s) for ${domain} (fail-closed)`);
+      // Phase 2.1 (V2 N-1 fix): overlayDrop must have a SINGLE authority. compliance.js already ran the authoritative
+      // overlay with FULL signals (trigger + employeeBand + corpus). If it ran (comp.canonical_jurisdictions present),
+      // this build-side gate is ASSERTION-ONLY: it must never double-cut with these degraded signals (no trig/band),
+      // which could false-drop a finding the authoritative pass correctly kept. It only actively filters as a fail-
+      // closed SAFETY NET when the authoritative overlay did NOT run.
+      const _overlay1Ran = !!(comp.canonical_jurisdictions && comp.canonical_jurisdictions.length);
+      comp.findings = comp.findings.filter(f => {
+        if (f.status !== 'miss') return true;
+        const law = idx.get(f.framework) || idx.get(f.framework_short);
+        const would = law ? overlayDrop(law, Object.assign({}, sig, { framework: f.framework || f.framework_short })) : false;
+        if (would && _overlay1Ran) { console.error(`[mint-gate ASSERT] overlay#1 already applied but build-gate would drop ${f.framework || f.framework_short} (${would}); trusting authoritative overlay, NOT double-cutting`); return true; }
+        return !would;
+      });
+      if (comp.findings.length !== before) console.error(`[mint-gate] dropped ${before - comp.findings.length} non-compliant finding(s) for ${domain} (fail-closed safety-net; authoritative overlay did not run)`);
     }
   } catch (_e) {}
   // Propagate the LLM firm-profiler's detected sector (corrects a mis-tagged row — e.g. a gym tagged
