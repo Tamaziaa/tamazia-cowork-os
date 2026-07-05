@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [ main, compliance-ssot ]
   push:
-    branches: [ compliance-ssot ]
+    branches: [ compliance-ssot, main ]
 jobs:
   legal-qa:
     runs-on: ubuntu-latest
