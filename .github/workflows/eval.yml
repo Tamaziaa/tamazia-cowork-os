@@ -29,6 +29,8 @@ jobs:
         run: node eval/nexus.test.js
       - name: Controlled-vocabulary SSOT invariants
         run: node eval/vocab.test.js
+      - name: Tagged-law schema integrity
+        run: node eval/law-schema.test.js
       - name: Registry detector assertions
         run: node eval/registry.test.js
       - name: Producer assertions
