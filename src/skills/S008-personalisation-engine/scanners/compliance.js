@@ -799,10 +799,11 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       : (_llmDetectedSec || _normLeadSec || sector)
   );
   // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
-  let frameworks;
+  let frameworks, framework_binding = {};
   try {
     const { connect, loadCatalogue } = require('../../../lib/compliance/connect.js');
-    frameworks = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector: effectiveSector, signals, text: corpusText }).frameworks;
+    const _cx = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector: effectiveSector, signals, text: corpusText });
+    frameworks = _cx.frameworks; framework_binding = _cx.binding || {};
   } catch (_e) {
     const fs2 = new Set(); for (const j of allJurisdictions) for (const f of routeJurisdictions({ country: j, sector: effectiveSector })) fs2.add(f); frameworks = Array.from(fs2);
   }
@@ -951,7 +952,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const payload = {
     domain, sector, country, ok: true, reachable: true,
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
-    frameworks, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
+    frameworks, binding: framework_binding, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
     firm_profile: firmProfile, detected_sector: effectiveSector,
     rules_evaluated: rules.length, hits, misses,
     resolver_dropped: _resolverDropped,

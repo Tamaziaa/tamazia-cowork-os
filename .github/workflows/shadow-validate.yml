@@ -36,5 +36,5 @@ jobs:
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           export REMINT_HASHES="${{ inputs.hashes }}"; [ -z "$REMINT_HASHES" ] && export REMINT_HASHES="$DEFAULT_HASHES"
           echo "shadow-minting: $REMINT_HASHES"
-          node scripts/remint-audits.js
+          node scripts/heartbeat.js wrap shadow-validate -- node scripts/remint-audits.js || node scripts/remint-audits.js
           node eval/shadow-diff.js
