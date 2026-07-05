@@ -44,7 +44,7 @@ const S = [
    fwHas:['UK_ABI'], fwNot:[], bindingHas:{UK_ABI:'voluntary_code'} },
  { n:'Bahrain firm (new ME law, distinct)', jur:['BH'], sec:'b2b',
    corpus:'Manama consultancy; we collect personal data via our contact form and use cookies; privacy policy.',
-   has:['MENA-BH'], not:['MENA-AE','MENA-SA'], sub:null, preds:['processes_bahrain_resident_data'],
+   has:['MENA-BH'], not:['MENA-AE','MENA-SA'], sub:'professional-services/general', preds:['processes_bahrain_resident_data'],
    fwHas:['BAHRAIN_PDPL'], fwNot:['UAE_PDPL','SAUDI_PDPL'] },
  { n:'Edge: empty (robustness)', jur:[], sec:'', corpus:'', has:[], not:['UK','USA'], sub:null, preds:[], fwHas:[], fwNot:[] },
 ];
