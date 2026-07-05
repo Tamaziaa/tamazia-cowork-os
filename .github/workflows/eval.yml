@@ -73,6 +73,8 @@ jobs:
         run: node eval/llm-hardening.test.js
       - name: coverage classify edge cases (FIX-A1)
         run: node eval/coverage-classify-edge.test.js
+      - name: CrUX PSI fallback wiring
+        run: node eval/crux-fallback.test.js
       - name: red-team adversarial fixtures (Phase 4.1.2)
         run: node eval/redteam.test.js
       - name: citation-verification gate (Phase 4.1.3)

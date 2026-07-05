@@ -183,11 +183,47 @@ async function _pageSpeedOne(domain, key, strategy) {
 // Fetch BOTH strategies in PARALLEL — the render shows a mobile|desktop toggle, so a single-strategy result would
 // make the whole PSI block vanish (psiStrats=null). Returns { ...mobileFlat, scores, mobile, desktop } so the legacy
 // flat readers AND the new per-strategy render both work; if one strategy fails the other still renders (resilient).
+// CrUX FALLBACK: when the Lighthouse LAB test times out (Google's crawler can't load a heavy/hostile site — e.g.
+// sjp.co.uk returns http 000 after 42s), fetch real-world FIELD data from the Chrome UX Report API instead. CrUX is
+// aggregated p75 field data (no live crawl) so it returns where the lab test cannot. Populates cwv (LCP/CLS/FCP/INP)
+// so the render's PageSpeed block shows real data instead of 'not assessed'. Requires the (free) Chrome UX Report API
+// to be enabled on the GCP project; fail-open (returns null) if disabled/no-data. formFactor: PHONE(mobile)|DESKTOP.
+async function _cruxOne(domain, key, strategy) {
+  if (!key) return null;
+  const formFactor = strategy === 'desktop' ? 'DESKTOP' : 'PHONE';
+  const url = 'https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=' + key;
+  // try exact URL first, then origin-level (CrUX 404s a specific URL with thin data but often has origin data)
+  for (const body of [{ url: 'https://' + domain, formFactor }, { origin: 'https://' + domain, formFactor }]) {
+    try {
+      const r = await timed((signal) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal }), 12000);
+      if (!r.ok) continue;
+      const j = await r.json();
+      const m = (j && j.record && j.record.metrics) || null;
+      if (!m) continue;
+      const p75 = (k) => { const v = m[k] && m[k].percentiles && m[k].percentiles.p75; const n = typeof v === 'string' ? parseFloat(v) : v; return Number.isFinite(n) ? n : null; };
+      const cwv = { lcp_ms: p75('largest_contentful_paint'), inp_ms: p75('interaction_to_next_paint') || p75('experimental_interaction_to_next_paint'), cls: p75('cumulative_layout_shift'), fcp_ms: p75('first_contentful_paint'), tbt_ms: null };
+      if (cwv.lcp_ms == null && cwv.cls == null && cwv.fcp_ms == null) continue;   // no usable field data
+      return {
+        strategy, source: 'crux-field',
+        perf: null, seo: null, lcp_ms: cwv.lcp_ms, cls: cwv.cls, tbt_ms: null, fcp_ms: cwv.fcp_ms,
+        scores: { performance: null, accessibility: null, 'best-practices': null, seo: null },   // present-but-null so buildPsiStrat renders the CWV
+        cwv, audits: [],
+      };
+    } catch (_e) { /* try next body / fail-open */ }
+  }
+  return null;
+}
+
 async function pageSpeed(domain, key) {
-  const [mobile, desktop] = await Promise.all([
+  let [mobile, desktop] = await Promise.all([
     _pageSpeedOne(domain, key, 'mobile'),
     _pageSpeedOne(domain, key, 'desktop'),
   ]);
+  // CrUX field-data fallback for whichever strategy the lab test could not produce (never render 'not assessed').
+  if (!mobile || !desktop) {
+    const [cm, cd] = await Promise.all([ mobile ? Promise.resolve(null) : _cruxOne(domain, key, 'mobile'), desktop ? Promise.resolve(null) : _cruxOne(domain, key, 'desktop') ]);
+    mobile = mobile || cm; desktop = desktop || cd;
+  }
   if (!mobile && !desktop) return null;
   const base = mobile || desktop;                                  // flat back-compat fields prefer mobile
   return Object.assign({}, base, { scores: base.scores, mobile: mobile || null, desktop: desktop || null });
