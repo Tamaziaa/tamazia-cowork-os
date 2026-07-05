@@ -121,6 +121,19 @@ function secMatches(sectors, sec) {
 }
 
 // catalogue = { frameworks:[{framework_short,jurisdiction}], rules:[{framework_short,sector_relevance[],rule_type,trigger_pattern,...}] }
+// FAIL-CLOSED self-test (resolveLaws rigor applied to the live engine, Branch 5): every attached framework MUST be
+// jurisdiction-valid (GLOBAL or an operated jurisdiction) and NOT node-excluded. A violation means a gate was bypassed
+// -> throw, so the mint path halts with a flag rather than silently shipping a leaked framework.
+function connectSelfTest(frameworks, jSet, sec, fvJuris, text) {
+  const _sx = require('./registry/sector.js');
+  for (const fw of (frameworks || [])) {
+    const jz = (fvJuris && fvJuris[fw]) || '';
+    if (!(jz === 'GLOBAL' || jSet.has(jz))) { const e = new Error('connect_self_test:jurisdiction_leak:' + fw + '(' + jz + ')'); e.guardrail = 'jurisdiction_leak'; throw e; }
+    if (_sx.subSectorExcludes(fw, sec, text || '')) { const e = new Error('connect_self_test:node_exclusion_leak:' + fw); e.guardrail = 'node_exclusion_leak'; throw e; }
+  }
+  return true;
+}
+
 function connect({ catalogue, jurisdictions, sector, signals, text }) {
   // Normalise variant sector names before routing so 'aesthetic' → 'aesthetics', 'legal' → 'law-firms', etc.
   // This makes the SECTOR_MAP lookup direct rather than relying only on the SECTOR_PARENTS chain.
@@ -169,6 +182,7 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     else if (sectorHeld) gates.sector_filtered.push(fw);
   }
   const _fwArr = Array.from(connectedFw).sort();
+  connectSelfTest(_fwArr, J, sec, fvJuris, t);   // fail-closed guardrail
   const _bind = {}; { const _i = require('./registry/framework-intel.js'); for (const _f of _fwArr) { const _b = _i.bindingStatus(_f); if (_b) _bind[_f] = _b; } }
   return { frameworks: _fwArr, rules: connectedRules, jurisdictions: Array.from(J), gates, binding: _bind };
 }
@@ -186,4 +200,4 @@ function loadCatalogue() {
   return _cat;
 }
 
-module.exports = { connect, loadCatalogue, expandJurisdictions, normJuris, EU_ISO, UNIVERSAL_FW, fwToSectors };
+module.exports = { connect, connectSelfTest, loadCatalogue, expandJurisdictions, normJuris, EU_ISO, UNIVERSAL_FW, fwToSectors };

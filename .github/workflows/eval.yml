@@ -25,6 +25,8 @@ jobs:
         run: node eval/subsector.test.js
       - name: Node-exclusivity guard (no cross-sector law leaks)
         run: node eval/node-exclusive.test.js
+      - name: connect() fail-closed self-test
+        run: node eval/connect-failclosed.test.js
       - name: NAICS crosswalk coverage
         run: node eval/crosswalk.test.js
       - name: No under-audited sector (>=1 law each)
