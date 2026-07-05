@@ -4,9 +4,9 @@
 // fined <penalty> for exactly this (source)". Ranking: framework match is required; +sector overlap; +recency.
 // Additive + downstream of connect (never changes attachment; shadow-identity trivially holds). Fail-open w/o DB.
 const { execFileSync } = require('child_process'); const path = require('path');
-let _cache = null;
+let _cache = null, _cacheAt = 0; const _CACHE_TTL_MS = 15 * 60 * 1000;   // FIX-P3: TTL so law-change updates propagate
 function _load() {
-  if (_cache) return _cache;
+  if (_cache && (Date.now() - _cacheAt) < _CACHE_TTL_MS) return _cache;
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return (_cache = []);
   try {
     const out = execFileSync(path.join(__dirname, '..', '..', '..', 'scripts', 'psql'),
@@ -15,6 +15,7 @@ function _load() {
     const _arr = v => { try { const j = JSON.parse(v); return Array.isArray(j) ? j.map(String) : []; } catch (_) { return []; } };
     _cache = out ? out.split('\n').filter(Boolean).map(l => { const [laws, sectors, breach_type, penalty, ruling_date, summary, source_url] = l.split('\t'); return { laws: _arr(laws), sectors: _arr(sectors).map(x => x.toLowerCase()), breach_type, penalty, ruling_date, summary, source_url }; }) : [];
   } catch (_e) { _cache = []; }
+  _cacheAt = Date.now();
   return _cache;
 }
 function _score(row, framework, sector) {
