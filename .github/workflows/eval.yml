@@ -37,6 +37,8 @@ jobs:
         run: node eval/sra-complaints-superset.test.js
       - name: sector cut-over no-loss (Branch 4)
         run: node eval/sector-cutover.test.js
+      - name: catalogue completeness + overlap (Phase 2.3)
+        run: node eval/catalogue-completeness.test.js
       - name: element-checklist candidate correctness
         run: node eval/element-checklist-candidates.test.js
       - name: NAICS crosswalk coverage
