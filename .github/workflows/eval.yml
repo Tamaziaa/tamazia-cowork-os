@@ -67,6 +67,8 @@ jobs:
         run: node eval/enforcement-backtest.test.js
       - name: sector-vocab canonicalisation (audit P1 fix)
         run: node eval/sector-vocab-canon.test.js
+      - name: citation completeness (FIX-S1)
+        run: node eval/citation-completeness.test.js
       - name: element-checklist candidate correctness
         run: node eval/element-checklist-candidates.test.js
       - name: NAICS crosswalk coverage

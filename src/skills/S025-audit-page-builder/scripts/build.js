@@ -456,7 +456,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   });
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';
   const lr = pg(`SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'`) || new Date().toISOString().slice(0, 10);
-  const rulesList = frameworks.map(f => `'${f}'`).join(',');
+  const rulesList = frameworks.map(f => `'${String(f).replace(/'/g, "''")}'`).join(',');   // FIX-S2a: escape single-quotes (SQL-injection defense-in-depth)
   const rulesRaw = rulesList ? pg(`SELECT framework_short, rule_id, severity, description, citation_url FROM compliance_rules WHERE active=TRUE AND framework_short IN (${rulesList}) ORDER BY severity, framework_short, rule_id`) : null;
   const rules = rulesRaw ? rulesRaw.split('\n').filter(Boolean).map(line => {
     const [framework_short, rule_id, severity, description, citation_url] = line.split('\t');
@@ -621,6 +621,9 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     const hasText = !!String(f.fact || f.title || f.layman_explanation || '').trim();
     if (!hasText) return false;
     if (f.bucket === 'compliance' && !String(f.framework_short || f.citation || '').trim()) return false;
+    // FIX-S1: a compliance breach that asserts a MONETARY exposure must cite the law (citation_url or statutory_citation).
+    // A fine with no citable source is unverifiable -> drop it fail-closed (mirrors the render-side FIX-R3 guard).
+    if (f.bucket === 'compliance' && (+f.fine_high_gbp || 0) > 0 && !String(f.citation_url || f.statutory_citation || '').trim()) return false;
     return true;
   };
   const _confirmed = _ft.confirmed(_classified).filter(_integrityOK);

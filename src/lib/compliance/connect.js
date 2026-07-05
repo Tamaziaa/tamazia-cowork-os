@@ -258,6 +258,10 @@ function loadCatalogue() {
   const frameworks = fw ? fw.split('\n').filter(Boolean).map(l => { const [framework_short, jurisdiction, req] = l.split('\t'); let required_nexus=null; try{ required_nexus = req?JSON.parse(req):null; }catch(_){ required_nexus=null; } return { framework_short, jurisdiction, required_nexus }; }) : [];
   const rl = pg("SELECT framework_short, rule_id, COALESCE(rule_type,'must_appear'), COALESCE(trigger_pattern,''), COALESCE(array_to_string(sector_relevance,'|'),''), COALESCE(severity,'P2') FROM compliance_rules WHERE active=TRUE").trim();
   const rules = rl ? rl.split('\n').filter(Boolean).map(l => { const [framework_short, rule_id, rule_type, trigger_pattern, sectors, severity] = l.split('\t'); return { framework_short, rule_id, rule_type, trigger_pattern: trigger_pattern || null, sector_relevance: sectors ? sectors.split('|').filter(Boolean) : [], severity }; }) : [];
+  // FIX-S2b: NEVER cache an empty catalogue. framework_versions always has rows, so an empty result means the DB
+  // query failed (outage/auth). Caching it would attach ZERO frameworks for the whole process life with no error.
+  // Return the empty result WITHOUT caching so the next call retries.
+  if (!frameworks.length) return { frameworks, rules };
   _cat = { frameworks, rules };
   return _cat;
 }
