@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>EUR-Lex - Recently modified legal acts</title>
+    <link>https://eur-lex.europa.eu/</link>
+    <description>Recently modified legal acts</description>
+    <item>
+      <title>Regulation (EU) 2026/1123 on artificial intelligence transparency obligations</title>
+      <link>https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32026R1123</link>
+      <guid>https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32026R1123</guid>
+      <pubDate>Tue, 01 Jul 2026 08:00:00 GMT</pubDate>
+      <description>Regulation laying down transparency obligations for AI systems.</description>
+    </item>
+    <item>
+      <title>Directive (EU) 2026/998 amending the ePrivacy framework</title>
+      <link>https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32026L0998</link>
+      <guid>https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32026L0998</guid>
+      <pubDate>Mon, 30 Jun 2026 09:30:00 GMT</pubDate>
+      <description>Directive amending Directive 2002/58/EC on privacy and electronic communications.</description>
+    </item>
+  </channel>
+</rss>

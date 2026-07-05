@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:leg="http://www.legislation.gov.uk/namespaces/legislation">
+  <title>Search Results</title>
+  <updated>2026-07-01T00:00:04Z</updated>
+  <id>https://www.legislation.gov.uk/new/data.feed</id>
+  <entry>
+    <id>https://www.legislation.gov.uk/uksi/2026/701</id>
+    <title>The Data Protection (Adequacy) (Amendment) Regulations 2026</title>
+    <updated>2026-07-01T00:00:04Z</updated>
+    <published>2026-07-01T00:00:04Z</published>
+    <link rel="alternate" href="https://www.legislation.gov.uk/uksi/2026/701"/>
+    <summary>These Regulations amend the adequacy provisions relating to international data transfers.</summary>
+  </entry>
+  <entry>
+    <id>https://www.legislation.gov.uk/uksi/2026/698</id>
+    <title>The Consumer Protection (Digital Markets) Regulations 2026</title>
+    <updated>2026-06-30T00:00:03Z</updated>
+    <published>2026-06-30T00:00:03Z</published>
+    <link rel="alternate" href="https://www.legislation.gov.uk/uksi/2026/698"/>
+    <summary>Provisions implementing parts of the Digital Markets, Competition and Consumers Act 2024.</summary>
+  </entry>
+  <entry>
+    <id>https://www.legislation.gov.uk/ukpga/2026/12</id>
+    <title>Online Safety (Age Assurance) Act 2026</title>
+    <updated>2026-06-29T00:00:02Z</updated>
+    <published>2026-06-29T00:00:02Z</published>
+    <link rel="alternate" href="https://www.legislation.gov.uk/ukpga/2026/12"/>
+    <summary>An Act to make provision about age assurance for online services.</summary>
+  </entry>
+</feed>

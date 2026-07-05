@@ -1,0 +1,29 @@
+{
+  "count": 2,
+  "next": "https://www.courtlistener.com/api/rest/v4/opinions/?cursor=xyz",
+  "previous": null,
+  "results": [
+    {
+      "id": 9938271,
+      "resource_uri": "https://www.courtlistener.com/api/rest/v4/opinions/9938271/",
+      "absolute_url": "/opinion/9938271/in-re-consumer-data-privacy-litigation/",
+      "cluster": "https://www.courtlistener.com/api/rest/v4/clusters/8811223/",
+      "case_name": "In re Consumer Data Privacy Litigation",
+      "type": "010combined",
+      "date_created": "2026-07-01T14:22:10.331200Z",
+      "date_modified": "2026-07-01T14:22:10.331230Z",
+      "snippet": "Opinion concerning standing under state privacy statutes."
+    },
+    {
+      "id": 9938102,
+      "resource_uri": "https://www.courtlistener.com/api/rest/v4/opinions/9938102/",
+      "absolute_url": "/opinion/9938102/ftc-v-example-adtech-inc/",
+      "cluster": "https://www.courtlistener.com/api/rest/v4/clusters/8811010/",
+      "case_name": "FTC v. Example AdTech Inc.",
+      "type": "020lead",
+      "date_created": "2026-06-30T09:05:44.100000Z",
+      "date_modified": "2026-06-30T09:05:44.100050Z",
+      "snippet": "Order granting summary judgment on deceptive advertising claims."
+    }
+  ]
+}

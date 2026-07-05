@@ -31,6 +31,12 @@ jobs:
       - run: npm install --omit=dev || npm install || true
       - run: python -m pip install --quiet -r requirements.txt
       - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Seed shadow rows from live (so the in-place re-mint has rows to update)
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          H="${{ inputs.hashes }}"; [ -z "$H" ] && H="$DEFAULT_HASHES"
+          Q=$(echo "$H" | sed "s/[^,]*/'&'/g")
+          ./scripts/psql "$NEON_URL" -c "INSERT INTO audit_pages_shadow SELECT * FROM audit_pages WHERE hash IN ($Q) ON CONFLICT DO NOTHING;"
       - name: Shadow re-mint golden sample (writes ONLY audit_pages_shadow)
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true

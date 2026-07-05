@@ -1,0 +1,17 @@
+{
+  "head": { "vars": ["work", "title", "date"] },
+  "results": {
+    "bindings": [
+      {
+        "work": { "type": "uri", "value": "http://publications.europa.eu/resource/cellar/aa11bb22-cc33-dd44-ee55-ff6677889900" },
+        "title": { "type": "literal", "value": "Commission Implementing Decision (EU) 2026/1200 on data adequacy" },
+        "date": { "type": "literal", "value": "2026-07-02" }
+      },
+      {
+        "work": { "type": "uri", "value": "http://publications.europa.eu/resource/cellar/11223344-5566-7788-99aa-bbccddeeff00" },
+        "title": { "type": "literal", "value": "Regulation (EU) 2026/1050 on consumer digital fairness" },
+        "date": { "type": "literal", "value": "2026-06-28" }
+      }
+    ]
+  }
+}
