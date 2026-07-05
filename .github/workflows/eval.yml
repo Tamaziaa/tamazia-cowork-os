@@ -27,6 +27,8 @@ jobs:
         run: node eval/sector-coverage.test.js
       - name: Nexus SSOT invariants
         run: node eval/nexus.test.js
+      - name: Controlled-vocabulary SSOT invariants
+        run: node eval/vocab.test.js
       - name: Registry detector assertions
         run: node eval/registry.test.js
       - name: Producer assertions
