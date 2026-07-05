@@ -4,10 +4,10 @@
 import { execFileSync } from 'child_process';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const { connect, loadCatalogue, UNIVERSAL_FW } = require('/tmp/tamazia-cowork-os/src/lib/compliance/connect.js');
-const { buildSignals } = require('/tmp/tamazia-cowork-os/src/lib/compliance/signals.js');
-const { buildEvidenceLedger } = require('/tmp/tamazia-cowork-os/src/lib/audit/evidence-ledger.js');
-const { verifyCitations } = require('/tmp/tamazia-cowork-os/src/lib/audit/citation-gate.js');
+const { connect, loadCatalogue, UNIVERSAL_FW } = require('../src/lib/compliance/connect.js');
+const { buildSignals } = require('../src/lib/compliance/signals.js');
+const { buildEvidenceLedger } = require('../src/lib/audit/evidence-ledger.js');
+const { verifyCitations } = require('../src/lib/audit/citation-gate.js');
 import { readFileSync } from 'fs';
 import { existsSync } from 'fs';
 if (!process.env.NEON_URL) { console.log('shadow-mint skipped — NEON_URL not set.'); process.exit(0); }
