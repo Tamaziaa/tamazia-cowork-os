@@ -55,6 +55,8 @@ jobs:
         run: node eval/enforcement-crossval.test.js
       - name: typed evidence ledger (Phase 3.5.3)
         run: node eval/evidence-ledger.test.js
+      - name: grounded LLM extraction (Phase 3.2)
+        run: node eval/llm-extractor.test.js
       - name: element-checklist candidate correctness
         run: node eval/element-checklist-candidates.test.js
       - name: NAICS crosswalk coverage
