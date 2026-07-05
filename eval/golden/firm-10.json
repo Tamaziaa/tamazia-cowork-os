@@ -1,0 +1,64 @@
+{
+ "id": "firm-10",
+ "region": "ME",
+ "sector": "real-estate",
+ "detected_sector": "real-estate",
+ "country": "AE",
+ "registered": "AE",
+ "operating_regions": [
+  "US",
+  "Middle East",
+  "Global"
+ ],
+ "engine_jurisdictions": [
+  "AE"
+ ],
+ "applicable_frameworks": [
+  "ADGM_DPR",
+  "GOOGLE_EEAT",
+  "UAE_AML_2018",
+  "UAE_ENV_2024",
+  "UAE_MOHRE",
+  "UAE_PDPL",
+  "UAE_RERA"
+ ],
+ "jurisdiction_regimes": [
+  "CCPA/CPRA + ADA",
+  "UAE PDPL / DIFC DP",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 3,
+  "p2": 16,
+  "total": 19
+ },
+ "compliance_findings": [
+  {
+   "citation": "US state privacy law (CCPA/CPRA) · cookie consent",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia installs a consent platform that blocks every non-essential tracker until opt-in, with a Reject-All button as prominent as Accept-All.",
+   "fact": "1 non-essential tracker(s) load with no detectable consent mechanism: Meta Pixel (sets lu, xs, c_user — Advertising, controller Facebook).",
+   "enforcement_example": true
+  },
+  {
+   "citation": "Multi-jurisdiction posture",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P2",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia maps each market to its regime and closes the gaps.",
+   "fact": "Operates across 3 regions (US, Middle East, Global) on one-size-fits-all compliance.",
+   "enforcement_example": true
+  }
+ ],
+ "trap": "S6/S7"
+}

@@ -1,0 +1,106 @@
+{
+  "_meta": {
+    "purpose": "Branch 8 prep for V1 defect C10 ('detection mostly single-regex; element_checklist rare'). Two AUTHOR-ONLY candidate element_checklist rules for the two highest-value disclosure duties: UK GDPR Article 13 privacy-notice contents, and SRA Transparency Rules complaints information. NOT applied to the live catalogue. Proven offline by eval/element-checklist-candidates.test.js against synthetic corpora before any migration. Each object is a full compliance_rules row; regex_elements is the [{label,pattern}] shape the ruleCheck element_checklist branch consumes. Patterns deliberately avoid backslashes so they survive JSON->jsonb round-tripping cleanly, matching the house style in db/migrations/20260629_element_checklist_3c.sql.",
+    "authored": "2026-07-05",
+    "applies_to_db": false,
+    "supersedes_note": "The later migration must INSERT these two and DEACTIVATE the superseded single-regex rows they replace (UK GDPR privacy-notice single-regex row -> A13_ELEMENTS; SRA complaints single-regex row -> SRA_COMPLAINTS_ELEMENTS), gated by a shadow-diff."
+  },
+  "rules": [
+    {
+      "id": 900001,
+      "framework_short": "UK_GDPR_A13",
+      "rule_id": "A13_ELEMENTS",
+      "rule_type": "must_appear",
+      "check_style": "element_checklist",
+      "page_scope": "privacy|/privacy-policy|privacy-notice|privacy-statement|data-protection|/gdpr|how-we-use-your-data|your-data|/dpa|fair-processing",
+      "trigger_pattern": null,
+      "regex_elements": [
+        {
+          "label": "the identity and contact details of the controller (Art 13(1)(a))",
+          "pattern": "(data controller|the controller (is|of)|controller.{0,30}(is|are)|who (we are|is responsible)|registered (office|address)|contact (us|details).{0,40}(privacy|data)|company (number|registration)|you can contact us|our (registered )?address)"
+        },
+        {
+          "label": "the contact details of the DPO where one is appointed (Art 13(1)(b))",
+          "pattern": "(data protection officer|(^|[^a-z])dpo([^a-z]|$)|dpo@|data.protection@|privacy@|our data protection|contact.{0,20}(our )?data protection)"
+        },
+        {
+          "label": "the purposes of the processing (Art 13(1)(c))",
+          "pattern": "(purpose[s]? (of|for) (the |our )?processing|purposes for which|we (use|process|collect).{0,60}(to|in order to|for the purpose|so that|because)|why we (collect|use|process)|reasons? (we|for) (collect|process|using))"
+        },
+        {
+          "label": "the lawful basis for the processing (Art 13(1)(c))",
+          "pattern": "(lawful basis|legal basis for (processing|our use)|basis for (the )?processing|legitimate interest[s]? (in|to|of|for)|(rely|relying) on (your )?consent|(your |the )?consent (to|for) (the |our )?(processing|use of)|performance of (a |the )?contract|article 6)"
+        },
+        {
+          "label": "the recipients or categories of recipients (Art 13(1)(e))",
+          "pattern": "(categories of recipient|(share|disclose|provide|pass) (your |the |personal )?(data|information|details) (with|to)|(recipient[s]? of|disclose).{0,20}(your |personal )?(data|information)|third part(y|ies) (who|that|processor|provider|we|receiv)|(service )?providers (who|that|process|acting as)|processor[s]? (who|that|acting|process)|who we share (your )?(data|information))"
+        },
+        {
+          "label": "international transfers and safeguards (Art 13(1)(f))",
+          "pattern": "(transfer[s]? (your |personal )?(data|information)? ?(outside|out of|to)(.{0,30})(uk|eea|european|country|countries)|international transfer|standard contractual clause|adequacy (decision|regulation)|appropriate safeguards|outside the (uk|eea)|third countr(y|ies))"
+        },
+        {
+          "label": "the retention period or criteria (Art 13(2)(a))",
+          "pattern": "(retention (period|policy)|how long we (keep|retain|hold|store)|(keep|retain|hold|store) (your |personal )?(data|information) (for|only|no longer)|retain(ed)?.{0,30}(period|as long as|necessary|years|months)|criteria (used )?to determine|for as long as)"
+        },
+        {
+          "label": "the data-subject rights including the right to complain to the ICO (Art 13(2)(b),(d))",
+          "pattern": "((your )?(data protection |privacy )?rights|right (to|of) (access|rectification|erasure|be forgotten|restrict|portability|object)|complain (to|with).{0,30}(ico|information commissioner)|information commissioner|(^|[^a-z])ico([^a-z]|$)|lodge a complaint|make a complaint (to|with) (the )?(ico|information))"
+        }
+      ],
+      "severity": "P1",
+      "description": "UK GDPR Article 13 requires a privacy notice given at the point personal data is collected to state the controller's identity and contact details, the DPO's contact details where one is appointed, the purposes and lawful basis of processing, the recipients or categories of recipients, any international transfers and safeguards, the retention period or criteria, and the data-subject rights including the right to complain to the ICO.",
+      "statutory_citation": "UK GDPR, Article 13 (as retained by the Data Protection Act 2018)",
+      "citation_url": "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/right-to-be-informed/what-privacy-information-should-we-provide/",
+      "sector_relevance": null,
+      "fine_low_gbp": 0,
+      "fine_high_gbp": 0,
+      "layman_explanation": "When you collect people's personal data you must give them a privacy notice that covers a specific list of points set by UK GDPR Article 13. Your privacy page is missing one or more of these required disclosures, which is one of the most common data-protection failings the ICO acts on.",
+      "tamazia_fix_short": "Tamazia rebuilds your privacy notice to cover every UK GDPR Article 13 element - controller and DPO contacts, purposes, lawful basis, recipients, international transfers, retention and the full set of data-subject rights including the right to complain to the ICO.",
+      "active": true
+    },
+    {
+      "id": 900002,
+      "framework_short": "UK_SRA_TRANSPARENCY",
+      "rule_id": "SRA_COMPLAINTS_ELEMENTS",
+      "rule_type": "must_appear",
+      "check_style": "element_checklist",
+      "page_scope": "complaint|complaints|feedback|/legal|regulatory|terms|our-service|client-care|how-we-work",
+      "trigger_pattern": "(solicitor[s]?|(^|[^a-z])sra([^a-z]|$)|solicitors regulation authority|regulated by the sra|law firm|legal practice|conveyanc|licensed conveyanc|our (solicitor|lawyer)[s]?|firm of solicitors)",
+      "regex_elements": [
+        {
+          "label": "how to make a complaint",
+          "pattern": "(how to (make |raise )?(a )?complain|make a complaint|raise a complaint|to complain(,| )|if you (wish to|want to|would like to) complain|our complaints (procedure|process|policy)|making a complaint|complaints (procedure|process|policy|handling))"
+        },
+        {
+          "label": "the complaint handling timescales",
+          "pattern": "(within [0-9]+ (working )?(day|week|month)|acknowledge.{0,30}(within|[0-9]+ (day|week))|respond.{0,30}(within|[0-9]+ (day|week))|[0-9]+ (working )?days? (of|to|from)|timescale|how long.{0,20}(complaint|respond)|final (written )?response.{0,30}(within|[0-9]+))"
+        },
+        {
+          "label": "signposting to the Legal Ombudsman",
+          "pattern": "(legal ombudsman|legalombudsman|www.legalombudsman|0300 555 0333)"
+        },
+        {
+          "label": "the right to complain to the SRA",
+          "pattern": "((complain|report|raise).{0,25}(to |with |us to )?(the )?sra([^a-z]|$)|(^|[^a-z])sra([^a-z]).{0,25}(if you|where you|to report|to complain|about (our|the)|conduct|misconduct|concern[s]?)|report (your )?concern[s]? to the sra)"
+        }
+      ],
+      "severity": "P1",
+      "description": "The SRA Transparency Rules require a regulated firm to publish, in a clear and accessible way, its complaints procedure - including how a client complains, the timescales for dealing with a complaint, and how and when a client can complain to the Legal Ombudsman and to the SRA.",
+      "statutory_citation": "SRA Transparency Rules 2018, rule 2 (complaints information), made under the SRA Standards and Regulations",
+      "citation_url": "https://www.sra.org.uk/solicitors/standards-regulations/transparency-rules/",
+      "sector_relevance": [
+        "legal",
+        "law-firm",
+        "solicitors",
+        "conveyancing",
+        "legal-services"
+      ],
+      "fine_low_gbp": 0,
+      "fine_high_gbp": 0,
+      "layman_explanation": "As a firm regulated by the SRA you must publish clear complaints information: how a client complains, how long you take to deal with it, and their right to escalate to the Legal Ombudsman and to the SRA. The scan could not find one or more of these required elements, which is a Transparency Rules breach the SRA enforces.",
+      "tamazia_fix_short": "Tamazia adds a compliant complaints section covering how to complain, your response timescales, and full signposting to both the Legal Ombudsman and the SRA, matching the SRA Transparency Rules.",
+      "active": true
+    }
+  ]
+}

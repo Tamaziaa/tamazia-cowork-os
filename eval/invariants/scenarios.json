@@ -1,0 +1,511 @@
+{
+ "source": "INV500",
+ "total_invariants": 500,
+ "scenarios": [
+  {
+   "id": "S1",
+   "group": "A",
+   "invariants": "1-10",
+   "name": "Detected country changes (the currency-switch case)",
+   "covered_by": [
+    "ledger:10.4"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S2",
+   "group": "A",
+   "invariants": "11-20",
+   "name": "Operates in multiple countries at once",
+   "covered_by": [
+    "ledger:6.2"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S3",
+   "group": "A",
+   "invariants": "21-30",
+   "name": "Relocates head office between runs",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S4",
+   "group": "A",
+   "invariants": "31-40",
+   "name": "Served-market currency differs from billing currency",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S5",
+   "group": "A",
+   "invariants": "41-50",
+   "name": "EU-only country with no national framework row",
+   "covered_by": [
+    "golden:EU"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S6",
+   "group": "A",
+   "invariants": "51-60",
+   "name": "Free-zone establishment detected (DIFC/ADGM/DHCC/DMCC)",
+   "covered_by": [
+    "G3"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S7",
+   "group": "A",
+   "invariants": "61-70",
+   "name": "Two free zones / conflicting establishment signals",
+   "covered_by": [
+    "G3"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S8",
+   "group": "A",
+   "invariants": "71-80",
+   "name": "Country with no catalogue coverage",
+   "covered_by": [
+    "G6",
+    "G9"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S9",
+   "group": "A",
+   "invariants": "81-90",
+   "name": "Established in one / serves a second / processes a third",
+   "covered_by": [
+    "G3",
+    "ledger:6.2"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S10",
+   "group": "A",
+   "invariants": "91-100",
+   "name": "Jurisdiction inferred from a template signal only",
+   "covered_by": [
+    "G9"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S11",
+   "group": "B",
+   "invariants": "101-110",
+   "name": "Sector reclassified between runs",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S12",
+   "group": "B",
+   "invariants": "111-120",
+   "name": "Sub-sector refined to a more specific node",
+   "covered_by": [
+    "ledger:4"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S13",
+   "group": "B",
+   "invariants": "121-130",
+   "name": "Firm spans two sectors",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S14",
+   "group": "B",
+   "invariants": "131-140",
+   "name": "Sector genuinely ambiguous",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S15",
+   "group": "B",
+   "invariants": "141-150",
+   "name": "Marketing agency serving a regulated sector",
+   "covered_by": [
+    "G9"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S16",
+   "group": "B",
+   "invariants": "151-160",
+   "name": "Sector has no matching sub-sector node",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S17",
+   "group": "B",
+   "invariants": "161-170",
+   "name": "Firm adds a regulated activity",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S18",
+   "group": "B",
+   "invariants": "171-180",
+   "name": "Sub-sector rule must never leak to a sibling",
+   "covered_by": [
+    "G8"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S19",
+   "group": "B",
+   "invariants": "181-190",
+   "name": "Holding company / group with multiple subsidiaries",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S20",
+   "group": "B",
+   "invariants": "191-200",
+   "name": "Franchise versus independent entity",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S21",
+   "group": "C",
+   "invariants": "201-210",
+   "name": "Site switches its displayed currency",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S22",
+   "group": "C",
+   "invariants": "211-220",
+   "name": "Real-fine examples must respect currency",
+   "covered_by": [
+    "G7"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S23",
+   "group": "C",
+   "invariants": "221-230",
+   "name": "Number and locale formatting",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S24",
+   "group": "C",
+   "invariants": "231-240",
+   "name": "Date format and recency",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S25",
+   "group": "C",
+   "invariants": "241-250",
+   "name": "Site language differs from the jurisdiction language",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S26",
+   "group": "C",
+   "invariants": "251-260",
+   "name": "Multi-language site",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S27",
+   "group": "C",
+   "invariants": "261-270",
+   "name": "VAT or sales-tax rate",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S28",
+   "group": "C",
+   "invariants": "271-280",
+   "name": "Penalty caps percentage vs flat",
+   "covered_by": [
+    "G7"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S29",
+   "group": "C",
+   "invariants": "281-290",
+   "name": "Turnover banding for exposure",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S30",
+   "group": "C",
+   "invariants": "291-300",
+   "name": "Units and statutory thresholds localise",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S31",
+   "group": "D",
+   "invariants": "301-310",
+   "name": "Framework repealed or superseded between syncs",
+   "covered_by": [
+    "ledger:8"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S32",
+   "group": "D",
+   "invariants": "311-320",
+   "name": "New framework enacted but not yet in force",
+   "covered_by": [
+    "ledger:8"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S33",
+   "group": "D",
+   "invariants": "321-330",
+   "name": "Effective date passes mid-engagement",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S34",
+   "group": "D",
+   "invariants": "331-340",
+   "name": "Framework obligations amended",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S35",
+   "group": "D",
+   "invariants": "341-350",
+   "name": "Regulator renamed or merged",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S36",
+   "group": "D",
+   "invariants": "351-360",
+   "name": "Framework changes binding status",
+   "covered_by": [
+    "ledger:6.1"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S37",
+   "group": "D",
+   "invariants": "361-370",
+   "name": "Penalty ceiling changes",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S38",
+   "group": "D",
+   "invariants": "371-380",
+   "name": "Required nexus changes",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S39",
+   "group": "D",
+   "invariants": "381-390",
+   "name": "Duplicate framework under two short codes merged",
+   "covered_by": [
+    "G8",
+    "ledger:7.1"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S40",
+   "group": "D",
+   "invariants": "391-400",
+   "name": "Applicable framework has rules pending (intel-only)",
+   "covered_by": [
+    "G6"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S41",
+   "group": "E",
+   "invariants": "401-410",
+   "name": "Page that proved a breach changes or is removed",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S42",
+   "group": "E",
+   "invariants": "411-420",
+   "name": "Crawl coverage drops for a run",
+   "covered_by": [
+    "ledger:10.2"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S43",
+   "group": "E",
+   "invariants": "421-430",
+   "name": "Breach phrase inside a customer testimonial",
+   "covered_by": [
+    "G2"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S44",
+   "group": "E",
+   "invariants": "431-440",
+   "name": "Same breach appears on multiple pages",
+   "covered_by": [
+    "(later phase)"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S45",
+   "group": "E",
+   "invariants": "441-450",
+   "name": "Authored fix is empty (fix-writer rate-limits)",
+   "covered_by": [
+    "G2"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S46",
+   "group": "E",
+   "invariants": "451-460",
+   "name": "Finding framework code mismatches the catalogue",
+   "covered_by": [
+    "G8",
+    "G9"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S47",
+   "group": "E",
+   "invariants": "461-470",
+   "name": "Two findings belong to one Act (siblings)",
+   "covered_by": [
+    "G8"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S48",
+   "group": "E",
+   "invariants": "471-480",
+   "name": "Finding severity changes",
+   "covered_by": [
+    "ledger:10.3"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "S49",
+   "group": "E",
+   "invariants": "481-490",
+   "name": "Screened framework later gains a breach",
+   "covered_by": [
+    "G6"
+   ],
+   "status": "partial"
+  },
+  {
+   "id": "S50",
+   "group": "E",
+   "invariants": "491-500",
+   "name": "Detection regex false-hits an incidental keyword",
+   "covered_by": [
+    "G1",
+    "G2"
+   ],
+   "status": "partial"
+  }
+ ]
+}

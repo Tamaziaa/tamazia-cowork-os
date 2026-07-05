@@ -1,0 +1,151 @@
+{
+ "id": "firm-01",
+ "region": "UK",
+ "sector": "hospitality",
+ "detected_sector": "hospitality",
+ "country": "UK",
+ "registered": "UK",
+ "operating_regions": [
+  "UK"
+ ],
+ "engine_jurisdictions": [
+  "UK"
+ ],
+ "applicable_frameworks": [
+  "GOOGLE_EEAT",
+  "UK_ASA_CAP",
+  "UK_CCR_2013",
+  "UK_CMA",
+  "UK_CRA_2015",
+  "UK_DMCC_2024",
+  "UK_DPA_2018",
+  "UK_EQUALITY_2010",
+  "UK_FOOD_INFO_2014",
+  "UK_FSA",
+  "UK_GDPR_A13",
+  "UK_ICO_COOKIES",
+  "UK_PECR"
+ ],
+ "jurisdiction_regimes": [
+  "UK GDPR + PECR",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 1,
+  "p2": 10,
+  "total": 11
+ },
+ "compliance_findings": [
+  {
+   "citation": "UK_CMA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia drafts a compliant pre-contract information block.",
+   "fact": "Consumer Rights Act statutory information",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_CMA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia builds a redesigned pricing flow.",
+   "fact": "Pricing transparency: total price including unavoidable fees",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_FSA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia embeds the 14-allergen schema.",
+   "fact": "Allergen information / Natasha law statement",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_CMA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia rewrites review verification and incentive disclosure.",
+   "fact": "Honest reviews disclosure (no fake or paid reviews)",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_CMA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia configures all-in pricing.",
+   "fact": "All-in pricing, no hidden mandatory fees (DMCC drip-pricing ban)",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_DPA_2018",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": 2500,
+   "fine_high_gbp": 17500000,
+   "fine_withheld": false,
+   "fix": "Tamazia publishes Section 3 personal data definition disclosure.",
+   "fact": "Section 3 personal data definition disclosure",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_FSA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia installs the FSA Food Hygiene Rating widget.",
+   "fact": "Food Hygiene Rating Scheme disclosure",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_DPA_2018",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": 400,
+   "fine_high_gbp": 17500000,
+   "fine_withheld": false,
+   "fix": "Tamazia verifies ICO data-protection-fee registration.",
+   "fact": "Organisation processing personal data with no sign of ICO data-protection-fee registration",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_FSA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P3",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia displays the current FHRS rating accurately.",
+   "fact": "Food hygiene rating display where used in promotion",
+   "enforcement_example": true
+  }
+ ],
+ "trap": "S1"
+}

@@ -1,0 +1,111 @@
+name: compliance-eval
+on:
+  pull_request:
+    branches: [ main, compliance-ssot ]
+  push:
+    branches: [ compliance-ssot ]
+jobs:
+  legal-qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Legal-QA harness (blocks regressions vs golden baseline)
+        run: node eval/guardrails.js --check
+      - name: End-to-end engine scenarios
+        run: node eval/e2e-engine.test.js
+      - name: Universal-obligation layer assertions
+        run: node eval/obligations.test.js
+      - name: Framework-intel overlay assertions
+        run: node eval/framework-intel.test.js
+      - name: Detection-correctness (prohibit/inversion) assertions
+        run: node eval/rulecheck-detection.test.js
+      - name: Sub-sector tree assertions
+        run: node eval/subsector.test.js
+      - name: Node-exclusivity guard (no cross-sector law leaks)
+        run: node eval/node-exclusive.test.js
+      - name: connect() fail-closed self-test
+        run: node eval/connect-failclosed.test.js
+      - name: barristers attachment (BSB not SRA)
+        run: node eval/barristers-attach.test.js
+      - name: framework record identity (Branch 7)
+        run: node eval/framework-record.test.js
+      - name: nexus-typed GATE A (establishment, fail-open)
+        run: node eval/nexus-gate.test.js
+      - name: SRA complaints element-checklist superset (no loss)
+        run: node eval/sra-complaints-superset.test.js
+      - name: sector cut-over no-loss (Branch 4)
+        run: node eval/sector-cutover.test.js
+      - name: catalogue completeness + overlap (Phase 2.3)
+        run: node eval/catalogue-completeness.test.js
+      - name: connect shadow-identity (Phase 2.1 refactor guard)
+        run: node eval/connect-shadow-identity.test.js
+      - name: conformal review band (Phase 2.4)
+        run: node eval/review-band.test.js
+      - name: EAA accessibility statement superset (Phase 2.7.8)
+        run: node eval/eaa-statement-superset.test.js
+      - name: applicability + lex-specialis tie-break (Phase 2.3)
+        run: node eval/applicability.test.js
+      - name: register grounding fail-open (Phase 2.2)
+        run: node eval/register-grounding.test.js
+      - name: enforcement-to-gap matcher (Phase 3.4.2)
+        run: node eval/enforcement-matcher.test.js
+      - name: enforcement cross-validation (Phase 3.4.3)
+        run: node eval/enforcement-crossval.test.js
+      - name: typed evidence ledger (Phase 3.5.3)
+        run: node eval/evidence-ledger.test.js
+      - name: grounded LLM extraction (Phase 3.2)
+        run: node eval/llm-extractor.test.js
+      - name: LLM sector auto-tagging (Phase 3.3)
+        run: node eval/sector-autotagger.test.js
+      - name: feed change-detection (Phase 3.1)
+        run: node eval/feed-registry.test.js
+      - name: coverage contract screened tri-state (Phase 3.5.1)
+        run: node eval/coverage-contract.test.js
+      - name: enforcement backtest / coverage (Phase 4.1.1)
+        run: node eval/enforcement-backtest.test.js
+      - name: sector-vocab canonicalisation (audit P1 fix)
+        run: node eval/sector-vocab-canon.test.js
+      - name: citation completeness (FIX-S1)
+        run: node eval/citation-completeness.test.js
+      - name: LLM prompt-injection hardening (FIX-P3)
+        run: node eval/llm-hardening.test.js
+      - name: coverage classify edge cases (FIX-A1)
+        run: node eval/coverage-classify-edge.test.js
+      - name: red-team adversarial fixtures (Phase 4.1.2)
+        run: node eval/redteam.test.js
+      - name: citation-verification gate (Phase 4.1.3)
+        run: node eval/citation-gate.test.js
+      - name: shadow-mint end-to-end (Phase 4.2)
+        run: node eval/shadow-mint.mjs
+      - name: element-checklist candidate correctness
+        run: node eval/element-checklist-candidates.test.js
+      - name: NAICS crosswalk coverage
+        run: node eval/crosswalk.test.js
+      - name: No under-audited sector (>=1 law each)
+        run: node eval/sector-law-coverage.test.js
+      - name: Catalogue-derived SECTOR_MAP coverage
+        run: node eval/sector-map-catalogue.test.js
+      - name: Calibration/regression baseline
+        run: node eval/calibration.test.js
+      - name: Phase 1 benchmark (54 reality checks)
+        run: node eval/phase1-benchmark.js
+      - name: Sector coverage-integrity (canonical reconciliation)
+        run: node eval/sector-coverage.test.js
+      - name: Nexus SSOT invariants
+        run: node eval/nexus.test.js
+      - name: Typed nexus detection (Art 3 / EDPB)
+        run: node eval/nexus-signals.test.js
+      - name: Local / sub-jurisdiction resolvers
+        run: node eval/subjurisdiction.test.js
+      - name: Controlled-vocabulary SSOT invariants
+        run: node eval/vocab.test.js
+      - name: Tagged-law schema integrity
+        run: node eval/law-schema.test.js
+      - name: Registry detector assertions
+        run: node eval/registry.test.js
+      - name: Producer assertions
+        run: node eval/producers.test.js
+      - name: Predicate-producibility gate (UP-1, BLOCKING)
+        run: node eval/predicate-gate.js

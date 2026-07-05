@@ -1,0 +1,88 @@
+{
+ "id": "firm-04",
+ "region": "UK",
+ "sector": "hospitality",
+ "detected_sector": "hospitality",
+ "country": "UK",
+ "registered": "UK",
+ "operating_regions": [
+  "UK"
+ ],
+ "engine_jurisdictions": [
+  "UK"
+ ],
+ "applicable_frameworks": [
+  "GOOGLE_EEAT",
+  "UK_ASA_CAP",
+  "UK_COMPANIES_ACT",
+  "UK_DPA_2018",
+  "UK_EQUALITY_2010",
+  "UK_FOOD_INFO_2014",
+  "UK_FSA",
+  "UK_GDPR_A13",
+  "UK_ICO_COOKIES",
+  "UK_PECR"
+ ],
+ "jurisdiction_regimes": [
+  "UK GDPR + PECR",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 1,
+  "p2": 5,
+  "total": 6
+ },
+ "compliance_findings": [
+  {
+   "citation": "UK_FSA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia adds the 14-allergen schema and product-page warning template; passes FSA spot-check from day one.",
+   "fact": "Allergen information / Natasha law statement",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_FSA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia adds the FSA Food Hygiene Rating widget to the homepage and footer template within week 1.",
+   "fact": "Food Hygiene Rating Scheme disclosure",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_DPA_2018",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": 400,
+   "fine_high_gbp": 17500000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Organisation processing personal data with no sign of ICO data-protection-fee registration\" on your site so it satisfies the Da…",
+   "fact": "Organisation processing personal data with no sign of ICO data-protection-fee registration",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_FSA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P3",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia displays the current FHRS rating accurately.",
+   "fact": "Food hygiene rating display where used in promotion",
+   "enforcement_example": true
+  }
+ ],
+ "trap": "S1"
+}

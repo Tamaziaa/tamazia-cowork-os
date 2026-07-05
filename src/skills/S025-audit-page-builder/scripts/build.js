@@ -302,8 +302,20 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
       const _sect = (comp.detected_sector || sector || '').toString().toLowerCase();  // 30-slug vocab — matches the sector gate
       const sig = { jurSet, employeeBand: 'unknown', sector: _sect };
       const before = comp.findings.length;
-      comp.findings = comp.findings.filter(f => { if (f.status !== 'miss') return true; const law = idx.get(f.framework) || idx.get(f.framework_short); return law ? !overlayDrop(law, Object.assign({}, sig, { framework: f.framework || f.framework_short })) : true; });
-      if (comp.findings.length !== before) console.error(`[mint-gate] dropped ${before - comp.findings.length} non-compliant finding(s) for ${domain} (fail-closed)`);
+      // Phase 2.1 (V2 N-1 fix): overlayDrop must have a SINGLE authority. compliance.js already ran the authoritative
+      // overlay with FULL signals (trigger + employeeBand + corpus). If it ran (comp.canonical_jurisdictions present),
+      // this build-side gate is ASSERTION-ONLY: it must never double-cut with these degraded signals (no trig/band),
+      // which could false-drop a finding the authoritative pass correctly kept. It only actively filters as a fail-
+      // closed SAFETY NET when the authoritative overlay did NOT run.
+      const _overlay1Ran = !!(comp.canonical_jurisdictions && comp.canonical_jurisdictions.length);
+      comp.findings = comp.findings.filter(f => {
+        if (f.status !== 'miss') return true;
+        const law = idx.get(f.framework) || idx.get(f.framework_short);
+        const would = law ? overlayDrop(law, Object.assign({}, sig, { framework: f.framework || f.framework_short })) : false;
+        if (would && _overlay1Ran) { console.error(`[mint-gate ASSERT] overlay#1 already applied but build-gate would drop ${f.framework || f.framework_short} (${would}); trusting authoritative overlay, NOT double-cutting`); return true; }
+        return !would;
+      });
+      if (comp.findings.length !== before) console.error(`[mint-gate] dropped ${before - comp.findings.length} non-compliant finding(s) for ${domain} (fail-closed safety-net; authoritative overlay did not run)`);
     }
   } catch (_e) {}
   // Propagate the LLM firm-profiler's detected sector (corrects a mis-tagged row — e.g. a gym tagged
@@ -444,7 +456,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
   });
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';
   const lr = pg(`SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'`) || new Date().toISOString().slice(0, 10);
-  const rulesList = frameworks.map(f => `'${f}'`).join(',');
+  const rulesList = frameworks.map(f => `'${String(f).replace(/'/g, "''")}'`).join(',');   // FIX-S2a: escape single-quotes (SQL-injection defense-in-depth)
   const rulesRaw = rulesList ? pg(`SELECT framework_short, rule_id, severity, description, citation_url FROM compliance_rules WHERE active=TRUE AND framework_short IN (${rulesList}) ORDER BY severity, framework_short, rule_id`) : null;
   const rules = rulesRaw ? rulesRaw.split('\n').filter(Boolean).map(line => {
     const [framework_short, rule_id, severity, description, citation_url] = line.split('\t');
@@ -609,6 +621,9 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     const hasText = !!String(f.fact || f.title || f.layman_explanation || '').trim();
     if (!hasText) return false;
     if (f.bucket === 'compliance' && !String(f.framework_short || f.citation || '').trim()) return false;
+    // FIX-S1: a compliance breach that asserts a MONETARY exposure must cite the law (citation_url or statutory_citation).
+    // A fine with no citable source is unverifiable -> drop it fail-closed (mirrors the render-side FIX-R3 guard).
+    if (f.bucket === 'compliance' && (+f.fine_high_gbp || 0) > 0 && !String(f.citation_url || f.statutory_citation || '').trim()) return false;
     return true;
   };
   const _confirmed = _ft.confirmed(_classified).filter(_integrityOK);
@@ -685,9 +700,11 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   if (!domain || !sector) throw new Error('domain and sector required');
   const slug = slugify(company || domain.split('.')[0]);
   let hash = generateHash();
+  // Shadow-validation redirect (default 'audit_pages' = prod unchanged; allow-list guarded, no injection).
+  const AUDIT_TABLE = (() => { const t = process.env.AUDIT_TABLE || "audit_pages"; if (!/^audit_pages(_[a-z0-9_]+)?$/.test(t)) throw new Error("unsafe AUDIT_TABLE: " + t); return t; })();
   // Collision guard
   for (let i = 0; i < 5; i++) {
-    const exists = pg(`SELECT 1 FROM audit_pages WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
+    const exists = pg(`SELECT 1 FROM ${AUDIT_TABLE} WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
     if (!exists) break;
     hash = generateHash();
   }
@@ -716,11 +733,11 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   const payloadJsonE = JSON.stringify(neonPayload).replace(/'/g, "''");
   // A4j — RETURNING id + loud failure: pg() returns null/'' on error, and a silently-failed INSERT here means a
   // DEAD AUDIT LINK gets emailed. Never return {slug,hash} unless the row is provably written.
-  let ins = pg(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds})) RETURNING id`);
+  let ins = pg(`INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds})) RETURNING id`);
   // A >100KB payload is routed by pg() through the psql -f path, which EXECUTES the INSERT but returns no RETURNING
   // output — so confirm the row with a small SELECT before declaring failure (else a successful large-payload mint
   // is wrongly rejected as a dead link).
-  if (!ins || !String(ins).trim()) ins = pg(`SELECT id FROM audit_pages WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
+  if (!ins || !String(ins).trim()) ins = pg(`SELECT id FROM ${AUDIT_TABLE} WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
   if (!ins || !String(ins).trim()) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written; refusing to return a dead audit link`);
 
   return { slug, hash, signed_url: signed.url, signed_exp: signed.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };

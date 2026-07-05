@@ -737,7 +737,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // stray mention/phone/currency/city. Stops a UAE firm picking up US law from a "+1"/"$"/"America"
   // mention while the home jurisdiction is treated as just another foreign hit. (F2/C-jur)
   const _strong = new Set(mk.strong_markets || mk.operating_countries || []);    // fallback: pre-strong_markets payloads → all (old behaviour)
-  const _N2C = { 'United Kingdom': 'UK', 'United States': 'US', 'United Arab Emirates': 'AE', 'Saudi Arabia': 'SA', 'Qatar': 'QA', 'Kuwait': 'AE', 'Bahrain': 'AE', 'Oman': 'AE', 'France': 'FR', 'Germany': 'DE' };
+  const _N2C = require('../../../lib/compliance/registry/jurisdiction.js').NAME_TO_CODE; // ONE jurisdiction registry (V2 DUP-4/5); gulf states DISTINCT (Bahrain->BH, Oman->OM, Kuwait->KW, +Egypt/Jordan/Israel), no longer collapsed to AE.
   for (const n of (mk.operating_countries || [])) { if (_strong.has(n) && _N2C[n]) codes.add(_N2C[n]); }
   if (mk.serves_eu) codes.add('EU');
   const _regName = ({ UK: 'United Kingdom', GB: 'United Kingdom', GBR: 'United Kingdom', US: 'United States', USA: 'United States', AE: 'United Arab Emirates', UAE: 'United Arab Emirates', SA: 'Saudi Arabia', KSA: 'Saudi Arabia', QA: 'Qatar' })[String(country || '').toUpperCase()] || country || '';
@@ -799,12 +799,17 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       : (_llmDetectedSec || _normLeadSec || sector)
   );
   // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
-  let frameworks;
+  let frameworks, framework_binding = {}; let comp_attach_error = null;
+  let comp_gates = null, comp_review = [], comp_confidence = {}; // Phase 3.5.2 drop-trace + review band
   try {
     const { connect, loadCatalogue } = require('../../../lib/compliance/connect.js');
-    frameworks = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector: effectiveSector, signals, text: corpusText }).frameworks;
+    const _cx = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector: effectiveSector, signals, text: corpusText });
+    frameworks = _cx.frameworks; framework_binding = _cx.binding || {};
+    comp_gates = _cx.gates || null; comp_review = _cx.review_candidates || []; comp_confidence = _cx.confidence || {};
   } catch (_e) {
-    const fs2 = new Set(); for (const j of allJurisdictions) for (const f of routeJurisdictions({ country: j, sector: effectiveSector })) fs2.add(f); frameworks = Array.from(fs2);
+    // FAIL-CLOSED (Branch 5 / V2 N-6): a connect/self-test failure HALTS with a flag; it never silently degrades to a
+    // coarse routeJurisdictions list. connect() is pure today, so this only fires on a genuine gate bug.
+    frameworks = []; framework_binding = {}; comp_attach_error = String((_e && (_e.guardrail || _e.message)) || _e);
   }
   let rules = loadRules({ frameworks });
   // ── SECTOR SUB-GATE (kills cross-sector false positives) ────────────────────────────────────────
@@ -951,7 +956,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const payload = {
     domain, sector, country, ok: true, reachable: true,
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
-    frameworks, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
+    frameworks, binding: framework_binding, attach_error: comp_attach_error, drop_trace: comp_gates, review_candidates: comp_review, attach_confidence: comp_confidence, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
     firm_profile: firmProfile, detected_sector: effectiveSector,
     rules_evaluated: rules.length, hits, misses,
     resolver_dropped: _resolverDropped,

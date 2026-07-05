@@ -1,0 +1,289 @@
+{
+ "id": "firm-13",
+ "region": "US",
+ "sector": "real-estate",
+ "detected_sector": "real-estate",
+ "country": "USA",
+ "registered": "USA",
+ "operating_regions": [
+  "US"
+ ],
+ "engine_jurisdictions": [
+  "US"
+ ],
+ "applicable_frameworks": [
+  "GOOGLE_EEAT",
+  "US_ADA",
+  "US_CCPA",
+  "US_FTC",
+  "US_FTC_ENDORSE",
+  "US_STATE_PRIVACY",
+  "US_TCPA"
+ ],
+ "jurisdiction_regimes": [
+  "CCPA/CPRA + ADA",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 7,
+  "p2": 45,
+  "total": 52
+ },
+ "compliance_findings": [
+  {
+   "citation": "US_CCPA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 2000,
+   "fine_high_gbp": 7500,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Right-to-know disclosure on data collected\" on your site so it satisfies the CCPA as amended by CPRA.",
+   "fact": "Right-to-know disclosure on data collected",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_CCPA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 2000,
+   "fine_high_gbp": 7500,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Right to delete disclosure\" on your site so it satisfies the CCPA as amended by CPRA.",
+   "fact": "Right to delete disclosure",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_CCPA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 2000,
+   "fine_high_gbp": 7500,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Right to opt out of sale or sharing\" on your site so it satisfies the CCPA as amended by CPRA.",
+   "fact": "Right to opt out of sale or sharing",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_CCPA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 2000,
+   "fine_high_gbp": 7500,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Do Not Sell or Share My Personal Information link\" on your site so it satisfies the CCPA as amended by CPRA.",
+   "fact": "Do Not Sell or Share My Personal Information link",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_FTC",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 2500,
+   "fine_high_gbp": 250000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Subject line cannot be deceptive\" on your site so it satisfies the FTC Act.",
+   "fact": "Subject line cannot be deceptive",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_FTC",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 2500,
+   "fine_high_gbp": 250000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"From header must identify sender\" on your site so it satisfies the FTC Act.",
+   "fact": "From header must identify sender",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_FTC",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 2500,
+   "fine_high_gbp": 250000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Postal address required in email\" on your site so it satisfies the FTC Act.",
+   "fact": "Postal address required in email",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_FTC",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 2500,
+   "fine_high_gbp": 250000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Opt-out within 10 business days\" on your site so it satisfies the FTC Act.",
+   "fact": "Opt-out within 10 business days",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_TCPA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": 400,
+   "fine_high_gbp": 1500,
+   "fine_withheld": false,
+   "fix": "Tamazia builds a TCPA-compliant double opt-in (call + text), adds the STOP/HELP flow, and reviews vendor contracts (especially AI-voice tools).",
+   "fact": "Calls/texts to US numbers require prior express written consent; AI voice = artificial voice.",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_ADA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": 5000,
+   "fine_high_gbp": 75000,
+   "fine_withheld": false,
+   "fix": "Tamazia ships the WCAG 2.1 AA accessibility statement and the conformance test report.",
+   "fact": "WCAG 2.1 AA accessibility statement",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_FTC",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": 2500,
+   "fine_high_gbp": 250000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Commercial messages must be labelled if subscriber opted in for transactional only\" on your site so it satisfies the FTC Act.",
+   "fact": "Commercial messages must be labelled if subscriber opted in for transactional only",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_FTC_ENDORSE",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": 42000,
+   "fine_high_gbp": 200000,
+   "fine_withheld": false,
+   "fix": "Implement an FTC-compliant review process: no fabricated or undisclosed-incentivised reviews, no suppression of genuine negatives.",
+   "fact": "Reviews or testimonials shown to US consumers without genuine-review safeguards under the FTC Consumer Review Rule",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_STATE_PRIVACY",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": 6000,
+   "fine_high_gbp": 16000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements server- and client-side GPC detection wired to your opt-out.",
+   "fact": "Honour the Global Privacy Control universal opt-out signal",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_TCPA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": 395,
+   "fine_high_gbp": 1185,
+   "fine_withheld": false,
+   "fix": "Tamazia adds TCPA one-to-one consent to phone capture.",
+   "fact": "One-to-one prior express written consent for calls/texts (TCPA/FCC)",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_ADA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": null,
+   "fine_high_gbp": 59000,
+   "fine_withheld": false,
+   "fix": "Tamazia brings the site to WCAG 2.1 AA and adds an accessibility statement.",
+   "fact": "Accessibility statement + WCAG 2.1 AA (ADA Title III)",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_CCPA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": 2000,
+   "fine_high_gbp": 6000,
+   "fine_withheld": false,
+   "fix": "Tamazia adds the CPRA sensitive-data limit link.",
+   "fact": "\"Limit the Use of My Sensitive Personal Information\" link",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_FTC_ENDORSE",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": 42000,
+   "fine_high_gbp": 200000,
+   "fine_withheld": false,
+   "fix": "Add clear and conspicuous disclosures to all endorsement, ambassador and affiliate content.",
+   "fact": "Endorsements, ambassador or affiliate content without a clear material-connection disclosure",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_STATE_PRIVACY",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": 6000,
+   "fine_high_gbp": 16000,
+   "fine_withheld": false,
+   "fix": "Tamazia adds a consumer-rights request workflow meeting the state requirements.",
+   "fact": "Consumer rights (access, delete, correct, opt-out, appeal) + request method",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US_STATE_PRIVACY",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": 6000,
+   "fine_high_gbp": 16000,
+   "fine_withheld": false,
+   "fix": "Tamazia adds sensitive-data opt-in and a data-minimisation posture.",
+   "fact": "Opt-in / limit for sensitive data (Nebraska, Maryland MODPA, others)",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US state privacy law (CCPA/CPRA) · cookie consent",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia installs a consent platform that blocks every non-essential tracker until opt-in, with a Reject-All button as prominent as Accept-All.",
+   "fact": "2 non-essential tracker(s) load with no detectable consent mechanism: Google Analytics (sets _ga, _gali, _ga_ — Analytics, controller Google); Google Tag Manage…",
+   "enforcement_example": true
+  },
+  {
+   "citation": "US CCPA/CPRA",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P2",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia adds a CCPA-compliant notice and opt-out.",
+   "fact": "Serves US clients with no clear privacy/opt-out notice.",
+   "enforcement_example": true
+  }
+ ],
+ "trap": "S30"
+}

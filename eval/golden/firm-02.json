@@ -1,0 +1,160 @@
+{
+ "id": "firm-02",
+ "region": "UK",
+ "sector": "healthcare",
+ "detected_sector": "healthcare",
+ "country": "UK",
+ "registered": "UK",
+ "operating_regions": [
+  "UK"
+ ],
+ "engine_jurisdictions": [
+  "UK"
+ ],
+ "applicable_frameworks": [
+  "GOOGLE_EEAT",
+  "UK_ASA_CAP",
+  "UK_CCR_2013",
+  "UK_CE_PLUS",
+  "UK_CMA",
+  "UK_COMPANIES_ACT",
+  "UK_CQC",
+  "UK_CQC_FUNDAMENTAL_STANDARDS",
+  "UK_CRA_2015",
+  "UK_DMCC_2024",
+  "UK_DPA_2018",
+  "UK_EQUALITY_2010",
+  "UK_FOIA_2000",
+  "UK_GDPR_A13",
+  "UK_GMC",
+  "UK_HFEA",
+  "UK_HRA_1998",
+  "UK_ICO_COOKIES",
+  "UK_MEDICAL_DEVICES",
+  "UK_PECR",
+  "UK_PSBAR_2018",
+  "UK_TRADING_STANDARDS"
+ ],
+ "jurisdiction_regimes": [
+  "UK GDPR + PECR",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 1,
+  "p2": 12,
+  "total": 13
+ },
+ "compliance_findings": [
+  {
+   "citation": "UK_CMA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia adds a compliant pre-contract information block: trader identity, total price, key service terms and the consumer cancellation right.",
+   "fact": "Consumer Rights Act statutory information",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_CMA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia redesigns the pricing flow to show total price upfront and removes drip-pricing patterns.",
+   "fact": "Pricing transparency: total price including unavoidable fees",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_TRADING_STANDARDS",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P0",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Business identification on website (Co. No, VAT, Address)\" on your site so it satisfies UK TRADING STANDARDS.",
+   "fact": "Business identification on website (Co. No, VAT, Address)",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_CMA",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia adds review verification and incentive disclosure, and removes any testimonial that cannot be substantiated.",
+   "fact": "Honest reviews disclosure (no fake or paid reviews)",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_EQUALITY_2010",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": false,
+   "fix": "Tamazia ships a WCAG 2.1 AA audit + statement + the top 10 priority fixes. EHRC-format statement deployed to /accessibility within 4 weeks.",
+   "fact": "Customer-facing websites must offer reasonable adjustments under the Equality Act 2010.",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_DPA_2018",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": 2000,
+   "fine_high_gbp": 17500000,
+   "fine_withheld": false,
+   "fix": "Tamazia applies the ICO Children Code standards.",
+   "fact": "Age-appropriate design (ICO Children Code)",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_DPA_2018",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": 400,
+   "fine_high_gbp": 17500000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Organisation processing personal data with no sign of ICO data-protection-fee registration\" on your site so it satisfies the Da…",
+   "fact": "Organisation processing personal data with no sign of ICO data-protection-fee registration",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK_DPA_2018",
+   "kind": "absence",
+   "state": "CONFIRMED",
+   "severity": "P2",
+   "fine_low_gbp": 2500,
+   "fine_high_gbp": 17500000,
+   "fine_withheld": false,
+   "fix": "Tamazia implements and verifies \"Section 22 manual unstructured data exemption noted where applicable\" on your site so it satisfies the Data Protection Act 2018…",
+   "fact": "Section 22 manual unstructured data exemption noted where applicable",
+   "enforcement_example": true
+  },
+  {
+   "citation": "UK PECR + UK GDPR · consent functionality",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P2",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia configures the consent platform to block these tags until opt-in and adds an equally prominent, functional Reject-All.",
+   "fact": "Consent signal detected (CookieYes), but 1 non-essential tracker(s) are present and may fire before opt-in: Google Tag Manager (sets td — Marketing, controller …",
+   "enforcement_example": true
+  }
+ ],
+ "trap": "S1,S19"
+}

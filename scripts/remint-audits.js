@@ -13,6 +13,7 @@ function pgFile(sql) { const f = path.join(__dirname, '..', '.remint-' + process
 function q(s) { return String(s == null ? '' : s).replace(/'/g, "''"); }
 (async () => {
   if (!NEON) { console.error('no NEON_URL'); process.exit(1); }
+  const AUDIT_TABLE = (() => { const t = process.env.AUDIT_TABLE || "audit_pages"; if (!/^audit_pages(_[a-z0-9_]+)?$/.test(t)) throw new Error("unsafe AUDIT_TABLE: " + t); return t; })();
   const limit = parseInt(process.argv[2] || '0', 10);
   const sinceArg = (process.argv.find(a => a.startsWith('--since=')) || '').split('=')[1];
   const cutoff = sinceArg || new Date(Date.now() - 2 * 3600 * 1000).toISOString(); // rows minted before this are stale
@@ -21,7 +22,7 @@ function q(s) { return String(s == null ? '' : s).replace(/'/g, "''"); }
   const where = hashes.length
     ? ("hash IN (" + hashes.map(h => "'" + h.replace(/'/g, "''") + "'").join(',') + ")")
     : ("payload_json IS NOT NULL AND (generated_at IS NULL OR generated_at < '" + cutoff + "')");
-  const raw = pg("SELECT id, domain, sector, country FROM audit_pages WHERE " + where + " ORDER BY id" + lim).trim();
+  const raw = pg("SELECT id, domain, sector, country FROM " + AUDIT_TABLE + " WHERE " + where + " ORDER BY id" + lim).trim();
   if (!raw) { console.log('nothing to re-mint (all current as of ' + cutoff + ')'); return; }
   const rows = raw.split('\n').map(l => { const [id, domain, sector, country] = l.split('\t'); return { id, domain, sector, country }; });
   console.log('re-minting ' + rows.length + ' rows (cutoff ' + cutoff + ')');
@@ -30,7 +31,7 @@ function q(s) { return String(s == null ? '' : s).replace(/'/g, "''"); }
     try {
       const payload = await buildPayload({ domain: r.domain, sector: r.sector, country: r.country || 'UK', env: process.env });
       const e = JSON.stringify(payload).replace(/'/g, "''");
-      pgFile("UPDATE audit_pages SET payload_json='" + e + "'::jsonb, framework_version='" + q(payload.framework_version) + "', generated_at=now() WHERE id=" + r.id + ";");
+      pgFile("UPDATE " + AUDIT_TABLE + " SET payload_json='" + e + "'::jsonb, framework_version='" + q(payload.framework_version) + "', generated_at=now() WHERE id=" + r.id + ";");
       const comp = (payload.pointers || []).filter(p => p.bucket === 'compliance').length;
       const km = payload.keyword_map ? (payload.keyword_map.keywords || []).length : 0;
       ok++; console.log('  OK ' + r.id + ' ' + r.domain + ' comp:' + comp + ' kw:' + km + (payload.via_archive ? ' [archive]' : '') + (payload.ai_citation ? ' [ai-cite]' : ''));

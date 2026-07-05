@@ -1,0 +1,132 @@
+{
+ "generated": "2026-06-30",
+ "firms": 15,
+ "total": 15,
+ "g5_orphans": 102,
+ "perFirm": {
+  "firm-01": {
+   "G1_citation_presence": 1
+  },
+  "firm-02": {
+   "G1_citation_presence": 1,
+   "G2_fix_keyed": 1
+  },
+  "firm-03": {
+   "G6_dim_findings": 1
+  },
+  "firm-05": {
+   "G6_dim_findings": 1
+  },
+  "firm-06": {
+   "G6_dim_findings": 1
+  },
+  "firm-07": {
+   "G6_dim_findings": 1
+  },
+  "firm-08": {
+   "G6_dim_findings": 1
+  },
+  "firm-09": {
+   "G3_one_establishment": 1,
+   "G9_finding_nexus": 1
+  },
+  "firm-10": {
+   "G9_finding_nexus": 1
+  },
+  "firm-11": {
+   "G9_finding_nexus": 1
+  },
+  "firm-12": {
+   "G9_finding_nexus": 2
+  },
+  "firm-13": {
+   "G2_fix_keyed": 1
+  }
+ },
+ "detail": {
+  "firm-01": [
+   {
+    "rule": "G1_citation_presence",
+    "detail": "citation-presence: uk_dpa_2018"
+   }
+  ],
+  "firm-02": [
+   {
+    "rule": "G1_citation_presence",
+    "detail": "citation-presence: uk_dpa_2018"
+   },
+   {
+    "rule": "G2_fix_keyed",
+    "detail": "fix[privacy]!=finding[schema_seo]"
+   }
+  ],
+  "firm-03": [
+   {
+    "rule": "G6_dim_findings",
+    "detail": "10 frameworks, 0 findings"
+   }
+  ],
+  "firm-05": [
+   {
+    "rule": "G6_dim_findings",
+    "detail": "10 frameworks, 0 findings"
+   }
+  ],
+  "firm-06": [
+   {
+    "rule": "G6_dim_findings",
+    "detail": "1 frameworks, 0 findings"
+   }
+  ],
+  "firm-07": [
+   {
+    "rule": "G6_dim_findings",
+    "detail": "6 frameworks, 0 findings"
+   }
+  ],
+  "firm-08": [
+   {
+    "rule": "G6_dim_findings",
+    "detail": "11 frameworks, 0 findings"
+   }
+  ],
+  "firm-09": [
+   {
+    "rule": "G3_one_establishment",
+    "detail": "free-zone regimes: DIFC_DPL+ADGM_DPR"
+   },
+   {
+    "rule": "G9_finding_nexus",
+    "detail": "cites UK vs nexus ME: uk pecr + uk gdpr · cookie con"
+   }
+  ],
+  "firm-10": [
+   {
+    "rule": "G9_finding_nexus",
+    "detail": "cites US vs nexus ME: us state privacy law (ccpa/cpr"
+   }
+  ],
+  "firm-11": [
+   {
+    "rule": "G9_finding_nexus",
+    "detail": "cites UK vs nexus US: uk pecr + uk gdpr + us state p"
+   }
+  ],
+  "firm-12": [
+   {
+    "rule": "G9_finding_nexus",
+    "detail": "cites UK vs nexus US: uk pecr + uk gdpr + eu gdpr + "
+   },
+   {
+    "rule": "G9_finding_nexus",
+    "detail": "cites EU vs nexus US: eu gdpr + eprivacy (cross-bord"
+   }
+  ],
+  "firm-13": [
+   {
+    "rule": "G2_fix_keyed",
+    "detail": "fix[reviews]!=finding[privacy]"
+   }
+  ]
+ }
+}

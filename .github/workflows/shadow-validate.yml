@@ -1,0 +1,46 @@
+name: Shadow validate (compliance-ssot, zero prod risk)
+# Mints a small golden sample through the compliance-ssot engine into audit_pages_shadow under a v9-shadow cache
+# namespace. Prod audit_pages, prod scanner_cache (v8), the website renderer, and main are ALL untouched.
+# Triggered by touching .shadow-trigger (controlled) or manual dispatch. Reversible: DROP TABLE audit_pages_shadow.
+on:
+  workflow_dispatch:
+    inputs:
+      hashes: { description: "comma-separated golden hashes", required: false, default: "" }
+  push:
+    branches: [ compliance-ssot ]
+    paths: [ '.shadow-trigger' ]
+concurrency: { group: shadow-validate, cancel-in-progress: false }
+permissions: { contents: read }
+jobs:
+  shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      AUDIT_TABLE: audit_pages_shadow
+      COMPLIANCE_ENGINE_VERSION: v9-shadow
+      AUDIT_PAYLOAD_STORE: neon
+      MINT_BUILD_TIMEOUT_MS: "300000"
+      DEFAULT_HASHES: "Wd0diK57,tY4JGaqQ,oVXQF41x,hd4miaDW,swm0stTZ,PHOIxv7S,x05wbxbc,n8fDbxyR"
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: compliance-ssot }
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: npm install --omit=dev || npm install || true
+      - run: python -m pip install --quiet -r requirements.txt
+      - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Seed shadow rows from live (so the in-place re-mint has rows to update)
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          H="${{ inputs.hashes }}"; [ -z "$H" ] && H="$DEFAULT_HASHES"
+          Q=$(echo "$H" | sed "s/[^,]*/'&'/g")
+          ./scripts/psql "$NEON_URL" -c "INSERT INTO audit_pages_shadow SELECT * FROM audit_pages WHERE hash IN ($Q) ON CONFLICT DO NOTHING;"
+      - name: Shadow re-mint golden sample (writes ONLY audit_pages_shadow)
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          export REMINT_HASHES="${{ inputs.hashes }}"; [ -z "$REMINT_HASHES" ] && export REMINT_HASHES="$DEFAULT_HASHES"
+          echo "shadow-minting: $REMINT_HASHES"
+          node scripts/heartbeat.js wrap shadow-validate -- node scripts/remint-audits.js || node scripts/remint-audits.js
+          node eval/shadow-diff.js

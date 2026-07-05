@@ -1,0 +1,58 @@
+{
+ "id": "firm-15",
+ "region": "EU",
+ "sector": "law-firms",
+ "detected_sector": "law-firms",
+ "country": "NL",
+ "registered": "NL",
+ "operating_regions": [
+  "EU"
+ ],
+ "engine_jurisdictions": [
+  "NL",
+  "EU"
+ ],
+ "applicable_frameworks": [
+  "EU_EPRIVACY",
+  "EU_GDPR",
+  "GOOGLE_EEAT"
+ ],
+ "jurisdiction_regimes": [
+  "EU GDPR + ePrivacy + EAA",
+  "Google Search Essentials + E-E-A-T"
+ ],
+ "framework_intel_keys": [],
+ "counts": {
+  "p0": 0,
+  "p1": 8,
+  "p2": 33,
+  "total": 41
+ },
+ "compliance_findings": [
+  {
+   "citation": "EU GDPR + ePrivacy · cookie consent",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia installs a consent platform that blocks every non-essential tracker until opt-in, with a Reject-All button as prominent as Accept-All.",
+   "fact": "2 non-essential tracker(s) load with no detectable consent mechanism: Google Analytics (sets _ga, _gali, _ga_ — Analytics, controller Google); Google Tag Manage…",
+   "enforcement_example": true
+  },
+  {
+   "citation": "EU GDPR + ePrivacy (cross-border)",
+   "kind": "absence",
+   "state": "NEEDS_REVIEW",
+   "severity": "P1",
+   "fine_low_gbp": null,
+   "fine_high_gbp": null,
+   "fine_withheld": true,
+   "fix": "Tamazia implements an EU-grade consent gate and data-protection notice.",
+   "fact": "Serves EU clients but has no detectable EU-grade consent mechanism.",
+   "enforcement_example": true
+  }
+ ],
+ "trap": "S5"
+}

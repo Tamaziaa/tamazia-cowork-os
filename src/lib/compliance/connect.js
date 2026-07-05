@@ -6,8 +6,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 
-const EU_ISO = new Set(['AT','BE','BG','CY','CZ','DE','DK','EE','ES','FI','FR','GR','HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE','SI','SK']);
-function normJuris(j) { j = String(j || '').toUpperCase().trim(); if (j === 'GB' || j === 'GBR') return 'UK'; if (j === 'USA') return 'US'; if (j === 'UAE') return 'AE'; return j; }
+const { EU_ISO, normJuris } = require('./registry/jurisdiction.js');
 
 // Frameworks that apply to EVERY sector (privacy, cookies, consumer protection, equality, advertising, Google).
 const UNIVERSAL_FW = new Set([
@@ -20,7 +19,7 @@ const UNIVERSAL_FW = new Set([
   'US_FTC','US_CPRA','US_CCPA','US_FTC_ENDORSE','US_ADA','US_TCPA','US_VCDPA','US_TDPSA',
   // US_STATE_PRIVACY removed (legal-QA P1): non-citable catch-all that duplicated the named state acts
   // (CCPA/CPRA/VCDPA/TDPSA). The named, citable statutes carry the obligation; the catch-all only added noise.
-  'UAE_PDPL','DIFC_DPL','ADGM_DPR','SAUDI_PDPL','QATAR_PDPPL','DE_BDSG','FR_CNIL_2025',
+  'UAE_PDPL','DIFC_DPL','ADGM_DPR','SAUDI_PDPL','QATAR_PDPPL','BAHRAIN_PDPL','OMAN_PDPL','EGYPT_PDPL','JORDAN_PDPL','ISRAEL_PPL','DE_BDSG','FR_CNIL_2025',
 ]);
 // SECTOR_PARENTS: signals.js SECTOR_RX and jurisdiction-router.js SECTOR_MAP use different vocab for the
 // same sector. This bridges them so GATE B0 + GATE B rule matching works correctly end-to-end.
@@ -36,7 +35,11 @@ const SECTOR_PARENTS = {
   'aesthetics': ['healthcare'],       // aesthetic clinics inherit CQC/MHRA from healthcare
   'aesthetic':  ['healthcare'],
   'dental':     ['healthcare'],       // dental inherits MHRA/CQC from healthcare
-  'barristers': ['law-firms'],        // barristers inherit SRA-adjacent rules
+  // NOTE: barristers is DELIBERATELY not bridged. Barristers/chambers are a distinct regulated node (BSB),
+  // NOT a child of solicitors (SRA). Bridging them to 'law-firms' made every non-node-exclusive law-firm
+  // framework leak onto chambers (a domain error). sector.js (own TREE parent) + jurisdiction-router SECTOR_MAP
+  // already treat them separately; this keeps connect() consistent. UK_BSB attaches via its direct 'barristers'
+  // sector_relevance; UK_SRA_* are correctly sector-filtered here.
 };
 
 let _fwToSectors = null;
@@ -56,7 +59,7 @@ function fwSectorOK(fw, sector, rulesForFw) {
   // check parent sectors — if 'healthcare' maps to this fw and sector='aesthetics', allow it
   const parents = SECTOR_PARENTS[sector] || [];
   if (parents.some(p => m && m.has(p))) return true;
-  if ((rulesForFw || []).some(r => Array.isArray(r.sector_relevance) && (r.sector_relevance.includes(sector) || parents.some(p => r.sector_relevance.includes(p))))) return true;
+  if ((rulesForFw || []).some(r => { if (!Array.isArray(r.sector_relevance)) return false; const t = _canonTags(r.sector_relevance); return t.includes(sector) || parents.some(p => t.includes(p)); })) return true;
   return false;                                     // sector-specific framework for a different sector -> excluded
 }
 
@@ -114,14 +117,66 @@ const CAP_GATE = {
   UK_TRADING_STANDARDS: { sig: 'payments', rx: /\b(book (online|now|an?|your)|online booking|appointment|price list|our prices|prices? from|£\s?\d{2,}|per (session|treatment|night|room|month|person)|reservation|add to (cart|basket|bag)|checkout|buy now|shop now|subscribe|membership (from|plan|fee)|enrol|admissions|tuition)\b/i },
 };
 
+// BUG-FIX (audit P1): compliance_rules.sector_relevance stores non-canonical vocab (legal/wealth/health/solicitors/
+// conveyancing/financial-services/aesthetic/clinic/crypto/technology...). connect normalises the FIRM sector to
+// canonical but compared it against the RAW rule tags, silently HELDING those rules (coverage loss). Canonicalise the
+// rule tags too (fallback to the raw tag when canonicalSector returns null, e.g. sub-sectors).
+function _canonTags(sectors) {
+  const cs = require('./registry/sector.js').canonicalSector;
+  const out = new Set();
+  for (const t of (sectors || [])) { const c = cs(t); out.add(c || t); out.add(t); }
+  return [...out];
+}
 function secMatches(sectors, sec) {
   if (!sectors.length || !sec) return true;
-  if (sectors.includes(sec)) return true;
+  const tags = _canonTags(sectors);
+  if (tags.includes(sec)) return true;
   const parents = SECTOR_PARENTS[sec] || [];
-  return parents.some(p => sectors.includes(p));
+  return parents.some(p => tags.includes(p));
 }
 
 // catalogue = { frameworks:[{framework_short,jurisdiction}], rules:[{framework_short,sector_relevance[],rule_type,trigger_pattern,...}] }
+// FAIL-CLOSED self-test (resolveLaws rigor applied to the live engine, Branch 5): every attached framework MUST be
+// jurisdiction-valid (GLOBAL or an operated jurisdiction) and NOT node-excluded. A violation means a gate was bypassed
+// -> throw, so the mint path halts with a flag rather than silently shipping a leaked framework.
+function connectSelfTest(frameworks, jSet, sec, fvJuris, text, opts) {
+  const _sx = require('./registry/sector.js');
+  const fvReq = (opts && opts.fvReq) || {}; const nx = (opts && opts.nexus) || {};
+  const estabAnywhere = Object.keys(nx).some(k => nx[k] && nx[k].established_in);
+  const FAM_OF = j => { j=String(j||'').toUpperCase(); if(j==='UK')return 'UK'; if(j==='EU'||j.indexOf('EU-')===0)return 'EU'; if(j==='US'||j==='USA')return 'USA'; if(j==='AE'||j.indexOf('MENA-AE')===0||j.indexOf('AE-')===0)return 'AE'; return null; };
+  for (const fw of (frameworks || [])) {
+    const jz = (fvJuris && fvJuris[fw]) || '';
+    if (!(jz === 'GLOBAL' || jSet.has(jz))) { const e = new Error('connect_self_test:jurisdiction_leak:' + fw + '(' + jz + ')'); e.guardrail = 'jurisdiction_leak'; throw e; }
+    if (_sx.subSectorExcludes(fw, sec, text || '')) { const e = new Error('connect_self_test:node_exclusion_leak:' + fw); e.guardrail = 'node_exclusion_leak'; throw e; }
+    // nexus consistency: an establishment-only framework must NOT survive when the firm is established in another
+    // family but not this one (mirrors the NEXUS GATE; guarantees the guard and the gate cannot diverge).
+    const req = fvReq[fw];
+    if (estabAnywhere && Array.isArray(req) && req.length === 1 && req[0] === 'established_in') {
+      const fam = FAM_OF(jz); if (fam && !(nx[fam] && nx[fam].established_in)) { const e = new Error('connect_self_test:nexus_leak:' + fw); e.guardrail = 'nexus_leak'; throw e; }
+    }
+  }
+  return true;
+}
+
+// Phase 2.4 — conformal review band (ADDITIVE, off by default). A cohort-frequency prior calibrated on 9,166 golden
+// firms (db/seeds/cohort-frequencies.json, tau at the 10th percentile => ~10% review rate) gives each attachment a
+// confidence. UNIVERSAL/GLOBAL frameworks are always high-confidence. review_candidates = attached frameworks whose
+// confidence < tau. The `frameworks` (attach) set is UNCHANGED (shadow-identity holds); a renderer may suppress
+// review_candidates. Fail-open: no calibration file => no confidence, empty review list, zero behaviour change.
+let _cohort = undefined;
+function _cohortCal() {
+  if (_cohort !== undefined) return _cohort;
+  try { _cohort = require('../../../db/seeds/cohort-frequencies.json'); } catch (_e) { _cohort = null; }
+  return _cohort;
+}
+function _confidence(fw, sec, universalSet) {
+  if (universalSet.has(fw)) return 1.0;                 // jurisdiction-universal law: always applies
+  const cal = _cohortCal(); if (!cal) return 1.0;       // fail-open
+  const bySec = (cal.by_sector && cal.by_sector[String(sec||'').toLowerCase()]) || {};
+  const p = (bySec[fw] !== undefined) ? bySec[fw] : ((cal.global && cal.global[fw]) || 0);
+  return p;
+}
+
 function connect({ catalogue, jurisdictions, sector, signals, text }) {
   // Normalise variant sector names before routing so 'aesthetic' → 'aesthetics', 'legal' → 'law-firms', etc.
   // This makes the SECTOR_MAP lookup direct rather than relying only on the SECTOR_PARENTS chain.
@@ -132,9 +187,15 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
   const t = String(text || '').toLowerCase();
   const J = expandJurisdictions(jurisdictions);
   const fvJuris = {}; for (const f of (catalogue.frameworks || [])) fvJuris[f.framework_short] = String(f.jurisdiction || '').toUpperCase();
+  const fvReq = {}; for (const f of (catalogue.frameworks || [])) if (f.required_nexus) fvReq[f.framework_short] = f.required_nexus;
+  // Establishment-nexus map (per family) from the firm's detected signals. FAIL-OPEN: only used to remove an
+  // establishment-ONLY framework from a firm proven established in a DIFFERENT family (never on absent evidence).
+  const _nx = (sig && sig.nexus) || {};
+  const _estabAnywhere = Object.keys(_nx).some(k => _nx[k] && _nx[k].established_in);
+  const _FAM_OF = j => { j=String(j||'').toUpperCase(); if(j==='UK')return 'UK'; if(j==='EU'||j.indexOf('EU-')===0)return 'EU'; if(j==='US'||j==='USA')return 'USA'; if(j==='AE'||j.indexOf('MENA-AE')===0||j.indexOf('AE-')===0)return 'AE'; return null; };
   const byFw = {}; for (const r of (catalogue.rules || [])) (byFw[r.framework_short] = byFw[r.framework_short] || []).push(r);
 
-  const gates = { jurisdiction_filtered: [], sector_filtered: [], trigger_filtered: [], regex_invalid: [] };
+  const gates = { jurisdiction_filtered: [], sector_filtered: [], nexus_filtered: [], trigger_filtered: [], regex_invalid: [] };
   const connectedFw = new Set(); const connectedRules = [];
 
   for (const fw of Object.keys(byFw)) {
@@ -144,6 +205,16 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     if (!jurOK) { gates.jurisdiction_filtered.push(fw); continue; }
     // GATE B0 · framework-sector applicability (stops pharma/accounting/energy frameworks leaking into, say, a law firm)
     if (!fwSectorOK(fw, sec, byFw[fw])) { gates.sector_filtered.push(fw); continue; }
+    if (require('./registry/sector.js').subSectorExcludes(fw, sec, t)) { gates.sector_filtered.push(fw); continue; }
+    // NEXUS GATE (Branch 6, fail-open): establishment-ONLY frameworks (required_nexus == ['established_in']) bind only
+    // where the firm is actually established. If the firm shows establishment in ANOTHER family but NOT this one, the
+    // establishment-only law does not attach (e.g. a US-incorporated law firm serving UK clients is not SRA-regulated).
+    // When there is NO establishment evidence anywhere, we fail OPEN and attach as before -- a thin site is never punished.
+    { const _req = fvReq[fw];
+      if (_estabAnywhere && Array.isArray(_req) && _req.length === 1 && _req[0] === 'established_in') {
+        const _fam = _FAM_OF(juris);
+        if (_fam) { const _here = !!(_nx[_fam] && _nx[_fam].established_in); if (!_here) { gates.nexus_filtered.push(fw); continue; } }
+      } }
     // CAPABILITY GATE: capability-scoped frameworks require a real on-site signal or explicit mention.
     const _cap = CAP_GATE[fw];
     if (_cap && !((_cap.sig && sig[_cap.sig]) || (_cap.rx && _cap.rx.test(t)))) { gates.trigger_filtered.push(fw); continue; }
@@ -168,7 +239,14 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     else if (triggerHeld) gates.trigger_filtered.push(fw);
     else if (sectorHeld) gates.sector_filtered.push(fw);
   }
-  return { frameworks: Array.from(connectedFw).sort(), rules: connectedRules, jurisdictions: Array.from(J), gates };
+  const _fwArr = Array.from(connectedFw).sort();
+  connectSelfTest(_fwArr, J, sec, fvJuris, t, { fvReq, nexus: _nx });   // fail-closed guardrail (jurisdiction+node+nexus)
+  const _bind = {}; { const _i = require('./registry/framework-intel.js'); for (const _f of _fwArr) { const _b = _i.bindingStatus(_f); if (_b) _bind[_f] = _b; } }
+  // conformal review band (additive): confidence per attachment + review candidates; attach set unchanged.
+  const _cal = _cohortCal(); const _tau = (_cal && typeof _cal.tau === 'number') ? _cal.tau : 0;
+  const _conf = {}; const _review = [];
+  for (const _f of _fwArr) { const _c = _confidence(_f, sec, UNIVERSAL_FW); _conf[_f] = _c; if (_cal && _c < _tau) _review.push(_f); }
+  return { frameworks: _fwArr, rules: connectedRules, jurisdictions: Array.from(J), gates, binding: _bind, confidence: _conf, review_candidates: _review, review_tau: _tau };
 }
 
 // --- Neon catalogue loader (engine use). Cached in-process. ---
@@ -176,12 +254,16 @@ let _cat = null;
 function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return ''; try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString(); } catch (_e) { return ''; } }
 function loadCatalogue() {
   if (_cat) return _cat;
-  const fw = pg("SELECT framework_short, COALESCE(jurisdiction,'') FROM framework_versions").trim();
-  const frameworks = fw ? fw.split('\n').filter(Boolean).map(l => { const [framework_short, jurisdiction] = l.split('\t'); return { framework_short, jurisdiction }; }) : [];
+  const fw = pg("SELECT framework_short, COALESCE(jurisdiction,''), COALESCE(required_nexus::text,'') FROM framework_versions").trim();
+  const frameworks = fw ? fw.split('\n').filter(Boolean).map(l => { const [framework_short, jurisdiction, req] = l.split('\t'); let required_nexus=null; try{ required_nexus = req?JSON.parse(req):null; }catch(_){ required_nexus=null; } return { framework_short, jurisdiction, required_nexus }; }) : [];
   const rl = pg("SELECT framework_short, rule_id, COALESCE(rule_type,'must_appear'), COALESCE(trigger_pattern,''), COALESCE(array_to_string(sector_relevance,'|'),''), COALESCE(severity,'P2') FROM compliance_rules WHERE active=TRUE").trim();
   const rules = rl ? rl.split('\n').filter(Boolean).map(l => { const [framework_short, rule_id, rule_type, trigger_pattern, sectors, severity] = l.split('\t'); return { framework_short, rule_id, rule_type, trigger_pattern: trigger_pattern || null, sector_relevance: sectors ? sectors.split('|').filter(Boolean) : [], severity }; }) : [];
+  // FIX-S2b: NEVER cache an empty catalogue. framework_versions always has rows, so an empty result means the DB
+  // query failed (outage/auth). Caching it would attach ZERO frameworks for the whole process life with no error.
+  // Return the empty result WITHOUT caching so the next call retries.
+  if (!frameworks.length) return { frameworks, rules };
   _cat = { frameworks, rules };
   return _cat;
 }
 
-module.exports = { connect, loadCatalogue, expandJurisdictions, normJuris, EU_ISO, UNIVERSAL_FW, fwToSectors };
+module.exports = { connect, connectSelfTest, loadCatalogue, expandJurisdictions, normJuris, EU_ISO, UNIVERSAL_FW, fwToSectors };
