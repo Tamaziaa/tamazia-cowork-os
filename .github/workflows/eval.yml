@@ -78,7 +78,7 @@ jobs:
       - name: citation-verification gate (Phase 4.1.3)
         run: node eval/citation-gate.test.js
       - name: shadow-mint end-to-end (Phase 4.2)
-        run: node eval/shadow-mint.mjs || true
+        run: node eval/shadow-mint.mjs
       - name: element-checklist candidate correctness
         run: node eval/element-checklist-candidates.test.js
       - name: NAICS crosswalk coverage
