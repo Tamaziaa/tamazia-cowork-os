@@ -33,6 +33,10 @@ jobs:
         run: node eval/framework-record.test.js
       - name: nexus-typed GATE A (establishment, fail-open)
         run: node eval/nexus-gate.test.js
+      - name: SRA complaints element-checklist superset (no loss)
+        run: node eval/sra-complaints-superset.test.js
+      - name: element-checklist candidate correctness
+        run: node eval/element-checklist-candidates.test.js
       - name: NAICS crosswalk coverage
         run: node eval/crosswalk.test.js
       - name: No under-audited sector (>=1 law each)
