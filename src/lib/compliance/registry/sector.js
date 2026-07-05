@@ -15,6 +15,8 @@ const TREE = {
     'mental-health':{ detect:/mental health|psychiatr|psycholog|counsell?ing|psychotherap/i, predicates:['makes_health_claims'], frameworks:['UK_CQC','UK_ASA_CAP'] },
     'pharmacy':{ detect:/pharmac|chemist|dispensing|online doctor/i, predicates:['mentions_medicines'], frameworks:['UK_GPHC','UK_MHRA'] },
     'oncology':{ detect:/oncolog|cancer (care|treatment|clinic|centre)/i, predicates:['makes_health_claims'], frameworks:['UK_CQC'] },
+    'telemedicine':{ detect:/telemedicine|telehealth|online (doctor|gp|consultation)|remote (consultation|appointment)|virtual (gp|doctor|clinic)/i, predicates:['makes_health_claims','doctor_led_service'], frameworks:['UK_CQC','UK_GMC','EU_CROSSBORDER_HEALTHCARE','EU_EHDS','UK_GDPR_A13'] },
+    'care-homes':{ detect:/care home|nursing home|residential care|elderly care|assisted living/i, predicates:['is_cqc_registered_provider'], frameworks:['UK_CQC_FUNDAMENTAL_STANDARDS','UK_MCA_DOLS','UK_NMC','US_CMS_LTC','UK_CMA'] },
   }},
   'dental': { label:'Dental', parent:'healthcare', regulators:['GDC'], sub:{
     'general-dental':{ detect:/\bdentist|dental (practice|clinic|surgery|care)/i, predicates:['is_dental_practice'], frameworks:['UK_GDC','UK_CQC'] },
@@ -66,7 +68,7 @@ const TREE = {
   'automotive': { label:'Automotive', regulators:['DVSA'], sub:{ 'general':{ detect:/car dealership|automotive|\bgarage\b|vehicle (repair|service)|auto repair/i, predicates:[], frameworks:['UK_DVSA','UK_ASA_CAP','UK_CCR_2013','UK_FCA_CONC25','UK_DMCC_2024'] } }},
   'food': { label:'Food & beverage', regulators:['FSA'], sub:{ 'general':{ detect:/food (business|producer|manufactur)|catering|grocery|food delivery/i, predicates:['sells_food_online'], frameworks:['UK_FOOD_INFO_2014','UK_FSA','UK_ASA_CAP','UK_DMCC_2024','UK_TRADING_STANDARDS'] } }},
 };
-const BRIDGE = { legal:'law-firms', law:'law-firms', financial:'finance', realestate:'real-estate', fb:'hospitality', food:'hospitality', wellness:'healthcare' };
+const BRIDGE = { legal:'law-firms', law:'law-firms', financial:'finance', realestate:'real-estate', fb:'hospitality', food:'hospitality', wellness:'healthcare', aesthetic:'aesthetics', barristers:'law-firms' };
 function parentOf(sec){ sec=String(sec||'').toLowerCase(); if(TREE[sec])return sec; if(BRIDGE[sec])return BRIDGE[sec];
   for(const k of Object.keys(TREE)) if(sec.includes(k)||(k==='law-firms'&&/legal|law/.test(sec))||(k==='finance'&&/financ/.test(sec))||(k==='real-estate'&&/real|estate|propert/.test(sec))||(k==='healthcare'&&/health/.test(sec))) return k;
   return null; }
