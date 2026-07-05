@@ -800,10 +800,12 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   );
   // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
   let frameworks, framework_binding = {}; let comp_attach_error = null;
+  let comp_gates = null, comp_review = [], comp_confidence = {}; // Phase 3.5.2 drop-trace + review band
   try {
     const { connect, loadCatalogue } = require('../../../lib/compliance/connect.js');
     const _cx = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector: effectiveSector, signals, text: corpusText });
     frameworks = _cx.frameworks; framework_binding = _cx.binding || {};
+    comp_gates = _cx.gates || null; comp_review = _cx.review_candidates || []; comp_confidence = _cx.confidence || {};
   } catch (_e) {
     // FAIL-CLOSED (Branch 5 / V2 N-6): a connect/self-test failure HALTS with a flag; it never silently degrades to a
     // coarse routeJurisdictions list. connect() is pure today, so this only fires on a genuine gate bug.
@@ -954,7 +956,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const payload = {
     domain, sector, country, ok: true, reachable: true,
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
-    frameworks, binding: framework_binding, attach_error: comp_attach_error, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
+    frameworks, binding: framework_binding, attach_error: comp_attach_error, drop_trace: comp_gates, review_candidates: comp_review, attach_confidence: comp_confidence, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
     firm_profile: firmProfile, detected_sector: effectiveSector,
     rules_evaluated: rules.length, hits, misses,
     resolver_dropped: _resolverDropped,
