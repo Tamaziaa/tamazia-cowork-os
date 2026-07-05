@@ -33,6 +33,8 @@ jobs:
         run: node eval/sector-map-catalogue.test.js
       - name: Calibration/regression baseline
         run: node eval/calibration.test.js
+      - name: Phase 1 benchmark (54 reality checks)
+        run: node eval/phase1-benchmark.js
       - name: Sector coverage-integrity (canonical reconciliation)
         run: node eval/sector-coverage.test.js
       - name: Nexus SSOT invariants
