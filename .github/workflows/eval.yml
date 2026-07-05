@@ -63,6 +63,8 @@ jobs:
         run: node eval/feed-registry.test.js
       - name: coverage contract screened tri-state (Phase 3.5.1)
         run: node eval/coverage-contract.test.js
+      - name: enforcement backtest / coverage (Phase 4.1.1)
+        run: node eval/enforcement-backtest.test.js
       - name: element-checklist candidate correctness
         run: node eval/element-checklist-candidates.test.js
       - name: NAICS crosswalk coverage
