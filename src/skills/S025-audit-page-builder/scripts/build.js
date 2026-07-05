@@ -263,7 +263,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     let _scanTo;
     scan = await Promise.race([
       scanSite({ domain, sector, env }),
-      new Promise((_, rej) => { _scanTo = setTimeout(() => rej(new Error('scanSite hard timeout')), 120000); }),
+      new Promise((_, rej) => { _scanTo = setTimeout(() => rej(new Error('scanSite hard timeout')), 150000); }),
     ]);
     clearTimeout(_scanTo);
   } catch (_e) { /* fail-open: audit still mints with frameworks only */ }

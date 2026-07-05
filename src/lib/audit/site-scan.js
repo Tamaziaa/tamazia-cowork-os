@@ -156,10 +156,15 @@ async function _pageSpeedOne(domain, key, strategy) {
   } catch (_e) {}
   if (!key) return null;
   const u = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${domain}&strategy=${strategy}&category=performance&category=seo&category=accessibility&category=best-practices&key=${key}`;
-  for (let i = 0; i < 2; i++) {
-    let status = 0;
+  // PSI-RESILIENCE: heavy corporate sites (sjp/mishcon/spire) need >28s for a Lighthouse run, so the old 28s cap +
+  // no-retry-on-timeout returned null and the PageSpeed block rendered 'not assessed'. Now 55s x2, retry on timeout/
+  // network/429/5xx/empty-200; give up only on a definitive non-retryable 4xx. 2x55s+backoff <= ~113s per strategy;
+  // mobile+desktop run in parallel so PSI fits the raised 150s scanSite cap.
+  const ATTEMPTS = 2, PER_ATTEMPT_MS = 55000;
+  for (let i = 0; i < ATTEMPTS; i++) {
+    let status = 0, timedOut = false;
     try {
-      const r = await timed((signal) => fetch(u, { signal }), 28000);  // Phase 5.3: 20s->28s so slow sites' PSI completes
+      const r = await timed((signal) => fetch(u, { signal }), PER_ATTEMPT_MS);
       status = r.status;
       if (r.ok) {
         const j = await r.json();
@@ -167,16 +172,11 @@ async function _pageSpeedOne(domain, key, strategy) {
           try { const dir = process.env.PSI_CACHE_DIR; if (dir) { const fs = require('fs'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(dir + '/' + domain + '-' + strategy + '.json', JSON.stringify(j)); } } catch (_e) {}
           return _parsePsi(j, strategy);
         }
-        // Got a response but no lighthouseResult — PSI glitch, not a slow site. No retry benefit.
-        return null;
+        // 200 but no lighthouseResult — transient glitch; retry.
       }
-    } catch (_e) {
-      // Network error / AbortError (timeout) — site is slow or unreachable. No retry; return null immediately.
-      return null;
-    }
-    // Only retry on rate-limit or server error (429/5xx). Any other status: give up.
-    if (status !== 429 && status < 500) return null;
-    if (i < 1) await new Promise(res => setTimeout(res, 2000));
+    } catch (_e) { timedOut = true; }   // timeout/network — a slow site often completes on the 2nd try
+    if (!timedOut && status >= 400 && status < 500 && status !== 429) return null;   // definitive 4xx -> give up
+    if (i < ATTEMPTS - 1) await new Promise(res => setTimeout(res, 3000));
   }
   return null;
 }
