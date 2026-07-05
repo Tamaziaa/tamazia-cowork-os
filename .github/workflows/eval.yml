@@ -73,6 +73,8 @@ jobs:
         run: node eval/llm-hardening.test.js
       - name: coverage classify edge cases (FIX-A1)
         run: node eval/coverage-classify-edge.test.js
+      - name: red-team adversarial fixtures (Phase 4.1.2)
+        run: node eval/redteam.test.js
       - name: element-checklist candidate correctness
         run: node eval/element-checklist-candidates.test.js
       - name: NAICS crosswalk coverage
