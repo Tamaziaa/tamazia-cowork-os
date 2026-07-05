@@ -18,4 +18,11 @@ assert(r.review_tau > 0 && r.review_tau < 0.3, 'tau in a sane calibrated range')
 for (const f of r.review_candidates) { assert(r.frameworks.includes(f), 'review candidate must be attached'); assert(r.confidence[f] < r.review_tau, 'review candidate below tau'); }
 // no universal framework is ever a review candidate
 for (const f of r.review_candidates) assert(r.confidence[f] !== 1.0, 'universal never in review band');
+// Phase 2.4 conformal upgrade: the calibration carries an explicit finite-sample coverage guarantee.
+const cal = require('../db/seeds/cohort-frequencies.json');
+assert(cal.method && /conformal/i.test(cal.method), 'calibration must document the split-conformal method');
+assert(typeof cal.k_index === 'number' && cal.n > 0, 'finite-sample index k and n recorded');
+assert(cal.coverage_guarantee && /P\(/.test(cal.coverage_guarantee), 'explicit coverage guarantee recorded');
+assert(Math.abs(cal.empirical_review_rate - cal.alpha) < 0.02, 'empirical review rate matches target alpha within finite-sample slack');
+
 console.log(`review-band OK: tau=${r.review_tau}, ${r.frameworks.length} attached, ${r.review_candidates.length} review candidate(s); universals full-confidence.`);
