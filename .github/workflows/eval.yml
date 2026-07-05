@@ -61,6 +61,8 @@ jobs:
         run: node eval/sector-autotagger.test.js
       - name: feed change-detection (Phase 3.1)
         run: node eval/feed-registry.test.js
+      - name: coverage contract screened tri-state (Phase 3.5.1)
+        run: node eval/coverage-contract.test.js
       - name: element-checklist candidate correctness
         run: node eval/element-checklist-candidates.test.js
       - name: NAICS crosswalk coverage
