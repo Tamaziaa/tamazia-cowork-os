@@ -31,6 +31,8 @@ jobs:
         run: node eval/barristers-attach.test.js
       - name: framework record identity (Branch 7)
         run: node eval/framework-record.test.js
+      - name: nexus-typed GATE A (establishment, fail-open)
+        run: node eval/nexus-gate.test.js
       - name: NAICS crosswalk coverage
         run: node eval/crosswalk.test.js
       - name: No under-audited sector (>=1 law each)

@@ -148,9 +148,15 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
   const t = String(text || '').toLowerCase();
   const J = expandJurisdictions(jurisdictions);
   const fvJuris = {}; for (const f of (catalogue.frameworks || [])) fvJuris[f.framework_short] = String(f.jurisdiction || '').toUpperCase();
+  const fvReq = {}; for (const f of (catalogue.frameworks || [])) if (f.required_nexus) fvReq[f.framework_short] = f.required_nexus;
+  // Establishment-nexus map (per family) from the firm's detected signals. FAIL-OPEN: only used to remove an
+  // establishment-ONLY framework from a firm proven established in a DIFFERENT family (never on absent evidence).
+  const _nx = (sig && sig.nexus) || {};
+  const _estabAnywhere = Object.keys(_nx).some(k => _nx[k] && _nx[k].established_in);
+  const _FAM_OF = j => { j=String(j||'').toUpperCase(); if(j==='UK')return 'UK'; if(j==='EU'||j.indexOf('EU-')===0)return 'EU'; if(j==='US'||j==='USA')return 'USA'; if(j==='AE'||j.indexOf('MENA-AE')===0||j.indexOf('AE-')===0)return 'AE'; return null; };
   const byFw = {}; for (const r of (catalogue.rules || [])) (byFw[r.framework_short] = byFw[r.framework_short] || []).push(r);
 
-  const gates = { jurisdiction_filtered: [], sector_filtered: [], trigger_filtered: [], regex_invalid: [] };
+  const gates = { jurisdiction_filtered: [], sector_filtered: [], nexus_filtered: [], trigger_filtered: [], regex_invalid: [] };
   const connectedFw = new Set(); const connectedRules = [];
 
   for (const fw of Object.keys(byFw)) {
@@ -161,6 +167,15 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     // GATE B0 · framework-sector applicability (stops pharma/accounting/energy frameworks leaking into, say, a law firm)
     if (!fwSectorOK(fw, sec, byFw[fw])) { gates.sector_filtered.push(fw); continue; }
     if (require('./registry/sector.js').subSectorExcludes(fw, sec, t)) { gates.sector_filtered.push(fw); continue; }
+    // NEXUS GATE (Branch 6, fail-open): establishment-ONLY frameworks (required_nexus == ['established_in']) bind only
+    // where the firm is actually established. If the firm shows establishment in ANOTHER family but NOT this one, the
+    // establishment-only law does not attach (e.g. a US-incorporated law firm serving UK clients is not SRA-regulated).
+    // When there is NO establishment evidence anywhere, we fail OPEN and attach as before -- a thin site is never punished.
+    { const _req = fvReq[fw];
+      if (_estabAnywhere && Array.isArray(_req) && _req.length === 1 && _req[0] === 'established_in') {
+        const _fam = _FAM_OF(juris);
+        if (_fam) { const _here = !!(_nx[_fam] && _nx[_fam].established_in); if (!_here) { gates.nexus_filtered.push(fw); continue; } }
+      } }
     // CAPABILITY GATE: capability-scoped frameworks require a real on-site signal or explicit mention.
     const _cap = CAP_GATE[fw];
     if (_cap && !((_cap.sig && sig[_cap.sig]) || (_cap.rx && _cap.rx.test(t)))) { gates.trigger_filtered.push(fw); continue; }
@@ -196,8 +211,8 @@ let _cat = null;
 function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return ''; try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString(); } catch (_e) { return ''; } }
 function loadCatalogue() {
   if (_cat) return _cat;
-  const fw = pg("SELECT framework_short, COALESCE(jurisdiction,'') FROM framework_versions").trim();
-  const frameworks = fw ? fw.split('\n').filter(Boolean).map(l => { const [framework_short, jurisdiction] = l.split('\t'); return { framework_short, jurisdiction }; }) : [];
+  const fw = pg("SELECT framework_short, COALESCE(jurisdiction,''), COALESCE(required_nexus::text,'') FROM framework_versions").trim();
+  const frameworks = fw ? fw.split('\n').filter(Boolean).map(l => { const [framework_short, jurisdiction, req] = l.split('\t'); let required_nexus=null; try{ required_nexus = req?JSON.parse(req):null; }catch(_){ required_nexus=null; } return { framework_short, jurisdiction, required_nexus }; }) : [];
   const rl = pg("SELECT framework_short, rule_id, COALESCE(rule_type,'must_appear'), COALESCE(trigger_pattern,''), COALESCE(array_to_string(sector_relevance,'|'),''), COALESCE(severity,'P2') FROM compliance_rules WHERE active=TRUE").trim();
   const rules = rl ? rl.split('\n').filter(Boolean).map(l => { const [framework_short, rule_id, rule_type, trigger_pattern, sectors, severity] = l.split('\t'); return { framework_short, rule_id, rule_type, trigger_pattern: trigger_pattern || null, sector_relevance: sectors ? sectors.split('|').filter(Boolean) : [], severity }; }) : [];
   _cat = { frameworks, rules };
