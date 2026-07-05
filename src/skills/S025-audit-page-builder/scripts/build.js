@@ -685,9 +685,11 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   if (!domain || !sector) throw new Error('domain and sector required');
   const slug = slugify(company || domain.split('.')[0]);
   let hash = generateHash();
+  // Shadow-validation redirect (default 'audit_pages' = prod unchanged; allow-list guarded, no injection).
+  const AUDIT_TABLE = (() => { const t = process.env.AUDIT_TABLE || "audit_pages"; if (!/^audit_pages(_[a-z0-9_]+)?$/.test(t)) throw new Error("unsafe AUDIT_TABLE: " + t); return t; })();
   // Collision guard
   for (let i = 0; i < 5; i++) {
-    const exists = pg(`SELECT 1 FROM audit_pages WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
+    const exists = pg(`SELECT 1 FROM ${AUDIT_TABLE} WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
     if (!exists) break;
     hash = generateHash();
   }
@@ -716,11 +718,11 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   const payloadJsonE = JSON.stringify(neonPayload).replace(/'/g, "''");
   // A4j — RETURNING id + loud failure: pg() returns null/'' on error, and a silently-failed INSERT here means a
   // DEAD AUDIT LINK gets emailed. Never return {slug,hash} unless the row is provably written.
-  let ins = pg(`INSERT INTO audit_pages (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds})) RETURNING id`);
+  let ins = pg(`INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds})) RETURNING id`);
   // A >100KB payload is routed by pg() through the psql -f path, which EXECUTES the INSERT but returns no RETURNING
   // output — so confirm the row with a small SELECT before declaring failure (else a successful large-payload mint
   // is wrongly rejected as a dead link).
-  if (!ins || !String(ins).trim()) ins = pg(`SELECT id FROM audit_pages WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
+  if (!ins || !String(ins).trim()) ins = pg(`SELECT id FROM ${AUDIT_TABLE} WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
   if (!ins || !String(ins).trim()) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written; refusing to return a dead audit link`);
 
   return { slug, hash, signed_url: signed.url, signed_exp: signed.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };
