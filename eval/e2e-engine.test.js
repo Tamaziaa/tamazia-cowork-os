@@ -46,6 +46,10 @@ const S = [
    corpus:'Manama consultancy; we collect personal data via our contact form and use cookies; privacy policy.',
    has:['MENA-BH'], not:['MENA-AE','MENA-SA'], sub:'professional-services/general', preds:['processes_bahrain_resident_data'],
    fwHas:['BAHRAIN_PDPL'], fwNot:['UAE_PDPL','SAUDI_PDPL'] },
+ { n:'UK barristers/chambers (BSB not SRA)', jur:['GB'], sec:'barristers',
+   corpus:'London commercial chambers; our barristers accept direct access instructions; KC and junior counsel; we process personal data; privacy policy.',
+   has:['UK'], not:['USA'], sub:'barristers/general', preds:[],
+   fwHas:['UK_BSB'], fwNot:['UK_SRA_TRANSPARENCY','UK_SRA_COC'] },
  { n:'Edge: empty (robustness)', jur:[], sec:'', corpus:'', has:[], not:['UK','USA'], sub:null, preds:[], fwHas:[], fwNot:[] },
 ];
 let fail=0;

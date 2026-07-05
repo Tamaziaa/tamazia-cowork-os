@@ -5,9 +5,11 @@
 // generated from this behind shadow comparison (4.2-4.3); a framework binds a NODE, never a flat bucket (kills ABI-on-bank).
 // Every framework_short below is present in framework_versions (verified 2026-06-30; no invented codes).
 const TREE = {
-  'law-firms': { label:'Legal services', regulators:['SRA','BSB'], sub:{
+  'law-firms': { label:'Solicitors & law firms', regulators:['SRA'], sub:{
     'solicitors':{ detect:/solicitor|conveyancing|probate|\blaw firm\b|legal advice/i, predicates:['offers_reserved_legal_activity'], frameworks:['UK_SRA_TRANSPARENCY','UK_SRA_COC'] },
-    'barristers':{ detect:/barrister|chambers|\bkc\b|\bqc\b|direct access barrister/i, predicates:['is_barrister_or_chambers'], frameworks:['UK_BSB'] },
+  }},
+  'barristers': { label:'Barristers & chambers', regulators:['BSB'], sub:{
+    'general':{ detect:/barrister|\bchambers\b|\bkc\b|\bqc\b|direct access|public access|instruct(ing)? counsel/i, predicates:['is_barrister_or_chambers'], frameworks:['UK_BSB'] },
   }},
   'healthcare': { label:'Healthcare', regulators:['CQC','GMC'], sub:{
     'general-practice':{ detect:/\bgp\b|general practice|family (doctor|medicine)|private gp/i, predicates:['doctor_led_service','is_cqc_registered_provider','makes_health_claims'], frameworks:['UK_CQC','UK_GMC'] },
@@ -68,7 +70,7 @@ const TREE = {
   'automotive': { label:'Automotive', regulators:['DVSA'], sub:{ 'general':{ detect:/car dealership|automotive|\bgarage\b|vehicle (repair|service)|auto repair/i, predicates:[], frameworks:['UK_DVSA','UK_ASA_CAP','UK_CCR_2013','UK_FCA_CONC25','UK_DMCC_2024'] } }},
   'food': { label:'Food & beverage', regulators:['FSA'], sub:{ 'general':{ detect:/food (business|producer|manufactur)|catering|grocery|food delivery/i, predicates:['sells_food_online'], frameworks:['UK_FOOD_INFO_2014','UK_FSA','UK_ASA_CAP','UK_DMCC_2024','UK_TRADING_STANDARDS'] } }},
 };
-const BRIDGE = { legal:'law-firms', law:'law-firms', financial:'finance', realestate:'real-estate', fb:'hospitality', food:'hospitality', wellness:'healthcare', aesthetic:'aesthetics', barristers:'law-firms' };
+const BRIDGE = { legal:'law-firms', law:'law-firms', financial:'finance', realestate:'real-estate', fb:'hospitality', food:'hospitality', wellness:'healthcare', aesthetic:'aesthetics' };
 function parentOf(sec){ sec=String(sec||'').toLowerCase(); if(TREE[sec])return sec; if(BRIDGE[sec])return BRIDGE[sec];
   for(const k of Object.keys(TREE)) if(sec.includes(k)||(k==='law-firms'&&/legal|law/.test(sec))||(k==='finance'&&/financ/.test(sec))||(k==='real-estate'&&/real|estate|propert/.test(sec))||(k==='healthcare'&&/health/.test(sec))) return k;
   return null; }
@@ -82,17 +84,21 @@ function subSectorPredicates(sector, corpusText=''){ const r=resolveSubSector(se
 const SUB_EXCLUSIVE = {
   UK_ABI:{parent:'finance',sub:'insurance'},
   UK_HFEA:{parent:'healthcare',sub:'fertility-ivf'},
-  UK_BSB:{parent:'law-firms',sub:'barristers'},
+  UK_BSB:{parent:'barristers',sub:'general'},
   UK_SRA_TRANSPARENCY:{parent:'law-firms',sub:'solicitors'},
   UK_SRA_COC:{parent:'law-firms',sub:'solicitors'},
 };
 // true iff `framework` is sub-exclusive to a sub-sector that is a SIBLING of the firm's resolved sub-sector
 // (same parent, different sub). Conservative: never fires when the firm's sub is unknown or a different parent.
 function subSectorExcludes(framework, sector, corpusText='') {
+  // A node-EXCLUSIVE framework binds ONLY its exact node (parent+sub). It is excluded from every other node —
+  // including a DIFFERENT parent sector (e.g. UK_SRA_* must never reach a barristers/chambers firm, even though
+  // legacy parent-inheritance lets it pass the coarse sector gate). This is the structural fix for cross-sector leaks.
   const node = SUB_EXCLUSIVE[framework]; if (!node) return false;
-  const firm = resolveSubSector(sector, corpusText); if (!firm || !firm.sub) return false;
-  if (firm.parent !== node.parent) return false;
-  return firm.sub !== node.sub;
+  const firm = resolveSubSector(sector, corpusText); if (!firm) return false;
+  if (firm.parent !== node.parent) return true;          // different sector entirely -> exclude
+  if (!firm.sub) return false;                            // same parent but sub unresolved -> conservative, keep
+  return firm.sub !== node.sub;                           // same parent, wrong sub -> exclude (the sibling case)
 }
 const SUB_SECTOR_IDS = Object.entries(TREE).flatMap(([p,n])=>Object.keys(n.sub).map(s=>p+'/'+s));
 // ─── CANONICAL SECTOR RECONCILIATION (Branch 4 / V2 DUP-3) ──────────────────────────────────────────

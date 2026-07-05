@@ -13,7 +13,7 @@ const cases = [
   ['botox clinic','aesthetics','we offer botox and dermal filler injectables','aesthetics/injectables'],
   ['letting agent','realestate','letting agent, tenancy and landlord services','real-estate/lettings'],
   ['restaurant','fb','our restaurant menu and dining experience','hospitality/restaurant'],
-  ['barristers','legal','our barristers chambers, direct access','law-firms/barristers'],
+  ['barristers','legal','our barristers chambers, direct access','barristers/general'],
 ];
 let fail=0;
 for(const [name,sec,corpus,want] of cases){ const got=sub(sec,corpus); if(got!==want){fail++;console.log(`FAIL ${name}: got ${got}, want ${want}`);} else console.log('PASS '+name+' -> '+got); }
