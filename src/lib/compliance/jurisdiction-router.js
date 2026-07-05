@@ -110,6 +110,31 @@ function normaliseSector(s) {
   return SECTOR_ALIASES[v] || v;
 }
 
+// Phase 2.6 cut-over: the catalogue (compliance_rules.sector_relevance) is the framework-per-sector TRUTH; the
+// hardcoded SECTOR_MAP above is the deterministic FLOOR. mergedSectorMap() returns legacy UNION catalogue-derived,
+// so no sector ever loses a framework (no-loss) and catalogue coverage is gained. Lazy + cached; FAILS OPEN to the
+// pure hardcoded map when no NEON_URL (module stays pure/testable). connect()'s main path is unaffected (it reads
+// the catalogue directly); this only enriches the coarse routeJurisdictions fallback + listAll* + fwToSectors.
+let _mergedMap = null;
+function mergedSectorMap() {
+  if (_mergedMap) return _mergedMap;
+  const merged = {}; for (const k of Object.keys(SECTOR_MAP)) merged[k] = SECTOR_MAP[k].slice();
+  try {
+    const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
+    if (url) {
+      const { execFileSync } = require('child_process'); const path = require('path');
+      const out = execFileSync(path.join(__dirname, '..', '..', '..', 'scripts', 'psql'),
+        [url, '-tA', '-c', "SELECT DISTINCT unnest(sector_relevance), framework_short FROM compliance_rules WHERE active AND sector_relevance IS NOT NULL"],
+        { encoding: 'utf8' }).toString().trim();
+      const pairs = out ? out.split('\n').filter(Boolean).map(l => { const [tag, framework] = l.split('\t'); return { tag, framework }; }) : [];
+      const { deriveSectorMapFromCatalogue } = require('./registry/sector-views.js');
+      const cat = deriveSectorMapFromCatalogue(pairs);
+      for (const k of Object.keys(cat)) { const set = new Set(merged[k] || []); for (const f of cat[k]) set.add(f); merged[k] = [...set].sort(); }
+    }
+  } catch (_e) { /* fail-open: pure hardcoded floor */ }
+  _mergedMap = merged; return merged;
+}
+
 function routeJurisdictions(opts = {}) {
   const c = String(opts.country || '').toUpperCase().trim();
   const sector = normaliseSector(opts.sector);
@@ -132,12 +157,12 @@ function routeJurisdictions(opts = {}) {
   }
 
   // Sector-specific frameworks (only added when sector is recognised)
-  for (const f of (SECTOR_MAP[sector] || [])) out.push(f);
+  for (const f of (mergedSectorMap()[sector] || SECTOR_MAP[sector] || [])) out.push(f);
 
   return Array.from(new Set(out));
 }
 
-function listAllSectors() { return Object.keys(SECTOR_MAP).sort(); }
+function listAllSectors() { return Object.keys(mergedSectorMap()).sort(); }
 function listAllFrameworks() {
   const set = new Set([
     'UK_GDPR_A13', 'UK_PECR', 'UK_ICO_COOKIES', 'UK_DPA_2018',
@@ -216,7 +241,7 @@ function routeForMarkets({ markets, country, sector, signals }) {
   return Array.from(out).filter(jOK);
 }
 
-module.exports = { routeJurisdictions, routeForMarkets, normaliseSector, listAllSectors, listAllFrameworks, EU_MEMBER_STATES, SECTOR_MAP, SECTOR_ALIASES };
+module.exports = { routeJurisdictions, routeForMarkets, normaliseSector, listAllSectors, listAllFrameworks, EU_MEMBER_STATES, SECTOR_MAP, mergedSectorMap, SECTOR_ALIASES };
 
 if (require.main === module) {
   console.log(JSON.stringify({
