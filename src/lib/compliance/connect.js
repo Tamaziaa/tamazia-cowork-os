@@ -59,7 +59,7 @@ function fwSectorOK(fw, sector, rulesForFw) {
   // check parent sectors — if 'healthcare' maps to this fw and sector='aesthetics', allow it
   const parents = SECTOR_PARENTS[sector] || [];
   if (parents.some(p => m && m.has(p))) return true;
-  if ((rulesForFw || []).some(r => Array.isArray(r.sector_relevance) && (r.sector_relevance.includes(sector) || parents.some(p => r.sector_relevance.includes(p))))) return true;
+  if ((rulesForFw || []).some(r => { if (!Array.isArray(r.sector_relevance)) return false; const t = _canonTags(r.sector_relevance); return t.includes(sector) || parents.some(p => t.includes(p)); })) return true;
   return false;                                     // sector-specific framework for a different sector -> excluded
 }
 
@@ -117,11 +117,22 @@ const CAP_GATE = {
   UK_TRADING_STANDARDS: { sig: 'payments', rx: /\b(book (online|now|an?|your)|online booking|appointment|price list|our prices|prices? from|£\s?\d{2,}|per (session|treatment|night|room|month|person)|reservation|add to (cart|basket|bag)|checkout|buy now|shop now|subscribe|membership (from|plan|fee)|enrol|admissions|tuition)\b/i },
 };
 
+// BUG-FIX (audit P1): compliance_rules.sector_relevance stores non-canonical vocab (legal/wealth/health/solicitors/
+// conveyancing/financial-services/aesthetic/clinic/crypto/technology...). connect normalises the FIRM sector to
+// canonical but compared it against the RAW rule tags, silently HELDING those rules (coverage loss). Canonicalise the
+// rule tags too (fallback to the raw tag when canonicalSector returns null, e.g. sub-sectors).
+function _canonTags(sectors) {
+  const cs = require('./registry/sector.js').canonicalSector;
+  const out = new Set();
+  for (const t of (sectors || [])) { const c = cs(t); out.add(c || t); out.add(t); }
+  return [...out];
+}
 function secMatches(sectors, sec) {
   if (!sectors.length || !sec) return true;
-  if (sectors.includes(sec)) return true;
+  const tags = _canonTags(sectors);
+  if (tags.includes(sec)) return true;
   const parents = SECTOR_PARENTS[sec] || [];
-  return parents.some(p => sectors.includes(p));
+  return parents.some(p => tags.includes(p));
 }
 
 // catalogue = { frameworks:[{framework_short,jurisdiction}], rules:[{framework_short,sector_relevance[],rule_type,trigger_pattern,...}] }
