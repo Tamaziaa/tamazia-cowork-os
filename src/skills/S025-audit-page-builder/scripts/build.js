@@ -274,7 +274,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   const effCountry = resolveHomeCountry(domain, scan.markets, country);
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
-  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) {}
+  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) { /* #48: never present a THROWN compliance scan as a clean bill of health — record the failure so the payload marks compliance unassessed rather than silently 'no breaches'. */ comp = { frameworks: [], findings: [], compliance_unassessed: true, compliance_error: String((_e && _e.message) || _e).slice(0, 160) }; }
   // HQ RECONCILIATION (Phase-7): the LLM firm-profiler (now reliable via the Cloudflare-first router) determines the
   // registered LEGAL HQ from the corpus. resolveHomeCountry runs BEFORE the profile exists and a .com firm can fall to
   // a TLD/market-derived scalar country that contradicts the real HQ (cert: pkfhospitality is London-HQ but .com made

@@ -763,7 +763,9 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     const { profileFirm, mergeJurisdictions } = require('../../../lib/audit/firm-profile.js');
     firmProfile = await profileFirm({ corpus: corpusText, domain, country, sector, env: process.env });
     mergedJur = mergeJurisdictions({ profile: firmProfile, markets: mk, registeredCountry: country, corpus: corpusText });
-  } catch (_e) {}
+  } catch (_e) { /* #47: on profiler/merge failure fall back to the REGISTERED country only, never the raw keyword
+      `codes` (which carry the US-law-on-a-UAE-firm noise mergeJurisdictions exists to strip). */
+    mergedJur = country ? [String(country).toUpperCase()] : null; }
   // FOREIGN-JURISDICTION GATE (F2b/C-jur — Al Tamimi → AE, not US). Keyword market-detection over-fires on
   // ADVISORY firms: a UAE law firm whose corpus is saturated with "SEC", "CCPA", "New York", "America" is NOT
   // US-regulated — it advises clients ON those regimes. So for FOREIGN jurisdictions we trust ONLY the LLM-gated
