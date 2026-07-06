@@ -455,7 +455,9 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     };
   });
   const fv = pg(`SELECT MAX(version) FROM framework_versions WHERE status='active'`) || '1.0.0';
-  const lr = pg(`SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'`) || new Date().toISOString().slice(0, 10);
+  // #63: if the version query returns empty (DB unreachable) do NOT stamp today's date as 'last reviewed' — that is
+  // false provenance on a legal document. Leave blank so the renderer shows 'unknown' rather than a fabricated date.
+  const lr = pg(`SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'`) || '';
   const rulesList = frameworks.map(f => `'${String(f).replace(/'/g, "''")}'`).join(',');   // FIX-S2a: escape single-quotes (SQL-injection defense-in-depth)
   const rulesRaw = rulesList ? pg(`SELECT framework_short, rule_id, severity, description, citation_url FROM compliance_rules WHERE active=TRUE AND framework_short IN (${rulesList}) ORDER BY severity, framework_short, rule_id`) : null;
   const rules = rulesRaw ? rulesRaw.split('\n').filter(Boolean).map(line => {
@@ -640,10 +642,14 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     const _key = process.env.NIM_API_KEY || process.env.GROQ_API_KEY;
     if (_key && _confirmed.length) {
       const _top = _confirmed.slice(0, 8).map(f => '- ' + (f.severity || '') + ' ' + String(f.fact || '').slice(0, 90)).join('\n');
-      const _expo = _confirmed.reduce((a, f) => a + (f.fine_high_gbp || 0), 0);
+      // ADDITIVE-MAXIMA FIX (bug #42/#53): fine_high_gbp is a per-framework STATUTORY MAXIMUM (a ceiling), not an
+      // incurred amount. Summing them (5 GDPR sub-findings -> 5x GBP17.5M) is materially misleading. Dedupe to one
+      // ceiling per framework, then take the SINGLE HIGHEST ceiling as the headline number (maxima are not additive).
+      const _ceilByFw = {}; for (const f of _confirmed) { const v = +f.fine_high_gbp || 0; const k = f.framework || f.code || f.rule_id; if (v > (_ceilByFw[k] || 0)) _ceilByFw[k] = v; }
+      const _expo = Object.values(_ceilByFw).reduce((m, v) => Math.max(m, v), 0);
       const _base = process.env.NIM_API_KEY ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
       const _model = process.env.NIM_API_KEY ? (process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct') : 'llama-3.3-70b-versatile';
-      const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nMax fine exposure across findings: GBP ' + _expo + '.\nWrite exactly two sentences: (1) the single most serious regulatory or commercial risk and why it matters, (2) the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.';
+      const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nHighest single statutory penalty ceiling among the applicable frameworks (a per-framework maximum, NOT a sum and NOT an incurred amount): GBP ' + _expo + '.\nWrite exactly two sentences: (1) the single most serious regulatory or commercial risk and why it matters, (2) the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.';
       const _r = await fetch(_base, { method: 'POST', headers: { authorization: 'Bearer ' + _key, 'content-type': 'application/json' }, body: JSON.stringify({ model: _model, messages: [{ role: 'user', content: _prompt }], max_tokens: 170, temperature: 0.3 }), signal: AbortSignal.timeout(25000) });
       if (_r.ok) { const _j = await _r.json(); const _t = (_j.choices && _j.choices[0] && _j.choices[0].message && _j.choices[0].message.content || '').trim(); if (_t && _t.length > 40) exec_summary = _t.slice(0, 600); }
     }

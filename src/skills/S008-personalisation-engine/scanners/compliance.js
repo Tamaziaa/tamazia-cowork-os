@@ -175,7 +175,7 @@ async function _pool(items, limit, deadlineMs, fn) {
 }
 function _discoverLinks(html, base, accepted) {
   const out = [];
-  const re = /href\s*=\s*["']([^"'#?]+)/gi; let m;
+  const re = /href\s*=\s*["']([^"'#]+)/gi; let m; // allow '?' so CMS pages (/privacy?page_id=) are discovered (bug #45)
   while ((m = re.exec(html)) && out.length < 600) {
     let href = m[1].trim(); if (!href || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) continue;
     let abs; try { abs = new URL(href, base).toString(); } catch (_e) { continue; }
@@ -608,7 +608,16 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
   // Default: must_appear — disclosure required.
   // If rule.url_check given (e.g. "/privacy"), test only that URL; else test all corpus
   const subset = rule.url_check ? corpus.filter(c => c.url.endsWith(rule.url_check) || c.url.includes(rule.url_check)) : corpus;
-  const pool = subset.length ? subset : corpus;
+  // ABSENCE-FABRICATION GUARD (bug #38/#41): a url_check-scoped must_appear rule (e.g. url_check:'/privacy') whose
+  // targeted page-type was NEVER fetched must NOT silently fall back to the whole corpus and emit a fined "missing
+  // disclosure" MISS — that asserts absence on unread content. Return a non-fined 'target_unfetched' status (build.js
+  // surfaces only 'miss', so no fabricated finding) rather than fining a page we never read.
+  if (rule.url_check && subset.length === 0) {
+    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity,
+             status: 'target_unfetched', rule_type: rule.rule_type || 'must_appear',
+             note: 'target page-type ' + rule.url_check + ' was not fetched this scan; absence not asserted' };
+  }
+  const pool = subset;
   for (const c of pool) {
     const m = c.body.match(re);
     if (m) {
