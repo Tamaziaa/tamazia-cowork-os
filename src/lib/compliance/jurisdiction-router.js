@@ -76,6 +76,8 @@ const SECTOR_MAP = {
 
 // Aliases (clients describe themselves with varied terms — normalise to canonical)
 const SECTOR_ALIASES = {
+  'barrister': 'barristers', 'conveyancer': 'law-firms', 'accountant': 'accounting',
+  'dentist': 'dental', 'pharmacist': 'pharmacy', 'recruiter': 'recruitment', 'optician': 'healthcare',
   'lawyer': 'law-firms', 'legal': 'law-firms', 'solicitor': 'law-firms', 'solicitors': 'law-firms',
   'attorney': 'law-firms', 'law': 'law-firms', 'litigation': 'law-firms',
   'medical': 'healthcare', 'clinic': 'healthcare', 'nhs': 'healthcare', 'hospital': 'healthcare',
@@ -90,7 +92,7 @@ const SECTOR_ALIASES = {
   'non-profit': 'charity', 'nonprofit': 'charity', 'cic': 'charity', 'foundation': 'charity',
   'utility': 'energy', 'electricity': 'energy', 'gas': 'energy',
   'rail': 'transport', 'airline': 'aviation', 'logistics': 'transport',
-  'pharmacy': 'pharma', 'pharmaceutical': 'pharma', 'medicine': 'pharma',
+  'pharmaceutical': 'pharma', 'medicine': 'pharma',  // pharmacy kept distinct (dispensing != manufacturing); bridged to pharma in connect (bug #74)
   'restaurant': 'hospitality', 'hotel': 'hospitality', 'pub': 'hospitality',
   'gym': 'fitness', 'gyms': 'fitness', 'leisure': 'fitness', 'wellness': 'fitness', 'health-club': 'fitness', 'health-clubs': 'fitness', 'studio': 'fitness', 'pilates': 'fitness', 'yoga': 'fitness',
   'agency': 'marketing', 'creative': 'marketing', 'advertising': 'marketing',

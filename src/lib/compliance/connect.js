@@ -35,6 +35,7 @@ const SECTOR_PARENTS = {
   'aesthetics': ['healthcare'],       // aesthetic clinics inherit CQC/MHRA from healthcare
   'aesthetic':  ['healthcare'],
   'dental':     ['healthcare'],       // dental inherits MHRA/CQC from healthcare
+  'pharmacy':   ['pharma'],           // dispensing pharmacy inherits pharma regulators; keeps its own 'pharmacy'-tagged DEA/FMD rules (bug #74)
   // NOTE: barristers is DELIBERATELY not bridged. Barristers/chambers are a distinct regulated node (BSB),
   // NOT a child of solicitors (SRA). Bridging them to 'law-firms' made every non-node-exclusive law-firm
   // framework leak onto chambers (a domain error). sector.js (own TREE parent) + jurisdiction-router SECTOR_MAP
@@ -81,7 +82,7 @@ function signalSatisfiesTrigger(triggerPattern, signals) {
   if (s.uses_ai && /\bai\b|artificial intelligence|model|chatbot|automated decision|algorithm/.test(tp)) return true;
   if (s.payments && /pay|subscrip|checkout|card|recurring|billing|basket|cart/.test(tp)) return true;
   if (s.biometrics && /biometric|facial|fingerprint|face/.test(tp)) return true;
-  if (s.ugc && /review|comment|user[- ]generated|forum|post|upload/.test(tp)) return true;
+  if (s.ugc && /review|comment|user[- ]generated|forum|\bposts?\b|upload/.test(tp)) return true;
   return false;
 }
 
@@ -119,6 +120,10 @@ const CAP_GATE = {
   UAE_DOH:     { sig: null, rx: /\b(abu dhabi|doh|department of health\b|\bhaad\b)\b/i },
 
   QATAR_PDPPL: { sig: null, rx: /\b(qatar|doha|\.qa\b|qfc|qatar financial centre)\b/i },
+  // CLC binds only genuine CLC-regulated licensed conveyancers/probate lawyers, not SRA solicitors (bug #20)
+  UK_CLC: { sig: null, rx: /\b(licensed conveyancer|council for licensed conveyancers|regulated by the clc|clc[- ]regulated|clc licen[cs]e)\b/i },
+  US_VCDPA: { sig: null, rx: /\b(virginia|\bVA\b|nationwide|all (?:50 )?states|united states|u\.?s\.?(?:[- ]wide|[- ]based)?|across the (?:us|united states)|us (?:customers|residents|consumers)|ship(?:ping)? (?:across|throughout|nationwide))\b/i },
+  US_TDPSA: { sig: null, rx: /\b(texas|\bTX\b|nationwide|all (?:50 )?states|united states|u\.?s\.?(?:[- ]wide|[- ]based)?|across the (?:us|united states)|us (?:customers|residents|consumers)|ship(?:ping)? (?:across|throughout|nationwide))\b/i },
   // CONSUMER-NEXUS GATING (legal-QA P0): DMCCA 2024 Part 4, CMA enforcement, CRA 2015 and Trading Standards bind
   // a trader only in a TRADER-TO-CONSUMER transaction. They were universal with no consumer gate, so pure-B2B
   // advisory/institutional firms got the full consumer stack (~30 FPs). Gate on a real B2C commerce signal; a
@@ -250,6 +255,14 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     else if (triggerHeld) gates.trigger_filtered.push(fw);
     else if (sectorHeld) gates.sector_filtered.push(fw);
   }
+  // REGULATOR EXCLUSIVITY (bug #20/#21): a CLC-regulated licensed conveyancer is NOT SRA-regulated. If the corpus
+  // clearly signals CLC regulation and NOT SRA, drop the SRA frameworks so a CLC firm is never told it breaches
+  // solicitor-only SRA rules (wrong-regulator, same class as the barristers leak).
+  {
+    const clcSig = /\b(regulated by the (clc|council for licensed conveyancers)|licensed conveyancer|clc[- ]regulated|clc licen[cs]e)\b/i.test(t);
+    const sraSig = /\b(regulated by the (solicitors regulation authority|sra)|\bsra (number|no|id|regulated)|solicitors? regulation authority)\b/i.test(t);
+    if (clcSig && !sraSig) { connectedFw.delete('UK_SRA_COC'); connectedFw.delete('UK_SRA_TRANSPARENCY'); }
+  }
   const _fwArr = Array.from(connectedFw).sort();
   connectSelfTest(_fwArr, J, sec, fvJuris, t, { fvReq, nexus: _nx });   // fail-closed guardrail (jurisdiction+node+nexus)
   const _bind = {}; { const _i = require('./registry/framework-intel.js'); for (const _f of _fwArr) { const _b = _i.bindingStatus(_f); if (_b) _bind[_f] = _b; } }
@@ -262,7 +275,7 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
 
 // --- Neon catalogue loader (engine use). Cached in-process. ---
 let _cat = null;
-function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return ''; try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString(); } catch (_e) { return ''; } }
+function pg(sql) { const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING; if (!url) return ''; try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).toString(); } catch (_e) { return ''; } }
 function loadCatalogue() {
   if (_cat) return _cat;
   const fw = pg("SELECT framework_short, COALESCE(jurisdiction,''), COALESCE(required_nexus::text,'') FROM framework_versions").trim();
@@ -272,7 +285,11 @@ function loadCatalogue() {
   // FIX-S2b: NEVER cache an empty catalogue. framework_versions always has rows, so an empty result means the DB
   // query failed (outage/auth). Caching it would attach ZERO frameworks for the whole process life with no error.
   // Return the empty result WITHOUT caching so the next call retries.
-  if (!frameworks.length) return { frameworks, rules };
+  // Never cache a partial/empty catalogue: both tables always have rows, so an empty frameworks OR empty
+  // rules result means the query failed (outage/auth/psql hiccup). Caching 290 frameworks with 0 rules would
+  // make connect() attach ZERO frameworks for the whole process life with no error. Return without caching so
+  // the next call retries. (bug #48-class: partial-catalogue poisoning)
+  if (!frameworks.length || !rules.length) return { frameworks, rules };
   _cat = { frameworks, rules };
   return _cat;
 }
