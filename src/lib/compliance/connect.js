@@ -112,14 +112,12 @@ const CAP_GATE = {
   // establishment phrase co-located with the zone, a physical DIFC/ADGM address, or zone-registration wording.
   DIFC_DPL:    { sig: null, rx: /(registered|licen[cs]ed|authorised|regulated|based|established|incorporated|headquarter|domiciled|our (office|firm|practice)|principal place)[^.]{0,40}(difc|dubai international financial centre|dfsa)|(difc|dfsa)[^.]{0,40}(registered|licen[cs]ed|authorised|regulated|established|based)|gate (village|district|avenue)|difc[- ]registered/i },
   ADGM_DPR:    { sig: null, rx: /(registered|licen[cs]ed|authorised|regulated|based|established|incorporated|headquarter|domiciled|our (office|firm|practice)|principal place)[^.]{0,40}(adgm|abu dhabi global market|fsra)|(adgm|fsra)[^.]{0,40}(registered|licen[cs]ed|authorised|regulated|established|based)|al maryah island|adgm[- ]registered/i },
-  SAUDI_PDPL:  { sig: null, rx: /\b(saudi arabia|\bKSA\b|riyadh|jeddah|dammam|\.sa\b|sdaia|commercial registration .*saudi)\b/i },
   // Emirate gating (healthcare regulators): DHA binds Dubai-based providers, DOH Abu Dhabi. Without this all three
   // coarse-'AE' authorities attached to every UAE clinic (a Dubai clinic wrongly got the Abu Dhabi regulator and
   // vice-versa). MOHAP (federal) stays the ungated default for the other emirates.
   UAE_DHA:     { sig: null, rx: /\b(dubai|dha|dubai health authority)\b/i },
   UAE_DOH:     { sig: null, rx: /\b(abu dhabi|doh|department of health\b|\bhaad\b)\b/i },
 
-  QATAR_PDPPL: { sig: null, rx: /\b(qatar|doha|\.qa\b|qfc|qatar financial centre)\b/i },
   // CLC binds only genuine CLC-regulated licensed conveyancers/probate lawyers, not SRA solicitors (bug #20)
   UK_CLC: { sig: null, rx: /\b(licensed conveyancer|council for licensed conveyancers|regulated by the clc|clc[- ]regulated|clc licen[cs]e)\b/i },
   US_VCDPA: { sig: null, rx: /\b(virginia|\bVA\b|nationwide|all (?:50 )?states|united states|u\.?s\.?(?:[- ]wide|[- ]based)?|across the (?:us|united states)|us (?:customers|residents|consumers)|ship(?:ping)? (?:across|throughout|nationwide))\b/i },
