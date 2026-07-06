@@ -100,7 +100,7 @@ const CAP_GATE = {
   // (Ltd/LLP/PLC/CIC). Sole traders, partnerships, and non-UK entities have no registered company number.
   // Gate on detecting a corporate entity signal in the corpus — if the firm is not a registered company,
   // the absence-of-number finding is a false positive.
-  UK_COMPANIES_ACT: { sig: null, rx: /\b(ltd\.?|limited|llp\b|plc\b|incorporated|co\.? reg\.?|company (no|number|reg|registration)|registered (in|with) (england|scotland|wales|northern ireland)|registered office|companies house)\b/i },
+  UK_COMPANIES_ACT: { sig: null, rx: /\b(ltd\.?|limited(?!\s+(?:time|availability|edition|offer|spaces?|places?|period|warranty|stock|quantity|number|selection|access|to\b))|llp\b|plc\b|incorporated|co\.? reg\.?|company (no|number|reg|registration)|registered (in|with) (england|scotland|wales|northern ireland)|registered office|companies house)\b/i },
   // FREE-ZONE GATING (legal-QA P0): UAE free zones are distinct legal jurisdictions. DIFC DPL No.5/2020 Art.6
   // binds only DIFC-established entities; ADGM DPR 2021 reg.6 only ADGM-licensed entities. A mainland UAE firm is
   // governed solely by Federal PDPL (Decree-Law 45/2021). Without these gates every AE firm wrongly inherited all
