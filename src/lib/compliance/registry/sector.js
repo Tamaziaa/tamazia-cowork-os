@@ -118,6 +118,10 @@ const SUB_SECTOR_IDS = Object.entries(TREE).flatMap(([p,n])=>Object.keys(n.sub).
 // distinct sectors stay separate. Fixes live coverage bugs: `aesthetic` firms reached 9 fw not 29; `legal`
 // and `law-firms` were disjoint (SRA vs Legal-Ombudsman rules each lost half).
 const SECTOR_ALIASES = {
+  // singular sub-sector labels (sourcing frequently emits these) -> canonical (bug #22)
+  barrister:'barristers', conveyancer:'law-firms', solicitor:'law-firms', lawyer:'law-firms',
+  accountant:'accounting', dentist:'dental', pharmacist:'pharmacy', recruiter:'recruitment',
+  'care-home':'care-homes', 'estate-agent':'real-estate', optician:'healthcare',
   aesthetic:'aesthetics', health:'healthcare', technology:'tech', 'financial-services':'finance',
   legal:'law-firms', law:'law-firms', financial:'finance', realestate:'real-estate', 'higher-education':'education',
   wellness:'healthcare', fb:'hospitality', clinic:'healthcare', cosmetic:'aesthetics', dermatology:'aesthetics',

@@ -4,7 +4,7 @@
 const assert = require('assert');
 if (!process.env.NEON_URL) { console.log('NEON unavailable — shadow-identity test skipped.'); process.exit(0); }
 const { hash, cells } = require('./_shadow-connect.js');
-const BASELINE = 'c1bacfc2abbde20546912c7877cef5e4f60d8446c5f4530b12e01cdceb17ecdf';
+const BASELINE = 'dde4004f9632171296289c43ef57b31da147a4dfeb5cb103f0aeee8f8b824492';
 assert.strictEqual(cells, 1998, 'shadow matrix cell count changed');
 assert.strictEqual(hash, BASELINE, `connect() attachment output changed (got ${hash}); if intentional, update BASELINE with review`);
 console.log(`connect shadow-identity OK: ${cells} cells, hash matches baseline.`);
