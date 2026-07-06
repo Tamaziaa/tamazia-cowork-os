@@ -67,6 +67,11 @@ function fwSectorOK(fw, sector, rulesForFw) {
 function expandJurisdictions(list) {
   const J = new Set((list || []).map(normJuris).filter(Boolean));
   if ([...J].some(j => EU_ISO.has(j))) J.add('EU');       // any EU member => EU-level law applies
+  // FIX (Gulf jurisdiction match): the scanner normalises Gulf countries to 'MENA-SA'/'MENA-QA'/'MENA-AE' etc., but
+  // the frameworks store the bare ISO ('SA','QA','AE','BH','OM'). Without this a Saudi/Qatar firm matched NOTHING
+  // (home data-protection regime dropped). Add the bare ISO for any 'MENA-XX' code so GATE A matches. Free-zone
+  // codes ('MENA-AE-DIFC') are left intact (the regex requires exactly two trailing letters).
+  for (const j of [...J]) { const m = /^MENA-([A-Z]{2})$/.exec(j); if (m) J.add(m[1]); }
   return J;
 }
 
@@ -95,7 +100,7 @@ const CAP_GATE = {
   // (Ltd/LLP/PLC/CIC). Sole traders, partnerships, and non-UK entities have no registered company number.
   // Gate on detecting a corporate entity signal in the corpus — if the firm is not a registered company,
   // the absence-of-number finding is a false positive.
-  UK_COMPANIES_ACT: { sig: null, rx: /\b(ltd\.?|limited|llp\b|plc\b|incorporated|co\.? reg\.?|company (no|number|reg|registration)|registered (in|with) (england|scotland|wales|northern ireland)|registered office|companies house)\b/i },
+  UK_COMPANIES_ACT: { sig: null, rx: /\b(ltd\.?|limited(?!\s+(?:time|availability|edition|offer|spaces?|places?|period|warranty|stock|quantity|number|selection|access|to\b))|llp\b|plc\b|incorporated|co\.? reg\.?|company (no|number|reg|registration)|registered (in|with) (england|scotland|wales|northern ireland)|registered office|companies house)\b/i },
   // FREE-ZONE GATING (legal-QA P0): UAE free zones are distinct legal jurisdictions. DIFC DPL No.5/2020 Art.6
   // binds only DIFC-established entities; ADGM DPR 2021 reg.6 only ADGM-licensed entities. A mainland UAE firm is
   // governed solely by Federal PDPL (Decree-Law 45/2021). Without these gates every AE firm wrongly inherited all

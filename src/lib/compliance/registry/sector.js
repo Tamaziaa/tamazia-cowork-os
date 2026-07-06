@@ -75,6 +75,15 @@ function parentOf(sec){ sec=String(sec||'').toLowerCase(); if(TREE[sec])return s
   for(const k of Object.keys(TREE)) if(sec.includes(k)||(k==='law-firms'&&/legal|law/.test(sec))||(k==='finance'&&/financ/.test(sec))||(k==='real-estate'&&/real|estate|propert/.test(sec))||(k==='healthcare'&&/health/.test(sec))) return k;
   return null; }
 function resolveSubSector(sector, corpusText=''){ const lc=String(corpusText||'').toLowerCase(); const p=parentOf(sector);
+  // Barrister/chambers specificity guard (bug #21/#22): a chambers site that also says
+  // "legal advice" was misresolved to solicitors because solicitors.detect matches the
+  // generic phrase first. Barrister signals are unambiguous, so if they fire AND the site
+  // does NOT self-identify as an SRA-regulated solicitor firm, resolve barristers first.
+  const barSig=/\bbarrister|\bchambers\b|\binstruct(ing)? counsel\b|direct access|public access|\bk\.?c\.?\b|\bq\.?c\.?\b/i.test(lc);
+  const solSig=/\bsolicitor|regulated by the (solicitors regulation authority|sra)\b|\bsra (number|no|id)\b|\bsra[- ]?regulated\b/i.test(lc);
+  if(barSig && !solSig && (!p || p==='barristers' || p==='law-firms')){
+    const bn=TREE['barristers']; if(bn && bn.sub && bn.sub.general) return { parent:'barristers', sub:'general', regulators:bn.regulators, predicates:bn.sub.general.predicates||[], frameworks:bn.sub.general.frameworks||[] };
+  }
   const order=p?[p,...Object.keys(TREE).filter(x=>x!==p)]:Object.keys(TREE);
   for(const parent of order){ const node=TREE[parent]; for(const [subId,s] of Object.entries(node.sub)) if(s.detect.test(lc)) return { parent, sub:subId, regulators:node.regulators, predicates:s.predicates||[], frameworks:s.frameworks||[] }; }
   return p?{ parent:p, sub:null, regulators:TREE[p].regulators, predicates:[], frameworks:[] }:null; }
