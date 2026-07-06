@@ -67,6 +67,11 @@ function fwSectorOK(fw, sector, rulesForFw) {
 function expandJurisdictions(list) {
   const J = new Set((list || []).map(normJuris).filter(Boolean));
   if ([...J].some(j => EU_ISO.has(j))) J.add('EU');       // any EU member => EU-level law applies
+  // FIX (Gulf jurisdiction match): the scanner normalises Gulf countries to 'MENA-SA'/'MENA-QA'/'MENA-AE' etc., but
+  // the frameworks store the bare ISO ('SA','QA','AE','BH','OM'). Without this a Saudi/Qatar firm matched NOTHING
+  // (home data-protection regime dropped). Add the bare ISO for any 'MENA-XX' code so GATE A matches. Free-zone
+  // codes ('MENA-AE-DIFC') are left intact (the regex requires exactly two trailing letters).
+  for (const j of [...J]) { const m = /^MENA-([A-Z]{2})$/.exec(j); if (m) J.add(m[1]); }
   return J;
 }
 
