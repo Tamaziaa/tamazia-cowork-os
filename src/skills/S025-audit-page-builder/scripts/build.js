@@ -252,7 +252,7 @@ function resolveHomeCountry(domain, markets, passedCountry) {
   return '';
 }
 
-async function buildPayload({ domain, sector, country, lead_id, env }) {
+async function buildPayload({ domain, sector, country, lead_id, env, company }) {
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
   let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
@@ -661,6 +661,7 @@ async function buildPayload({ domain, sector, country, lead_id, env }) {
     detected_jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [],
     detected_sector: (comp && comp.detected_sector) || sector,
     firm_profile: (comp && comp.firm_profile) || null,
+    company: (() => { const nm = (company && String(company).trim()) || ''; const fp = (comp && comp.firm_profile) || {}; const scanned = fp.name || fp.legal_name || fp.display_name || fp.trading_name || fp.brand || ''; if (scanned && String(scanned).trim()) return String(scanned).trim(); return nm || null; })(),
     via_archive: !!(comp && comp.via_archive), archive_date: (comp && comp.archive_date) || null,
     engine_jurisdictions: (comp && comp.jurisdictions) || [],
     rules,
@@ -708,7 +709,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     if (!exists) break;
     hash = generateHash();
   }
-  const payload = await buildPayload({ domain, sector, country, lead_id, env: env || process.env });
+  const payload = await buildPayload({ domain, sector, country, lead_id, env: env || process.env, company });
 
   // R2 storage offload (AUDIT_PAYLOAD_STORE: 'neon' | 'both' | 'r2'; default 'neon' keeps current behaviour).
   // Lazy-require r2.js (pulls @aws-sdk) ONLY when R2 storage is actually used, so a neon-mode mint never depends
