@@ -585,12 +585,14 @@ function _dpPolicyPageUnread(rule, corpus) {
   // l'effacement", "délégué à la protection", "base légale" or "autorité de contrôle". Require >=1 deep marker so a page
   // only counts as a real policy when its substantive DP text was actually read.
   const _DP_DEEP = _DP_MARKERS.slice(1, 6); // controller / erasure / DPO / lawful-basis / supervisory-authority
+  // CONTENT is a WEAK signal on its own: French/EU homepages embed a cookie-consent banner (OneTrust etc.) that carries
+  // "responsable du traitement", "CNIL", "donnees personnelles" — enough to fake a policy body. So content only counts
+  // when a page shows ALL 5 deep markers (a real policy enumerates every data-subject right + controller + DPO +
+  // lawful basis + supervisory authority; a consent banner never does). The reliable signal is a dedicated policy URL.
   const _hasPolicyContent = (corpus || []).some((c) => {
     const t = _stripHtml(c && (c.text || c.body || c.html));
     let deep = 0; for (const rx of _DP_DEEP) { if (rx.test(t)) deep++; }
-    if (deep < 1) return false;
-    let total = 0; for (const rx of _DP_MARKERS) { if (rx.test(t)) total++; }
-    return total >= 2; // >=1 deep + >=2 total markers => genuine policy body, not a footer link cluster
+    return deep >= 5;
   });
   const _POLICY_SLUG = /^(?:[a-z]{2}\/)?(?:politique[- ]?de[- ]?)?(?:confidentialite|privacy(?:[- ]?policy)?|datenschutz(?:erklaerung)?|mentions[- ]?legales|donnees[- ]?personnelles|rgpd|gdpr|informativa(?:[- ]?privacy)?|privacidad|aviso[- ]?legal|privacybeleid|privacyverklaring|politique[- ]?cookies|cookie[- ]?policy|protection[- ]?des[- ]?donnees|proteccion[- ]?de[- ]?datos)$/i;
   const _hasPolicyUrl = (corpus || []).some((c) => {
@@ -752,7 +754,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v9-2026-07-09-dp-policy-guard';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v10-2026-07-09-dp-policy-guard-banner-proof';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
