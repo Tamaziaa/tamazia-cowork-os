@@ -92,6 +92,19 @@ function _selfIdOverride(lc) {
   if (/\b((our|the) (software|saas|platform|product) (platform |solution )?(helps|enables|automates|powers|delivers)|we (build|develop|provide|offer) (a |our )?(software|saas|platform)|(ai|automation|software) platform for|enterprise software (company|vendor|provider))/.test(lc)) return 'saas';
   // own-firm = a marketing/creative agency (marketing FOR clinics/charities is NOT healthcare/charity)
   if (/\b((we are|we're) (a|an) [a-z -]{0,30}(marketing|advertising|creative|digital|branding|seo|pr) agency|full.service [a-z -]{0,20}agency|digital marketing agency|creative agency|advertising agency)/.test(lc)) return 'marketing';
+  // own-firm = a hotel / accommodation venue. High precision: needs >=2 distinct booking/rooms signals so a passing
+  // "hotel" mention on a non-hotel site (or a blog/"news" section) cannot flip a real hotel to 'media'. Fixes
+  // mercuremanchester.co.uk (a 4-star hotel) being classified 'media' and attached IPSO/OSA press frameworks.
+  {
+    const _HOTEL = [
+      /\bbook (a |your )?(room|stay|table)\b/, /\b(hotel|guest|bed)\s?rooms?\b/, /\broom (availability|rates|types|offers|gallery|layouts)\b/,
+      /\bcheck.?in\b[\s\S]{0,40}\bcheck.?out\b/, /\ben.?suite\b/, /\b(meeting|conference|function) (rooms|venue|packages)\b/,
+      /\bwedding (venue|reception|packages|planner)\b/, /\b\d{2,4} (comfortable |guest )?(bed)?rooms\b/, /\bovernight (stay|accommodation)\b/,
+      /\brestaurant (&|and) bar\b/, /\b(single|double|twin|family|executive) (room|suite)s?\b/, /\bhotel (offers|booking|reservation)\b/
+    ];
+    let _n = 0; for (const rx of _HOTEL) { if (rx.test(lc)) _n++; if (_n >= 2) break; }
+    if (_n >= 2) return 'hospitality';
+  }
   return null;
 }
 // DOMAIN-NAME self-ID: a firm names itself after what it IS, not after its clients — so an unambiguous profession
