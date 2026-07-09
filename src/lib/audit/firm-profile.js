@@ -46,12 +46,12 @@ function _code(name) { return COUNTRY_CODE[String(name || '').toLowerCase().trim
 // Ordered most-specific first. Returns a SECTORS-list value or null (genuinely unknown — do not fabricate).
 // Never emits "general": unknown sector → null so downstream gating signals low-confidence, not wrong pack.
 const _SECTOR_KW = [
-  [/\bsolicit|barrister|\bllp\b|law firm|sra number|legal service|conveyancing|litigation|employment law|immigration law/i, 'law-firms'],
+  [/\bsolicit|barrister|\bllp\b|law firm|law offices|sra number|legal service|legal counsel|attorneys?\b|lawyers?\b|conveyancing|litigation|practice areas|employment law|immigration law|corporate law/i, 'law-firms'],
   [/\bbarrister|chambers\b|inn of court/i, 'barristers'],
   [/\bgmc\b|cqc register|cosmetic (surgery|procedure)|botox|anti.wrinkle|dermal filler|aesthetic (clinic|treatment)|medspa|med.spa|skin clinic|filler treatment|lip filler|rhinoplasty|breast augmentation|plastic surgeon|aesthetic practitioner/i, 'aesthetic'],
   [/\bdentist|dental (practice|clinic|implant)|orthodont|gdc\b|nhs dental/i, 'dental'],
   [/\bclinic|medical centre|healthcare|gp practice|physiotherap|care home|nhs trust|\bhospitals?\b|medical (practice|group)|cqc registered/i, 'healthcare'],
-  [/\bfca register|\bifa\b|financial advice|wealth management|investment advice|pension advice|chartered financial|independent financial adviser/i, 'finance'],
+  [/\bfca register|\bifa\b|financial advice|wealth manage|wealth plan|private wealth|private client (invest|portfolio|wealth|financ)|investment advice|pension (advice|planning|fund)|chartered financial|independent financial advis|financial advis(e|o)r|financial plann(er|ing)|family office|registered investment advis|\bria\b|discretionary (fund|portfolio|invest)|fund management|portfolio management|investment management (firm|company|service|for)|stockbrok|financial services (firm|company|group|authority)/i, 'finance'],
   [/\bfintech|payment (gateway|processor)|open banking|embedded finance|neobank|crypto exchange/i, 'fintech'],
   [/\binsur(ance|er)\b|underwr|reinsur|lloyds market/i, 'insurance'],
   [/\bestate agent|letting agent|property (for sale|to let|management|portfolio|investment|developer|fund|group|services)|rightmove|zoopla|\brics\b|naea|arla|tpo|sstc|chartered surveyor|block management|commercial property|residential property|property manager|rent review|lease renewal/i, 'real-estate'],
@@ -126,7 +126,7 @@ function _domainProfession(domain) {
   if (/(physiotherap|physio|gpsurgery|medicalcentre|medicalcenter|healthcare|hospital(?!ity))/.test(d)) return 'healthcare';
   if (/(realty|realestate|estateagent|lettingagent|propertygroup|propertymanagement|lettings|chartered ?surveyor)/.test(d)) return 'real-estate';
   if (/(hotel|resort|restaurant|bistro|brasserie|guesthouse|bedandbreakfast|hospitality)/.test(d)) return 'hospitality';
-  if (/(wealthmanagement|financialadvis|wealthadvis|\bifa\b)/.test(d)) return 'finance';
+  if (/(wealth|assetmanage|financialadvis|financialplann|wealthadvis|\bifa\b|privatewealth|investmentmanage|capitalpartners|wealthpartners)/.test(d)) return 'finance';
   if (/(insurance|underwrit)/.test(d)) return 'insurance';
   if (/(trucking|logistics|haulage|freight|courier|removals)/.test(d)) return 'transport';
   return null;
