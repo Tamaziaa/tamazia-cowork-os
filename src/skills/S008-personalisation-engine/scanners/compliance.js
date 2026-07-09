@@ -804,6 +804,20 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // `codes` (which carry that keyword noise). The registered country is always inside mergedJur, so it can never
   // be lost; we fall back to the raw codes only if the LLM profiler failed entirely.
   let allJurisdictions = (mergedJur && mergedJur.length) ? Array.from(new Set(mergedJur)) : Array.from(codes);
+  // PRIMARY-JURISDICTION WHITELIST (founder directive): the engine attaches ONLY the four primary regions — UK, US,
+  // EU (+ member states) and the Middle East. Any other detected jurisdiction (Canada/Australia/Singapore/India/...)
+  // is dropped here, before connect or the render ever see it, so no non-primary jurisdiction is ever attached or
+  // displayed. Free-zone / MENA-prefixed and EU-prefixed sub-codes are kept.
+  {
+    const _PRIMARY = new Set(['UK','GB','GBR','US','USA','EU',
+      'DE','FR','ES','IT','NL','IE','BE','SE','PL','AT','DK','FI','PT','GR','EL','CZ','HU','RO','BG','HR','SK','SI','LT','LV','EE','LU','CY','MT',
+      'AE','UAE','SA','KSA','QA','BH','OM','KW','EG','JO','LB','IL']);
+    allJurisdictions = allJurisdictions.filter((j) => {
+      const u = String(j || '').toUpperCase();
+      return _PRIMARY.has(u) || u.indexOf('EU-') === 0 || u.indexOf('AE-') === 0 || u.indexOf('MENA') === 0 || u.indexOf('US-') === 0 || u.indexOf('UK-') === 0;
+    });
+    if (!allJurisdictions.length && country) allJurisdictions = [String(country).toUpperCase()];  // never leave it empty — fall back to registered country
+  }
   // POST-BREXIT EU GATE (anti-frivolous): a non-EU-registered firm is EU-regulated only with a CONCRETE EU market
   // signal — EUR pricing, a named EU country served, or an EU-registered entity — NOT a mere "GDPR"/"Europe"
   // mention (which appears in every UK privacy policy and was attaching EU GDPR/ePrivacy to UK-only SMEs). Applied
