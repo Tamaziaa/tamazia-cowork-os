@@ -657,10 +657,34 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
     const _fw = String(rule.framework_short || '').toUpperCase();
     const _isDP = /GDPR|_BDSG|_CNIL|_PDPL|DPA_2018|DPDP|PECR|EPRIVACY|DATA_PROT/.test(_fw);
     if (_isDP) {
-      // NOTE: match genuine privacy/data-protection policy pages only. Bare 'cookie' is excluded because utility
-      // pages like /test-cookie are not privacy policies (they matched before and defeated this guard on ramsaysante.fr).
-      const _POLICY_RX = /privacy[- ]?(policy|notice|statement)|\/privacy|policy|confidentialit|datenschutz|mentions[- ]?legales|donnees[- ]?personnelles|rgpd|dsgvo|vie[- ]?privee|informativa|privacidad|aviso[- ]?legal|privacybeleid|data[- ]?protection|cookie[- ](policy|notice|statement|richtlinie|erkl)/i;
-      const _hasPolicyPage = (corpus || []).some((c) => _POLICY_RX.test(String(c.url || '')));
+      // A page counts as a genuine privacy/data-protection policy ONLY if identified by CONTENT or by a CLEAN policy
+      // URL path — never by a bare URL-substring. Two false-positive cascades on ramsaysante.fr came from substring
+      // matching: /test-cookie (word "cookie") and /actualites/...-en-confidentialite (a NEWS article whose slug
+      // contained "confidentialite"). Neither is a privacy policy. We now require real evidence.
+      const _DP_MARKERS = [
+        /privacy[- ]?(policy|notice|statement)|politique\s+de\s+confidentialit|datenschutzerkl|informativa\s+privacy|pol[ií]tica\s+de\s+privacidad|privacyverklaring|privacybeleid/i,
+        /data\s+controller|responsable\s+d[eu]\s+traitement|verantwortliche[rn]?\s+stelle|titolare\s+del\s+trattamento|responsable\s+del\s+tratamiento/i,
+        /right\s+to\s+erasure|droit\s+[àa]\s+l['e]effacement|recht\s+auf\s+l[öo]schung|derecho\s+de\s+supresi[óo]n|diritto\s+alla\s+cancellazione/i,
+        /data\s+protection\s+officer|d[ée]l[ée]gu[ée]\s+[àa]\s+la\s+protection|datenschutzbeauftragt|\bDPO\b|delegado\s+de\s+protecci[óo]n/i,
+        /lawful\s+basis|base\s+l[ée]gale|rechtsgrundlage|base\s+giuridica|base\s+jur[íi]dica/i,
+        /supervisory\s+authority|autorit[ée]\s+de\s+contr[ôo]le|aufsichtsbeh[öo]rde|\bCNIL\b|\bICO\b|garante\s+per\s+la\s+protezione/i,
+        /personal\s+data|donn[ée]es\s+(?:[àa]\s+caract[èe]re\s+)?personnel|personenbezogene\s+daten|dati\s+personali|datos\s+personales/i
+      ];
+      const _stripHtml = (h) => String(h || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+      const _hasPolicyContent = (corpus || []).some((c) => {
+        const t = _stripHtml(c && (c.text || c.body || c.html));
+        let n = 0; for (const rx of _DP_MARKERS) { if (rx.test(t)) { n++; if (n >= 2) return true; } }
+        return false;
+      });
+      const _POLICY_SLUG = /^(?:[a-z]{2}\/)?(?:politique[- ]?de[- ]?)?(?:confidentialite|privacy(?:[- ]?policy)?|datenschutz(?:erklaerung)?|mentions[- ]?legales|donnees[- ]?personnelles|rgpd|gdpr|informativa(?:[- ]?privacy)?|privacidad|aviso[- ]?legal|privacybeleid|privacyverklaring|politique[- ]?cookies|cookie[- ]?policy|protection[- ]?des[- ]?donnees|proteccion[- ]?de[- ]?datos)$/i;
+      const _hasPolicyUrl = (corpus || []).some((c) => {
+        let path = '';
+        try { path = new URL(String(c && c.url)).pathname; } catch (_) { path = String((c && c.url) || ''); }
+        if (/\/(actualites?|news|blog|article|articles|presse|press|media|events?|agenda)\//i.test(path)) return false;
+        const seg = path.replace(/\/+$/, '').split('/').filter(Boolean).pop() || '';
+        return _POLICY_SLUG.test(seg);
+      });
+      const _hasPolicyPage = _hasPolicyContent || _hasPolicyUrl;
       if (!_hasPolicyPage) {
         return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity,
                  status: 'policy_page_unfetched', rule_type: rule.rule_type || 'must_appear',
