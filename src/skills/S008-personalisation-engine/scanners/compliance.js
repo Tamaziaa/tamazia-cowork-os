@@ -560,6 +560,41 @@ function _scopePool(corpus, scope) {
   return scoped.length ? scoped : corpus;
 }
 
+// DATA-PROTECTION POLICY-PAGE GUARD (shared): GDPR / national-DP rights & notice disclosures live on the PRIVACY
+// POLICY page. Returns TRUE when the rule is a data-protection disclosure AND no genuine policy page was read this
+// scan — identified by CONTENT (>=2 multilingual DP markers in one page body) or a CLEAN policy URL slug (the policy
+// term as a full path segment, not buried in a /actualites/...-confidentialite news slug and not a /test-cookie
+// utility page). Both of those substring false-positives produced fabricated GDPR cascades on ramsaysante.fr.
+function _dpPolicyPageUnread(rule, corpus) {
+  const _fw = String((rule && rule.framework_short) || '').toUpperCase();
+  const _isDP = /GDPR|_BDSG|_CNIL|_PDPL|DPA_2018|DPDP|PECR|EPRIVACY|DATA_PROT/.test(_fw);
+  if (!_isDP) return false;
+  const _DP_MARKERS = [
+    /privacy[- ]?(policy|notice|statement)|politique\s+de\s+confidentialit|datenschutzerkl|informativa\s+privacy|pol[ií]tica\s+de\s+privacidad|privacyverklaring|privacybeleid/i,
+    /data\s+controller|responsable\s+d[eu]\s+traitement|verantwortliche[rn]?\s+stelle|titolare\s+del\s+trattamento|responsable\s+del\s+tratamiento/i,
+    /right\s+to\s+erasure|droit\s+[àa]\s+l['e]effacement|recht\s+auf\s+l[öo]schung|derecho\s+de\s+supresi[óo]n|diritto\s+alla\s+cancellazione/i,
+    /data\s+protection\s+officer|d[ée]l[ée]gu[ée]\s+[àa]\s+la\s+protection|datenschutzbeauftragt|\bDPO\b|delegado\s+de\s+protecci[óo]n/i,
+    /lawful\s+basis|base\s+l[ée]gale|rechtsgrundlage|base\s+giuridica|base\s+jur[íi]dica/i,
+    /supervisory\s+authority|autorit[ée]\s+de\s+contr[ôo]le|aufsichtsbeh[öo]rde|\bCNIL\b|\bICO\b|garante\s+per\s+la\s+protezione/i,
+    /personal\s+data|donn[ée]es\s+(?:[àa]\s+caract[èe]re\s+)?personnel|personenbezogene\s+daten|dati\s+personali|datos\s+personales/i
+  ];
+  const _stripHtml = (h) => String(h || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  const _hasPolicyContent = (corpus || []).some((c) => {
+    const t = _stripHtml(c && (c.text || c.body || c.html));
+    let n = 0; for (const rx of _DP_MARKERS) { if (rx.test(t)) { n++; if (n >= 2) return true; } }
+    return false;
+  });
+  const _POLICY_SLUG = /^(?:[a-z]{2}\/)?(?:politique[- ]?de[- ]?)?(?:confidentialite|privacy(?:[- ]?policy)?|datenschutz(?:erklaerung)?|mentions[- ]?legales|donnees[- ]?personnelles|rgpd|gdpr|informativa(?:[- ]?privacy)?|privacidad|aviso[- ]?legal|privacybeleid|privacyverklaring|politique[- ]?cookies|cookie[- ]?policy|protection[- ]?des[- ]?donnees|proteccion[- ]?de[- ]?datos)$/i;
+  const _hasPolicyUrl = (corpus || []).some((c) => {
+    let path = '';
+    try { path = new URL(String(c && c.url)).pathname; } catch (_) { path = String((c && c.url) || ''); }
+    if (/\/(actualites?|news|blog|article|articles|presse|press|media|events?|agenda)\//i.test(path)) return false;
+    const seg = path.replace(/\/+$/, '').split('/').filter(Boolean).pop() || '';
+    return _POLICY_SLUG.test(seg);
+  });
+  return !(_hasPolicyContent || _hasPolicyUrl);
+}
+
 function ruleCheck(rule, corpus, sector, corpusIndex) {
   // Sector relevance gate: if the rule has a sector list and our sector isn't in it, skip.
   if (rule.sectors && rule.sectors.length > 0 && sector && !rule.sectors.includes(sector)) {
@@ -589,6 +624,7 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
     }
     const missing = elements.filter(e => !e.present).map(e => e.label);
     const present = elements.filter(e => e.present).map(e => e.label);
+    if (missing.length && _dpPolicyPageUnread(rule, corpus)) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'policy_page_unfetched', rule_type: 'element_checklist', note: 'no privacy/data-protection policy page was read this scan; the disclosure could not be assessed' };
     if (!missing.length) {
       return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'hit', description: rule.description, citation_url: rule.citation_url, elements, present_elements: present, evidence_url: (elements.find(e => e.url) || {}).url };
     }
@@ -614,6 +650,9 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
       if (m) { triggered = true; const q = _extractQuote(c.body, triggerRe); triggerEvidence = { url: c.url, snippet: (q && q.matched) || m[0].slice(0, 80), quote: q && q.quote }; break; }
     }
     if (!triggered) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'trigger_absent' };
+    // DP guard: a data-protection disclosure whose PRIVACY-POLICY page was never read cannot be asserted absent even
+    // when the trigger (site handles personal data) fired — that produced the ramsaysante.fr GDPR cascade.
+    if (_dpPolicyPageUnread(rule, corpus)) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'policy_page_unfetched', rule_type: rule.rule_type || 'trigger_then_check', note: 'no privacy/data-protection policy page was read this scan; the disclosure could not be assessed' };
     // Trigger present — now check whether the disclosure is also present.
     for (const c of corpus) { if (_presentIn(c, re)) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'hit_after_trigger', trigger_evidence: triggerEvidence }; }
     // Trigger present but disclosure missing → real breach. Carry the real nearest-miss absence evidence too, so the
@@ -648,49 +687,11 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
              status: 'target_unfetched', rule_type: rule.rule_type || 'must_appear',
              note: 'target page-type ' + rule.url_check + ' was not fetched this scan; absence not asserted' };
   }
-  // DATA-PROTECTION POLICY-PAGE GUARD (sector-audit i18n): GDPR / national-DP rights & notice disclosures live on the
-  // PRIVACY POLICY page (multilingual: /privacy, /confidentialite, /datenschutz, /mentions-legales, /informativa...).
-  // If the rule is a data-protection disclosure and NO policy-type page was actually read this scan, we cannot assess
-  // it — return a non-fined status rather than asserting absence off the homepage (this is what produced the 19-item
-  // false-positive GDPR cascade on a French site whose /confidentialite page fell past the crawl cap).
-  {
-    const _fw = String(rule.framework_short || '').toUpperCase();
-    const _isDP = /GDPR|_BDSG|_CNIL|_PDPL|DPA_2018|DPDP|PECR|EPRIVACY|DATA_PROT/.test(_fw);
-    if (_isDP) {
-      // A page counts as a genuine privacy/data-protection policy ONLY if identified by CONTENT or by a CLEAN policy
-      // URL path — never by a bare URL-substring. Two false-positive cascades on ramsaysante.fr came from substring
-      // matching: /test-cookie (word "cookie") and /actualites/...-en-confidentialite (a NEWS article whose slug
-      // contained "confidentialite"). Neither is a privacy policy. We now require real evidence.
-      const _DP_MARKERS = [
-        /privacy[- ]?(policy|notice|statement)|politique\s+de\s+confidentialit|datenschutzerkl|informativa\s+privacy|pol[ií]tica\s+de\s+privacidad|privacyverklaring|privacybeleid/i,
-        /data\s+controller|responsable\s+d[eu]\s+traitement|verantwortliche[rn]?\s+stelle|titolare\s+del\s+trattamento|responsable\s+del\s+tratamiento/i,
-        /right\s+to\s+erasure|droit\s+[àa]\s+l['e]effacement|recht\s+auf\s+l[öo]schung|derecho\s+de\s+supresi[óo]n|diritto\s+alla\s+cancellazione/i,
-        /data\s+protection\s+officer|d[ée]l[ée]gu[ée]\s+[àa]\s+la\s+protection|datenschutzbeauftragt|\bDPO\b|delegado\s+de\s+protecci[óo]n/i,
-        /lawful\s+basis|base\s+l[ée]gale|rechtsgrundlage|base\s+giuridica|base\s+jur[íi]dica/i,
-        /supervisory\s+authority|autorit[ée]\s+de\s+contr[ôo]le|aufsichtsbeh[öo]rde|\bCNIL\b|\bICO\b|garante\s+per\s+la\s+protezione/i,
-        /personal\s+data|donn[ée]es\s+(?:[àa]\s+caract[èe]re\s+)?personnel|personenbezogene\s+daten|dati\s+personali|datos\s+personales/i
-      ];
-      const _stripHtml = (h) => String(h || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
-      const _hasPolicyContent = (corpus || []).some((c) => {
-        const t = _stripHtml(c && (c.text || c.body || c.html));
-        let n = 0; for (const rx of _DP_MARKERS) { if (rx.test(t)) { n++; if (n >= 2) return true; } }
-        return false;
-      });
-      const _POLICY_SLUG = /^(?:[a-z]{2}\/)?(?:politique[- ]?de[- ]?)?(?:confidentialite|privacy(?:[- ]?policy)?|datenschutz(?:erklaerung)?|mentions[- ]?legales|donnees[- ]?personnelles|rgpd|gdpr|informativa(?:[- ]?privacy)?|privacidad|aviso[- ]?legal|privacybeleid|privacyverklaring|politique[- ]?cookies|cookie[- ]?policy|protection[- ]?des[- ]?donnees|proteccion[- ]?de[- ]?datos)$/i;
-      const _hasPolicyUrl = (corpus || []).some((c) => {
-        let path = '';
-        try { path = new URL(String(c && c.url)).pathname; } catch (_) { path = String((c && c.url) || ''); }
-        if (/\/(actualites?|news|blog|article|articles|presse|press|media|events?|agenda)\//i.test(path)) return false;
-        const seg = path.replace(/\/+$/, '').split('/').filter(Boolean).pop() || '';
-        return _POLICY_SLUG.test(seg);
-      });
-      const _hasPolicyPage = _hasPolicyContent || _hasPolicyUrl;
-      if (!_hasPolicyPage) {
-        return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity,
-                 status: 'policy_page_unfetched', rule_type: rule.rule_type || 'must_appear',
-                 note: 'no privacy/data-protection policy page was read this scan; the disclosure could not be assessed' };
-      }
-    }
+  // DP policy-page guard for the plain must_appear path (shared helper — see _dpPolicyPageUnread).
+  if (_dpPolicyPageUnread(rule, corpus)) {
+    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity,
+             status: 'policy_page_unfetched', rule_type: rule.rule_type || 'must_appear',
+             note: 'no privacy/data-protection policy page was read this scan; the disclosure could not be assessed' };
   }
   const pool = subset;
   for (const c of pool) {
