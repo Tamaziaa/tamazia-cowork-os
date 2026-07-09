@@ -579,10 +579,18 @@ function _dpPolicyPageUnread(rule, corpus) {
     /personal\s+data|donn[ée]es\s+(?:[àa]\s+caract[èe]re\s+)?personnel|personenbezogene\s+daten|dati\s+personali|datos\s+personales/i
   ];
   const _stripHtml = (h) => String(h || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  // DEEP markers appear ONLY in real policy BODY text, never in a homepage footer's link labels. A homepage footer
+  // carries shallow labels like "Politique de confidentialité / Mentions légales / Données personnelles" (that tripped
+  // the old >=2-shallow check off the homepage on ramsaysante.fr). It NEVER says "responsable de traitement", "droit à
+  // l'effacement", "délégué à la protection", "base légale" or "autorité de contrôle". Require >=1 deep marker so a page
+  // only counts as a real policy when its substantive DP text was actually read.
+  const _DP_DEEP = _DP_MARKERS.slice(1, 6); // controller / erasure / DPO / lawful-basis / supervisory-authority
   const _hasPolicyContent = (corpus || []).some((c) => {
     const t = _stripHtml(c && (c.text || c.body || c.html));
-    let n = 0; for (const rx of _DP_MARKERS) { if (rx.test(t)) { n++; if (n >= 2) return true; } }
-    return false;
+    let deep = 0; for (const rx of _DP_DEEP) { if (rx.test(t)) deep++; }
+    if (deep < 1) return false;
+    let total = 0; for (const rx of _DP_MARKERS) { if (rx.test(t)) total++; }
+    return total >= 2; // >=1 deep + >=2 total markers => genuine policy body, not a footer link cluster
   });
   const _POLICY_SLUG = /^(?:[a-z]{2}\/)?(?:politique[- ]?de[- ]?)?(?:confidentialite|privacy(?:[- ]?policy)?|datenschutz(?:erklaerung)?|mentions[- ]?legales|donnees[- ]?personnelles|rgpd|gdpr|informativa(?:[- ]?privacy)?|privacidad|aviso[- ]?legal|privacybeleid|privacyverklaring|politique[- ]?cookies|cookie[- ]?policy|protection[- ]?des[- ]?donnees|proteccion[- ]?de[- ]?datos)$/i;
   const _hasPolicyUrl = (corpus || []).some((c) => {
