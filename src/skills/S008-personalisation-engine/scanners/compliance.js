@@ -760,7 +760,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v11-2026-07-09-dp-guard-url-primary';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v12-2026-07-09-english-only-gate';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
@@ -822,6 +822,37 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       block_reason: _reason, http_status: _cg.home_status || 0, challenge: !!_cg.challenge, pages_tried: _cg.pages_tried || 0 };
     writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 3600 });
     return payload;
+  }
+  // ENGLISH-LANGUAGE GATE (scope decision): the compliance catalogue's regex disclosures are authored in ENGLISH
+  // ("right to erasure", "data controller", "lawful basis" ...). On a non-English site those regexes never match the
+  // (foreign-language) disclosures, so EVERY must_appear rule fires as a false "missing disclosure" breach — e.g.
+  // ramsaysante.fr (French) produced 16 fabricated GDPR article breaches off English-only regexes. We therefore do
+  // NOT assess compliance for predominantly non-English sites; we mark the audit out-of-scope rather than fabricate.
+  // Signal 1: <html lang>. Signal 2: stop-word density of major non-English EU languages vs English over visible text.
+  {
+    const _home = (corpus[0] && corpus[0].body) || '';
+    const _langAttr = (String(_home).match(/<html[^>]*lang\s*=\s*["']?\s*([a-z]{2})/i) || [])[1] || '';
+    const _visible = corpusText.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').toLowerCase();
+    const _count = (rx) => (_visible.match(rx) || []).length;
+    const _en = _count(/(the|and|of|to|for|with|your|our|we|you|is|are|this|that|from|please|contact|about|services?)/g);
+    const _fr = _count(/(le|la|les|des|une?|nous|vous|votre|nos|pour|avec|est|sont|cette|vie priv[ée]e|donn[ée]es|mentions l[ée]gales|acc[eé]der|d[ée]couvrir|nos services)/g);
+    const _de = _count(/(und|der|die|das|den|dem|ein|eine|wir|sie|ihre|f[üu]r|mit|ist|sind|diese|datenschutz|impressum|unternehmen|leistungen)/g);
+    const _es = _count(/(el|la|los|las|una?|nosotros|usted|su|para|con|es|son|esta|pol[íi]tica de privacidad|datos|aviso legal|servicios|nuestros)/g);
+    const _it = _count(/(il|lo|la|gli|le|una?|noi|voi|vostro|per|con|[eè]|sono|questa|informativa|dati personali|servizi|nostri)/g);
+    const _nl = _count(/(de|het|een|wij|onze|voor|met|is|zijn|deze|privacybeleid|gegevens|diensten|over ons)/g);
+    const _foreign = Math.max(_fr, _de, _es, _it, _nl);
+    const _langHdrNonEn = /^(fr|de|es|it|nl|pt|pl|sv|da|fi|el|cs|hu|ro|ar)$/i.test(_langAttr);
+    // Non-English when: html lang says so AND English stop-words are not dominant, OR a foreign language clearly
+    // out-counts English on real body text (2x margin so an English site quoting a French address is not tripped).
+    const _nonEnglish = (_langHdrNonEn && _en < _foreign * 1.2) || (_foreign >= 8 && _foreign > _en * 2);
+    if (_nonEnglish) {
+      const payload = { domain, sector, country, ok: true, reachable: true, rules_evaluated: 0, findings: [],
+        frameworks: [], detected_jurisdictions: [], compliance_unassessed: true,
+        compliance_error: 'non_english_site_out_of_scope',
+        note: 'site primary language is not English (lang="' + (_langAttr || _foreign >= 8 ? (_langAttr||'non-en') : '?') + '"); the compliance catalogue is English-only so this site is out of audit scope and no findings are asserted' };
+      writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 86400 });
+      return payload;
+    }
   }
   // Credibility guard: a privacy/cookie policy that only renders via JavaScript/iframe is invisible to static
   // scanning (and to AI crawlers). We must NOT assert granular "missing disclosure" breaches we cannot verify.
