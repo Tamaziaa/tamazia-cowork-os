@@ -657,7 +657,9 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
     const _fw = String(rule.framework_short || '').toUpperCase();
     const _isDP = /GDPR|_BDSG|_CNIL|_PDPL|DPA_2018|DPDP|PECR|EPRIVACY|DATA_PROT/.test(_fw);
     if (_isDP) {
-      const _POLICY_RX = /privacy|policy|confidentialit|datenschutz|mentions[- ]?legales|donnees|rgpd|dsgvo|vie[- ]?privee|informativa|privacidad|aviso[- ]?legal|privacybeleid|cookie|data[- ]?protection/i;
+      // NOTE: match genuine privacy/data-protection policy pages only. Bare 'cookie' is excluded because utility
+      // pages like /test-cookie are not privacy policies (they matched before and defeated this guard on ramsaysante.fr).
+      const _POLICY_RX = /privacy[- ]?(policy|notice|statement)|\/privacy|policy|confidentialit|datenschutz|mentions[- ]?legales|donnees[- ]?personnelles|rgpd|dsgvo|vie[- ]?privee|informativa|privacidad|aviso[- ]?legal|privacybeleid|data[- ]?protection|cookie[- ](policy|notice|statement|richtlinie|erkl)/i;
       const _hasPolicyPage = (corpus || []).some((c) => _POLICY_RX.test(String(c.url || '')));
       if (!_hasPolicyPage) {
         return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity,
