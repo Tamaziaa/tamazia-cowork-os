@@ -656,6 +656,13 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     detected_jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [],
     detected_sector: (comp && comp.detected_sector) || sector,
     firm_profile: (comp && comp.firm_profile) || null,
+    // #17: propagate the engine's binding-status map (framework -> statute/voluntary_code/...), the drop-trace
+    // (why frameworks were screened out), the review-band tri-state, and per-attachment confidence, so the render
+    // can show binding labels, the screening trace, and the attach/review/exclude states honestly.
+    binding: (comp && comp.binding) || {},
+    drop_trace: (comp && comp.drop_trace) || null,
+    review_candidates: (comp && comp.review_candidates) || [],
+    attach_confidence: (comp && comp.attach_confidence) || {},
     company: (() => { const nm = (company && String(company).trim()) || ''; const fp = (comp && comp.firm_profile) || {}; const scanned = fp.name || fp.legal_name || fp.display_name || fp.trading_name || fp.brand || ''; if (scanned && String(scanned).trim()) return String(scanned).trim(); return nm || null; })(),
     via_archive: !!(comp && comp.via_archive), archive_date: (comp && comp.archive_date) || null,
     engine_jurisdictions: (comp && comp.jurisdictions) || [],
