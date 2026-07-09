@@ -602,7 +602,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   try { const _enf = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'enforcement-map.js')); for (const _f of findings) { if (_f && _f.bucket === 'compliance' && !_f.enforcement_example) _f.enforcement_example = _enf.enforcementFor(_f.framework_short || _f.citation); } } catch (_e) {}
   const _ft = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'finding-trust.js'));
   const _corpusAdequate = _assessable && !(comp && comp.challenge);
-  let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class, jurisdictions: (comp && comp.jurisdictions) || [], sector });
+  let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class, jurisdictions: (comp && comp.jurisdictions) || [], sector, via_archive: !!(comp && comp.via_archive)});
   try { _classified = await verifyTopFindings(_classified, env || process.env); } catch (_e) {}
   // FINDING-INTEGRITY GATE (legal-QA P0 fabricated-finding, 14 hits): never render a legal finding that is
   // unmapped or textless. A compliance-bucket finding with no framework_short, or any finding whose title/fact
