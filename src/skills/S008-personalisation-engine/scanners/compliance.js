@@ -308,7 +308,7 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concur
   let smap = [];
   try { smap = await _discoverSitemap(domain, accepted); } catch (_e) {}
   if (altBase && altHome && altHome.ok) { try { const altReg = _registrable(altBase.replace('https://', '')); const sm2 = await _discoverSitemap(altBase.replace('https://', ''), new Set([altReg])); smap = smap.concat(sm2); } catch (_e) {} }
-  const _TIER1 = /privacy|cookie|terms|legal|gdpr|data[- ]protection|accessibility|complaint|modern[- ]slavery|disclaimer|imprint|impressum|disclosure|safeguard|regulat|compliance/i;
+  const _TIER1 = /privacy|cookie|terms|legal|gdpr|data[- ]protection|accessibility|complaint|modern[- ]slavery|disclaimer|imprint|impressum|disclosure|safeguard|regulat|compliance|confidentialit|mentions[- ]legales|donnees[- ]personnelles|rgpd|vie[- ]privee|datenschutz|dsgvo|rechtlich|privacidad|aviso[- ]legal|privacybeleid|informativa/i;
   const _TIER2 = /about|contact|service|pricing|fees|returns|refund|shipping|delivery|sector|team|locations|offices/i;
   // B2 — blog/editorial tier: marketing & compliance claims (medical, financial, prohibited terms) live in blog
   // posts, news, insights & case studies. Reserve priority slots so they are crawled and every word scanned — a
