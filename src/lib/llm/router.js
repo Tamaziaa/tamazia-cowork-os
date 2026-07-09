@@ -171,6 +171,30 @@ async function callNIM({ system, prompt, model, max_tokens, temperature, json })
   return { ok: true, text, latency_ms: latency, prompt_tokens: usage.prompt_tokens || 0, completion_tokens: usage.completion_tokens || 0 };
 }
 
+// Anthropic (Claude Haiku) — PAID fallover. Only reached when EVERY free tier (Cloudflare/Groq/NIM/Gemini) has 429'd
+// or errored, which is exactly what happens under batch-mint load (free daily allocations exhausted). Without a paid
+// fallover the whole LLM chain returns empty and the engine collapses to brittle regex heuristics -> wrong sector,
+// wrong jurisdiction, fabricated breaches. Metered (~$0.8/$4 per 1M in/out tokens); fires only on free-tier failure.
+async function callAnthropic({ system, prompt, model, max_tokens, temperature }) {
+  const t0 = Date.now();
+  const _apiModel = ({ 'claude-haiku-4-5': 'claude-haiku-4-5-20251001' })[model] || model;
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY || '', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: _apiModel, max_tokens: max_tokens || 1024, temperature: typeof temperature === 'number' ? temperature : 0.2, ...(system ? { system } : {}), messages: [{ role: 'user', content: prompt }] }),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS)
+    });
+  } catch (e) { return { ok: false, latency_ms: Date.now() - t0, error: `anthropic_fetch_${String(e && e.name || e).slice(0,40)}` }; }
+  const latency = Date.now() - t0;
+  const data = await res.json().catch(() => null);
+  if (!res.ok) return { ok: false, latency_ms: latency, error: `anthropic_http_${res.status}_${JSON.stringify(data).slice(0,200)}` };
+  const text = Array.isArray(data && data.content) ? data.content.map((b) => b && b.text || '').join('') : '';
+  const usage = (data && data.usage) || {};
+  return { ok: true, text, latency_ms: latency, prompt_tokens: usage.input_tokens || 0, completion_tokens: usage.output_tokens || 0 };
+}
+
 // Default chain: free first, paid last. NIM inserted as an extra free, separate-quota tier before Gemini.
 const _NIM_MODEL = process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct';
 const DEFAULT_CHAIN = [
@@ -179,7 +203,8 @@ const DEFAULT_CHAIN = [
   { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
   { provider: 'groq',       model: 'llama-3.1-8b-instant' },
   ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
-  { provider: 'gemini',     model: 'gemini-2.0-flash' }
+  { provider: 'gemini',     model: 'gemini-2.0-flash' },
+  ...(process.env.ANTHROPIC_API_KEY ? [{ provider: 'anthropic', model: 'claude-haiku-4-5' }] : [])
 ];
 
 // Smart routing by role
@@ -189,19 +214,22 @@ const ROUTE_BY_ROLE = {
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
     { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
     { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct' },
-    { provider: 'gemini',     model: 'gemini-2.0-flash' }
+    { provider: 'gemini',     model: 'gemini-2.0-flash' },
+    ...(process.env.ANTHROPIC_API_KEY ? [{ provider: 'anthropic', model: 'claude-haiku-4-5' }] : [])
   ],
   // Pointer synthesis: bigger model first
   synthesise: [
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
     { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
-    { provider: 'gemini',     model: 'gemini-2.0-flash' }
+    { provider: 'gemini',     model: 'gemini-2.0-flash' },
+    ...(process.env.ANTHROPIC_API_KEY ? [{ provider: 'anthropic', model: 'claude-haiku-4-5' }] : [])
   ],
   // Cheap classification: free 8B first
   classify: [
     { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct' },
     { provider: 'groq',       model: 'llama-3.1-8b-instant' },
-    { provider: 'groq',       model: 'llama-3.3-70b-versatile' }
+    { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
+    ...(process.env.ANTHROPIC_API_KEY ? [{ provider: 'anthropic', model: 'claude-haiku-4-5' }] : [])
   ]
 };
 
@@ -227,6 +255,7 @@ async function run(args) {
     if (step.provider === 'groq') return callGroq({ system, prompt, model: step.model, max_tokens, temperature, json });
     if (step.provider === 'nim') return callNIM({ system, prompt, model: step.model, max_tokens, temperature, json });
     if (step.provider === 'gemini') return callGemini({ system, prompt, model: step.model, max_tokens, temperature });
+    if (step.provider === 'anthropic') return callAnthropic({ system, prompt, model: step.model, max_tokens, temperature });
     return null;
   };
   // CONCURRENCY GATE: the free providers 429 on simultaneous requests (burst of CONC mints x several LLM calls each),
