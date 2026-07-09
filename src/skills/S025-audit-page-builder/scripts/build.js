@@ -666,7 +666,24 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     framework_version: fv,
     framework_last_reviewed: lr,
     applicable_frameworks: frameworks,
-    detected_jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [],
+    detected_jurisdictions: (() => {
+      // Show only jurisdictions whose law we ACTUALLY assessed (>=1 attached framework) plus the registered country,
+      // so a firm that merely lists offices/clients in a country with no attached framework (Canada/Australia/
+      // Singapore) does not appear as a binding jurisdiction it was never audited against. (sector-audit noise fix)
+      const considered = (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [];
+      try {
+        const codes = (frameworks || []).map((x) => (x && (x.framework_short || x.code)) || x).filter(Boolean);
+        if (!codes.length) return considered;
+        const inList = codes.map((cc) => "'" + String(cc).replace(/'/g, "''") + "'").join(',');
+        const jr = new Set(pg("SELECT DISTINCT upper(coalesce(jurisdiction,'')) FROM framework_versions WHERE framework_short IN (" + inList + ")").trim().split('\n').map((x) => x.trim()).filter(Boolean));
+        // map an EU-member ISO to also satisfy 'EU'; keep a considered jurisdiction if any attached framework covers it
+        const NAME2ISO = { 'united kingdom':'UK','united states':'US','germany':'DE','france':'FR','spain':'ES','italy':'IT','netherlands':'NL','ireland':'IE','united arab emirates':'AE','saudi arabia':'SA','qatar':'QA','european union':'EU','canada':'CA','australia':'AU','singapore':'SG' };
+        const EU_ISO = new Set(['DE','FR','ES','IT','NL','IE','BE','SE','PL','AT','DK','FI','PT']);
+        const covered = (name) => { const iso = NAME2ISO[String(name).toLowerCase()] || String(name).toUpperCase(); if (jr.has(iso)) return true; if (iso === 'EU' && [...jr].some((j) => EU_ISO.has(j) || j === 'EU')) return true; if (EU_ISO.has(iso) && jr.has('EU')) return true; return false; };
+        const kept = considered.filter(covered);
+        return kept.length ? kept : considered;
+      } catch (_e) { return considered; }
+    })(),
     detected_sector: (comp && comp.detected_sector) || sector,
     firm_profile: (comp && comp.firm_profile) || null,
     // #17: propagate the engine's binding-status map (framework -> statute/voluntary_code/...), the drop-trace
