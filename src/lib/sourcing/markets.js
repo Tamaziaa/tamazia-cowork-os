@@ -151,12 +151,19 @@ function applicableRegimes(markets) {
 const _REGION_LAW = { UK: 'UK law (UK GDPR, PECR, CMA/DMCC, sector regulators)', EU: 'EU law (GDPR, ePrivacy, the European Accessibility Act, DSA)', US: 'US law (CCPA/CPRA and ~20 state privacy laws, FTC, ADA)', 'Middle East': 'Gulf law (UAE PDPL, DIFC/ADGM, RERA where applicable)', CA: 'Canadian law (PIPEDA)', AU: 'Australian law (Privacy Act)', Global: 'multiple international regimes' };
 const _REGION_NAME = { UK: 'the UK', EU: 'the EU', US: 'the US', 'Middle East': 'the Middle East', CA: 'Canada', AU: 'Australia', Global: 'globally' };
 function _join(a) { a = a.filter(Boolean); return a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
-function jurisdictionStatement({ markets = {}, registeredCountry = '', company = '' } = {}) {
+function jurisdictionStatement({ markets = {}, registeredCountry = '', company = '', boundRegions = null } = {}) {
+  // boundRegions (optional): the regions the engine ACTUALLY attached binding frameworks for. When provided, the
+  // statement is grounded in real attachment (not raw served-markets), so a firm that merely SERVES US clients but
+  // is not US-regulated no longer gets a statement claiming US law binds it. (jurisdiction-statement grounding fix)
   const reg = String(registeredCountry || '').toUpperCase();
   const regLabel = { UK: 'the United Kingdom', GB: 'the United Kingdom', US: 'the United States', USA: 'the United States', AE: 'the UAE', SA: 'Saudi Arabia', QA: 'Qatar', DE: 'Germany', FR: 'France', NL: 'the Netherlands', IE: 'Ireland' }[reg] || registeredCountry || 'its home jurisdiction';
   const regRegion = ({ UK: 'UK', GB: 'UK', US: 'US', USA: 'US', AE: 'Middle East', SA: 'Middle East', QA: 'Middle East', DE: 'EU', FR: 'EU', NL: 'EU', IE: 'EU' })[reg];
-  const ops = Array.from(new Set([...(markets.regions || []), regRegion].filter(Boolean)));
-  const m2 = { ...markets, regions: ops, serves_eu: markets.serves_eu || regRegion === 'EU' };
+  const _servedOps = Array.from(new Set([...(markets.regions || []), regRegion].filter(Boolean)));
+  // Grounded set: only regions with a REAL attached framework (plus the registered home region, which always binds).
+  const ops = (Array.isArray(boundRegions) && boundRegions.length)
+    ? Array.from(new Set([...boundRegions, regRegion].filter(Boolean)))
+    : _servedOps;
+  const m2 = { ...markets, regions: ops, serves_eu: ops.includes('EU') };
   const regimes = applicableRegimes(m2).slice();
   // Google applies to ANY site that wants Google ranking / AI citation, regardless of jurisdiction.
   regimes.push({ regime: 'Google Search Essentials + E-E-A-T', why: 'applies to every site that wants to rank in Google or be cited by AI answer engines, regardless of where it is registered' });
