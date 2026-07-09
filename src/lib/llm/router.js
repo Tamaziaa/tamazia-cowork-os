@@ -55,7 +55,10 @@ const COST = {
   'groq/llama-3.1-8b-instant':    { in: 0, out: 0 },
   'gemini/gemini-2.0-flash':      { in: 0.10, out: 0.40 },
   'gemini/gemini-2.5-flash':      { in: 0.30, out: 2.50 },
-  'anthropic/claude-haiku-4-5':   { in: 0.80, out: 4.00 }
+  'anthropic/claude-haiku-4-5':   { in: 0.80, out: 4.00 },
+  'qwen/qwen-plus':               { in: 0.40, out: 1.20 },
+  'qwen/qwen-turbo':              { in: 0.05, out: 0.20 },
+  'qwen/qwen-max':                { in: 1.60, out: 6.40 }
 };
 
 function ledger({ provider, model, prompt_tokens, completion_tokens, latency_ms, ok, error, lead_id, scan_id, role }) {
@@ -195,9 +198,37 @@ async function callAnthropic({ system, prompt, model, max_tokens, temperature })
   return { ok: true, text, latency_ms: latency, prompt_tokens: usage.input_tokens || 0, completion_tokens: usage.output_tokens || 0 };
 }
 
+// Alibaba Model Studio (Qwen / DashScope) — OpenAI-compatible. RELIABLE paid primary once the account has a model
+// enabled (the China endpoint authenticates; intl rejects the key). Reads DASHSCOPE_API_KEY + optional QWEN_MODEL.
+// Placed FIRST in the chains (gated on the key) so, when present, grounding no longer depends on rate-limited free
+// tiers. If the key is absent or the model is not yet activated (AccessDenied.Unpurchased) it fails fast and the
+// chain falls over to the free providers, so wiring it is safe even before activation.
+const _QWEN_BASE = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+async function callQwen({ system, prompt, model, max_tokens, temperature, json }) {
+  const t0 = Date.now();
+  const body = { model, messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }], max_tokens: max_tokens || 1024, temperature: typeof temperature === 'number' ? temperature : 0.2 };
+  if (json) body.response_format = { type: 'json_object' };
+  let res;
+  try {
+    res = await fetch(`${_QWEN_BASE}/chat/completions`, {
+      method: 'POST', headers: { 'Authorization': `Bearer ${process.env.DASHSCOPE_API_KEY || ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(LLM_TIMEOUT_MS)
+    });
+  } catch (e) { return { ok: false, latency_ms: Date.now() - t0, error: `qwen_fetch_${String(e && e.name || e).slice(0,40)}` }; }
+  const latency = Date.now() - t0;
+  const data = await res.json().catch(() => null);
+  if (!res.ok) return { ok: false, latency_ms: latency, error: `qwen_http_${res.status}_${JSON.stringify(data).slice(0,160)}` };
+  const text = data.choices?.[0]?.message?.content || '';
+  const usage = data.usage || {};
+  return { ok: true, text, latency_ms: latency, prompt_tokens: usage.prompt_tokens || 0, completion_tokens: usage.completion_tokens || 0 };
+}
+const _QWEN_MODEL = process.env.QWEN_MODEL || 'qwen-plus';
+const _QWEN_STEP = process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: _QWEN_MODEL }] : [];
+
 // Default chain: free first, paid last. NIM inserted as an extra free, separate-quota tier before Gemini.
 const _NIM_MODEL = process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct';
 const DEFAULT_CHAIN = [
+  ..._QWEN_STEP,
   { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
   { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct' },
   { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
@@ -211,6 +242,7 @@ const DEFAULT_CHAIN = [
 const ROUTE_BY_ROLE = {
   // Fast structured extraction: prefer Groq 70B (faster, JSON-stable) then Cloudflare
   extract: [
+    ..._QWEN_STEP,
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
     { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
     { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct' },
@@ -219,6 +251,7 @@ const ROUTE_BY_ROLE = {
   ],
   // Pointer synthesis: bigger model first
   synthesise: [
+    ..._QWEN_STEP,
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
     { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
     { provider: 'gemini',     model: 'gemini-2.0-flash' },
@@ -226,6 +259,7 @@ const ROUTE_BY_ROLE = {
   ],
   // Cheap classification: free 8B first
   classify: [
+    ..._QWEN_STEP,
     { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct' },
     { provider: 'groq',       model: 'llama-3.1-8b-instant' },
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
@@ -256,6 +290,7 @@ async function run(args) {
     if (step.provider === 'nim') return callNIM({ system, prompt, model: step.model, max_tokens, temperature, json });
     if (step.provider === 'gemini') return callGemini({ system, prompt, model: step.model, max_tokens, temperature });
     if (step.provider === 'anthropic') return callAnthropic({ system, prompt, model: step.model, max_tokens, temperature });
+    if (step.provider === 'qwen') return callQwen({ system, prompt, model: step.model, max_tokens, temperature, json });
     return null;
   };
   // CONCURRENCY GATE: the free providers 429 on simultaneous requests (burst of CONC mints x several LLM calls each),
