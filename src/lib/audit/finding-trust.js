@@ -48,7 +48,8 @@ function classifyFinding(f, ctx = {}) {
     // on-site proof it was actually checked — a verbatim quote OR the specific pages inspected
     // (checked_urls). Corpus-adequacy ALONE is not proof ("fired because the rule exists"). Unevidenced
     // → NEEDS_REVIEW (held back from the report, not shown). (D23/D33/F9)
-    if (corpusAdequate && (_hasQuote(f) || _inspected(f))) { signals.push('rule_trigger', 'corpus_coverage', _inspected(f) ? 'pages_inspected' : 'verbatim_quote'); state = 'CONFIRMED'; confidence = _inspected(f) ? 0.86 : 0.9; }
+    if (ctx.via_archive) { signals.push('rule_trigger', 'archive_snapshot'); state = 'NEEDS_REVIEW'; confidence = 0.5; }  // #54/#64: a 'missing disclosure' read from a Wayback snapshot may be fixed live now — never a CONFIRMED current breach.
+    else if (corpusAdequate && (_hasQuote(f) || _inspected(f))) { signals.push('rule_trigger', 'corpus_coverage', _inspected(f) ? 'pages_inspected' : 'verbatim_quote'); state = 'CONFIRMED'; confidence = _inspected(f) ? 0.86 : 0.9; }
     else { signals.push('rule_trigger'); state = 'NEEDS_REVIEW'; confidence = 0.5; }
   } else if (kind === 'observed') {
     if (f.evidence && renderOk) { signals.push('observed_evidence', 'render_ok'); state = 'CONFIRMED'; confidence = 0.85; }
