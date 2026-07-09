@@ -659,7 +659,20 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     // #17: propagate the engine's binding-status map (framework -> statute/voluntary_code/...), the drop-trace
     // (why frameworks were screened out), the review-band tri-state, and per-attachment confidence, so the render
     // can show binding labels, the screening trace, and the attach/review/exclude states honestly.
-    binding: (comp && comp.binding) || {},
+    binding: (() => {
+      // #17: cover EVERY applicable framework with its authoritative binding_status from framework_versions
+      // (connect's curated map only carries a subset), so every framework row gets an accurate binding label.
+      const base = (comp && comp.binding) || {};
+      try {
+        const codes = (frameworks || []).map((x) => (x && (x.framework_short || x.code)) || x).filter(Boolean);
+        if (codes.length) {
+          const inList = codes.map((c) => "'" + String(c).replace(/'/g, "''") + "'").join(',');
+          const rows = pg("SELECT framework_short, coalesce(binding_status,'') FROM framework_versions WHERE framework_short IN (" + inList + ")").trim();
+          for (const line of rows.split('\n').filter(Boolean)) { const [fw, bs] = line.split('\t'); if (fw && bs && !base[fw]) base[fw] = bs; }
+        }
+      } catch (_e) {}
+      return base;
+    })(),
     drop_trace: (comp && comp.drop_trace) || null,
     review_candidates: (comp && comp.review_candidates) || [],
     attach_confidence: (comp && comp.attach_confidence) || {},
