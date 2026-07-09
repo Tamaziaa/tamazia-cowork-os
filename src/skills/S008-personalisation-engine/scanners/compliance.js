@@ -648,6 +648,24 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
              status: 'target_unfetched', rule_type: rule.rule_type || 'must_appear',
              note: 'target page-type ' + rule.url_check + ' was not fetched this scan; absence not asserted' };
   }
+  // DATA-PROTECTION POLICY-PAGE GUARD (sector-audit i18n): GDPR / national-DP rights & notice disclosures live on the
+  // PRIVACY POLICY page (multilingual: /privacy, /confidentialite, /datenschutz, /mentions-legales, /informativa...).
+  // If the rule is a data-protection disclosure and NO policy-type page was actually read this scan, we cannot assess
+  // it — return a non-fined status rather than asserting absence off the homepage (this is what produced the 19-item
+  // false-positive GDPR cascade on a French site whose /confidentialite page fell past the crawl cap).
+  {
+    const _fw = String(rule.framework_short || '').toUpperCase();
+    const _isDP = /GDPR|_BDSG|_CNIL|_PDPL|DPA_2018|DPDP|PECR|EPRIVACY|DATA_PROT/.test(_fw);
+    if (_isDP) {
+      const _POLICY_RX = /privacy|policy|confidentialit|datenschutz|mentions[- ]?legales|donnees|rgpd|dsgvo|vie[- ]?privee|informativa|privacidad|aviso[- ]?legal|privacybeleid|cookie|data[- ]?protection/i;
+      const _hasPolicyPage = (corpus || []).some((c) => _POLICY_RX.test(String(c.url || '')));
+      if (!_hasPolicyPage) {
+        return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity,
+                 status: 'policy_page_unfetched', rule_type: rule.rule_type || 'must_appear',
+                 note: 'no privacy/data-protection policy page was read this scan; the disclosure could not be assessed' };
+      }
+    }
+  }
   const pool = subset;
   for (const c of pool) {
     const _p = _presentIn(c, re);
