@@ -32,7 +32,7 @@ jobs:
       # keeps each audit's LLM calls inside the free per-minute budget (groq recovers immediately when not hammered),
       # so grounding actually runs. Slower throughput, correct audits. Raise again only once a PAID fallover key
       # (ANTHROPIC_API_KEY) is present in ENV_B64 so free-tier 429s route to a provider that will not rate-limit.
-      MINT_CONCURRENCY: "1"
+      MINT_CONCURRENCY: "3"
       # LLM in-process concurrency 1 so a single audit's calls are also paced (free tiers 429 on simultaneous requests).
       LLM_MAX_CONCURRENCY: "1"
     steps:
