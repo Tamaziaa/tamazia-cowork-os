@@ -145,7 +145,17 @@ function _detectSectorFromCorpus(corpusText, fallbackSector) {
 }
 
 async function profileFirm({ corpus = '', domain = '', country = '', sector = '', env = process.env } = {}) {
-  const text = String(corpus || '').replace(/\s+/g, ' ').trim().slice(0, 12000);
+  // ROOT-CAUSE FIX: classify on VISIBLE text, not raw HTML. corpus arrives as raw page HTML; a WordPress/JS site's
+  // first 12k chars are <head> + meta + inline CSS/scripts, so the real content (e.g. a hotel's "Book a Room / hotel
+  // rooms / weddings") sits PAST the window and the classifier sees only head-noise -> misclassifies (mercuremanchester
+  // -> 'media' off a stray head token). Strip script/style/tags first so the 12k window holds actual visible content.
+  const _visibleText = String(corpus || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&[a-z#0-9]+;/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const text = (_visibleText.length >= 200 ? _visibleText : String(corpus || '').replace(/\s+/g, ' ').trim()).slice(0, 12000);
   // R-1/R-2: deterministic keyword-first resolution. Never emit the raw "General" sector — use corpus keywords instead.
   const _ovr = _selfIdOverride(String(text || '').toLowerCase()) || _domainProfession(domain);   // high-confidence own-business self-ID (corpus phrase OR domain profession) — wins over stale ICP
   const deterministicSector = _ovr || _detectSectorFromCorpus(text, sector);
