@@ -1,0 +1,750 @@
+{
+ "version": "2026-07-09",
+ "count": 104,
+ "note": "Grounded prompt library across the engine's LLM stages. Every prompt judges ONLY provided material (engine output / RAG statute context / live page text); no priors, no fabrication. Placeholders {..} are filled from engine-bridge.js / statute-rag.js / the scan.",
+ "stages": [
+  "extraction",
+  "sector",
+  "jurisdiction",
+  "attachment_check",
+  "absence_verify",
+  "entailment",
+  "fix_writer",
+  "exec_summary",
+  "ai_citation",
+  "competitor",
+  "enforcement_match",
+  "overclaim_review",
+  "coverage_contract"
+ ],
+ "prompts": [
+  {
+   "id": "P001",
+   "stage": "extraction",
+   "purpose": "Grounded firm/profile extraction from live site text",
+   "grounding": "engine+rag+live_page",
+   "template": "From the website text, extract the firm's legal/trading name, primary service, and the jurisdictions it operates in. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P002",
+   "stage": "extraction",
+   "purpose": "Grounded firm/profile extraction from live site text",
+   "grounding": "engine+rag+live_page",
+   "template": "Identify the firm's regulator(s) explicitly named on the page (e.g. SRA, FCA, CQC, GPhC). Quote the exact phrase. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P003",
+   "stage": "extraction",
+   "purpose": "Grounded firm/profile extraction from live site text",
+   "grounding": "engine+rag+live_page",
+   "template": "Does the text state a company registration number, VAT number, or registered office? Quote each verbatim or answer NONE. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P004",
+   "stage": "extraction",
+   "purpose": "Grounded firm/profile extraction from live site text",
+   "grounding": "engine+rag+live_page",
+   "template": "List the countries/regions the firm says it serves, with the verbatim phrase for each. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P005",
+   "stage": "extraction",
+   "purpose": "Grounded firm/profile extraction from live site text",
+   "grounding": "engine+rag+live_page",
+   "template": "Extract any professional-body membership or accreditation claimed, with the exact wording. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P006",
+   "stage": "extraction",
+   "purpose": "Grounded firm/profile extraction from live site text",
+   "grounding": "engine+rag+live_page",
+   "template": "Identify whether the firm sells to consumers (B2C) or only to businesses (B2B), quoting the signal. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P007",
+   "stage": "extraction",
+   "purpose": "Grounded firm/profile extraction from live site text",
+   "grounding": "engine+rag+live_page",
+   "template": "Extract the firm's physical address(es) and any emirate/state/country locus. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P008",
+   "stage": "extraction",
+   "purpose": "Grounded firm/profile extraction from live site text",
+   "grounding": "engine+rag+live_page",
+   "template": "From the page, is this firm established (registered/licensed) in a specific jurisdiction, or merely serving clients there? Quote the phrase. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P009",
+   "stage": "sector",
+   "purpose": "Sector / sub-sector classification grounded to the catalogue's canonical sectors",
+   "grounding": "engine+rag+live_page",
+   "template": "Classify this firm into ONE canonical sector from this list: {sector_list}. Justify with a verbatim quote. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P010",
+   "stage": "sector",
+   "purpose": "Sector / sub-sector classification grounded to the catalogue's canonical sectors",
+   "grounding": "engine+rag+live_page",
+   "template": "Is this a law firm of solicitors (SRA) or a barristers' chambers (BSB)? Quote the deciding phrase. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P011",
+   "stage": "sector",
+   "purpose": "Sector / sub-sector classification grounded to the catalogue's canonical sectors",
+   "grounding": "engine+rag+live_page",
+   "template": "Is this a dispensing pharmacy, a pharmaceutical manufacturer, or a telehealth prescriber? Quote the signal. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P012",
+   "stage": "sector",
+   "purpose": "Sector / sub-sector classification grounded to the catalogue's canonical sectors",
+   "grounding": "engine+rag+live_page",
+   "template": "Does this healthcare firm perform aesthetic/cosmetic procedures (botox, fillers)? Quote evidence or answer NO. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P013",
+   "stage": "sector",
+   "purpose": "Sector / sub-sector classification grounded to the catalogue's canonical sectors",
+   "grounding": "engine+rag+live_page",
+   "template": "Is this a lettings agent, a sales-only estate agent, or both? The distinction changes which laws bind. Quote it. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P014",
+   "stage": "sector",
+   "purpose": "Sector / sub-sector classification grounded to the catalogue's canonical sectors",
+   "grounding": "engine+rag+live_page",
+   "template": "Classify the sub-sector precisely (e.g. care-home vs domiciliary care vs supported living). Quote evidence. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P015",
+   "stage": "sector",
+   "purpose": "Sector / sub-sector classification grounded to the catalogue's canonical sectors",
+   "grounding": "engine+rag+live_page",
+   "template": "Does this firm operate in a UAE free zone (DIFC/ADGM/DHCC) or mainland? Quote the establishment phrase. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P016",
+   "stage": "sector",
+   "purpose": "Sector / sub-sector classification grounded to the catalogue's canonical sectors",
+   "grounding": "engine+rag+live_page",
+   "template": "Given the catalogue sectors {sector_list}, return the single best match plus a confidence 0-1. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P017",
+   "stage": "jurisdiction",
+   "purpose": "Jurisdiction / nexus determination (registered vs operating)",
+   "grounding": "engine+rag+live_page",
+   "template": "From the text, list the jurisdictions where the firm is ESTABLISHED (registered/licensed), separately from those it merely SERVES. Quote each. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P018",
+   "stage": "jurisdiction",
+   "purpose": "Jurisdiction / nexus determination (registered vs operating)",
+   "grounding": "engine+rag+live_page",
+   "template": "Does mentioning 'GDPR' or 'EU customers' alone establish EU nexus here, or is there a concrete EU market signal (EUR pricing, named EU country, EU entity)? Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P019",
+   "stage": "jurisdiction",
+   "purpose": "Jurisdiction / nexus determination (registered vs operating)",
+   "grounding": "engine+rag+live_page",
+   "template": "For a US firm, which specific US states does the text show a nexus to (offices, 'we serve X residents', shipping)? Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P020",
+   "stage": "jurisdiction",
+   "purpose": "Jurisdiction / nexus determination (registered vs operating)",
+   "grounding": "engine+rag+live_page",
+   "template": "Is this a Saudi/Qatar/UAE-established firm, or a foreign firm advising ON Gulf regimes? The distinction flips PDPL applicability. Quote it. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P021",
+   "stage": "jurisdiction",
+   "purpose": "Jurisdiction / nexus determination (registered vs operating)",
+   "grounding": "engine+rag+live_page",
+   "template": "A firm advising clients on US securities law from the UAE is NOT US-regulated. From the text, is this firm regulated by, or advising on, each named regime? Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P022",
+   "stage": "jurisdiction",
+   "purpose": "Jurisdiction / nexus determination (registered vs operating)",
+   "grounding": "engine+rag+live_page",
+   "template": "Which single emirate (Dubai/Abu Dhabi/other) is this UAE health provider based in? DHA vs DOH vs MOHAP depends on it. Quote it. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P023",
+   "stage": "jurisdiction",
+   "purpose": "Jurisdiction / nexus determination (registered vs operating)",
+   "grounding": "engine+rag+live_page",
+   "template": "Does the firm target a specific member state (France/Germany) such that national law (CNIL/BDSG) applies, or only EU-level law? Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P024",
+   "stage": "jurisdiction",
+   "purpose": "Jurisdiction / nexus determination (registered vs operating)",
+   "grounding": "engine+rag+live_page",
+   "template": "Summarise the firm's binding jurisdiction set as registered-country UNION two-signal-corroborated served markets. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P025",
+   "stage": "attachment_check",
+   "purpose": "Second-opinion on which frameworks bind (grounded to connect output + statute)",
+   "grounding": "engine+rag+live_page",
+   "template": "The engine attached these frameworks: {frameworks}. Given the firm text, is any attachment implausible? Quote the deciding signal. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P026",
+   "stage": "attachment_check",
+   "purpose": "Second-opinion on which frameworks bind (grounded to connect output + statute)",
+   "grounding": "engine+rag+live_page",
+   "template": "Framework {framework} was attached. Its statutory obligations are:\n{statute}\nDoes the firm's activity plausibly fall within scope? Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P027",
+   "stage": "attachment_check",
+   "purpose": "Second-opinion on which frameworks bind (grounded to connect output + statute)",
+   "grounding": "engine+rag+live_page",
+   "template": "The engine EXCLUDED {framework} for this firm. Given the text and the statute below, was the exclusion correct?\nStatute:\n{statute}\nText:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P028",
+   "stage": "attachment_check",
+   "purpose": "Second-opinion on which frameworks bind (grounded to connect output + statute)",
+   "grounding": "engine+rag+live_page",
+   "template": "For sector {sector} in {jurisdiction}, which of {frameworks} are the CORE regulator regimes vs universal baseline (GDPR/consumer)? "
+  },
+  {
+   "id": "P029",
+   "stage": "attachment_check",
+   "purpose": "Second-opinion on which frameworks bind (grounded to connect output + statute)",
+   "grounding": "engine+rag+live_page",
+   "template": "Is this framework a statute, a professional code, or voluntary guidance? Answer from its binding_status only: {binding_status}."
+  },
+  {
+   "id": "P030",
+   "stage": "attachment_check",
+   "purpose": "Second-opinion on which frameworks bind (grounded to connect output + statute)",
+   "grounding": "engine+rag+live_page",
+   "template": "Given the review-band (uncertain) attachments {review_candidates}, which would you upgrade to CONFIRMED given the text? Quote evidence. Text:\n\"\"\"{corpus}\"\"\""
+  },
+  {
+   "id": "P031",
+   "stage": "attachment_check",
+   "purpose": "Second-opinion on which frameworks bind (grounded to connect output + statute)",
+   "grounding": "engine+rag+live_page",
+   "template": "The firm is a {sector}. Should {framework} bind it, or is it a sector mismatch? Base the answer only on the statute:\n{statute}"
+  },
+  {
+   "id": "P032",
+   "stage": "attachment_check",
+   "purpose": "Second-opinion on which frameworks bind (grounded to connect output + statute)",
+   "grounding": "engine+rag+live_page",
+   "template": "Explain in one sentence, for the firm owner, why {framework} legally binds them, grounded in:\n{statute}"
+  },
+  {
+   "id": "P033",
+   "stage": "absence_verify",
+   "purpose": "Verify a 'missing disclosure' finding against the real page (evidence-lock)",
+   "grounding": "engine+rag+live_page",
+   "template": "You are a compliance auditor. Use ONLY the material provided below. Do not use outside knowledge or assume facts not present. If the material is insufficient, say so.\nRequirement the page must satisfy: \"{requirement}\"\nPage text:\n\"\"\"{ctx}\"\"\"\nDoes the text ALREADY satisfy the requirement? Answer SATISFIED or MISSING on line 1; if SATISFIED quote the exact words."
+  },
+  {
+   "id": "P034",
+   "stage": "absence_verify",
+   "purpose": "Verify a 'missing disclosure' finding against the real page (evidence-lock)",
+   "grounding": "engine+rag+live_page",
+   "template": "Requirement: \"{requirement}\". Statute basis:\n{statute}\nPage text:\n\"\"\"{ctx}\"\"\"\nIs the required disclosure present in READABLE text (not only a script)? SATISFIED/MISSING + quote."
+  },
+  {
+   "id": "P035",
+   "stage": "absence_verify",
+   "purpose": "Verify a 'missing disclosure' finding against the real page (evidence-lock)",
+   "grounding": "engine+rag+live_page",
+   "template": "The finding claims the firm is MISSING: {requirement}. Before we assert this, confirm we actually read the relevant page-type. Pages inspected: {checked_urls}. If the target page was not fetched, answer CANNOT_ASSERT."
+  },
+  {
+   "id": "P036",
+   "stage": "absence_verify",
+   "purpose": "Verify a 'missing disclosure' finding against the real page (evidence-lock)",
+   "grounding": "engine+rag+live_page",
+   "template": "Does the page contain the required element expressed in any reasonable wording (not just the exact phrase)? Requirement: {requirement}. Text:\n\"\"\"{ctx}\"\"\" Answer SATISFIED/MISSING + quote."
+  },
+  {
+   "id": "P037",
+   "stage": "absence_verify",
+   "purpose": "Verify a 'missing disclosure' finding against the real page (evidence-lock)",
+   "grounding": "engine+rag+live_page",
+   "template": "A must_appear disclosure was scored MISSING. Could it be present but JS-rendered/embedded? Note any consent-tool/script signals. Text:\n\"\"\"{ctx}\"\"\""
+  },
+  {
+   "id": "P038",
+   "stage": "absence_verify",
+   "purpose": "Verify a 'missing disclosure' finding against the real page (evidence-lock)",
+   "grounding": "engine+rag+live_page",
+   "template": "Confirm the requirement genuinely applies to THIS firm's activity before flagging absence. Requirement: {requirement}; firm activity quoted: {activity}."
+  },
+  {
+   "id": "P039",
+   "stage": "absence_verify",
+   "purpose": "Verify a 'missing disclosure' finding against the real page (evidence-lock)",
+   "grounding": "engine+rag+live_page",
+   "template": "Is the quoted evidence for this absence finding actually the RELEVANT page (e.g. a real /privacy page), or an unrelated page? Evidence URL: {evidence_url}."
+  },
+  {
+   "id": "P040",
+   "stage": "absence_verify",
+   "purpose": "Verify a 'missing disclosure' finding against the real page (evidence-lock)",
+   "grounding": "engine+rag+live_page",
+   "template": "Grade confidence 0-1 that this 'missing disclosure' is a real, current, on-site gap (not archive-sourced, not JS-only). Evidence: {evidence_quote}; via_archive: {via_archive}."
+  },
+  {
+   "id": "P041",
+   "stage": "entailment",
+   "purpose": "Verify a PRESENCE/breach finding: does the quoted text support it?",
+   "grounding": "engine+rag+live_page",
+   "template": "You verify website-audit findings. Use ONLY the material provided below. Do not use outside knowledge or assume facts not present. If the material is insufficient, say so.\nFinding: \"{finding}\"\nText quoted verbatim from the website: \"{quote}\"\nDoes the quoted text clearly support the finding? YES or NO on line 1, then a six-word reason."
+  },
+  {
+   "id": "P042",
+   "stage": "entailment",
+   "purpose": "Verify a PRESENCE/breach finding: does the quoted text support it?",
+   "grounding": "engine+rag+live_page",
+   "template": "Finding: \"{finding}\". Quote: \"{quote}\". If the match is inside a script/attribute rather than visible prose, answer NOT_VISIBLE."
+  },
+  {
+   "id": "P043",
+   "stage": "entailment",
+   "purpose": "Verify a PRESENCE/breach finding: does the quoted text support it?",
+   "grounding": "engine+rag+live_page",
+   "template": "Does the quote constitute the PROHIBITED claim the rule targets (e.g. an absolute health-efficacy claim), or is it benign context? Rule: {finding}; quote: \"{quote}\"."
+  },
+  {
+   "id": "P044",
+   "stage": "entailment",
+   "purpose": "Verify a PRESENCE/breach finding: does the quoted text support it?",
+   "grounding": "engine+rag+live_page",
+   "template": "Is the quoted claim unsubstantiated puffery banned by the regulator, or a substantiated/qualified statement? Rule: {finding}; quote: \"{quote}\"; statute:\n{statute}"
+  },
+  {
+   "id": "P045",
+   "stage": "entailment",
+   "purpose": "Verify a PRESENCE/breach finding: does the quoted text support it?",
+   "grounding": "engine+rag+live_page",
+   "template": "Rate 0-1 how strongly the quote entails the finding. Below 0.6 -> demote to needs_review. Finding: {finding}; quote: \"{quote}\"."
+  },
+  {
+   "id": "P046",
+   "stage": "entailment",
+   "purpose": "Verify a PRESENCE/breach finding: does the quoted text support it?",
+   "grounding": "engine+rag+live_page",
+   "template": "Could this quote be a false positive from a testimonial, blog quote, or third-party embed rather than the firm's own claim? Finding: {finding}; quote: \"{quote}\"."
+  },
+  {
+   "id": "P047",
+   "stage": "entailment",
+   "purpose": "Verify a PRESENCE/breach finding: does the quoted text support it?",
+   "grounding": "engine+rag+live_page",
+   "template": "The quote triggered a prohibited-content rule. Is the surrounding context a disclaimer that neutralises it? Quote+context: \"{quote}\"."
+  },
+  {
+   "id": "P048",
+   "stage": "entailment",
+   "purpose": "Verify a PRESENCE/breach finding: does the quoted text support it?",
+   "grounding": "engine+rag+live_page",
+   "template": "Confirm the finding's fine originates from the catalogue statute (not invented). Statute:\n{statute}\nFinding: {finding}."
+  },
+  {
+   "id": "P049",
+   "stage": "fix_writer",
+   "purpose": "Write the specific, actionable Tamazia fix for a confirmed finding",
+   "grounding": "engine+rag+live_page",
+   "template": "Write ONE sentence telling the firm exactly how to fix this gap, grounded in the statute. Do not invent obligations. Finding: {finding}. Statute:\n{statute}"
+  },
+  {
+   "id": "P050",
+   "stage": "fix_writer",
+   "purpose": "Write the specific, actionable Tamazia fix for a confirmed finding",
+   "grounding": "engine+rag+live_page",
+   "template": "Given the missing disclosure \"{requirement}\" for a {sector} firm, write the exact on-page copy/section they should add. Statute:\n{statute}"
+  },
+  {
+   "id": "P051",
+   "stage": "fix_writer",
+   "purpose": "Write the specific, actionable Tamazia fix for a confirmed finding",
+   "grounding": "engine+rag+live_page",
+   "template": "The firm makes a prohibited claim: \"{quote}\". Write the compliant rewrite that keeps the marketing intent but removes the breach. Statute:\n{statute}"
+  },
+  {
+   "id": "P052",
+   "stage": "fix_writer",
+   "purpose": "Write the specific, actionable Tamazia fix for a confirmed finding",
+   "grounding": "engine+rag+live_page",
+   "template": "Write a 1-line remediation for {framework}'s {requirement} that a non-lawyer can action this week. Ground it in:\n{statute}"
+  },
+  {
+   "id": "P053",
+   "stage": "fix_writer",
+   "purpose": "Write the specific, actionable Tamazia fix for a confirmed finding",
+   "grounding": "engine+rag+live_page",
+   "template": "Explain, in the firm owner's language, WHY this fix matters commercially and legally (2 sentences). Statute:\n{statute}"
+  },
+  {
+   "id": "P054",
+   "stage": "fix_writer",
+   "purpose": "Write the specific, actionable Tamazia fix for a confirmed finding",
+   "grounding": "engine+rag+live_page",
+   "template": "Draft the exact regulated-status footer line this firm must display for {framework} (e.g. 'Authorised and regulated by ...'). Statute:\n{statute}"
+  },
+  {
+   "id": "P055",
+   "stage": "fix_writer",
+   "purpose": "Write the specific, actionable Tamazia fix for a confirmed finding",
+   "grounding": "engine+rag+live_page",
+   "template": "Prioritise these open gaps for a resource-constrained owner, hardest-hitting first: {gaps}. One line each on why."
+  },
+  {
+   "id": "P056",
+   "stage": "fix_writer",
+   "purpose": "Write the specific, actionable Tamazia fix for a confirmed finding",
+   "grounding": "engine+rag+live_page",
+   "template": "Produce the price/service transparency block this firm must publish, per {framework}. Statute:\n{statute}"
+  },
+  {
+   "id": "P057",
+   "stage": "exec_summary",
+   "purpose": "2-sentence, evidence-only executive summary",
+   "grounding": "engine+rag+live_page",
+   "template": "You are writing a 2-sentence executive summary for the leadership of {domain}, based ONLY on this audit. Findings:\n{top}\nHighest single statutory penalty ceiling (a per-framework maximum, NOT a sum): GBP {expo}.\nSentence 1: the single most serious risk and why. Sentence 2: the headline opportunity if fixed. British English, no fabrication, no facts beyond those listed."
+  },
+  {
+   "id": "P058",
+   "stage": "exec_summary",
+   "purpose": "2-sentence, evidence-only executive summary",
+   "grounding": "engine+rag+live_page",
+   "template": "Summarise the compliance posture in one sentence and the ranking/AI-visibility posture in one sentence, using only: {findings}."
+  },
+  {
+   "id": "P059",
+   "stage": "exec_summary",
+   "purpose": "2-sentence, evidence-only executive summary",
+   "grounding": "engine+rag+live_page",
+   "template": "If no critical statutory breach surfaced, write a headline that frames the exposure as lost rankings/buyers/AI-visibility, not fines. Findings: {findings}."
+  },
+  {
+   "id": "P060",
+   "stage": "exec_summary",
+   "purpose": "2-sentence, evidence-only executive summary",
+   "grounding": "engine+rag+live_page",
+   "template": "Write a one-line 'where you stand': N frameworks legally bind you, M rivals ahead. Use only these numbers: bind={bind}, rivals={rivals}."
+  },
+  {
+   "id": "P061",
+   "stage": "exec_summary",
+   "purpose": "2-sentence, evidence-only executive summary",
+   "grounding": "engine+rag+live_page",
+   "template": "For an investor-grade reader, state the firm's single biggest regulatory exposure and its commercial cost, from: {findings}."
+  },
+  {
+   "id": "P062",
+   "stage": "exec_summary",
+   "purpose": "2-sentence, evidence-only executive summary",
+   "grounding": "engine+rag+live_page",
+   "template": "Compliance could not be fully assessed this scan (site blocked a deep read). Write a headline that implies NO clean bill of health while still valuing the ranking/AI findings. Findings: {findings}."
+  },
+  {
+   "id": "P063",
+   "stage": "exec_summary",
+   "purpose": "2-sentence, evidence-only executive summary",
+   "grounding": "engine+rag+live_page",
+   "template": "Write the 'keep it current' line: re-run monthly so a new breach is caught before enforcement or a competitor moves. No fabrication."
+  },
+  {
+   "id": "P064",
+   "stage": "exec_summary",
+   "purpose": "2-sentence, evidence-only executive summary",
+   "grounding": "engine+rag+live_page",
+   "template": "One sentence to the founder: the most credible, specific quick win from {findings}."
+  },
+  {
+   "id": "P065",
+   "stage": "ai_citation",
+   "purpose": "AI-visibility / share-of-voice probing (grounded to real probe output)",
+   "grounding": "engine+rag+live_page",
+   "template": "A buyer asks for the best providers for \"{query}\". Do the answer engines name {company}? Base the answer ONLY on this probe output:\n{probe}"
+  },
+  {
+   "id": "P066",
+   "stage": "ai_citation",
+   "purpose": "AI-visibility / share-of-voice probing (grounded to real probe output)",
+   "grounding": "engine+rag+live_page",
+   "template": "From the probe results {probe}, compute {company}'s share of voice (0-100) and name the rivals cited instead."
+  },
+  {
+   "id": "P067",
+   "stage": "ai_citation",
+   "purpose": "AI-visibility / share-of-voice probing (grounded to real probe output)",
+   "grounding": "engine+rag+live_page",
+   "template": "Is {company} described by AI as trustworthy/citable, or returned as 'no reliable information'? Probe:\n{probe}"
+  },
+  {
+   "id": "P068",
+   "stage": "ai_citation",
+   "purpose": "AI-visibility / share-of-voice probing (grounded to real probe output)",
+   "grounding": "engine+rag+live_page",
+   "template": "Which identity anchors (Organization schema, sameAs, Wikidata) is {company} missing, per: {anchors}?"
+  },
+  {
+   "id": "P069",
+   "stage": "ai_citation",
+   "purpose": "AI-visibility / share-of-voice probing (grounded to real probe output)",
+   "grounding": "engine+rag+live_page",
+   "template": "Across repeated probes {probe}, which rivals are named EVERY run (the AI default answer)?"
+  },
+  {
+   "id": "P070",
+   "stage": "ai_citation",
+   "purpose": "AI-visibility / share-of-voice probing (grounded to real probe output)",
+   "grounding": "engine+rag+live_page",
+   "template": "Write one sentence on why {company} is invisible to AI answer engines, grounded in: crawler_access={crawler}, anchors={anchors}, sov={sov}."
+  },
+  {
+   "id": "P071",
+   "stage": "ai_citation",
+   "purpose": "AI-visibility / share-of-voice probing (grounded to real probe output)",
+   "grounding": "engine+rag+live_page",
+   "template": "Given AI crawler access = {crawler}, does the firm's robots.txt block the bots that feed ChatGPT/Claude/Perplexity? List the blocked bots."
+  },
+  {
+   "id": "P072",
+   "stage": "ai_citation",
+   "purpose": "AI-visibility / share-of-voice probing (grounded to real probe output)",
+   "grounding": "engine+rag+live_page",
+   "template": "Summarise the AI-readiness gap for a founder in one line, using only {anchors} and {sov}."
+  },
+  {
+   "id": "P073",
+   "stage": "competitor",
+   "purpose": "Competitor set + benchmarking (grounded to real SERP/DR data)",
+   "grounding": "engine+rag+live_page",
+   "template": "List the top 8 firms or providers a buyer would consider for \"{query}\" in {location}. Base it ONLY on this SERP data:\n{serp}"
+  },
+  {
+   "id": "P074",
+   "stage": "competitor",
+   "purpose": "Competitor set + benchmarking (grounded to real SERP/DR data)",
+   "grounding": "engine+rag+live_page",
+   "template": "From {competitors}, which outrank {company} and by what authority signal (DR/backlinks)? Data: {drdata}."
+  },
+  {
+   "id": "P075",
+   "stage": "competitor",
+   "purpose": "Competitor set + benchmarking (grounded to real SERP/DR data)",
+   "grounding": "engine+rag+live_page",
+   "template": "Is any 'competitor' actually a directory/aggregator that should be filtered out? List them from: {competitors}."
+  },
+  {
+   "id": "P076",
+   "stage": "competitor",
+   "purpose": "Competitor set + benchmarking (grounded to real SERP/DR data)",
+   "grounding": "engine+rag+live_page",
+   "template": "Rank {company} against {competitors} on domain rating using only: {drdata}."
+  },
+  {
+   "id": "P077",
+   "stage": "competitor",
+   "purpose": "Competitor set + benchmarking (grounded to real SERP/DR data)",
+   "grounding": "engine+rag+live_page",
+   "template": "Name the single competitor most often cited ahead of {company} and the gap to close, from: {serp}."
+  },
+  {
+   "id": "P078",
+   "stage": "competitor",
+   "purpose": "Competitor set + benchmarking (grounded to real SERP/DR data)",
+   "grounding": "engine+rag+live_page",
+   "template": "For sector {sector} in {location}, are the named rivals genuine peers or national brands? Judge from: {competitors}."
+  },
+  {
+   "id": "P079",
+   "stage": "competitor",
+   "purpose": "Competitor set + benchmarking (grounded to real SERP/DR data)",
+   "grounding": "engine+rag+live_page",
+   "template": "Write one sentence on the competitive position, grounded only in DR={dr}, rivals_ahead={ahead}."
+  },
+  {
+   "id": "P080",
+   "stage": "competitor",
+   "purpose": "Competitor set + benchmarking (grounded to real SERP/DR data)",
+   "grounding": "engine+rag+live_page",
+   "template": "Which buyer query is {company} most winnable on, from the SERP data {serp}?"
+  },
+  {
+   "id": "P081",
+   "stage": "enforcement_match",
+   "purpose": "Match a finding to real enforcement precedent",
+   "grounding": "engine+rag+live_page",
+   "template": "Given this finding ({finding}) and this enforcement history:\n{enforcement}\nName the most similar real action and its outcome. Do not invent cases."
+  },
+  {
+   "id": "P082",
+   "stage": "enforcement_match",
+   "purpose": "Match a finding to real enforcement precedent",
+   "grounding": "engine+rag+live_page",
+   "template": "Is there a real regulator action in {enforcement} that makes this gap ({requirement}) a live enforcement risk, not theoretical?"
+  },
+  {
+   "id": "P083",
+   "stage": "enforcement_match",
+   "purpose": "Match a finding to real enforcement precedent",
+   "grounding": "engine+rag+live_page",
+   "template": "From {enforcement}, state the typical penalty range this regulator actually imposes for this breach (not the statutory maximum)."
+  },
+  {
+   "id": "P084",
+   "stage": "enforcement_match",
+   "purpose": "Match a finding to real enforcement precedent",
+   "grounding": "engine+rag+live_page",
+   "template": "Does the enforcement record show this regulator is ACTIVELY enforcing this obligation now? Evidence: {enforcement}."
+  },
+  {
+   "id": "P085",
+   "stage": "enforcement_match",
+   "purpose": "Match a finding to real enforcement precedent",
+   "grounding": "engine+rag+live_page",
+   "template": "Cross-check: does the cited fine ceiling match what {authority} actually levies, per {enforcement}? Flag if overstated."
+  },
+  {
+   "id": "P086",
+   "stage": "enforcement_match",
+   "purpose": "Match a finding to real enforcement precedent",
+   "grounding": "engine+rag+live_page",
+   "template": "Summarise, in one line for the owner, the real-world enforcement risk of this gap, grounded only in {enforcement}."
+  },
+  {
+   "id": "P087",
+   "stage": "enforcement_match",
+   "purpose": "Match a finding to real enforcement precedent",
+   "grounding": "engine+rag+live_page",
+   "template": "Which recent enforcement item in {enforcement} is most quotable as social proof that this obligation is enforced?"
+  },
+  {
+   "id": "P088",
+   "stage": "enforcement_match",
+   "purpose": "Match a finding to real enforcement precedent",
+   "grounding": "engine+rag+live_page",
+   "template": "If {enforcement} is empty for this framework, say 'no enforcement precedent found in our sources' \u2014 never fabricate one."
+  },
+  {
+   "id": "P089",
+   "stage": "overclaim_review",
+   "purpose": "Health/marketing overclaim adjudication",
+   "grounding": "engine+rag+live_page",
+   "template": "Is \"{quote}\" an absolute health-efficacy or safety claim banned by ASA/FTC/DHA (guaranteed, 100% safe, miracle, cure)? YES/NO + which."
+  },
+  {
+   "id": "P090",
+   "stage": "overclaim_review",
+   "purpose": "Health/marketing overclaim adjudication",
+   "grounding": "engine+rag+live_page",
+   "template": "Rewrite \"{quote}\" so it is substantiated and compliant while keeping the marketing intent. Statute:\n{statute}"
+  },
+  {
+   "id": "P091",
+   "stage": "overclaim_review",
+   "purpose": "Health/marketing overclaim adjudication",
+   "grounding": "engine+rag+live_page",
+   "template": "Does the page substantiate the claim \"{quote}\" with evidence, or is it unsupported puffery? Text:\n\"\"\"{ctx}\"\"\""
+  },
+  {
+   "id": "P092",
+   "stage": "overclaim_review",
+   "purpose": "Health/marketing overclaim adjudication",
+   "grounding": "engine+rag+live_page",
+   "template": "Is this a disease-cure/prevention claim (cures cancer, reverses ageing) requiring the strictest scrutiny? Quote: \"{quote}\"."
+  },
+  {
+   "id": "P093",
+   "stage": "overclaim_review",
+   "purpose": "Health/marketing overclaim adjudication",
+   "grounding": "engine+rag+live_page",
+   "template": "For a dentist, is \"{quote}\" a misleading 'free' or unverified specialist claim the state dental board bans? YES/NO."
+  },
+  {
+   "id": "P094",
+   "stage": "overclaim_review",
+   "purpose": "Health/marketing overclaim adjudication",
+   "grounding": "engine+rag+live_page",
+   "template": "Distinguish a lawful qualified claim ('may help', 'results vary') from a banned absolute one, in \"{quote}\"."
+  },
+  {
+   "id": "P095",
+   "stage": "overclaim_review",
+   "purpose": "Health/marketing overclaim adjudication",
+   "grounding": "engine+rag+live_page",
+   "template": "Flag any testimonial that makes a health claim the firm itself couldn't make directly. Text:\n\"\"\"{ctx}\"\"\""
+  },
+  {
+   "id": "P096",
+   "stage": "overclaim_review",
+   "purpose": "Health/marketing overclaim adjudication",
+   "grounding": "engine+rag+live_page",
+   "template": "One-line compliant caption the clinic can use instead of \"{quote}\"."
+  },
+  {
+   "id": "P097",
+   "stage": "coverage_contract",
+   "purpose": "Scan-adequacy / anti-fabrication gating",
+   "grounding": "engine+rag+live_page",
+   "template": "Was the site actually readable this scan? If only a JS shell / bot-challenge was returned, say NOT_ASSESSABLE. Signal: reachable={reachable}, render_class={render_class}."
+  },
+  {
+   "id": "P098",
+   "stage": "coverage_contract",
+   "purpose": "Scan-adequacy / anti-fabrication gating",
+   "grounding": "engine+rag+live_page",
+   "template": "The targeted page-type {url_check} was not fetched. Should we assert its disclosure is absent? Answer NO unless the page was read."
+  },
+  {
+   "id": "P099",
+   "stage": "coverage_contract",
+   "purpose": "Scan-adequacy / anti-fabrication gating",
+   "grounding": "engine+rag+live_page",
+   "template": "Findings were generated from an archived snapshot dated {archive_date}. Should they render as CONFIRMED current breaches or NEEDS_REVIEW?"
+  },
+  {
+   "id": "P100",
+   "stage": "coverage_contract",
+   "purpose": "Scan-adequacy / anti-fabrication gating",
+   "grounding": "engine+rag+live_page",
+   "template": "Given corpus_adequate={adequate} and evidence={evidence}, classify this finding as CONFIRMED / NEEDS_REVIEW / PASS per the evidence-lock rule."
+  },
+  {
+   "id": "P101",
+   "stage": "coverage_contract",
+   "purpose": "Scan-adequacy / anti-fabrication gating",
+   "grounding": "engine+rag+live_page",
+   "template": "If the compliance scan threw an error, the audit must NOT imply a clean bill. Write the 'not assessed' headline. Error: {error}."
+  },
+  {
+   "id": "P102",
+   "stage": "coverage_contract",
+   "purpose": "Scan-adequacy / anti-fabrication gating",
+   "grounding": "engine+rag+live_page",
+   "template": "Confirm every rendered fine originates from a CONFIRMED, evidence-locked finding \u2014 list any fine lacking a verbatim quote or inspected page."
+  },
+  {
+   "id": "P103",
+   "stage": "coverage_contract",
+   "purpose": "Scan-adequacy / anti-fabrication gating",
+   "grounding": "engine+rag+live_page",
+   "template": "Should this low-confidence (review-band) attachment render as a hard breach or in 'applies to you'? Confidence: {confidence}."
+  },
+  {
+   "id": "P104",
+   "stage": "coverage_contract",
+   "purpose": "Scan-adequacy / anti-fabrication gating",
+   "grounding": "engine+rag+live_page",
+   "template": "State the assessment scope honestly for the report header, given: pages_read={pages}, render_class={render_class}."
+  }
+ ]
+}
