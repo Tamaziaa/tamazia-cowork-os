@@ -128,7 +128,14 @@ const POLICY_PATHS = [
   // never guessed before, so element-checklist rules can assess the page they actually live on.
   '/fees', '/our-fees', '/pricing', '/prices', '/price', '/costs', '/fees-and-pricing',
   '/fees-pricing', '/our-pricing', '/pricing-and-fees', '/tariff', '/quote', '/get-a-quote',
-  '/checkout', '/cart', '/basket', '/book', '/booking'
+  '/checkout', '/cart', '/basket', '/book', '/booking',
+  // EU-language policy paths (i18n): French/German/Italian/Spanish/Dutch sites publish their privacy/legal notices
+  // under localised paths, so an English-only path list never reads the EU privacy policy -> false 'missing GDPR
+  // disclosure' cascade on compliant EU sites. (sector-audit i18n fix)
+  '/confidentialite', '/confidentialite/', '/politique-de-confidentialite', '/politique-confidentialite',
+  '/mentions-legales', '/rgpd', '/donnees-personnelles', '/vie-privee', '/cookies-fr',
+  '/datenschutz', '/datenschutzerklaerung', '/datenschutzerklarung', '/impressum', '/dsgvo', '/rechtliches',
+  '/privacy-it', '/privacidad', '/aviso-legal', '/privacybeleid', '/juridisch'
 ];
 
 function _sameHost(u, domain) {
