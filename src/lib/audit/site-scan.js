@@ -508,7 +508,9 @@ async function scanSite({ domain, sector, env }) {
   let pointers = pointersFromSignals(sig, psi, sector || '');
   for (const pp of psiPointers(psi)) pointers.push(pp);
   // AI crawler access (GEO) from robots.txt body
-  try { const robotsBody = await getText('https://' + clean + '/robots.txt'); for (const pp of aiCrawlerPointers(robotsBody)) pointers.push(pp); } catch (_e) {}
+  // #55: a robots.txt timeout returning '' was silently treated as "no AI bots blocked" (clean). Retry once so a
+  // transient failure doesn't hide a genuinely blocking robots.txt; only emit the AI-crawler read when we actually got a body.
+  try { let robotsBody = await getText('https://' + clean + '/robots.txt'); if (!robotsBody) { robotsBody = await getText('https://' + clean + '/robots.txt'); } if (robotsBody) { for (const pp of aiCrawlerPointers(robotsBody)) pointers.push(pp); } } catch (_e) {}
   // CrUX real-user field data (free, same key)
   try { const crux = await cruxField(clean, key); for (const pp of cruxPointers(crux)) pointers.push(pp); } catch (_e) {}
   let wikidata = { checked: false, present: false };
