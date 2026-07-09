@@ -671,6 +671,10 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     })(),
     needs_review: _needsReview.slice(0, 40),
     trust_summary: { confirmed: _confirmed.length, needs_review: _needsReview.length },
+    // #48: if the compliance scan threw (comp.compliance_unassessed), surface it so the renderer shows
+    // "compliance not assessed this scan" instead of implying a clean bill of health.
+    compliance_unassessed: !!(comp && comp.compliance_unassessed),
+    compliance_error: (comp && comp.compliance_error) || null,
     exec_summary,
     news_map: (() => { const nm = {}; const want = new Set((frameworks||[]).map(f=>String(f))); try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) { const fw = ln.slice(0, i); if (!want.size || want.has(fw)) nm[fw] = ln.slice(i + 1); } } } catch (_e) {} return nm; })(),
     // Curated regulatory-intelligence per framework (obligations the regulator assesses + focus + a verified recent
