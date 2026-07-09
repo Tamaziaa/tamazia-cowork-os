@@ -581,7 +581,20 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     payload_geo_visuals = { ai_engine_grid: _v.aiEngineGrid(engines), ai_radar: _v.aiRadar(radarAxes), entity_web_map: _v.entityWebMap({ you: (domain || '').replace(/^www\./, '').split('.')[0], nodes }) };
     payload_screenshots = _sc.screenshotUrls({ domain, query: (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '') });
   } catch (_e) {}
-  try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: displayCountry, company: (domain || '').replace(/^www\./, '').split('.')[0] }); } catch (_e) {}
+  // Ground the jurisdiction statement in the regions the engine ACTUALLY attached binding frameworks for (not raw
+  // served-markets), so a firm that merely serves a region but is not regulated there does not get an overclaiming
+  // statement. Map each attached framework's jurisdiction -> region.
+  let _boundRegions = [];
+  try {
+    const codes = (frameworks || []).map((x) => (x && (x.framework_short || x.code)) || x).filter(Boolean);
+    if (codes.length) {
+      const inList = codes.map((cc) => "'" + String(cc).replace(/'/g, "''") + "'").join(',');
+      const jr = pg("SELECT DISTINCT coalesce(jurisdiction,'') FROM framework_versions WHERE framework_short IN (" + inList + ")").trim();
+      const R = (j) => { j = String(j || '').toUpperCase(); if (j === 'UK' || j === 'GB') return 'UK'; if (j === 'US' || j === 'USA') return 'US'; if (j === 'EU' || ['DE','FR','NL','IE','IT','ES','BE','SE','PL','AT','DK','FI','PT'].includes(j)) return 'EU'; if (['AE','SA','QA','BH','OM','KW','EG','JO'].includes(j) || j.indexOf('MENA') === 0) return 'Middle East'; return null; };
+      _boundRegions = Array.from(new Set(jr.split('\n').map((x) => R(x.trim())).filter(Boolean)));
+    }
+  } catch (_e) {}
+  try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: displayCountry, company: (domain || '').replace(/^www\./, '').split('.')[0], boundRegions: _boundRegions }); } catch (_e) {}
   let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings, ..._aiReadyFindings, ..._geoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // ── REACHABILITY RECONCILIATION (anti-fabrication red line) ──────────────────────────────────
   // Two independent corpus paths can disagree: site-scan's direct fetch + PSI may fail (timeout / bot-block)
