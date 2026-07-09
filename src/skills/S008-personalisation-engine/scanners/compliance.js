@@ -589,7 +589,13 @@ function _dpPolicyPageUnread(rule, corpus) {
   // "responsable du traitement", "CNIL", "donnees personnelles" — enough to fake a policy body. So content only counts
   // when a page shows ALL 5 deep markers (a real policy enumerates every data-subject right + controller + DPO +
   // lawful basis + supervisory authority; a consent banner never does). The reliable signal is a dedicated policy URL.
+  // URL-ONLY primary signal (content is unreliable: a JS cookie-consent banner can enumerate every right). The only
+  // trustworthy signal that a real privacy policy was READ is that a dedicated policy PAGE (clean URL slug) was crawled.
+  // Content kept ONLY as an extreme fallback (all 5 deep markers on a NON-root page), so a policy served inline on a
+  // sub-page still counts, but a homepage banner never does.
   const _hasPolicyContent = (corpus || []).some((c) => {
+    let path = ''; try { path = new URL(String(c && c.url)).pathname.replace(/\/+$/, ''); } catch (_) { path = ''; }
+    if (path === '' || path === '/') return false; // never trust the homepage/root (banners live there)
     const t = _stripHtml(c && (c.text || c.body || c.html));
     let deep = 0; for (const rx of _DP_DEEP) { if (rx.test(t)) deep++; }
     return deep >= 5;
@@ -754,7 +760,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v10-2026-07-09-dp-policy-guard-banner-proof';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v11-2026-07-09-dp-guard-url-primary';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
