@@ -681,7 +681,19 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
         const EU_ISO = new Set(['DE','FR','ES','IT','NL','IE','BE','SE','PL','AT','DK','FI','PT']);
         const covered = (name) => { const iso = NAME2ISO[String(name).toLowerCase()] || String(name).toUpperCase(); if (jr.has(iso)) return true; if (iso === 'EU' && [...jr].some((j) => EU_ISO.has(j) || j === 'EU')) return true; if (EU_ISO.has(iso) && jr.has('EU')) return true; return false; };
         const kept = considered.filter(covered);
-        return kept.length ? kept : considered;
+        // FALLBACK (carpenterssolicitors.co.uk fix): when the crawl surfaces no explicit jurisdiction signal, the
+        // scanner's considered[] is empty and the firm renders with NO jurisdiction even though its registered country
+        // (and every bound framework) is domestic. Seed from the registered country so the "applies to you" region is
+        // never blank. Map the registered ISO to a display name; if that country's law is actually bound, use it.
+        if (kept.length) return kept;
+        const ISO2NAME = { 'UK':'United Kingdom','GB':'United Kingdom','US':'United States','USA':'United States','DE':'Germany','FR':'France','ES':'Spain','IT':'Italy','NL':'Netherlands','IE':'Ireland','AE':'United Arab Emirates','UAE':'United Arab Emirates','SA':'Saudi Arabia','QA':'Qatar','BH':'Bahrain','OM':'Oman','KW':'Kuwait','EU':'European Union' };
+        const _cty = String(country || effCountry || '').toUpperCase();
+        const _ctyName = ISO2NAME[_cty] || null;
+        if (_ctyName && covered(_ctyName)) return [_ctyName];
+        // last resort: any jurisdiction the bound frameworks cover, derived from framework_versions
+        const _fromFw = [...jr].map((iso) => Object.keys(ISO2NAME).includes(iso) ? ISO2NAME[iso] : null).filter(Boolean);
+        if (_fromFw.length) return Array.from(new Set(_fromFw));
+        return considered;
       } catch (_e) { return considered; }
     })(),
     detected_sector: (comp && comp.detected_sector) || sector,
