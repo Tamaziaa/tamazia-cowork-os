@@ -20,15 +20,21 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       # Per-build cap: PSI fix (PR #138) bounds scanSite at 90s; compliance + formatters add ~60s.
       # 3 min is a safe ceiling. Previous 5-min cap let a single slow site hold up the batch.
-      MINT_BUILD_TIMEOUT_MS: "300000"
+      MINT_BUILD_TIMEOUT_MS: "540000"
       # Reclaim zombie 'minting' rows left by any worker killed >16 min ago. Set below the old 30 min
       # default so that zombies from a previously killed GH Actions job (any run that used the old
       # 15-min timeout) are cleaned up immediately at the start of this run.
       MINT_RECLAIM_AFTER_MIN: "16"
-      # Concurrency 5 (was 15): a 2-core GH runner starves at 15 concurrent builds (each does PSI 42s + LLM +
-      # multi-page crawl), blowing the per-build clock — 53/80 golden re-mints timed out at 15. 5 concurrent x
-      # 5-min cap drains reliably (~60-100/hr), far above the 200/day target. Reliability over raw burst.
-      MINT_CONCURRENCY: "3"
+      # CONCURRENCY 1 (was 3): the LLM grounding (sector/jurisdiction/disclosure extraction) runs on FREE providers
+      # (Cloudflare/Groq/Gemini) that rate-limit hard on CONCURRENCY. At concurrency 3 a burst of simultaneous mints
+      # 429'd ~99% of LLM calls (measured: 71 fail / 1 ok in 20 min), so every audit silently fell back to brittle
+      # regex heuristics -> wrong sector (hotel->media), wrong jurisdiction, fabricated breaches. Serializing to 1
+      # keeps each audit's LLM calls inside the free per-minute budget (groq recovers immediately when not hammered),
+      # so grounding actually runs. Slower throughput, correct audits. Raise again only once a PAID fallover key
+      # (ANTHROPIC_API_KEY) is present in ENV_B64 so free-tier 429s route to a provider that will not rate-limit.
+      MINT_CONCURRENCY: "1"
+      # LLM in-process concurrency 1 so a single audit's calls are also paced (free tiers 429 on simultaneous requests).
+      LLM_MAX_CONCURRENCY: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
