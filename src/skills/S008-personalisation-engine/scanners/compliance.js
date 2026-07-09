@@ -445,6 +445,16 @@ function _isProse(str) {
   let run = 0; for (const w of words) { if (/^[A-Z][a-zA-Z]{1,}$/.test(w)) { run++; if (run >= 3) return false; } else run = 0; }
   return true;
 }
+// #43/#44: rule matching must run against VISIBLE prose, not raw HTML. A disclosure keyword inside a <script>
+// or attribute is not a real, user-facing disclosure — matching raw markup both false-hits (miss inside script)
+// and false-passes (a 'present' disclosure that only lives in a cookie-banner script). Cache the stripped text
+// per page. If a page has essentially no visible text (JS-only / unreadable), return '' so the caller's
+// reachability / #38 guards decide, rather than asserting on markup.
+function _visibleBody(c) {
+  if (!c) return '';
+  if (c._vt === undefined) { const t = _stripText(c.body || ''); c._vt = (t && t.trim().length >= 12) ? t : ''; }
+  return c._vt;
+}
 function _extractQuote(html, re) {
   const text = _stripText(html);
   let rx; try { rx = new RegExp(re.source, 'i'); } catch (_e) { return null; }
@@ -544,7 +554,7 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
       let trRe = null; try { trRe = new RegExp(rule.trigger_pattern, 'i'); } catch (_e) { trRe = null; }
       if (trRe) {
         let triggered = false;
-        for (const c of corpus) { const m = c.body.match(trRe); if (m) { triggered = true; const q = _extractQuote(c.body, trRe); triggerEvidence = { url: c.url, quote: q && q.quote, snippet: (q && q.matched) || m[0].slice(0, 80) }; break; } }
+        for (const c of corpus) { const _vt = _visibleBody(c); const m = _vt.match(trRe); if (m) { triggered = true; const q = _extractQuote(c.body, trRe); triggerEvidence = { url: c.url, quote: q && q.quote, snippet: (q && q.matched) || m[0].slice(0, 80) }; break; } }
         if (!triggered) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'trigger_absent' };
       }
     }
@@ -553,7 +563,7 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
     for (const el of rule.regex_elements) {
       let elRe = null; try { elRe = new RegExp(el.pattern, 'i'); } catch (_e) { elRe = null; }
       let present = false, quote = null, url = null;
-      if (elRe) { for (const c of pool) { const m = c.body.match(elRe); if (m) { present = true; const q = _extractQuote(c.body, elRe); quote = (q && q.quote) || m[0].slice(0, 140); url = c.url; break; } } }
+      if (elRe) { for (const c of pool) { const _vt = _visibleBody(c); const m = _vt.match(elRe); if (m) { present = true; const q = _extractQuote(c.body, elRe); quote = (q && q.quote) || m[0].slice(0, 140); url = c.url; break; } } }
       elements.push({ label: el.label, present, quote: present ? quote : null, url });
     }
     const missing = elements.filter(e => !e.present).map(e => e.label);
@@ -579,12 +589,12 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
     let triggered = false;
     let triggerEvidence = null;
     for (const c of corpus) {
-      const m = c.body.match(triggerRe);
+      const m = _visibleBody(c).match(triggerRe);
       if (m) { triggered = true; const q = _extractQuote(c.body, triggerRe); triggerEvidence = { url: c.url, snippet: (q && q.matched) || m[0].slice(0, 80), quote: q && q.quote }; break; }
     }
     if (!triggered) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'trigger_absent' };
     // Trigger present — now check whether the disclosure is also present.
-    for (const c of corpus) { if (c.body.match(re)) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'hit_after_trigger', trigger_evidence: triggerEvidence }; }
+    for (const c of corpus) { if (_visibleBody(c).match(re)) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'hit_after_trigger', trigger_evidence: triggerEvidence }; }
     // Trigger present but disclosure missing → real breach. Carry the real nearest-miss absence evidence too, so the
     // render shows WHAT is on the page vs the missing element (not "inspected your homepage") for trigger breaches as well.
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, enforce_typical_low_gbp: rule.enforce_typical_low_gbp, enforce_typical_high_gbp: rule.enforce_typical_high_gbp, enforce_methodology: rule.enforce_methodology, enforce_context: rule.enforce_context, enforce_max_rare: rule.enforce_max_rare, statutory_citation: rule.statutory_citation, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: triggerEvidence?.url, evidence_quote: triggerEvidence?.quote, trigger_evidence: triggerEvidence, checked_urls: corpus.map(c => c.url), absence_evidence: _absenceEvidence(corpus, corpus, rule) };
@@ -619,10 +629,18 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
   }
   const pool = subset;
   for (const c of pool) {
-    const m = c.body.match(re);
+    const m = _visibleBody(c).match(re);
     if (m) {
       return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'hit', description: rule.description, citation_url: rule.citation_url, evidence_url: c.url, evidence_snippet: m[0].slice(0, 200) };
     }
+  }
+  // #43/#44 companion guard: now that presence is decided on VISIBLE text, a JS-only / unreadable page (no visible
+  // prose) would otherwise yield a fabricated must_appear MISS. If NO page in the pool has any visible text, we could
+  // not actually read the disclosure surface — return non-fined 'corpus_unreadable' rather than asserting absence.
+  if (pool.length && !pool.some(c => _visibleBody(c))) {
+    return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity,
+             status: 'corpus_unreadable', rule_type: rule.rule_type || 'must_appear',
+             note: 'no visible text on the candidate pages this scan; absence not asserted' };
   }
   // Miss: rule was expected but no match found in any candidate page
   return {
