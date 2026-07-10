@@ -286,6 +286,18 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concur
           home = { ok: true, status: rg.status || 200, body: rg.body, challenge: false, via_residential: true };
         }
       } catch (_e) { /* fail-open: keep the datacenter result */ }
+      // FREE WALL-BYPASS (Apify-independent): if the datacenter fetch AND the paid residential rescue both failed or
+      // were WAF-challenged, render the homepage through the free Jina reader (r.jina.ai executes JS and fetches from
+      // JINA's IP, defeating the datacenter-IP WAF that 403s the GitHub runner). This is the primary crawl path when
+      // Apify credits/credentials are down — verified live: carbonhealth/medcare/bsalaw all return via Jina when the
+      // direct fetch 403s. Costs nothing and needs no secret.
+      const _stillBad = !home || !home.ok || home.challenge || _txtLen(home.body) < 500;
+      if (_stillBad) {
+        try {
+          const _jt = await _renderViaReader(base + '/');
+          if (_jt && _jt.replace(/\s+/g, '').length >= 500) home = { ok: true, status: 200, body: _jt, challenge: false, via_reader: true };
+        } catch (_e) { /* fail-open */ }
+      }
     }
   }
   const candidates = [base + '/'];
@@ -361,11 +373,11 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concur
   // so it MUST run even when a challenge was detected. Previously this was gated to !challenge, which silently sent
   // every walled site straight to stale Wayback or a blocked audit — the root cause of the ~"sites no longer crawl"
   // regression (verified: thehandbook.com was challenge-blocked yet Jina returns full content in <1s).
-  if (!corpus.length && home) {
-    // PARALLEL with a hard deadline: homepage + up to 2 key pages rendered concurrently, total <=14s, so the
-    // wall-bypass fallback adds bounded latency (was sequential 4x12s = up to 48s, which blew the mint timeout on
-    // hard sites — leightonpark/domirealestate failed at the 120/300s build cap).
-    const renderTargets = [base + '/', ...guessed.filter(u => /privacy|terms|about/i.test(u)).slice(0, 2)];
+  if (!corpus.length) {
+    // PARALLEL with a hard deadline. Runs even when home is null (a hard 403 returns no object) — that null was the
+    // bug that skipped the free Jina rescue on WAF-blocked runners and shipped an empty (unassessed) audit. Render the
+    // homepage + key policy/about pages via Jina so a datacenter-blocked site still yields a usable multi-page corpus.
+    const renderTargets = [base + '/', ...guessed.filter(u => /privacy|terms|about|legal|cookie|contact|service|regulat/i.test(u)).slice(0, 6)];
     const rendered = await _pool(renderTargets, renderTargets.length, 14000, (ru) => _renderViaReader(ru));
     for (let i = 0; i < renderTargets.length; i++) {
       const txt = rendered[i]; const ru = renderTargets[i];
@@ -760,7 +772,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v18-2026-07-blindsend';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v19-2026-07-jina-crawl-rescue';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
