@@ -48,7 +48,7 @@ jobs:
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ensure-schema.js || true
-          node scripts/mint-worker.js --once --reclaim-startup
+          AUDIT_PAYLOAD_STORE=both node scripts/mint-worker.js --once --reclaim-startup
 
       - name: send-gate summary
         if: always()
