@@ -772,7 +772,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v21-2026-07-nx-fix-llm-verify';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22-2026-07-knowledge-mode';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
@@ -827,11 +827,35 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   }
   // CREDIBILITY GUARD: an empty/unreadable corpus (site blocked our crawler, JS-only, or down) cannot support
   // any 'missing disclosure' finding. Asserting 50+ must_appear misses against no text is a false-positive. Bail.
+  // KNOWLEDGE-MODE FALLBACK (founder directive): bailing to an EMPTY audit throws away the three facts that need
+  // no crawl at all: the firm's sector (ICP, canonicalised), its registered-country jurisdiction family, and the
+  // statutes the catalogue binds to that (sector, family) cell. Those are deterministic and correct by
+  // construction, so we ship them as an APPLIES-only obligation map: zero findings, zero fines, zero fabrication.
+  const _EU_MEMBERS_K = new Set(['DE','FR','ES','IT','NL','IE','BE','SE','PL','AT','DK','FI','PT','GR','EL','CZ','HU','RO','BG','HR','SK','SI','LT','LV','EE','LU','CY','MT']);
+  const _C2FAM_K = (c) => { c = String(c || '').toUpperCase(); if (c === 'GB' || c === 'GBR' || c === 'UK') return 'UK'; if (c === 'USA' || c === 'US') return 'US'; if (c === 'UAE' || c === 'AE') return 'AE'; if (c === 'KSA' || c === 'SA') return 'SA'; if (c === 'QA') return 'QA'; if (_EU_MEMBERS_K.has(c)) return 'EU'; return null; };
+  const _NXKEY_K = { UK: 'UK', EU: 'EU', US: 'USA', AE: 'AE', SA: 'SA', QA: 'QA' };
+  const _knowledgePayload = (noteStr, extra) => {
+    const cc = String(country || '').toUpperCase();
+    const fam = _C2FAM_K(cc) || 'UK';
+    const jurs = (fam === 'EU' && _EU_MEMBERS_K.has(cc)) ? [cc, 'EU'] : [fam];
+    const nexus = {}; nexus[_NXKEY_K[fam] || fam] = { established_in: 'registered_country:' + (cc || fam), source: 'company_registration' };
+    let secC = String(sector || 'professional-services').toLowerCase();
+    try { const sr = require('../../../lib/compliance/registry/sector.js'); secC = sr.canonicalSector(secC) || secC; } catch (_e) {}
+    let fw = [], binding = {};
+    try { const { connect, loadCatalogue } = require('../../../lib/compliance/connect.js');
+      const cx = connect({ catalogue: loadCatalogue(), jurisdictions: jurs, sector: secC, signals: { nexus }, text: '', mode: 'knowledge' });
+      fw = cx.frameworks || []; binding = cx.binding || {}; } catch (_e) { fw = []; binding = {}; }
+    return Object.assign({ domain, sector: secC, detected_sector: secC, country: cc || null, ok: true, reachable: false,
+      rules_evaluated: 0, findings: [], frameworks: fw, binding,
+      detected_jurisdictions: cc ? [cc] : [], nexus,
+      jurisdiction_families: { families: [fam], primary: fam, serves_only: [] },
+      compliance_unassessed: true, render_mode: 'knowledge', note: noteStr }, extra || {});
+  };
   if (!corpus.length || corpusText.replace(/\s+/g, '').length < 500) {
     const _reason = _cg.reason || 'corpus_unreadable_site_blocked_or_down';
-    const payload = { domain, sector, country, ok: true, reachable: false, rules_evaluated: 0, findings: [],
-      note: _cg.challenge ? 'held_anti_bot_challenge_not_assessable_without_authorized_access' : ('corpus_unreadable_' + _reason),
-      block_reason: _reason, http_status: _cg.home_status || 0, challenge: !!_cg.challenge, pages_tried: _cg.pages_tried || 0 };
+    const payload = _knowledgePayload(
+      _cg.challenge ? 'held_anti_bot_challenge_not_assessable_without_authorized_access' : ('corpus_unreadable_' + _reason),
+      { block_reason: _reason, http_status: _cg.home_status || 0, challenge: !!_cg.challenge, pages_tried: _cg.pages_tried || 0 });
     writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 3600 });
     return payload;
   }
@@ -858,10 +882,9 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     // out-counts English on real body text (2x margin so an English site quoting a French address is not tripped).
     const _nonEnglish = (_langHdrNonEn && _en < _foreign * 1.2) || (_foreign >= 8 && _foreign > _en * 2);
     if (_nonEnglish) {
-      const payload = { domain, sector, country, ok: true, reachable: true, rules_evaluated: 0, findings: [],
-        frameworks: [], detected_jurisdictions: [], compliance_unassessed: true,
-        compliance_error: 'non_english_site_out_of_scope',
-        note: 'site primary language is not English (lang="' + (_langAttr || _foreign >= 8 ? (_langAttr||'non-en') : '?') + '"); the compliance catalogue is English-only so this site is out of audit scope and no findings are asserted' };
+      const payload = _knowledgePayload(
+        'site primary language is not English (lang="' + (_langAttr || (_foreign >= 8 ? 'non-en' : '?')) + '"); the English-only breach catalogue is out of scope here, so no findings are asserted. The binding obligation map below is catalogue fact for the registered country and needs no site read.',
+        { reachable: true, compliance_error: 'non_english_site_out_of_scope' });
       writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 86400 });
       return payload;
     }
