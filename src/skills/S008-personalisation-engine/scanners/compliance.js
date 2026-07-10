@@ -914,7 +914,10 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // another family's serve-signals are louder (maseco class); an evidence-less family can never attach
   // (maguirejackson ghost-US class). Registered-country fallback above still guards the empty case.
   const _NXC = { UK: 'UK', EU: 'EU', USA: 'US', AE: 'AE', SA: 'SA', QA: 'QA' };
-  const _nx = (signals && signals.nexus) || {};
+  // v18.2: callers rarely pass signals — derive the EDPB nexus map ourselves from the live corpus so the
+  // establishment-first filter always has evidence to work with (root cause of the V07 ghost-family reds).
+  let _nx = (signals && signals.nexus) || {};
+  if (!Object.keys(_nx).length) { try { _nx = (require('../../../lib/compliance/signals.js').buildSignals({ jurisdictions: allJurisdictions, sector, corpusText }).nexus) || {}; } catch (_e) { _nx = {}; } }
   const _estF = Object.entries(_nx).filter(([f, v]) => v && v.established_in).map(([f]) => _NXC[f] || f);
   const _srvF = Object.entries(_nx).filter(([f, v]) => v && !v.established_in && v.serves_customers_in).map(([f]) => _NXC[f] || f);
   if (_estF.length || _srvF.length) {
