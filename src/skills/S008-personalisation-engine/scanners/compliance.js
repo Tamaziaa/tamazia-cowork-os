@@ -772,7 +772,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v20-2026-07-adaptive-render';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v21-2026-07-nx-fix-llm-verify';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
@@ -908,6 +908,11 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // `codes` (which carry that keyword noise). The registered country is always inside mergedJur, so it can never
   // be lost; we fall back to the raw codes only if the LLM profiler failed entirely.
   let allJurisdictions = (mergedJur && mergedJur.length) ? Array.from(new Set(mergedJur)) : Array.from(codes);
+  // E-201 (audit-of-the-audits P-001): these four were declared INSIDE the whitelist block below (v18.2,
+  // a3eaf38) but are read at payload build far outside it, so every mint since v18.2 threw
+  // "_nx is not defined" -> compliance_error + compliance_unassessed + zero pages. Hoisted to function scope.
+  let _nx = {}; let _estF = []; let _srvF = [];
+  let _jurFamilies = { families: [], primary: String(country || 'UK').toUpperCase(), serves_only: [] };
   // PRIMARY-JURISDICTION WHITELIST (founder directive): the engine attaches ONLY the four primary regions — UK, US,
   // EU (+ member states) and the Middle East. Any other detected jurisdiction (Canada/Australia/Singapore/India/...)
   // is dropped here, before connect or the render ever see it, so no non-primary jurisdiction is ever attached or
@@ -928,17 +933,17 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const _NXC = { UK: 'UK', EU: 'EU', USA: 'US', AE: 'AE', SA: 'SA', QA: 'QA' };
   // v18.2: callers rarely pass signals — derive the EDPB nexus map ourselves from the live corpus so the
   // establishment-first filter always has evidence to work with (root cause of the V07 ghost-family reds).
-  let _nx = (signals && signals.nexus) || {};
+  _nx = (signals && signals.nexus) || {};
   if (!Object.keys(_nx).length) { try { _nx = (require('../../../lib/compliance/signals.js').buildSignals({ jurisdictions: allJurisdictions, sector, corpusText }).nexus) || {}; } catch (_e) { _nx = {}; } }
-  const _estF = Object.entries(_nx).filter(([f, v]) => v && v.established_in).map(([f]) => _NXC[f] || f);
-  const _srvF = Object.entries(_nx).filter(([f, v]) => v && !v.established_in && v.serves_customers_in).map(([f]) => _NXC[f] || f);
+  _estF = Object.entries(_nx).filter(([f, v]) => v && v.established_in).map(([f]) => _NXC[f] || f);
+  _srvF = Object.entries(_nx).filter(([f, v]) => v && !v.established_in && v.serves_customers_in).map(([f]) => _NXC[f] || f);
   if (_estF.length || _srvF.length) {
     const _keep = new Set([..._estF, ..._srvF]);
     allJurisdictions = allJurisdictions.filter(j => _keep.has(String(j).toUpperCase()));
     for (const c of _estF) if (!allJurisdictions.includes(c)) allJurisdictions.push(c);
     if (!allJurisdictions.length) allJurisdictions = _estF.length ? [..._estF] : [String(country || 'UK').toUpperCase()];
   }
-  const _jurFamilies = { families: [...new Set(allJurisdictions.map(j => String(j).toUpperCase()))],
+  _jurFamilies = { families: [...new Set(allJurisdictions.map(j => String(j).toUpperCase()))],
                          primary: (_estF[0] || String(country || allJurisdictions[0] || 'UK').toUpperCase()),
                          serves_only: _srvF.filter(c => !_estF.includes(c)) };
   }
