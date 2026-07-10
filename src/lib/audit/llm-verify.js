@@ -54,7 +54,7 @@ function _prompt(p) {
       '',
       'TASK: (1) Is detected_sector the firm\'s OWN primary business (not its clients\' industry)? ',
       '(2) Does each jurisdiction family have plausible nexus evidence? ',
-      '(3) Flag every attached framework whose family is NOT in jurisdiction_families, or which is sector-implausible for this firm (e.g. a healthcare regulator on a law firm, food law on a wealth manager). Be conservative: flag only clear errors, not debatable edge cases.',
+      '(3) Flag every attached framework whose family is NOT in jurisdiction_families, or which is sector-implausible for this firm (e.g. a healthcare regulator on a law firm, food law on a wealth manager). Be conservative: flag only clear errors, not debatable edge cases. NEVER flag a code merely for being voluntary, professional, industry, or membership-based; binding labels other than statute are intentional. Flag ONLY wrong-family or wrong-sector attachments.',
       'Respond with JSON exactly: {"sector_ok": true|false, "sector_should_be": "<canonical sector or same>", "families_ok": true|false, "wrong_families": ["..."], "flagged_frameworks": [{"code": "...", "reason": "<10 words max>"}], "confidence": 0.0-1.0}'
     ].join('\n')
   };
@@ -85,7 +85,10 @@ async function llmVerifyPayload(p) {
   const flagged = Array.isArray(out.flagged_frameworks) ? out.flagged_frameworks : [];
   for (const f of flagged) {
     const code = String((f && f.code) || '').trim();
-    if (binding.includes(code)) flags.push({ code, reason: String((f && f.reason) || '').slice(0, 80) });
+    const reason = String((f && f.reason) || '').slice(0, 80);
+    const _bindLabel = String((p.binding || {})[code] || '');
+    const _bindingnessOnly = /voluntar|not mandatory|industry code|professional code|guideline|only if member|membership|non.?binding|not universally|not a (law|statute)/i.test(reason);
+    if (binding.includes(code) && !(_bindingnessOnly && _bindLabel !== 'statute')) flags.push({ code, reason });
   }
   if (out.sector_ok === false) flags.push({ code: 'SECTOR', reason: ('llm says ' + String(out.sector_should_be || 'different sector')).slice(0, 80) });
   if (out.families_ok === false && Array.isArray(out.wrong_families) && out.wrong_families.length) {

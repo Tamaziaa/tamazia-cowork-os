@@ -5,7 +5,8 @@ const THRESHOLD_US = ['US_CPRA', 'US_CCPA', 'US_VCDPA', 'US_TDPSA'];
 function verifyPayload(p) {
   p = p || {};
   const R = []; const ok = (c, code, detail) => { if (!c) R.push({ code, detail: String(detail == null ? '' : detail).slice(0, 200) }); };
-  const fams = ((p.jurisdiction_families && p.jurisdiction_families.families) || (p.engine_jurisdictions || [])).map(x => String(x).toUpperCase());
+  const _FA = { UAE: 'AE', USA: 'US', GB: 'UK', GBR: 'UK', KSA: 'SA' };
+  const fams = ((p.jurisdiction_families && p.jurisdiction_families.families) || (p.engine_jurisdictions || [])).map(x => { const u = String(x).toUpperCase(); return _FA[u] || u; });
   const nexus = p.nexus || {};
   const binding = Object.keys(p.binding || {});
   const fp = p.firm_profile || {};
@@ -17,7 +18,8 @@ function verifyPayload(p) {
   ok(!(binding.some(f => /^(UAE_|AE_)/.test(f)) && !fams.includes('AE')), 'V02_ae_law_without_ae_family', binding.filter(f => /^(UAE_|AE_)/.test(f)).join(','));
   ok(!(binding.some(f => /^SAUDI_/.test(f)) && !fams.includes('SA')), 'V02_sa_law_without_sa_family', '');
   ok(!(binding.some(f => /^QATAR_/.test(f)) && !fams.includes('QA')), 'V02_qa_law_without_qa_family', '');
-  for (const t of THRESHOLD_US) ok(!binding.includes(t) || !!(p.threshold_evidence && p.threshold_evidence[t]) || fams.includes('US'), 'V03_threshold_law_unevidenced', t);
+  const _usEst = !!(nexus.USA && nexus.USA.established_in) || !!(nexus.US && nexus.US.established_in);
+  for (const t of THRESHOLD_US) ok(!binding.includes(t) || !!(p.threshold_evidence && p.threshold_evidence[t]) || (fams.includes('US') && _usEst), 'V03_threshold_law_unevidenced', t);
   ok(!shipped.some(x => x.gate_reason), 'V04_gated_finding_shipped', (shipped.find(x => x.gate_reason) || {}).gate_reason);
   ok(!shipped.some(x => (x.kind === 'absence' || x.status === 'miss') && !(x.absence_evidence && (x.absence_evidence.target_url || x.absence_evidence.pages_checked)) && !(x.checked_urls || []).length), 'V05_absence_without_proof', '');
   ok(!shipped.some(x => String(x.regulator || '') === 'Sector regulator'), 'V06_placeholder_regulator', '');
