@@ -4,6 +4,8 @@ This repo is the **agency lead-gen engine**: sourcing, enrichment, verification,
 
 **Load order for a cold session:** this file → `docs/CONTEXT-PACK.md` (the compact bootstrap) → `docs/PIPELINE-STATE.md` (live Neon snapshot, auto-generated). For the full workspace also read `../Tamazia-Remix/MAP.md` (where everything lives) and `../Tamazia-Remix/STATE.md` (what is true now) when working in the local `TAMAZIA-REBUILD` tree.
 
+**Working on the audit/compliance engine specifically (the off-limits system described below)?** Read `AUDIT-ENGINE-CURRENT-STATE.md` at repo root first, not this file's agency-side sections. It is the audit engine's own equivalent of `PROJECT-MEMORY.md`.
+
 ## Identity
 Tamazia is a compliance-led SEO/GEO agency. Founder credential, stated EXACTLY: "LLM in International Business Law, King's College London". (An identity-string conflict with the website repo is tracked in `../Tamazia-Remix/STATE.md`; do not bake a wrong value, confirm with Aman.) Aman writes no code: flag any git/Neon/worker/deploy step for him.
 
