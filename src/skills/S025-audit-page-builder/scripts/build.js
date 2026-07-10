@@ -781,6 +781,22 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   if (mode === 'both' || mode === 'r2') {
     try { const { putAudit } = require('../../../lib/r2'); await putAudit(slug, hash, payload); } catch (e) { if (mode === 'r2') throw e; }
   }
+  // E-203 (audit-of-the-audits P-005): canonical country codes at the write seam. USA/US, UAE/AE and
+  // GB/UK coexisting in audit_pages.country silently split every family-keyed computation downstream.
+  const _CANON_COUNTRY = { USA: 'US', UAE: 'AE', GB: 'UK', GBR: 'UK', KSA: 'SA' };
+  { const _cc = String(payload.country || country || '').toUpperCase();
+    const _canon = _CANON_COUNTRY[_cc] || _cc;
+    if (payload.country) payload.country = _canon; country = country ? _canon : country; }
+  // E-202 (audit-of-the-audits): LLM blind-send cross-verifier. Independent second opinion on sector,
+  // families and every bound framework. Fail-closed on disagreement (merged into verify below); recorded
+  // in the payload so the renderer and the send gate can see it. Runs BEFORE serialization.
+  let _llmv = { status: 'unavailable', flags: [] };
+  try { _llmv = await require('../../../lib/audit/llm-verify.js').llmVerifyPayload(payload); } catch (_e) { _llmv = { status: 'unavailable', flags: [], error: String(_e).slice(0, 120) }; }
+  payload.llm_verify = _llmv;
+  // E-205 (audit-of-the-audits P-007): out-of-ICP hard gate. media/general audits attach the weakest
+  // catalogue cells and have zero commercial value; they persist but can never verify or ship.
+  const _ICP_BLOCK = new Set(['media', 'general']);
+  const _outOfIcp = _ICP_BLOCK.has(String(payload.detected_sector || '').toLowerCase()) && process.env.ALLOW_NON_ICP !== '1';
   const neonPayload = (mode === 'r2') ? { r2: true, framework_version: payload.framework_version } : payload;
 
   const expSeconds = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
@@ -801,7 +817,20 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // reasons in verify_report) and is never outreach-eligible; the loop inspects reds and re-mints after fixes.
   let _verify; try { _verify = require('../../../lib/audit/verify-payload.js').verifyPayload(payload); }
   catch (e) { _verify = { verified: false, reasons: [{ code: 'verifier_crash', detail: String(e).slice(0, 160) }] }; }
+  // E-202 merge: any LLM cross-check flag quarantines (fail-closed); LLM unavailability does NOT block
+  // (deterministic verifier remains the hard gate) but is visible in payload.llm_verify for the send gate.
+  if (_llmv && _llmv.status === 'flag') {
+    _verify.verified = false;
+    _verify.reasons = (_verify.reasons || []).concat([{ code: 'V12_llm_crosscheck', detail: _llmv.flags.map(f => f.code + ':' + f.reason).join(' | ').slice(0, 200) }]);
+  }
+  if (_outOfIcp) {
+    _verify.verified = false;
+    _verify.reasons = (_verify.reasons || []).concat([{ code: 'V15_out_of_icp_sector', detail: String(payload.detected_sector || '') }]);
+  }
   if (!_verify.verified) console.error('[send-gate] QUARANTINED ' + domain + ' ' + JSON.stringify(_verify.reasons).slice(0, 280));
+  // E-204 (audit-of-the-audits P-006): one live audit per domain. Supersede any prior live rows so the
+  // newest mint is the only publicly current one; superseded rows keep their data for cohort analysis.
+  try { pg(`UPDATE ${AUDIT_TABLE} SET status='superseded', archived_at=now() WHERE domain='${domain.replace(/'/g, "''")}' AND status='live'`); } catch (_e) {}
   const verifyE = JSON.stringify(_verify).replace(/'/g, "''");
   let ins = pg(`INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}), ${_verify.verified}, '${verifyE}'::jsonb) RETURNING id`);
   // A >100KB payload is routed by pg() through the psql -f path, which EXECUTES the INSERT but returns no RETURNING

@@ -56,7 +56,11 @@ Proven from live v17 payloads before the fix, re-verified from live v18/v19 payl
 
 `functions/audit/_adapter.js` + `public/audit/audit-app.js`: headline split (E-090: "X obligations verified breached... Y further frameworks bind you and were assessed at page level"), zero-breach M-2 header (a clean audit reads as depth, not emptiness), render-side quote gate (E-091, twin of the engine gate), binding label map incl. `industry_code` (E-092), APPLIES · ASSESSED badge with inspected pages (E-088), two Calendly CTAs (E-094).
 
-## 6. UNRESOLVED — the v19 Jina-rescue anomaly (highest priority open item)
+## 6. RESOLVED (2026-07-11) — the zero-pages anomaly was NOT Jina: it was a v18.2 scope bug
+
+**Root cause found and fixed (E-201, v21).** v18.2 (`a3eaf38`) declared `_nx`, `_estF`, `_srvF` and `_jurFamilies` inside the PRIMARY-JURISDICTION whitelist block (compliance.js ~915-944) while lines ~1020 and ~1147 read them outside that scope. Every mint since threw `ReferenceError: _nx is not defined`, caught upstream and written as `compliance_error` with `compliance_unassessed=true` and zero pages: exactly the live evidence this section documented. 55 of the 55 most recent audit_pages rows carried that literal error string. The Jina rescue (PR #261) was diagnosing the wrong layer; it may still be useful for genuine WAF blocks but was never the outage. Fixed in v21 by hoisting the four declarations to function scope. Also shipped in the same session: E-202 LLM blind-send cross-verifier (src/lib/audit/llm-verify.js, fail-closed V12_llm_crosscheck, live-tested flagging UK_PECR on an AE firm and passing a clean UK firm, Qwen key confirmed working end to end), E-203 canonical country codes at the write seam, E-204 one-live-audit-per-domain supersede, E-205 out-of-ICP sector gate (V15). Full defect catalogue: the audit-of-the-audits document (11 Jul session), 108 primary + 200 secondary issues.
+
+### Historical record of the (wrong) prior diagnosis
 
 PR #261 (`5997ea9`, merged 17:54 UTC by `Tamaziaa`, not this session) claims to fix the runner crawl blocker reported at the end of this session's v18.3 work: the GitHub Actions runner's datacenter IP gets WAF-challenged, the paid Apify residential rescue was down (credential/credit), so it adds a free `r.jina.ai` fallback and removes a gating bug that skipped the rescue on a hard 403. Commit message claims local verification: "medcare.ae 8 pages, pallmallmedical 7 pages."
 
@@ -118,3 +122,10 @@ select domain, verified, jsonb_array_length(coalesce(payload_json->'pages_crawle
   from audit_pages order by generated_at desc limit 10;
 # latest mint-now run log, grep for the domain(s) you care about
 ```
+
+
+## 12. 2026-07-11 session addendum
+
+- v21 (`E-201`) unblocks minting; DASHSCOPE_API_KEY value confirmed working (workspace 911052, Singapore); founder must confirm the same key is set as a GitHub Actions secret for mint-now.
+- Send gate policy: outreach eligibility = `verified = TRUE`; for the priority sectors (legal, healthcare, hospitality, real estate, finance/wealth) additionally require `payload_json->'llm_verify'->>'status' = 'pass'`.
+- Neon migrations applied this session: country canonicalisation (USA→US, UAE→AE, GB→UK), duplicate live rows superseded keeping newest, media/general rows superseded, legacy NULL-verified rows stamped `verified=false` with reason `V00_legacy_unverified` so nothing pre-gate is ever outreach-eligible.
