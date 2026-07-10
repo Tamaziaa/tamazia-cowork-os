@@ -67,6 +67,8 @@ function classifyFinding(f, ctx = {}) {
     const fwj = _fwJur(f.framework_short || f.citation);
     if (fwj !== 'GLOBAL' && !ctx.jurisdictions.includes(fwj)) { state = 'NEEDS_REVIEW'; confidence = Math.min(confidence, 0.5); signals.push('jurisdiction_mismatch'); }
   }
+  // E-041 compose: the scanner's evidence gate is authoritative — a gate-demoted finding is never re-CONFIRMED here.
+  if (f && f.gate_reason) { state = 'NEEDS_REVIEW'; confidence = Math.min(confidence, 0.5); signals.push('evidence_gate'); }
   const out = Object.assign({}, f, { kind, signals, confidence, state });
   // P1.5 evidence-lock: a statutory fine renders only on a CONFIRMED finding (fines originate only from the catalogue).
   if (state !== 'CONFIRMED') { out.fine_low_gbp = null; out.fine_high_gbp = null; out.fine_withheld = true; }
