@@ -199,7 +199,12 @@ function _confidence(fw, sec, universalSet) {
   return p;
 }
 
-function connect({ catalogue, jurisdictions, sector, signals, text }) {
+function connect({ catalogue, jurisdictions, sector, signals, text, mode }) {
+  // mode==='knowledge' (v22): crawl-free APPLIES-only attachment. Trigger and capability gates need site text,
+  // which knowledge mode by definition lacks, so they are skipped; jurisdiction, sector and nexus gates stay,
+  // and any framework whose required_nexus demands more than establishment (thresholds, state nexus) is skipped
+  // outright so nothing conditional ever attaches without its condition.
+  const _kMode = mode === 'knowledge';
   // Normalise variant sector names before routing so 'aesthetic' → 'aesthetics', 'legal' → 'law-firms', etc.
   // This makes the SECTOR_MAP lookup direct rather than relying only on the SECTOR_PARENTS chain.
   let _rawSec = String(sector || '').toLowerCase().trim();
@@ -216,6 +221,16 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
   const _estabAnywhere = Object.keys(_nx).some(k => _nx[k] && _nx[k].established_in);
   const _FAM_OF = j => { j=String(j||'').toUpperCase(); if(j==='UK')return 'UK'; if(j==='EU'||j.indexOf('EU-')===0)return 'EU'; if(j==='US'||j==='USA')return 'USA'; if(j==='AE'||j.indexOf('MENA-AE')===0||j.indexOf('AE-')===0)return 'AE'; return null; };
   const byFw = {}; for (const r of (catalogue.rules || [])) (byFw[r.framework_short] = byFw[r.framework_short] || []).push(r);
+  // Knowledge-mode attach set (v22, correct-by-construction): the family's ESTABLISHED baseline statutes plus any
+  // framework a catalogue author explicitly sector-tagged for this firm's sector. Trigger-only universal statutes
+  // (food law, telemarketing, issuers-only market abuse ...) stay OUT because without site text their condition is
+  // unproven; sector-tagged law is applicable by authorship; baseline law is applicable by family. Nothing else.
+  const _kFam = (() => { for (const j of (jurisdictions || [])) { const f = _FAM_OF(j) || (String(j).toUpperCase()==='SA'?'SA':String(j).toUpperCase()==='QA'?'QA':null); if (f) return f === 'USA' ? 'US' : f; } return null; })();
+  const _kBase = new Set(((_kFam && BASELINE_BY_FAMILY[_kFam]) || { established: [] }).established);
+  // Sub-jurisdiction and threshold statutes (US state privacy acts, BIPA, NYDFS, city ordinances) apply only on
+  // state nexus or economic thresholds that a crawl-free audit cannot evidence. In knowledge mode they are
+  // excluded outright rather than attached on family alone. The live-crawl path is untouched.
+  const _K_SUBJUR = /^US_(CPRA|CCPA|VCDPA|TDPSA|BIPA|WA_|NV_|CA_|IL_|CO_|TX_|NY|NYC_|MA_|FL_|NYDFS)|^NYDFS/;
 
   const gates = { jurisdiction_filtered: [], sector_filtered: [], nexus_filtered: [], trigger_filtered: [], regex_invalid: [] };
   const connectedFw = new Set(); const connectedRules = [];
@@ -225,6 +240,7 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     // GATE A · JURISDICTION: framework must belong to a jurisdiction the firm operates in. GLOBAL always applies.
     const jurOK = juris === 'GLOBAL' || J.has(juris);
     if (!jurOK) { gates.jurisdiction_filtered.push(fw); continue; }
+    if (_kMode && _K_SUBJUR.test(fw)) { gates.nexus_filtered.push(fw); continue; }
     // GATE B0 · framework-sector applicability (stops pharma/accounting/energy frameworks leaking into, say, a law firm)
     if (!fwSectorOK(fw, sec, byFw[fw])) { gates.sector_filtered.push(fw); continue; }
     if (require('./registry/sector.js').subSectorExcludes(fw, sec, t)) { gates.sector_filtered.push(fw); continue; }
@@ -244,12 +260,13 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     for (const r of byFw[fw]) {
       const sectors = Array.isArray(r.sector_relevance) ? r.sector_relevance : [];
       // GATE B · SECTOR: empty sector list = family baseline (E-024): gate on BASELINE_BY_FAMILY[firm family]; else firm sector must match (direct or parent alias).
+      if (_kMode && !sectors.length && !_kBase.has(fw)) { sectorHeld = true; continue; }
       if (!secMatches(sectors, sec)) { sectorHeld = true; continue; }
       // GATE C · TRIGGER: trigger_then_check AND prohibited rules only connect when their trigger is present
       // (text or signal). Prohibited rules carry a trigger naming the subject area (e.g. botox|filler, review|
       // testimonial); without it the framework was attaching on sector alone — leaking e.g. the Botox-Children
       // Act onto a dental firm or the FTC fake-reviews rule onto a firm with no reviews. Gating both fixes that.
-      if ((r.rule_type === 'trigger_then_check' || r.rule_type === 'prohibit') && r.trigger_pattern) {
+      if (!_kMode && (r.rule_type === 'trigger_then_check' || r.rule_type === 'prohibit') && r.trigger_pattern) {
         let trig = false;
         try { trig = new RegExp(r.trigger_pattern, 'i').test(t); } catch (_e) { gates.regex_invalid.push(r.rule_id); }
         if (!trig) trig = signalSatisfiesTrigger(r.trigger_pattern, sig);

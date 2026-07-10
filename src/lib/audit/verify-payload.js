@@ -30,9 +30,28 @@ function verifyPayload(p) {
   ok(!/statutory max|maximum fine|17\.5M or 4%/i.test(String((p.exec_summary && (p.exec_summary.headline || p.exec_summary.title)) || '')), 'V09_statutory_max_in_headline', '');
   // V-11 (blind-send hard floor): an audit that could not assess the live site is NEVER outreach-eligible,
   // whatever laws the catalogue attaches from registered-country metadata. Kills the unassessed-green blind spot.
+  // KNOWLEDGE-MODE EXCEPTION (v22): render_mode='knowledge' is the founder-directed fallback that ships the
+  // three crawl-free facts (sector, registered-country family, catalogue-bound laws) with ZERO claims about the
+  // live site. It is shippable IFF it truly asserts nothing: no shipped findings, no fines, no absence claims,
+  // exactly one registered-country family with registration-sourced nexus, and a non-empty binding map. Any
+  // deviation falls back to the hard V11 floor.
   const _unassessed = p.compliance_unassessed === true || String(p.compliance_unassessed) === 'true'
     || (p.scan && p.scan.reachable === false) || ((p.pages_crawled || []).length === 0);
-  ok(!_unassessed, 'V11_unassessed_crawl', (p.pages_crawled || []).length + ' pages');
+  const _kMode = p.render_mode === 'knowledge';
+  if (_kMode) {
+    ok(shipped.length === 0, 'V11K_knowledge_mode_shipped_findings', shipped.length + ' findings');
+    ok(!(p.pointers || []).some(x => x && (x.fine_low_gbp || x.fine_high_gbp)), 'V11K_knowledge_mode_carries_fines', '');
+    ok(fams.length === 1, 'V11K_knowledge_mode_family_count', fams.join(','));
+    ok(Object.values(nexus).every(v => !v || String(v.established_in || '').indexOf('registered_country:') === 0 || v.serves_customers_in == null), 'V11K_knowledge_nexus_source', '');
+    ok(binding.length > 0, 'V11K_knowledge_mode_empty_binding', '');
+  } else {
+    ok(!_unassessed, 'V11_unassessed_crawl', (p.pages_crawled || []).length + ' pages');
+  }
+  // V16 (v22, taxonomy uniformity): the shipped sector must be a canonical taxonomy code so every downstream
+  // tag (laws, sub-sectors, peer cohorts) joins cleanly. Aliases are the profiler's job, not the payload's.
+  try { const _sr = require('../../compliance/registry/sector.js') && require('../../compliance/registry/sector.js');
+    const _cs = _sr.CANONICAL_SECTORS; const _secOk = _cs && _cs.has(String(p.detected_sector || '').toLowerCase());
+    ok(!!_secOk, 'V16_noncanonical_sector', String(p.detected_sector || '')); } catch (_e) {}
   ok(!!p.domain && !!p.detected_sector, 'V10_missing_core_fields', '');
   ok(!shipped.some(x => x.citation === ''), 'V10_empty_citation', '');
   return { verified: R.length === 0, reasons: R, checked_at: new Date().toISOString(), verifier: 'v1-blueprint-E101-E110' };

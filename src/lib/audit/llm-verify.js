@@ -62,9 +62,10 @@ function _prompt(p) {
 
 async function llmVerifyPayload(p) {
   const binding = Object.keys((p && p.binding) || {});
-  // Nothing attached, or the deterministic path already declared the crawl unassessed: nothing for
-  // the LLM to second-guess; V11 handles unassessed.
-  if (!binding.length || p.compliance_unassessed === true) {
+  // Nothing attached: nothing to second-guess. Unassessed payloads are still checked when they carry a
+  // knowledge-mode binding map (v22), since wrong-law-on-family is exactly what this verifier exists to catch;
+  // V11 handles the plain unassessed case.
+  if (!binding.length || (p.compliance_unassessed === true && p.render_mode !== 'knowledge')) {
     return { status: 'skipped', flags: [], checked_at: new Date().toISOString() };
   }
   let out;

@@ -383,6 +383,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   ]);
   const frameworks = (comp.frameworks && comp.frameworks.length)
     ? comp.frameworks
+    : (comp && comp.compliance_unassessed) ? []  // fail-closed: never coarse-route laws onto an unread site (audit-of-the-audits)
     : (router.routeForMarkets ? router.routeForMarkets({ markets: scan.markets, country: effCountry, sector, signals: scan.signals }) : router.routeJurisdictions({ country: effCountry, sector }));
   const _gbp = (n) => n == null ? null : (n >= 1e6 ? '£' + (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1e3 ? '£' + Math.round(n / 1e3) + 'k' : '£' + Math.round(n));
   // Best-practice / GEO signals (Google E-E-A-T, schema, robots for AI engines) are NOT regulatory laws — they
@@ -738,6 +739,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     // #48: if the compliance scan threw (comp.compliance_unassessed), surface it so the renderer shows
     // "compliance not assessed this scan" instead of implying a clean bill of health.
     compliance_unassessed: !!(comp && comp.compliance_unassessed),
+    render_mode: (comp && comp.render_mode) || null,
     compliance_error: (comp && comp.compliance_error) || null,
     exec_summary,
     news_map: (() => { const nm = {}; const want = new Set((frameworks||[]).map(f=>String(f))); try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) { const fw = ln.slice(0, i); if (!want.size || want.has(fw)) nm[fw] = ln.slice(i + 1); } } } catch (_e) {} return nm; })(),
