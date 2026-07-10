@@ -234,7 +234,7 @@ async function _renderPage(url) {
   const svc = process.env.CRAWL_RENDER_URL;
   if (svc) {
     try {
-      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 25000);
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 40000);
       const u = svc + (svc.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url);
       const r = await fetch(u, { headers: { accept: 'application/json, text/plain' }, signal: ctl.signal });
       clearTimeout(t);
@@ -266,7 +266,7 @@ async function _archiveSnapshot(url) {
   } catch (_e) { return null; }
 }
 
-async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concurrency = 12 }) {
+async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 90000, concurrency = 14 }) {
   const base = 'https://' + domain;
   const corpus = []; const seenBody = new Set(); const used = new Set();
   // 1) homepage first (and a source of internal links)
@@ -344,7 +344,7 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concur
   // fetch — BOUNDED concurrency pool + wall-clock DEADLINE (every page, in seconds, without 120 simultaneous sockets
   // or a slow tail stalling the mint). Homepage(s) reused from above.
   const _homeFor = (u) => (u === base + '/' && home) ? home : (altBase && u === altBase + '/' && altHome) ? altHome : null;
-  const results = await _pool(fetchList, concurrency, deadlineMs, (u) => { const h = _homeFor(u); return h ? Promise.resolve(h) : fetchWithRetry(u, { timeout: 10000, retries: 1 }); });
+  const results = await _pool(fetchList, concurrency, deadlineMs, (u) => { const h = _homeFor(u); return h ? Promise.resolve(h) : fetchWithRetry(u, { timeout: 15000, retries: 1 }); });
   for (let i = 0; i < fetchList.length; i++) {
     const r = results[i]; const url = fetchList[i];
     if (r && r.ok && r.body && r.body.length > 400) {
@@ -360,9 +360,9 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concur
   try {
     const shells = [];
     for (let i = 0; i < fetchList.length; i++) { const r = results[i]; const u = fetchList[i]; if (r && (r.status === 200 || r.ok) && r.body && r.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, '').length < 500 && !r.challenge) shells.push(u); }
-    const toRender = shells.slice(0, 20);                                   // cap the headless tail
+    const toRender = shells.slice(0, 30);                                   // cap the headless tail
     if (toRender.length) {
-      const rendered = await _pool(toRender, Math.min(4, concurrency), Math.max(8000, deadlineMs / 2), (u) => _renderPage(u));
+      const rendered = await _pool(toRender, Math.min(6, concurrency), Math.max(45000, Math.floor(deadlineMs * 0.6)), (u) => _renderPage(u));
       for (let i = 0; i < toRender.length; i++) { const txt = rendered[i]; const u = toRender[i]; if (txt && txt.replace(/\s+/g, '').length > 500) { const sig = _crypto.createHash('sha1').update(txt).digest('hex'); if (seenBody.has(sig)) continue; seenBody.add(sig); corpus.push({ url: u, body: txt, status: 200, fetch_ms: 0, bytes: Buffer.byteLength(txt), rendered: true }); } }
     }
   } catch (_e) {}
@@ -378,7 +378,7 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 28000, concur
     // bug that skipped the free Jina rescue on WAF-blocked runners and shipped an empty (unassessed) audit. Render the
     // homepage + key policy/about pages via Jina so a datacenter-blocked site still yields a usable multi-page corpus.
     const renderTargets = [base + '/', ...guessed.filter(u => /privacy|terms|about|legal|cookie|contact|service|regulat/i.test(u)).slice(0, 6)];
-    const rendered = await _pool(renderTargets, renderTargets.length, 14000, (ru) => _renderViaReader(ru));
+    const rendered = await _pool(renderTargets, renderTargets.length, 45000, (ru) => _renderViaReader(ru));
     for (let i = 0; i < renderTargets.length; i++) {
       const txt = rendered[i]; const ru = renderTargets[i];
       if (txt && txt.replace(/\s+/g, '').length > 500) {
@@ -772,7 +772,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v19-2026-07-jina-crawl-rescue';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v20-2026-07-adaptive-render';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
