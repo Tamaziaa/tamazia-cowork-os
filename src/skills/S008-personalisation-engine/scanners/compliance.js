@@ -737,10 +737,10 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
 const _SPAM_RX = /\b(1xbet|melbet|betway|casino|slots?\b|sportsbook|\bbetting\b|payday loan|viagra|cialis|tadalafil|replica (watch|rolex|handbag|bag)|\bescort(s)?\b|porn|adult cam|crypto (giveaway|airdrop|doubler)|forex signals|essay writing service|cbd gummies|\bsex\b)\b/gi;
 function _detectCompromise(corpus, sector) {
   if (/gambl|casino|\bbet\b|betting|adult|pharma|crypto|cannabis|cbd/i.test(String(sector || ''))) return null; // legit use of these terms
-  let hits = 0; const samples = new Set();
+  let hits = 0; const samples = new Set(); let firstUrl = null;
   for (const c of (corpus || [])) {
     const m = String(c.body || '').match(_SPAM_RX);
-    if (m) { hits += m.length; m.slice(0, 4).forEach(x => samples.add(x.toLowerCase().trim())); }
+    if (m) { hits += m.length; if (!firstUrl) firstUrl = c.url || null; m.slice(0, 4).forEach(x => samples.add(x.toLowerCase().trim())); }
   }
   if (hits < 6 || samples.size < 2) return null;
   const ex = Array.from(samples).slice(0, 5);
@@ -749,7 +749,7 @@ function _detectCompromise(corpus, sector) {
     description: 'Suspected site compromise: injected spam / off-topic content',
     layman_explanation: 'Your website appears to be serving injected spam content (' + ex.join(', ') + ') unrelated to your business — a strong indicator the site has been hacked or hit by an SEO-spam injection. This poisons your Google reputation, can trigger a manual penalty / "this site may be hacked" label, and exposes visitors to harm.',
     tamazia_fix_short: 'Urgent: scan for malware/injected content, remove the spam, patch and harden the CMS/plugins, rotate credentials, then request a Google security review.',
-    evidence_quote: ex.join(', '), penalty_basis: 'non_monetary', penalty_note: 'urgent security remediation (reputational + Google manual-action risk)',
+    evidence_quote: ex.join(', '), evidence_url: firstUrl, checked_urls: (corpus || []).map(x => x && x.url).filter(Boolean).slice(0, 12), penalty_basis: 'non_monetary', penalty_note: 'urgent security remediation (reputational + Google manual-action risk)',
   };
 }
 
@@ -1129,6 +1129,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   } catch (_pce) {}
 
   const payload = {
+    nexus: _nx, jurisdiction_families: _jurFamilies,
     inspected_by_framework: _inspectedByFramework(frameworks, corpus), pages_crawled: (corpus || []).map(x => x && (x.label || x.url)).filter(Boolean),
     domain, sector, country, ok: true, reachable: true,
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
@@ -1166,6 +1167,7 @@ function _evidenceGate(findings, pages) {
     const demote = reason => Object.assign({}, f, { state: 'NEEDS_REVIEW', fine_withheld: true, gate_reason: reason });
     const q = String(f.evidence_snippet || f.evidence_quote || (f.breach_panel && f.breach_panel.where && f.breach_panel.where.quote) || '').trim();
     if (f.status === 'miss' || f.kind === 'absence') {
+      if (q && q.length >= 25 && hay.includes(q.toLowerCase())) return f; // presence-class proof (e.g. injected spam found)
       const ae = f.absence_evidence;
       if (!(ae && (ae.target_url || ae.pages_checked)) && !((f.checked_urls || []).length)) return demote('absence_without_proving_page');
       return f;
