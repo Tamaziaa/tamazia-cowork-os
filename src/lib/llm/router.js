@@ -203,7 +203,7 @@ async function callAnthropic({ system, prompt, model, max_tokens, temperature })
 // Placed FIRST in the chains (gated on the key) so, when present, grounding no longer depends on rate-limited free
 // tiers. If the key is absent or the model is not yet activated (AccessDenied.Unpurchased) it fails fast and the
 // chain falls over to the free providers, so wiring it is safe even before activation.
-const _QWEN_BASE = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+const _QWEN_BASE = process.env.DASHSCOPE_BASE_URL || 'https://ws-68b311bmgelxd5vz.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1';
 async function callQwen({ system, prompt, model, max_tokens, temperature, json }) {
   const t0 = Date.now();
   const body = { model, messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }], max_tokens: max_tokens || 1024, temperature: typeof temperature === 'number' ? temperature : 0.2 };
@@ -228,42 +228,33 @@ const _QWEN_STEP = process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: _
 // Default chain: free first, paid last. NIM inserted as an extra free, separate-quota tier before Gemini.
 const _NIM_MODEL = process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct';
 const DEFAULT_CHAIN = [
-  ..._QWEN_STEP,
-  { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
-  { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct' },
   { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
   { provider: 'groq',       model: 'llama-3.1-8b-instant' },
   ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
   { provider: 'gemini',     model: 'gemini-2.0-flash' },
-  ...(process.env.ANTHROPIC_API_KEY ? [{ provider: 'anthropic', model: 'claude-haiku-4-5' }] : [])
+  ..._QWEN_STEP
 ];
 
-// Smart routing by role
+// Smart routing by role. HIERARCHY (per founder): groq -> NVIDIA NIM -> gemini -> Alibaba Qwen (paid fallover, last).
 const ROUTE_BY_ROLE = {
-  // Fast structured extraction: prefer Groq 70B (faster, JSON-stable) then Cloudflare
   extract: [
-    ..._QWEN_STEP,
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
-    { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
-    { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct' },
+    ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
     { provider: 'gemini',     model: 'gemini-2.0-flash' },
-    ...(process.env.ANTHROPIC_API_KEY ? [{ provider: 'anthropic', model: 'claude-haiku-4-5' }] : [])
+    ..._QWEN_STEP
   ],
-  // Pointer synthesis: bigger model first
   synthesise: [
-    ..._QWEN_STEP,
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
-    { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
+    ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
     { provider: 'gemini',     model: 'gemini-2.0-flash' },
-    ...(process.env.ANTHROPIC_API_KEY ? [{ provider: 'anthropic', model: 'claude-haiku-4-5' }] : [])
+    ..._QWEN_STEP
   ],
-  // Cheap classification: free 8B first
   classify: [
-    ..._QWEN_STEP,
-    { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct' },
     { provider: 'groq',       model: 'llama-3.1-8b-instant' },
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
-    ...(process.env.ANTHROPIC_API_KEY ? [{ provider: 'anthropic', model: 'claude-haiku-4-5' }] : [])
+    ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
+    { provider: 'gemini',     model: 'gemini-2.0-flash' },
+    ..._QWEN_STEP
   ]
 };
 
