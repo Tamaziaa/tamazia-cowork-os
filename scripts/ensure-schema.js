@@ -107,3 +107,6 @@ async function main() {
   process.exit(0); // never block the cycle
 }
 main();
+
+// E-082 columns (blind-send): self-provision so a fresh environment never fails the gated INSERT.
+try { pg("alter table audit_pages add column if not exists verified boolean, add column if not exists verify_report jsonb"); } catch (e) {}
