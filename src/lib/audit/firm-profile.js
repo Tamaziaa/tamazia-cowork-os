@@ -46,7 +46,7 @@ function _code(name) { return COUNTRY_CODE[String(name || '').toLowerCase().trim
 // Ordered most-specific first. Returns a SECTORS-list value or null (genuinely unknown — do not fabricate).
 // Never emits "general": unknown sector → null so downstream gating signals low-confidence, not wrong pack.
 const _SECTOR_KW = [
-  [/\bsolicit|barrister|\bllp\b|law firm|law offices|sra number|legal service|legal counsel|attorneys?\b|lawyers?\b|conveyancing|litigation|practice areas|employment law|immigration law|corporate law/i, 'law-firms'],
+  [/\bsolicit|barrister|law firm|law offices|sra number|regulated by the sra|legal services (firm|team)|conveyancing (quality|service|solicitor)|our (solicitors|lawyers|attorneys)|firm of (solicitors|lawyers)|employment law|immigration law/i, 'law-firms'],
   [/\bbarrister|chambers\b|inn of court/i, 'barristers'],
   [/\bgmc\b|cqc register|cosmetic (surgery|procedure)|botox|anti.wrinkle|dermal filler|aesthetic (clinic|treatment)|medspa|med.spa|skin clinic|filler treatment|lip filler|rhinoplasty|breast augmentation|plastic surgeon|aesthetic practitioner/i, 'aesthetic'],
   [/\bdentist|dental (practice|clinic|implant)|orthodont|gdc\b|nhs dental/i, 'dental'],
@@ -85,6 +85,12 @@ const _SECTOR_KW = [
 // deterministic and LLM paths (cert fix: the LLM is frequently off at mint, so the override must not depend on it).
 function _selfIdOverride(lc) {
   if (/(chartered (certified )?accountants?|\baccountanc(y|ies)\b|firm of accountants|\bacca\b|\bicaew\b|registered auditors?|tax advisers? and accountants|specialist accountants|bookkeeping (services|firm))/.test(lc)) return 'accounting';
+  // own-firm = a wealth manager / financial-advisory / investment firm. Placed right after the accountancy guard and
+  // BEFORE the consultancy guard, because "financial/wealth/investment advisory firm" is FINANCE, not management
+  // consulting. Fixes masecoprivatewealth (LLP->law), finsbury/margettswealth/tanagerwealth being read wrong.
+  if (/\b(wealth management (firm|company|service|partner|team)|private wealth (management|manager|advis)|independent financial advis(e|o)r|financial (advisory|planning) (firm|practice|service|team)|investment (management|advisory) (firm|company|service)|discretionary (fund|portfolio) manage|we are (a|an) [a-z -]{0,25}(wealth|financial|investment) (manage|advis|planning)|sec[- ]registered (invest|advis)|registered investment advis)/.test(lc)) return 'finance';
+  // own-firm = a law firm (OWN-context only, never a bare "attorney"/"llp" that any firm can carry).
+  if (/\b(we are (a|an) [a-z -]{0,20}(law firm|firm of solicitors)|firm of (solicitors|barristers)|regulated by the (sra|solicitors regulation authority|bar standards board)|our (solicitors|barristers|advocates) |practising certificate|(law offices|the law firm) of|sra (number|regulated|id)|advocates (and|&) legal consultants?|legal consultan(cy|ts)\b|\bdifc\b.{0,30}(law|legal|advocat)|(disputes|litigation|arbitration) (practice|team|lawyers|department)|full[- ]service law firm)/.test(lc)) return 'law-firms';
   if (/\b(housing association|registered provider of social housing|registered social landlord)\b/.test(lc)) return 'real-estate';
   // own-firm = a consultancy/advisory practice (advising client sectors like hotels/health is NOT being in them)
   if (/\b((we are|we're) (a|an) [a-z -]{0,30}(consultancy|advisory (firm|practice)|consulting firm)|\bconsultanc(y|ies)\b|(management|strategy|business|hospitality|advisory|boutique) consult|consulting (firm|practice|group|services|company)|(advisory|consulting) activities\b|pioneer in [a-z ]{0,20}consulting|team of [a-z0-9 ]{0,20}consultants|we (advise|consult for|provide advisory))/.test(lc)) return 'professional-services';
@@ -92,6 +98,9 @@ function _selfIdOverride(lc) {
   if (/\b((our|the) (software|saas|platform|product) (platform |solution )?(helps|enables|automates|powers|delivers)|we (build|develop|provide|offer) (a |our )?(software|saas|platform)|(ai|automation|software) platform for|enterprise software (company|vendor|provider))/.test(lc)) return 'saas';
   // own-firm = a marketing/creative agency (marketing FOR clinics/charities is NOT healthcare/charity)
   if (/\b((we are|we're) (a|an) [a-z -]{0,30}(marketing|advertising|creative|digital|branding|seo|pr) agency|full.service [a-z -]{0,20}agency|digital marketing agency|creative agency|advertising agency)/.test(lc)) return 'marketing';
+  // own-firm = an estate / letting agency (own-identity). Fixes connells/lvproperty/maguirejackson being read as
+  // insurance/law/hospitality because they also mention mortgages/conveyancing/local restaurants.
+  if (/\b(estate agents?|estate agency|letting agents?|lettings? (agency|specialist|team)|sales (and|&) lettings|property (for sale|to let|to rent)|homes for sale|we are (a|an) [a-z -]{0,20}(estate|letting) agen|independent estate agen|(rightmove|zoopla|onthemarket)|residential (sales|lettings) (agen|team|service))/.test(lc)) return 'real-estate';
   // own-firm = a hotel / accommodation venue. High precision: needs >=2 distinct booking/rooms signals so a passing
   // "hotel" mention on a non-hotel site (or a blog/"news" section) cannot flip a real hotel to 'media'. Fixes
   // mercuremanchester.co.uk (a 4-star hotel) being classified 'media' and attached IPSO/OSA press frameworks.
@@ -124,7 +133,7 @@ function _domainProfession(domain) {
   if (/(aesthetic|cosmeticsurgery|skinclinic|medspa|medispa)/.test(d)) return 'aesthetic';
   if (/(pharmacy|pharmaceutical|\bpharma)/.test(d)) return 'pharma';
   if (/(physiotherap|physio|gpsurgery|medicalcentre|medicalcenter|healthcare|hospital(?!ity))/.test(d)) return 'healthcare';
-  if (/(realty|realestate|estateagent|lettingagent|propertygroup|propertymanagement|lettings|chartered ?surveyor)/.test(d)) return 'real-estate';
+  if (/(realty|realestate|estateagent|lettingagent|propertygroup|propertymanagement|lettings|property|homes|\bproperties\b|chartered ?surveyor)/.test(d)) return 'real-estate';
   if (/(hotel|resort|restaurant|bistro|brasserie|guesthouse|bedandbreakfast|hospitality)/.test(d)) return 'hospitality';
   if (/(wealth|assetmanage|financialadvis|financialplann|wealthadvis|\bifa\b|privatewealth|investmentmanage|capitalpartners|wealthpartners)/.test(d)) return 'finance';
   if (/(insurance|underwrit)/.test(d)) return 'insurance';
