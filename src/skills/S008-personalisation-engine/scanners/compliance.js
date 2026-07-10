@@ -772,7 +772,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22-2026-07-knowledge-mode';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.2-2026-07-family-canon';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
@@ -966,9 +966,23 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     for (const c of _estF) if (!allJurisdictions.includes(c)) allJurisdictions.push(c);
     if (!allJurisdictions.length) allJurisdictions = _estF.length ? [..._estF] : [String(country || 'UK').toUpperCase()];
   }
-  _jurFamilies = { families: [...new Set(allJurisdictions.map(j => String(j).toUpperCase()))],
-                         primary: (_estF[0] || String(country || allJurisdictions[0] || 'UK').toUpperCase()),
+  const _FAMALIAS = { UAE: 'AE', USA: 'US', GB: 'UK', GBR: 'UK', KSA: 'SA' };
+  const _famCanon = (j) => { const u = String(j).toUpperCase(); return _FAMALIAS[u] || u; };
+  _jurFamilies = { families: [...new Set(allJurisdictions.map(_famCanon))],
+                         primary: _famCanon(_estF[0] || String(country || allJurisdictions[0] || 'UK')),
                          serves_only: _srvF.filter(c => !_estF.includes(c)) };
+  }
+  // H4 (agents, v22.2): a family kept only by the registered-country fallback must still carry typed nexus
+  // evidence, or V07 rightly quarantines it. Company registration IS establishment evidence, so inject it for
+  // the registered family when signal derivation found nothing. Foreign families never get this injection.
+  { const _regFam = (() => { const u = String(country || '').toUpperCase(); return ({ UAE: 'AE', USA: 'US', GB: 'UK', GBR: 'UK', KSA: 'SA' })[u] || u; })();
+    const _NXK = { UK: 'UK', EU: 'EU', US: 'USA', AE: 'AE', SA: 'SA', QA: 'QA' };
+    for (const f of _jurFamilies.families) {
+      const k = _NXK[f] || f;
+      if (f === _regFam && !(_nx[k] && (_nx[k].established_in || _nx[k].serves_customers_in))) {
+        _nx[k] = { established_in: 'registered_country:' + _regFam, source: 'company_registration' };
+      }
+    }
   }
   // POST-BREXIT EU GATE (anti-frivolous): a non-EU-registered firm is EU-regulated only with a CONCRETE EU market
   // signal — EUR pricing, a named EU country served, or an EU-registered entity — NOT a mere "GDPR"/"Europe"
