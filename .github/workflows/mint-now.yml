@@ -49,3 +49,9 @@ jobs:
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ensure-schema.js || true
           node scripts/mint-worker.js --once --reclaim-startup
+
+      - name: send-gate summary
+        if: always()
+        env:
+          NEON_URL: ${{ secrets.NEON_URL }}
+        run: node -e "const{Client}=require('pg');(async()=>{const c=new Client({connectionString:process.env.NEON_URL,ssl:{rejectUnauthorized:false}});await c.connect();const r=await c.query(\"select verified, count(*) c from audit_pages where generated_at > now() - interval '6 hours' group by 1\");console.log('SEND-GATE:',JSON.stringify(r.rows));await c.end();})().catch(e=>console.log('summary skip',e.message))"
