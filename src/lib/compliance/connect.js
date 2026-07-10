@@ -9,18 +9,26 @@ const ROOT = path.resolve(__dirname, '..', '..', '..');
 const { EU_ISO, normJuris } = require('./registry/jurisdiction.js');
 
 // Frameworks that apply to EVERY sector (privacy, cookies, consumer protection, equality, advertising, Google).
-const UNIVERSAL_FW = new Set([
-  'GOOGLE_EEAT',
-  'UK_GDPR_A13','UK_PECR','UK_ICO_COOKIES','UK_DPA_2018','UK_DMCC_2024','UK_COMPANIES_ACT','UK_EQUALITY_2010','UK_CRA_2015','UK_CMA','UK_TRADING_STANDARDS','UK_ASA_CAP',
-  // UK_MODERN_SLAVERY removed from UNIVERSAL: MSA s.54 only binds commercial organisations with UK turnover ≥£36M.
-  // It now lives only in the sector map (manufacturing, construction, transport, energy) — so SME clinics/schools/
-  // law firms never get it, while large supply-chain sectors still do. (F-1 fix / 5-of-9 false-positive class)
-  'EU_GDPR','EU_EPRIVACY','EU_AI_ACT','EU_EAA_2025','EU_DSA',
-  'US_FTC','US_CPRA','US_CCPA','US_FTC_ENDORSE','US_ADA','US_TCPA','US_VCDPA','US_TDPSA',
-  // US_STATE_PRIVACY removed (legal-QA P1): non-citable catch-all that duplicated the named state acts
-  // (CCPA/CPRA/VCDPA/TDPSA). The named, citable statutes carry the obligation; the catch-all only added noise.
-  'UAE_PDPL','DIFC_DPL','ADGM_DPR','SAUDI_PDPL','QATAR_PDPPL','BAHRAIN_PDPL','OMAN_PDPL','EGYPT_PDPL','JORDAN_PDPL','ISRAEL_PPL','DE_BDSG','FR_CNIL_2025',
-]);
+// E-023 (blind-send): baseline law is a function of the firm's nexus FAMILY, never a global set.
+// UNIVERSAL_FW kept as the derived union so resolver.js gating (line 90-98 contract) cannot drift.
+const BASELINE_BY_FAMILY = {
+  UK: { established: ['UK_GDPR_A13', 'UK_DPA_2018', 'UK_PECR', 'UK_ICO_COOKIES', 'UK_COMPANIES_ACT', 'UK_EQUALITY_2010', 'UK_ASA_CAP'],
+        serves:      ['UK_GDPR_A13', 'UK_PECR', 'UK_CRA_2015', 'UK_DMCC_2024'] },
+  EU: { established: ['EU_GDPR', 'EU_EPRIVACY', 'EU_EAA_2025', 'EU_DSA'],
+        serves:      ['EU_GDPR', 'EU_EPRIVACY', 'EU_EAA_2025', 'EU_DSA'] },
+  US: { established: ['US_FTC', 'US_ADA'],
+        serves:      ['US_FTC', 'US_FTC_ENDORSE', 'US_CANSPAM', 'US_TCPA'] },
+  AE: { established: ['UAE_PDPL', 'UAE_CONSUMER', 'UAE_ECOMMERCE'],
+        serves:      ['UAE_PDPL'] },   // PDPL Art.2 extraterritorial reach; sector law needs establishment
+  SA: { established: ['SAUDI_PDPL'], serves: ['SAUDI_PDPL'] },
+  QA: { established: ['QATAR_PDPPL'], serves: ['QATAR_PDPPL'] },
+  GLOBAL: { established: ['GOOGLE_EEAT'], serves: ['GOOGLE_EEAT'] },   // non-statutory, stays global (E-023)
+};
+// Blueprint parenthetical gates preserved — consumed by the conditional/CAP_GATE paths, never silently dropped.
+const BASELINE_GATES = { UK_COMPANIES_ACT: 'cap', UK_CRA_2015: 'cap', UK_DMCC_2024: 'consumer-signal', EU_EAA_2025: 'capability', EU_DSA: 'capability', US_FTC_ENDORSE: 'review-signal', US_CANSPAM: 'email-signal', US_TCPA: 'sms-tel-signal', UAE_ECOMMERCE: 'commerce-signal' };
+// REMOVED from every baseline per E-023: DIFC_DPL/ADGM_DPR (registry allowlist + free-zone establishment only),
+// US_CPRA/US_CCPA/US_VCDPA/US_TDPSA (MONITOR by threshold), DE_BDSG/FR_CNIL_2025 (member-state establishment only).
+const UNIVERSAL_FW = new Set(Object.values(BASELINE_BY_FAMILY).flatMap(v => [...v.established, ...v.serves]));
 // SECTOR_PARENTS: signals.js SECTOR_RX and jurisdiction-router.js SECTOR_MAP use different vocab for the
 // same sector. This bridges them so GATE B0 + GATE B rule matching works correctly end-to-end.
 // Also maps child sectors (aesthetics → healthcare) so inherited regulator rules fire correctly.
@@ -235,7 +243,7 @@ function connect({ catalogue, jurisdictions, sector, signals, text }) {
     let anyRule = false, triggerHeld = false, sectorHeld = false;
     for (const r of byFw[fw]) {
       const sectors = Array.isArray(r.sector_relevance) ? r.sector_relevance : [];
-      // GATE B · SECTOR: empty sector list = universal; else firm sector must match (direct or parent alias).
+      // GATE B · SECTOR: empty sector list = family baseline (E-024): gate on BASELINE_BY_FAMILY[firm family]; else firm sector must match (direct or parent alias).
       if (!secMatches(sectors, sec)) { sectorHeld = true; continue; }
       // GATE C · TRIGGER: trigger_then_check AND prohibited rules only connect when their trigger is present
       // (text or signal). Prohibited rules carry a trigger naming the subject area (e.g. botox|filler, review|
@@ -292,4 +300,4 @@ function loadCatalogue() {
   return _cat;
 }
 
-module.exports = { connect, connectSelfTest, loadCatalogue, expandJurisdictions, normJuris, EU_ISO, UNIVERSAL_FW, fwToSectors };
+module.exports = { BASELINE_BY_FAMILY, BASELINE_GATES, connect, connectSelfTest, loadCatalogue, expandJurisdictions, normJuris, EU_ISO, UNIVERSAL_FW, fwToSectors };

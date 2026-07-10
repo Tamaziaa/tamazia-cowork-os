@@ -1,3 +1,14 @@
+// E-023 twin (blind-send): consent regime keyed on the firm's OWN families, never hardcoded UK.
+function _cookieRegimes(m) {
+  const fams = ((m && (m.families || m.regions)) || []).map(x => String(x).toUpperCase());
+  const has = f => fams.some(x => x.includes(f));
+  const regs = [];
+  if (has('UK') || has('UNITED KINGDOM')) regs.push('UK PECR + UK GDPR');
+  if (has('EU') || has('EUROPE')) regs.push('EU ePrivacy Directive + EU GDPR');
+  if (has('US') || has('UNITED STATES')) regs.push('US state privacy law (CCPA/CPRA, where thresholds are met)');
+  if (has('ME') || has('AE') || has('MIDDLE') || has('GULF') || has('EMIRATES')) regs.push('UAE PDPL (Federal Decree-Law 45/2021) consent rules');
+  return regs.length ? regs : ['the data-protection law of your operating market'];
+}
 // Phase B audit scanners — Node-native, no Chrome, no host, fail-open. Each returns evidence-tied
 // pointers in the engine's standard shape. Attached to the converged scanSite. Every check degrades
 // to an empty result on failure, never throws.
@@ -64,7 +75,7 @@ function cookieCompliance(html, markets) {
     // No consent mechanism at all → clear breach.
     out.push(P('compliance', 'P1', regs.join(' + ') + ' · cookie consent',
       ne.length + ' non-essential tracker(s) load with no detectable consent mechanism: ' + list + '.',
-      'These trackers set cookies and share data with ' + controllers + ' the moment the page loads, before the visitor consents. That breaches ' + regs.join(' and ') + '. You serve clients in ' + ((m.regions || ['the UK']).join(', ')) + ', so each of those regimes applies regardless of where the firm is registered. The ICO is actively reviewing the UK\'s top 1,000 sites and the maximum PECR fine is now £17.5M or 4% of global turnover.',
+      'These trackers set cookies and share data with ' + controllers + ' the moment the page loads, before the visitor consents. That breaches ' + (_cookieRegimes(m).join(' and ')) + '. You serve clients in ' + ((m.regions || ['the UK']).join(', ')) + ', so each of those regimes applies regardless of where the firm is registered. ' + (((_cookieRegimes(m)[0] || '').includes('PECR')) ? 'The ICO is actively reviewing the UK\'s top 1,000 sites and the maximum PECR fine is now £17.5M or 4% of global turnover.' : 'Your market regulator enforces consent directly; penalties follow the cited statute.') + '',
       'Tamazia installs a consent platform that blocks every non-essential tracker until opt-in, with a Reject-All button as prominent as Accept-All.',
       'homepage HTML · ' + ne.length + ' non-essential trackers, no consent gate · controllers: ' + controllers));
   } else {

@@ -83,6 +83,19 @@ const _SECTOR_KW = [
 // every pattern is anchored to a self-describing phrase ("firm of", "we are a", "our platform"), never a
 // passing mention, so a client term (charity/hotel/bank) in the body can't flip the result. Runs in BOTH the
 // deterministic and LLM paths (cert fix: the LLM is frequently off at mint, so the override must not depend on it).
+function _scoreSectorCues(text) {
+  // E-005 helper: score every sector's cues over visible text; top + runner-up + evidence phrases.
+  const lc = String(text || '').toLowerCase(); const hits = {}; const ev = {};
+  const entries = Array.isArray(_SECTOR_KW) ? _SECTOR_KW : Object.entries(_SECTOR_KW);
+  for (const [sec, rx] of entries) {
+    const re2 = new RegExp(rx.source, rx.flags && rx.flags.includes('g') ? rx.flags : (rx.flags || '') + 'g');
+    const m = lc.match(re2) || [];
+    hits[sec] = new Set(m.map(x => x.trim())).size; if (m.length) ev[sec] = [...new Set(m)].slice(0, 5);
+  }
+  const order = Object.entries(hits).sort((a, b) => b[1] - a[1]);
+  return { top: order[0] && order[0][1] ? order[0][0] : null, topHits: order[0] ? order[0][1] : 0,
+           runnerHits: order[1] ? order[1][1] : 0, evidence: (order[0] && ev[order[0][0]]) || [] };
+}
 function _selfIdOverride(lc) {
   if (/(chartered (certified )?accountants?|\baccountanc(y|ies)\b|firm of accountants|\bacca\b|\bicaew\b|registered auditors?|tax advisers? and accountants|specialist accountants|bookkeeping (services|firm))/.test(lc)) return 'accounting';
   // own-firm = a wealth manager / financial-advisory / investment firm. Placed right after the accountancy guard and
@@ -167,8 +180,17 @@ async function profileFirm({ corpus = '', domain = '', country = '', sector = ''
   const text = (_visibleText.length >= 200 ? _visibleText : String(corpus || '').replace(/\s+/g, ' ').trim()).slice(0, 12000);
   // R-1/R-2: deterministic keyword-first resolution. Never emit the raw "General" sector — use corpus keywords instead.
   const _ovr = _selfIdOverride(String(text || '').toLowerCase()) || _domainProfession(domain);   // high-confidence own-business self-ID (corpus phrase OR domain profession) — wins over stale ICP
-  const deterministicSector = _ovr || _detectSectorFromCorpus(text, sector);
-  const fallback = { primary_sector: deterministicSector || null, sectors: deterministicSector ? [deterministicSector] : [], hq_country: country || null, office_countries: [], serves: [], source: 'fallback', sector_self_id: !!_ovr };
+  const _kwSector = _detectSectorFromCorpus(text, sector);
+  // E-005 (blind-send): deny-by-default. No self-ID, no domain profession, and a weak or tied keyword score
+  // must NEVER select a regulated sector's laws. Uncertain firms take professional-services (universal
+  // baseline only) with sector_confident=false. This kills the ahdubai class at source: a hospital can no
+  // longer inherit law-firms from a stray cue, because the winning sector must show >=2 distinct own cues
+  // AND strictly beat the runner-up.
+  const _scored = _scoreSectorCues(text);
+  const _kwConfident = !!_kwSector && _scored.top === _kwSector && _scored.topHits >= 2 && _scored.topHits > _scored.runnerHits;
+  const deterministicSector = _ovr || (_kwConfident ? _kwSector : 'professional-services');
+  const sector_confident = !!_ovr || _kwConfident;
+  const fallback = { primary_sector: deterministicSector || null, sectors: deterministicSector ? [deterministicSector] : [], hq_country: country || null, office_countries: [], serves: [], source: 'fallback', sector_self_id: !!_ovr, sector_confident, sector_evidence: _ovr ? ['self_id'] : _scored.evidence };
   if (!text || text.length < 200) return fallback;
   const prompt = `You are a meticulous compliance analyst. From the WEBSITE TEXT below, extract ONLY what the text actually evidences — never guess or infer beyond it.
 Return STRICT JSON only:
@@ -206,7 +228,7 @@ ${text}`;
     office_countries: offices, serves, source: 'llm',
     // self-ID override fired → high confidence. OR the LLM ran successfully (own-vs-client prompt) and returned a
     // sector: trust that over a stale scraped ICP label (which is often the CLIENT industry, e.g. RegTech→fintech).
-    sector_self_id: !!_ovr, sector_from_llm: !!llmSector,
+    sector_self_id: !!_ovr, sector_from_llm: !!llmSector, sector_confident: (typeof sector_confident !== 'undefined' ? sector_confident : true), sector_evidence: (fallback.sector_evidence || []),
   };
 }
 

@@ -719,6 +719,10 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     company: (() => { const nm = (company && String(company).trim()) || ''; const fp = (comp && comp.firm_profile) || {}; const scanned = fp.name || fp.legal_name || fp.display_name || fp.trading_name || fp.brand || ''; if (scanned && String(scanned).trim()) return String(scanned).trim(); return nm || null; })(),
     via_archive: !!(comp && comp.via_archive), archive_date: (comp && comp.archive_date) || null,
     engine_jurisdictions: (comp && comp.jurisdictions) || [],
+    nexus: (comp && comp.nexus) || null,
+    jurisdiction_families: (comp && comp.jurisdiction_families) || null,
+    inspected_by_framework: (comp && comp.inspected_by_framework) || null,
+    pages_crawled: (comp && comp.pages_crawled) || [],
     rules,
     // Evidence-tied findings from the real site scan — surfaced at top level so any renderer can read them
     pointers: (() => {
@@ -793,7 +797,13 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   const payloadJsonE = JSON.stringify(neonPayload).replace(/'/g, "''");
   // A4j — RETURNING id + loud failure: pg() returns null/'' on error, and a silently-failed INSERT here means a
   // DEAD AUDIT LINK gets emailed. Never return {slug,hash} unless the row is provably written.
-  let ins = pg(`INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds})) RETURNING id`);
+  // E-082 (blind-send): verify BEFORE the write. A red payload persists quarantined (verified=false, machine
+  // reasons in verify_report) and is never outreach-eligible; the loop inspects reds and re-mints after fixes.
+  let _verify; try { _verify = require('../../../lib/audit/verify-payload.js').verifyPayload(payload); }
+  catch (e) { _verify = { verified: false, reasons: [{ code: 'verifier_crash', detail: String(e).slice(0, 160) }] }; }
+  if (!_verify.verified) console.error('[send-gate] QUARANTINED ' + domain + ' ' + JSON.stringify(_verify.reasons).slice(0, 280));
+  const verifyE = JSON.stringify(_verify).replace(/'/g, "''");
+  let ins = pg(`INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}), ${_verify.verified}, '${verifyE}'::jsonb) RETURNING id`);
   // A >100KB payload is routed by pg() through the psql -f path, which EXECUTES the INSERT but returns no RETURNING
   // output — so confirm the row with a small SELECT before declaring failure (else a successful large-payload mint
   // is wrongly rejected as a dead link).

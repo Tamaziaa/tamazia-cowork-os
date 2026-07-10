@@ -760,7 +760,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v17-2026-07-10-own-identity-selfid';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v18-2026-07-blindsend';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
@@ -909,6 +909,23 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       return _PRIMARY.has(u) || u.indexOf('EU-') === 0 || u.indexOf('AE-') === 0 || u.indexOf('MENA') === 0 || u.indexOf('US-') === 0 || u.indexOf('UK-') === 0;
     });
     if (!allJurisdictions.length && country) allJurisdictions = [String(country).toUpperCase()];  // never leave it empty — fall back to registered country
+  // E-014 (blind-send): jurisdictions are typed nexus, not vibes. Keep only families with EDPB-factor
+  // evidence (established_in OR serves) from signals.nexus; ALWAYS retain establishment families even when
+  // another family's serve-signals are louder (maseco class); an evidence-less family can never attach
+  // (maguirejackson ghost-US class). Registered-country fallback above still guards the empty case.
+  const _NXC = { UK: 'UK', EU: 'EU', USA: 'US', AE: 'AE', SA: 'SA', QA: 'QA' };
+  const _nx = (signals && signals.nexus) || {};
+  const _estF = Object.entries(_nx).filter(([f, v]) => v && v.established_in).map(([f]) => _NXC[f] || f);
+  const _srvF = Object.entries(_nx).filter(([f, v]) => v && !v.established_in && v.serves_customers_in).map(([f]) => _NXC[f] || f);
+  if (_estF.length || _srvF.length) {
+    const _keep = new Set([..._estF, ..._srvF]);
+    allJurisdictions = allJurisdictions.filter(j => _keep.has(String(j).toUpperCase()));
+    for (const c of _estF) if (!allJurisdictions.includes(c)) allJurisdictions.push(c);
+    if (!allJurisdictions.length) allJurisdictions = _estF.length ? [..._estF] : [String(country || 'UK').toUpperCase()];
+  }
+  const _jurFamilies = { families: [...new Set(allJurisdictions.map(j => String(j).toUpperCase()))],
+                         primary: (_estF[0] || String(country || allJurisdictions[0] || 'UK').toUpperCase()),
+                         serves_only: _srvF.filter(c => !_estF.includes(c)) };
   }
   // POST-BREXIT EU GATE (anti-frivolous): a non-EU-registered firm is EU-regulated only with a CONCRETE EU market
   // signal — EUR pricing, a named EU country served, or an EU-registered entity — NOT a mere "GDPR"/"Europe"
@@ -985,7 +1002,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     }
   }
   if (!rules.length) {
-    const payload = { domain, sector, country, frameworks, detected_jurisdictions: detectedJurisdictions, ok: true, rules_evaluated: 0, findings: [], note: 'no_active_rules_for_routing' };
+    const payload = { domain, sector, country, frameworks, detected_jurisdictions: detectedJurisdictions, nexus: _nx, jurisdiction_families: _jurFamilies, ok: true, rules_evaluated: 0, findings: [], note: 'no_active_rules_for_routing' };
     writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 3600 });
     return payload;
   }
@@ -1087,6 +1104,10 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
 
   // Most severe first
   findings.sort((a, b) => sevRank(a.severity) - sevRank(b.severity));
+  // E-041 EVIDENCE GATE (blind-send): every finding re-proven before counts and payload are built.
+  // Quote >=25 chars and verbatim-anchored in a fetched page; testimonial/nav fragments rejected; absence
+  // findings need a proving page. Failures demote to NEEDS_REVIEW (state) — they never render as breaches.
+  { const _gated = _evidenceGate(findings, corpus); findings.length = 0; findings.push(..._gated); }
 
   // ── D-6 POSITIVE COMPLIANCE SIGNALS (detected from corpus, never fabricated) ────────────────────────
   // When a firm DISPLAYS their regulatory registration number / badge, that is evidence of compliance.
@@ -1108,6 +1129,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   } catch (_pce) {}
 
   const payload = {
+    inspected_by_framework: _inspectedByFramework(frameworks, corpus), pages_crawled: (corpus || []).map(x => x && (x.label || x.url)).filter(Boolean),
     domain, sector, country, ok: true, reachable: true,
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
     frameworks, binding: framework_binding, attach_error: comp_attach_error, drop_trace: comp_gates, review_candidates: comp_review, attach_confidence: comp_confidence, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
@@ -1135,3 +1157,31 @@ if (require.main === module) {
     .catch(e => { console.error(e); process.exit(1); });
 }
 module.exports = { scan, ruleCheck, gatherCorpus, loadRules };
+
+// ---- blind-send helpers (blueprint E-041/E-044) ----
+function _evidenceGate(findings, pages) {
+  const hay = (pages || []).map(p => ((p && (p.text || p.html || p.body)) || '')).join('\n').toLowerCase();
+  return (findings || []).map(f => {
+    if (!f) return f;
+    const demote = reason => Object.assign({}, f, { state: 'NEEDS_REVIEW', fine_withheld: true, gate_reason: reason });
+    const q = String(f.evidence_snippet || f.evidence_quote || (f.breach_panel && f.breach_panel.where && f.breach_panel.where.quote) || '').trim();
+    if (f.status === 'miss' || f.kind === 'absence') {
+      const ae = f.absence_evidence;
+      if (!(ae && (ae.target_url || ae.pages_checked)) && !((f.checked_urls || []).length)) return demote('absence_without_proving_page');
+      return f;
+    }
+    if (q) {
+      if (q.length < 25) return demote('quote_too_short');
+      if (!hay.includes(q.toLowerCase())) return demote('quote_not_anchored_in_fetched_pages');
+      if (/^(home|about|contact us|read more|learn more|menu)\b/i.test(q)) return demote('nav_fragment_quote');
+      if (/[\u201c"].{0,140}[\u201d"]\s*[-\u2013\u2014]\s*[A-Z][a-z]+/.test(q)) return demote('testimonial_quote');
+    }
+    return f;
+  });
+}
+function _inspectedByFramework(frameworks, pages) {
+  const labels = (pages || []).map(p => p && (p.label || p.url)).filter(Boolean);
+  const out = {};
+  for (const fw of (frameworks || [])) { const k = typeof fw === 'string' ? fw : (fw && (fw.short || fw.framework_short || fw.code)); if (k) out[k] = labels; }
+  return out;
+}
