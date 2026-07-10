@@ -834,7 +834,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // newest mint is the only publicly current one; superseded rows keep their data for cohort analysis.
   try { pg(`UPDATE ${AUDIT_TABLE} SET status='superseded', archived_at=now() WHERE domain='${domain.replace(/'/g, "''")}' AND status='live'`); } catch (_e) {}
   const verifyE = JSON.stringify(_verify).replace(/'/g, "''");
-  let ins = pg(`INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}), ${_verify.verified}, '${verifyE}'::jsonb) RETURNING id`);
+  let ins = pg(`INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}), ${_verify.verified}, '${verifyE}'::jsonb, '${_outOfIcp ? 'quarantined' : 'live'}') RETURNING id`);
   // A >100KB payload is routed by pg() through the psql -f path, which EXECUTES the INSERT but returns no RETURNING
   // output — so confirm the row with a small SELECT before declaring failure (else a successful large-payload mint
   // is wrongly rejected as a dead link).

@@ -79,7 +79,11 @@ function resolveSubSector(sector, corpusText=''){ const lc=String(corpusText||''
   // "legal advice" was misresolved to solicitors because solicitors.detect matches the
   // generic phrase first. Barrister signals are unambiguous, so if they fire AND the site
   // does NOT self-identify as an SRA-regulated solicitor firm, resolve barristers first.
-  const barSig=/\bbarrister|\bchambers\b|\binstruct(ing)? counsel\b|direct access|public access|\bk\.?c\.?\b|\bq\.?c\.?\b/i.test(lc);
+    // Telemedicine precedence (agent A5): a telehealth-led service that also mentions GP/consultations must
+  // resolve to the telemedicine node, not general-practice, so the remote-care duties attach.
+  const teleSig=/\btele(medicine|health)\b|online (doctor|gp|consultation)|remote (consultation|appointment)|virtual (gp|doctor|clinic)/i.test(lc);
+  if(String(p||sector)==='healthcare'&&teleSig){const t=(TREE['healthcare']&&TREE['healthcare'].sub&&TREE['healthcare'].sub['telemedicine']);if(t)return Object.assign({id:'telemedicine'},t);}
+const barSig=/\bbarrister|\bchambers\b|\binstruct(ing)? counsel\b|direct access|public access|\bk\.?c\.?\b|\bq\.?c\.?\b/i.test(lc);
   const solSig=/\bsolicitor|regulated by the (solicitors regulation authority|sra)\b|\bsra (number|no|id)\b|\bsra[- ]?regulated\b/i.test(lc);
   if(barSig && !solSig && (!p || p==='barristers' || p==='law-firms')){
     const bn=TREE['barristers']; if(bn && bn.sub && bn.sub.general) return { parent:'barristers', sub:'general', regulators:bn.regulators, predicates:bn.sub.general.predicates||[], frameworks:bn.sub.general.frameworks||[] };

@@ -42,14 +42,14 @@ function verifyPayload(p) {
     ok(shipped.length === 0, 'V11K_knowledge_mode_shipped_findings', shipped.length + ' findings');
     ok(!(p.pointers || []).some(x => x && (x.fine_low_gbp || x.fine_high_gbp)), 'V11K_knowledge_mode_carries_fines', '');
     ok(fams.length === 1, 'V11K_knowledge_mode_family_count', fams.join(','));
-    ok(Object.values(nexus).every(v => !v || String(v.established_in || '').indexOf('registered_country:') === 0 || v.serves_customers_in == null), 'V11K_knowledge_nexus_source', '');
+    ok(Object.keys(nexus).length > 0 && Object.values(nexus).every(v => v && String(v.established_in || '').indexOf('registered_country:') === 0 && !v.serves_customers_in), 'V11K_knowledge_nexus_source', '');
     ok(binding.length > 0, 'V11K_knowledge_mode_empty_binding', '');
   } else {
     ok(!_unassessed, 'V11_unassessed_crawl', (p.pages_crawled || []).length + ' pages');
   }
   // V16 (v22, taxonomy uniformity): the shipped sector must be a canonical taxonomy code so every downstream
   // tag (laws, sub-sectors, peer cohorts) joins cleanly. Aliases are the profiler's job, not the payload's.
-  try { const _sr = require('../../compliance/registry/sector.js') && require('../../compliance/registry/sector.js');
+  try { const _sr = require('../compliance/registry/sector.js');
     const _cs = _sr.CANONICAL_SECTORS; const _secOk = _cs && _cs.has(String(p.detected_sector || '').toLowerCase());
     ok(!!_secOk, 'V16_noncanonical_sector', String(p.detected_sector || '')); } catch (_e) {}
   ok(!!p.domain && !!p.detected_sector, 'V10_missing_core_fields', '');
