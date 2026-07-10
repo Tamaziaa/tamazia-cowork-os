@@ -66,6 +66,16 @@ async function askLLM(prompt, { temperature = 0.4, maxTokens = 400, json = false
     // on 429/5xx/empty: fall through to next provider
   }
   if (env.GEMINI_API_KEY) { const t = await _geminiPlain(prompt, env.GEMINI_API_KEY, temperature, maxTokens); if (t) return { text: t, provider: 'gemini' }; }
+  // Alibaba Qwen (DashScope, OpenAI-compatible) — PAID final fallover, last resort per founder hierarchy
+  // (groq -> nim -> gemini -> qwen). Only billed when every free provider above has 429'd/failed.
+  if (env.DASHSCOPE_API_KEY) {
+    const _qbase = (env.DASHSCOPE_BASE_URL || 'https://ws-68b311bmgelxd5vz.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1').replace(/\/$/, '');
+    const _qpayload = { model: env.QWEN_MODEL || 'qwen-plus', messages: [{ role: 'user', content: prompt }], temperature, max_tokens: maxTokens };
+    if (json) _qpayload.response_format = { type: 'json_object' };
+    try { const r = await _post(_qbase + '/chat/completions', env.DASHSCOPE_API_KEY, _qpayload);
+      if (r.status === 200) { const t = JSON.parse(r.body).choices[0].message.content; if (t && t.trim()) return { text: t, provider: 'qwen' }; }
+    } catch (_e) {}
+  }
   return { text: '', provider: null };
 }
 
