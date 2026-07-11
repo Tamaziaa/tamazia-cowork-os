@@ -1331,6 +1331,12 @@
         "default": null,
         "notnull": false,
         "identity": false
+      },
+      "idem_key": {
+        "type": "varchar(64)",
+        "default": null,
+        "notnull": false,
+        "identity": false
       }
     },
     "pk": [
@@ -8853,6 +8859,36 @@
       "last_seen": {
         "type": "timestamptz",
         "default": "now()",
+        "notnull": false,
+        "identity": false
+      },
+      "official_url": {
+        "type": "varchar(300)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "provider": {
+        "type": "varchar(60)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "engine_version": {
+        "type": "varchar(40)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "reviewed_at": {
+        "type": "timestamptz",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "reviewed_by": {
+        "type": "varchar(60)",
+        "default": null,
         "notnull": false,
         "identity": false
       }

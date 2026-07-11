@@ -412,7 +412,29 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 90000, concur
     else if (home && home.ok && home.body && home.body.replace(/<[^>]+>/g,' ').replace(/\s+/g,'').length < 500) reason = 'js_rendered_empty_shell';
     else reason = 'no_readable_pages';
   }
-  return { corpus, blocked: corpus.length === 0, reason, challenge: !!anyChallenge, home_status: home ? home.status : 0, pages_tried: fetchList.length, via_archive: !!_archiveDate, archive_date: _archiveDate };
+  // E-230 (v22.7): CRAWL COVERAGE TELEMETRY. The compliance rules score against POLICY pages (privacy, cookies,
+  // terms, complaints, accessibility, regulatory). A mint can "succeed" (homepage read) yet have missed every
+  // policy page — which quietly weakens the audit. Report which policy classes we actually captured, how we got
+  // the corpus (direct / rendered / archive), and a coverage score, so a thin-but-passing crawl is visible in the
+  // payload and the weekly report, and never silently mistaken for a complete assessment. Diagnosable by design.
+  const _POLICY_CLASSES = {
+    privacy: /privacy|data[- ]protection|gdpr|rgpd|datenschutz|privacidad|informativa|donnees[- ]personnelles/i,
+    cookies: /cookie/i,
+    terms: /terms|conditions|legal|mentions[- ]legales|rechtlich|aviso[- ]legal|disclaimer/i,
+    complaints: /complaint|feedback|grievance/i,
+    accessibility: /accessibilit/i,
+    regulatory: /regulat|sra|fca|cqc|transparency|disclosure|compliance|authoris/i,
+  };
+  const _crawledText = corpus.map(c => (c.url || '') + ' ' + (c.body || '')).join(' \n ');
+  const _classHit = {}; let _hits = 0;
+  for (const [k, rx] of Object.entries(_POLICY_CLASSES)) { const h = rx.test(_crawledText); _classHit[k] = h; if (h) _hits++; }
+  const _via = corpus.some(c => c.archived) ? 'archive' : corpus.some(c => c.via_reader || c.rendered) ? 'rendered' : corpus.some(c => c.via_residential) ? 'residential' : corpus.length ? 'direct' : 'none';
+  const crawl_telemetry = {
+    pages_captured: corpus.length, pages_tried: fetchList.length, via: _via,
+    challenge_detected: !!anyChallenge, home_status: home ? home.status : 0,
+    policy_classes_found: _classHit, policy_coverage: +(_hits / Object.keys(_POLICY_CLASSES).length).toFixed(2),
+  };
+  return { corpus, blocked: corpus.length === 0, reason, challenge: !!anyChallenge, home_status: home ? home.status : 0, pages_tried: fetchList.length, via_archive: !!_archiveDate, archive_date: _archiveDate, crawl_telemetry };
 }
 
 // Phase 7.4 · detect operating jurisdictions from the actual site corpus.
@@ -772,7 +794,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.6-2026-07-llm-gate';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.7-2026-07-idempotent-nexus';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
@@ -1201,12 +1223,22 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       _subSector = _rs.sub;
       _subSectorMeta = { parent: _rs.parent, regulators: _rs.regulators || [], node: _rs.parent + '/' + _rs.sub };
     }
+    // E-231 (v22.7, cosmetic): 'solicitors'/'barristers' are UK-REGULATORY node names (SRA/BSB). They correctly
+    // describe a UK firm, but on a US/EU/ME law firm they are a misleading label — and they attach NO non-UK law
+    // (UK_SRA_*/UK_BSB are jurisdiction-gated to UK), so dropping them for non-UK legal firms is purely a display
+    // correction with zero effect on the law set. A jurisdiction-neutral label is emitted instead.
+    const _cc = require('../../../lib/compliance/registry/jurisdiction.js').famCanon(String(country || '').toUpperCase());
+    if ((_subSector === 'solicitors' || _subSector === 'barristers') && _cc !== 'UK') {
+      _subSectorMeta = Object.assign({}, _subSectorMeta, { label: 'Law firm', ukterm_suppressed: _subSector });
+      _subSector = null;
+    }
   } catch (_e) {}
   const payload = {
     nexus: _nx, jurisdiction_families: _jurFamilies,
     inspected_by_framework: _inspectedByFramework(frameworks, corpus), pages_crawled: (corpus || []).map(x => x && (x.label || x.url)).filter(Boolean),
     domain, sector, country, ok: true, reachable: true,
     engine_version: ENGINE_VERSION,
+    crawl_telemetry: _cg.crawl_telemetry || null,   // E-230: policy-page coverage + via + challenge, visible in SQL
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
     frameworks, binding: framework_binding, attach_error: comp_attach_error, drop_trace: comp_gates, review_candidates: comp_review, attach_confidence: comp_confidence, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
     firm_profile: firmProfile, detected_sector: _secCanon, sub_sector: _subSector, sub_sector_meta: _subSectorMeta,
