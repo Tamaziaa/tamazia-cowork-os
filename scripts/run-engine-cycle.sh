@@ -124,7 +124,7 @@ run() { if past_deadline; then echo "[$(TS)] >> SKIP (cycle budget ${CYCLE_BUDGE
   # de-guarded render-touches below. So it runs EVERY cycle and can never be starved. SEND stays OFF.
   run "node scripts/governor-release.js"
   run_guarded "node scripts/enqueue-leads.js ${ENQUEUE_BATCH:-500}"              # MINT seam (1/2): enqueue qualified, not-yet-minted leads into minting_queue
-  run_guarded "node scripts/mint-worker.js --once"                     # MINT seam (2/2): drain the queue -> build audit_pages -> set leads.audit_url (the Touch-1 link). REPLACES the never-existed build-audit-pages.js
+  run_guarded "AUDIT_PAYLOAD_STORE=both node scripts/mint-worker.js --once"                     # MINT seam (2/2): drain the queue -> build audit_pages -> set leads.audit_url (the Touch-1 link). REPLACES the never-existed build-audit-pages.js
   # VERIFY AUDITS (P5 [X2/X8]): confirm each FIT+qualified lead's audit_url is a real, minted, signed, LIVE (200)
   # audit; self-heal (re-mint) the broken/missing ones, then set audit_verified (24h TTL). This was NOT a cycle
   # step at all (only require()d by other scripts), so audit_verified stuck at ~35 and the push/export gate (which
