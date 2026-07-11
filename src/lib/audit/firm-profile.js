@@ -209,6 +209,7 @@ Return STRICT JSON only:
 {"own_activity": a short phrase describing what THIS firm itself does (its own product/service),
  "client_industries": [industries the firm SELLS TO or SERVES — these are NOT the firm's own sector; list them so they are excluded],
  "primary_sector": one value from [${SECTORS.join(', ')}] — the firm's OWN business from own_activity, NEVER any value in client_industries,
+ "sector_evidence": the single VERBATIM phrase copied character-for-character from the WEBSITE TEXT that best proves the firm's own primary business (its self-description, regulator statement or service line — never a client mention),
  "sub_sector": ${_subNodes.length ? 'one value from [' + _subNodes.join(', ') + '] when the text clearly evidences it, else null' : 'null'},
  "secondary_sectors": [zero or more from the same list, only if the firm itself also operates in them],
  "hq_country": the country of the firm's LEGAL HEADQUARTERS / registered entity (full name). Distinguish the HQ from branch/representative/regional offices — the HQ is where it is incorporated or states its head office, NOT merely where it has a branch,
@@ -237,9 +238,14 @@ ${text}`;
         const e1 = H.inSet(out.primary_sector, _secSet, 2, 'primary_sector', SECTORS.join(', ')); score += e1.pts; if (e1.def) defs.push(e1.def);
         const sub = out.sub_sector == null ? null : String(out.sub_sector).toLowerCase();
         if (sub == null || _nodeSet.has(sub)) score += 1; else defs.push('sub_sector "' + sub + '" is not an offered node; use one of [' + _subNodes.join(', ') + '] or null');
+        // Evidence anchoring, 2 pts split: the SECTOR claim itself must carry a verbatim proving phrase (1) and
+        // every office/served-market claim must quote verbatim site text (1). Fabricated evidence = named miss.
+        { const se = String(out.sector_evidence || '').trim();
+          if (se) { const a0 = H.anchored([se], _lcText, 1, 'sector_evidence'); score += a0.pts; if (a0.def) defs.push(a0.def); }
+          else defs.push('sector_evidence is required: copy the verbatim phrase that proves the firm\'s own business'); }
         const _ev = [...(Array.isArray(out.office_countries) ? out.office_countries : []), ...(Array.isArray(out.served_markets) ? out.served_markets : [])]
           .map((o) => o && o.evidence).filter(Boolean).slice(0, 4);
-        if (!_ev.length) score += 2; else { const a = H.anchored(_ev, _lcText, 2, 'office/served_markets'); score += a.pts; if (a.def) defs.push(a.def); }
+        if (!_ev.length) score += 1; else { const a = H.anchored(_ev, _lcText, 1, 'office/served_markets'); score += a.pts; if (a.def) defs.push(a.def); }
         const _llmSec = String(out.primary_sector || '').toLowerCase();
         let cons = 2;
         if (_ovr && _llmSec && _llmSec !== _ovr) { cons -= 1; defs.push('the site SELF-IDENTIFIES as "' + _ovr + '" (own-business phrase); primary_sector must not contradict it'); }
@@ -256,7 +262,7 @@ ${text}`;
       { provider: 'gemini', model: 'gemini-2.0-flash' },
       ...(process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: process.env.QWEN_MODEL || 'qwen-plus' }] : []),
     ];
-    const g = await gateLLM({ role: 'extract', chain: _chain, system: 'You are a meticulous compliance analyst. Output ONLY valid JSON, no prose.', prompt, rubric, threshold: 7, max_attempts: 3, max_tokens: 700, scan_id: domain + ':classify' });
+    const g = await gateLLM({ role: 'extract', chain: _chain, system: 'You are a meticulous compliance analyst. Output ONLY valid JSON, no prose.', prompt, rubric, threshold: 7, max_attempts: 3, max_tokens: 700, deadline_ms: 110000, scan_id: domain + ':classify' });
     _gateMeta = { score: g.score, attempts: g.attempts, provider: g.provider, deficiencies: g.ok ? [] : g.deficiencies };
     if (g.ok) p = g.out;
   } catch (_e) { _gateMeta = { score: 0, attempts: 0, provider: null, deficiencies: ['gate_crash'] }; }

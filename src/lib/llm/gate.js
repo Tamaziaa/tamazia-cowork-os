@@ -22,13 +22,28 @@
 // `runFn` overrides the router (tests). Router failure counts as a scored-0 attempt (chain already retries
 // per-provider internally, so a hard unavailability is real).
 
+// E-224 (v22.6.1): UNIQUE ESCALATING RETRIES. Each attempt is a DIFFERENT protocol, not a re-roll:
+//   Attempt 1 · BASELINE — the caller's prompt as written.
+//   Attempt 2 · FORENSIC — deficiencies + an extraction protocol: locate the verbatim proving sentence FIRST,
+//               derive the value ONLY from it, output null when no sentence proves a value. Never infer.
+//   Attempt 3 · MAXIMUM RIGOR — field-by-field quote→derive→validate-against-allowed-list→output procedure,
+//               "null over guess" made explicit, and the PREMIUM chain (paid Qwen first, then Gemini) so the
+//               final attempt runs on the strongest available model. This is the closest engineering truth to
+//               "the third retry ensures success": strongest model + strictest protocol + honest nulls; if even
+//               that scores <7 the gate DROPS to the deterministic fallback rather than ship a guess.
+const PROTOCOLS = {
+  2: 'ESCALATION PROTOCOL (attempt 2 — forensic extraction): for EVERY field, first locate the exact verbatim sentence in the DOC that proves it. Derive the value ONLY from that sentence. If no sentence proves a value, output null for that field — never infer, never generalise, never use outside knowledge.',
+  3: 'ESCALATION PROTOCOL (attempt 3 — maximum rigor, final): work field by field. Step 1: quote the shortest verbatim evidence span. Step 2: derive the value ONLY from that quote. Step 3: check the value against the allowed list in the schema; if it is not in the list, pick the closest allowed value ONLY if the quote clearly supports it, else null. Step 4: output. A null is a correct answer; a guess is a failure. Return the strict JSON only.',
+};
 async function gateLLM(opts) {
   const {
-    role = 'extract', system, prompt, rubric, chain,
+    role = 'extract', system, prompt, rubric, chain, premium_chain,
     max_tokens = 700, temperature = 0, scan_id, lead_id, runFn,
   } = opts || {};
   const threshold = Number.isFinite(+opts.threshold) ? +opts.threshold : 7;
   const maxAttempts = Math.max(1, Math.min(5, Number(opts.max_attempts || 3)));
+  const deadlineMs = Number(opts.deadline_ms || 0);
+  const t0 = Date.now();
   let run = runFn;
   if (!run) { try { run = require('./router.js').run; } catch (_e) { run = null; } }
   const history = [];
@@ -36,12 +51,24 @@ async function gateLLM(opts) {
   if (!run || typeof rubric !== 'function') {
     return { ok: false, out: null, score: 0, attempts: 0, provider: null, deficiencies: ['gate_unavailable'], history };
   }
+  const _defaultPremium = [
+    ...(process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: process.env.QWEN_MODEL || 'qwen-plus' }] : []),
+    { provider: 'gemini', model: 'gemini-2.0-flash' },
+    { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+  ];
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Wall-clock budget (E-224): the gate must never blow the mint's per-build cap. Out of time -> drop cleanly.
+    if (deadlineMs && attempt > 1 && (Date.now() - t0) > deadlineMs) {
+      history.push({ score: 0, provider: null, deficiencies: ['gate_deadline_exceeded_after_' + (attempt - 1) + '_attempts'] });
+      break;
+    }
+    const _protocol = PROTOCOLS[attempt] ? (PROTOCOLS[attempt] + '\n\n') : '';
+    const _chain = (attempt >= 3) ? (premium_chain || _defaultPremium) : chain;
     let r = null;
     try {
       r = await run({
-        role, chain, system,
-        prompt: feedback ? (prompt + '\n\n' + feedback) : prompt,
+        role, chain: _chain, system,
+        prompt: _protocol + prompt + (feedback ? ('\n\n' + feedback) : ''),
         json: true, temperature, max_tokens, lead_id, scan_id: (scan_id || '') + ':gate' + attempt,
       });
     } catch (_e) { r = null; }
