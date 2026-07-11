@@ -1,0 +1,47 @@
+name: engine-version-guard
+# E-245 — THE GUARD THAT WOULD HAVE CAUGHT THE ENTIRE v22.10 DISASTER.
+#
+# scanner_cache is keyed on ENGINE_VERSION (24h TTL), and idem_key = sha1(domain|engine_version|hour_bucket).
+# So when compliance.js changes but ENGINE_VERSION does NOT:
+#   1. every re-mint HITS the stale scanner_cache row and REPLAYS the old scan — the fix just shipped never runs;
+#   2. idem_key is unchanged, so `INSERT ... ON CONFLICT (idem_key) DO NOTHING` writes nothing and adopt-by-key
+#      silently adopts the OLD audit_pages row — the queue reports "done" while the audit is untouched.
+#
+# BOTH failures are SILENT and BOTH report success. A batch of 14 law-firm audits was declared green while
+# running two-versions-old code, still carrying a fabricated "site compromise" accusation. Nothing in CI caught
+# it, because nothing in CI was looking.
+#
+# From now on: touch the scanner, bump the version, or the PR does not merge.
+on:
+  pull_request:
+    paths:
+      - 'src/skills/S008-personalisation-engine/scanners/compliance.js'
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: ENGINE_VERSION must be bumped whenever the scanner changes
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          F='src/skills/S008-personalisation-engine/scanners/compliance.js'
+          git fetch -q origin "$BASE_REF"
+          extract() { grep -oE "ENGINE_VERSION = process\.env\.COMPLIANCE_ENGINE_VERSION \|\| '[^']+'" | grep -oE "'[^']+'" | tr -d "'" | head -1; }
+          OLD="$(git show "origin/$BASE_REF:$F" | extract || true)"
+          NEW="$(extract < "$F" || true)"
+          echo "base ENGINE_VERSION : ${OLD:-<none>}"
+          echo "head ENGINE_VERSION : ${NEW:-<none>}"
+          if [ -z "${NEW:-}" ]; then
+            echo "::error file=$F::ENGINE_VERSION literal not found. The cache key and the idem_key both depend on it."
+            exit 1
+          fi
+          if [ "${OLD:-}" = "$NEW" ]; then
+            echo "::error file=$F::compliance.js changed but ENGINE_VERSION is still '$NEW'."
+            echo "::error::Every re-mint would replay the stale scanner_cache entry, and the write seam would adopt the previous audit_pages row by idem_key, silently, while reporting success. Bump ENGINE_VERSION."
+            exit 1
+          fi
+          echo "OK, scanner changed and ENGINE_VERSION was bumped ($OLD -> $NEW)"
