@@ -35,6 +35,10 @@ jobs:
       MINT_CONCURRENCY: "3"
       # LLM in-process concurrency 1 so a single audit's calls are also paced (free tiers 429 on simultaneous requests).
       LLM_MAX_CONCURRENCY: "1"
+      # E-238: a JSON classification that has not answered in 12s is not coming. The 30s default meant a
+      # rate-limited provider burned 30s x retries x 3 gate attempts, stalling every mint for minutes. The
+      # gate still drops to the deterministic fallback on failure; it just stops WAITING so long to do it.
+      LLM_TIMEOUT_MS: "12000"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
