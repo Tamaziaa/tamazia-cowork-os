@@ -28,15 +28,18 @@ const PRIORITY_SECTORS = "('law-firms','barristers','legal','healthcare','dental
 const PRIORITY_COUNTRIES = "('UK','US','AE','SA','QA','IE','FR','DE','ES','IT','NL','BE','EU')";
 
 if (watchlist) {
-  const vals = WATCH.map((d) => `('${d}', 'remint-v22.5-canary', 'pending', 2)`).join(',');
+  // minting_queue carries a UNIQUE(domain) constraint, so a previously-minted domain must be RE-ARMED in place
+  // (ON CONFLICT), never re-inserted. A row currently pending/minting is left untouched.
   const sql = `INSERT INTO minting_queue (domain, source, status, priority)
-    SELECT v.d, v.s, v.st, v.p FROM (VALUES ${WATCH.map((d) => `('${d}','remint-v22.5-canary','pending',2)`).join(',')}) AS v(d,s,st,p)
-    WHERE NOT EXISTS (SELECT 1 FROM minting_queue q WHERE q.domain = v.d AND q.status IN ('pending','minting'))
+    VALUES ${WATCH.map((d) => `('${d}','remint-v22.5-canary','pending',2)`).join(',')}
+    ON CONFLICT (domain) DO UPDATE SET
+      status='pending', source=EXCLUDED.source, priority=EXCLUDED.priority,
+      retries=0, error=NULL, claimed_at=NULL, enqueued_at=now()
+    WHERE minting_queue.status NOT IN ('pending','minting')
     RETURNING domain`;
   if (dry) { console.log('[dry] would queue watchlist: ' + WATCH.join(', ')); process.exit(0); }
   const out = pg(sql);
-  console.log('[remint] canary watchlist queued: ' + (out ? out.split('\n').length : 0) + ' domains\n' + out);
-  void vals;
+  console.log('[remint] canary watchlist queued/re-armed: ' + (out ? out.split('\n').filter(Boolean).length : 0) + ' domains\n' + out);
 } else {
   const sel = `SELECT ap.domain FROM audit_pages ap
     WHERE ap.status='live' AND ap.verified IS NOT TRUE
@@ -52,6 +55,11 @@ if (watchlist) {
       AND NOT EXISTS (SELECT 1 FROM minting_queue q WHERE q.domain = ap.domain AND q.status IN ('pending','minting'))
       AND NOT EXISTS (SELECT 1 FROM audit_pages ap2 WHERE ap2.domain = ap.domain AND ap2.verified IS TRUE AND ap2.status='live')
     ORDER BY (ap.country='UK') DESC, ap.generated_at DESC LIMIT ${batch}
+    ON CONFLICT (domain) DO UPDATE SET
+      status='pending', source=EXCLUDED.source, priority=EXCLUDED.priority,
+      sector=EXCLUDED.sector, country=EXCLUDED.country, lead_id=COALESCE(EXCLUDED.lead_id, minting_queue.lead_id),
+      retries=0, error=NULL, claimed_at=NULL, enqueued_at=now()
+    WHERE minting_queue.status NOT IN ('pending','minting')
     RETURNING domain`;
   const out = pg(sql);
   const n = out ? out.split('\n').filter(Boolean).length : 0;
