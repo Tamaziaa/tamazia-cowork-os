@@ -857,7 +857,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.1-2026-07-adjudicated-seam';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.2-2026-07-ico-register';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
@@ -1222,6 +1222,30 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     }
     // Drop irrelevant rules — trigger_absent, not_applicable_to_sector, no_prohibited_pattern.
   }
+  // E-259 (v23.2) — THE ICO REGISTER. THE FIRST FINDING THAT IS NOT AN INTERPRETATION.
+  // Every other finding we make is, at bottom, a judgement: does this text satisfy this obligation. A partner can
+  // argue with a judgement. NOBODY CAN ARGUE WITH A PUBLIC REGISTER.
+  // Under the Data Protection (Charges and Information) Regulations 2018 (s.137 DPA 2018) an organisation
+  // processing personal data must pay the fee and appear on the ICO register. A firm with a contact form and
+  // analytics cookies is unquestionably a controller. So "processes personal data + absent from the register", or
+  // "registration EXPIRED", is a BINARY, EVIDENCED breach requiring no regex, no model and no interpretation.
+  // FAIL-OPEN: if the register is not loaded, or the name cannot be matched with confidence, we assert NOTHING.
+  // Accusing a REGISTERED firm of being unregistered would be far worse than staying silent.
+  try {
+    const { checkRegistration, registrationFinding } = require('../../../lib/evidence/ico-register.js');
+    const _cc2 = String(country || '').toUpperCase();
+    if (!_cc2 || _cc2 === 'UK' || _cc2 === 'GB' || _cc2 === 'GBR') {
+      const _co = (firmProfile && (firmProfile.company_name || firmProfile.legal_name)) || company || domain.split('.')[0];
+      const _reg = checkRegistration({ company: _co, domain });
+      const _sig = { has_form: /<form|contact us|get in touch|enquir/i.test(corpusText),
+                     trackers: /gtag|googletagmanager|google-analytics|fbq|hotjar/i.test(corpusText),
+                     cookies: /cookie/i.test(corpusText) };
+      const _f = registrationFinding(_reg, _sig);
+      if (_f) { misses++; findings.push(_f); }
+      console.error('[ico-register] ' + domain + ' -> ' + _reg.status + (_reg.registration_number ? ' (' + _reg.registration_number + ')' : '') + (_f ? ' BREACH' : ''));
+    }
+  } catch (_ie) { console.error('[ico-register] skipped: ' + String((_ie && _ie.message) || _ie)); }
+
   // SITE-INTEGRITY pass: flag a hacked/spam-injected site as a P0 security finding (highest real-world risk).
   try { const _ci = _detectCompromise(corpus, effectiveSectorAuth || sector); if (_ci) { misses++; findings.push(_ci); } } catch (_e) {}
   // >>> E-253 (v23.0) THE BREACH ADJUDICATION GATE — see src/lib/audit/breach-adjudicator.js <<<
