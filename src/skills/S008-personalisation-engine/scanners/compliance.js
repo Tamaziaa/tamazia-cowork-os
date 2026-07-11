@@ -196,17 +196,25 @@ async function _discoverSitemap(domain, accepted) {
   const roots = [];
   try { const rob = await fetchWithRetry('https://' + domain + '/robots.txt', { timeout: 6000, retries: 0 }); if (rob && rob.ok && rob.body) for (const sm of (rob.body.match(/sitemap:\s*(\S+)/gi) || [])) roots.push(sm.replace(/sitemap:\s*/i, '').trim()); } catch (_e) {}
   roots.push('https://' + domain + '/sitemap.xml', 'https://' + domain + '/sitemap_index.xml', 'https://' + domain + '/sitemap-index.xml');
-  for (const root of roots) {
-    let r; try { r = await fetchWithRetry(root, { timeout: 8000, retries: 0 }); } catch (_e) { continue; }
-    if (!r || !r.ok || !r.body) continue;
-    const locs = (r.body.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || []).map(x => x.replace(/<\/?loc>/gi, '').trim());
+  // E-236 (v22.9): sitemap discovery was fully SEQUENTIAL — every root, then every child sitemap, one 8s fetch
+  // after another. On a big firm with an index + 8 children that is 9 round-trips of pure waiting before the page
+  // crawl even starts. Roots race in parallel (first one with URLs wins), and its children are fetched in parallel.
+  // Identical URL set, identical ordering downstream; only the idling is gone.
+  const rootResults = await Promise.all(roots.map(async (root) => {
+    try { const r = await fetchWithRetry(root, { timeout: 8000, retries: 0 }); return (r && r.ok && r.body) ? r.body : null; } catch (_e) { return null; }
+  }));
+  for (const body of rootResults) {
+    if (!body) continue;
+    const locs = (body.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || []).map(x => x.replace(/<\/?loc>/gi, '').trim());
     const childSitemaps = locs.filter(u => /sitemap.*\.xml/i.test(u)).slice(0, 8);     // follow more child sitemaps for big sites
     const pageUrls = locs.filter(u => !/\.xml/i.test(u));
     for (const u of pageUrls) if (_sameSite(u, accepted)) urls.push(u);
-    for (const cs of childSitemaps) {
-      try { const cr = await fetchWithRetry(cs, { timeout: 8000, retries: 0 }); if (cr && cr.ok && cr.body) {
-        (cr.body.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || []).map(x => x.replace(/<\/?loc>/gi, '').trim()).forEach(u => { if (_sameSite(u, accepted)) urls.push(u); });
-      } } catch (_e) {}
+    const childBodies = await Promise.all(childSitemaps.map(async (cs) => {
+      try { const cr = await fetchWithRetry(cs, { timeout: 8000, retries: 0 }); return (cr && cr.ok && cr.body) ? cr.body : null; } catch (_e) { return null; }
+    }));
+    for (const cb of childBodies) {
+      if (!cb) continue;
+      (cb.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || []).map(x => x.replace(/<\/?loc>/gi, '').trim()).forEach(u => { if (_sameSite(u, accepted)) urls.push(u); });
     }
     if (urls.length) break;
   }
@@ -266,7 +274,14 @@ async function _archiveSnapshot(url) {
   } catch (_e) { return null; }
 }
 
-async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 90000, concurrency = 14 }) {
+// E-236 (v22.9) SPEED RESTORATION — we used to audit any site in ~45s; mints had crept to 5+ minutes and the
+// crawl alone was blowing 43s+ on a normal law-firm site. The cause was NOT the page budget, it was PARALLELISM:
+// 120 pages at concurrency 14 is ~9 sequential rounds of pure network wait. Fetching is I/O-bound, so raising the
+// pool width fetches the SAME pages, finds the SAME breaches, and simply stops idling. ACCURACY IS UNCHANGED BY
+// CONSTRUCTION: same maxPages, same TIER-1 policy-first ordering, same blog/editorial scan, same Jina/residential/
+// Wayback fallbacks. Only the waiting is removed. The deadline is a CAP (a slow site still gets what it can), not
+// a floor. Overridable per-call for a gentler crawl on a fragile host.
+async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 45000, concurrency = 28 }) {
   const base = 'https://' + domain;
   const corpus = []; const seenBody = new Set(); const used = new Set();
   // 1) homepage first (and a source of internal links)
@@ -362,7 +377,10 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 90000, concur
     for (let i = 0; i < fetchList.length; i++) { const r = results[i]; const u = fetchList[i]; if (r && (r.status === 200 || r.ok) && r.body && r.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, '').length < 500 && !r.challenge) shells.push(u); }
     const toRender = shells.slice(0, 30);                                   // cap the headless tail
     if (toRender.length) {
-      const rendered = await _pool(toRender, Math.min(6, concurrency), Math.max(45000, Math.floor(deadlineMs * 0.6)), (u) => _renderPage(u));
+      // E-236: the SPA-render tail was serialised at width 6 with a 45s FLOOR (Math.max), so a site with a few
+      // shells always paid at least 45 seconds even when the renders returned in two. Width 12, and the budget is
+      // now a proportional CAP, never a floor. Same shells rendered, same words captured.
+      const rendered = await _pool(toRender, Math.min(12, concurrency), Math.max(20000, Math.floor(deadlineMs * 0.6)), (u) => _renderPage(u));
       for (let i = 0; i < toRender.length; i++) { const txt = rendered[i]; const u = toRender[i]; if (txt && txt.replace(/\s+/g, '').length > 500) { const sig = _crypto.createHash('sha1').update(txt).digest('hex'); if (seenBody.has(sig)) continue; seenBody.add(sig); corpus.push({ url: u, body: txt, status: 200, fetch_ms: 0, bytes: Buffer.byteLength(txt), rendered: true }); } }
     }
   } catch (_e) {}
@@ -822,7 +840,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.8-2026-07-integrity-fix';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.9-2026-07-speed-restore';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
