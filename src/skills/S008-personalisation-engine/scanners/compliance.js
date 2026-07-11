@@ -840,7 +840,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.9-2026-07-speed-restore';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.8-2026-07-integrity-fix';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
@@ -1027,6 +1027,20 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // establishment-first filter always has evidence to work with (root cause of the V07 ghost-family reds).
   _nx = (signals && signals.nexus) || {};
   if (!Object.keys(_nx).length) { try { _nx = (require('../../../lib/compliance/signals.js').buildSignals({ jurisdictions: allJurisdictions, sector, corpusText }).nexus) || {}; } catch (_e) { _nx = {}; } }
+  // E-242 (v22.10) GHOST-FAMILY KILL. The registered-country nexus was injected AFTER this filter (old H4), so on a
+  // firm whose corpus yields no established/serves family the guard `if (_estF.length || _srvF.length)` was FALSE
+  // and the filter was SKIPPED ENTIRELY — every keyword-detected country survived as a ghost family. Live proof:
+  // franklin-paris.com (a PARIS law firm) shipped families [FR, DE, IT, EU] with nexus evidence for NONE of DE/IT,
+  // and V07 rightly quarantined an otherwise-perfect audit. Registration IS establishment evidence (E-228
+  // doctrine), so inject it FIRST: _estF then always contains the registered family, the filter ALWAYS runs, and
+  // any family without typed nexus is stripped BEFORE connect() ever sees it. This kills the V07 ghost-family
+  // class at the source instead of quarantining after the fact.
+  { const _regF = require('../../../lib/compliance/registry/jurisdiction.js').famCanon(String(country || '').toUpperCase());
+    const _NXKEY = { UK: 'UK', EU: 'EU', US: 'USA', AE: 'AE', SA: 'SA', QA: 'QA' };
+    const _k = _NXKEY[_regF] || _regF;
+    if (_regF && !(_nx[_k] && (_nx[_k].established_in || _nx[_k].serves_customers_in))) {
+      _nx[_k] = { established_in: 'registered_country:' + _regF, source: 'company_registration' };
+    } }
   _estF = Object.entries(_nx).filter(([f, v]) => v && v.established_in).map(([f]) => _NXC[f] || f);
   _srvF = Object.entries(_nx).filter(([f, v]) => v && !v.established_in && v.serves_customers_in).map(([f]) => _NXC[f] || f);
   if (_estF.length || _srvF.length) {

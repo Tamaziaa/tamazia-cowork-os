@@ -71,6 +71,7 @@ function _prompt(p) {
       'NEXUS DOCTRINE — apply exactly, two independent sufficiency paths:',
       'PATH A (ESTABLISHMENT): a firm ESTABLISHED / INCORPORATED / REGISTERED in country X is, by that registration ALONE, subject to X\'s data-protection law and X\'s professional-conduct regulation. This is the establishment limb (e.g. GDPR Art 3(1); UAE/KSA/Qatar PDPL territorial scope). Therefore ACCEPT any attached framework whose family EQUALS registered_country_family on registration alone. The ABSENCE of an on-page nexus quote is NOT evidence against a registered-country attachment; never flag it for "no nexus evidence".',
       'PATH B (TARGETING/SERVES): a FOREIGN framework (family NOT equal to registered_country_family) requires real serves/establishment evidence in the DATA (an office, local clientele, local language/currency, an explicit "we serve <country>"). If that evidence is absent, FLAG it.',
+      'GLOBAL FRAMEWORKS: a framework whose family is GLOBAL (e.g. GOOGLE_EEAT, search/ranking standards) has NO jurisdiction and binds EVERY website by definition. NEVER flag a GLOBAL framework for a foreign family or a missing nexus. It is always correctly attached.',
       '',
       'TASK: (1) Is detected_sector the firm\'s OWN primary business (not its clients\' industry)? ',
       '(2) For each attached framework decide PATH A or PATH B and apply the doctrine above. ',
@@ -115,6 +116,12 @@ async function llmVerifyPayload(p) {
     // Path A guard: a framework in the registered-country family, flagged only for missing nexus, is a correct
     // establishment attachment — never quarantine it.
     if (_regFam && FAMILY_OF(code) === _regFam && _nexusDoubtRx.test(reason)) continue;
+    // E-241 (v22.10): GLOBAL-FAMILY GUARD. A GLOBAL framework (GOOGLE_EEAT and any non-jurisdictional standard)
+    // binds EVERY website by definition — it has no jurisdiction and therefore cannot have a "wrong family" or a
+    // "missing nexus". The cross-verifier was flagging GOOGLE_EEAT as "foreign family, no nexus evidence" and
+    // quarantining otherwise-perfect audits (freeths, brownejacobson: classify 10/10, everything else clean).
+    // A GLOBAL code is never flaggable on family/nexus grounds. Sector-implausibility is still catchable.
+    if (FAMILY_OF(code) === 'GLOBAL' && (_nexusDoubtRx.test(reason) || /famil|jurisdic|foreign/i.test(reason))) continue;
     // v22.3 flag policy: the cross-check exists to catch WRONG-FAMILY and WRONG-SECTOR attachments. Opinions
     // about bindingness, generality or enforcement style are the catalogue's domain (binding labels carry them)
     // and must never quarantine a correct stack. Drop those; keep everything family/sector-shaped; when in doubt
@@ -139,7 +146,7 @@ async function llmVerifyPayload(p) {
   if (out.families_ok === false && Array.isArray(out.wrong_families) && out.wrong_families.length) {
     // E-228: the registered-country family can never be a "wrong family" — a firm is bound by its own country's
     // law by registration. Strip it from the rejection list; only genuinely foreign families remain flaggable.
-    const _wrong = out.wrong_families.map(x => { const u = String(x).toUpperCase(); return ({ USA: 'US', UAE: 'AE', GB: 'UK', GBR: 'UK', KSA: 'SA' })[u] || u; }).filter(x => x !== _regFam);
+    const _wrong = out.wrong_families.map(x => { const u = String(x).toUpperCase(); return ({ USA: 'US', UAE: 'AE', GB: 'UK', GBR: 'UK', KSA: 'SA' })[u] || u; }).filter(x => x !== _regFam && x !== 'GLOBAL');   // E-241: GLOBAL is never a wrong family
     if (_wrong.length) flags.push({ code: 'FAMILY', reason: ('llm rejects ' + _wrong.join(',')).slice(0, 80) });
   }
   // E-212 (v22.5) PRIORITY-SECTOR QUORUM: for the priority ICP (legal, healthcare, hospitality, real estate,
@@ -168,6 +175,9 @@ async function llmVerifyPayload(p) {
           try { _FAL2 = require('../compliance/registry/jurisdiction.js').FAMILY_ALIAS || _FAL2; } catch (_e3) {}
           const _fams2 = new Set((((p.jurisdiction_families || {}).families) || []).map(x => _FAL2[String(x).toUpperCase()] || String(x).toUpperCase()));
           const _inFam2 = _fams2.size === 0 || _fams2.has(FAMILY_OF(code)) || FAMILY_OF(code) === 'GLOBAL';
+          // E-241: the quorum leg gets the same GLOBAL guard — a GLOBAL framework has no jurisdiction and so can
+          // never be flagged for a foreign family or a missing nexus (the freeths '[quorum] no serves evidence' class).
+          if (FAMILY_OF(code) === 'GLOBAL' && (/no nexus|without nexus|no (establishment|evidence|serves)|not established|missing (nexus|evidence)|no serves/i.test(reason) || /famil|jurisdic|foreign/i.test(reason))) continue;
           const _styleOnly2 = /voluntar|not mandatory|industry code|professional code|guideline|only if member|membership|non.?binding|not universally|not a (law|statute|framework)|not sector-specific|general (corporate|consumer|data protection)? ?law|enforcement (agency|body)|applies (to|across) (all|any|every)|umbrella|broad(ly)? applicable/i.test(reason);
           if (binding.includes(code) && !(_styleOnly2 && _inFam2)) flags.push({ code, reason: '[quorum] ' + reason });
         }
