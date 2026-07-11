@@ -922,6 +922,11 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     trust_summary: payload.trust_summary || null, exec_summary: payload.exec_summary || '',
     llm_verify: payload.llm_verify || null, compliance_unassessed: !!payload.compliance_unassessed,
     render_mode: payload.render_mode || null, registers: payload.registers || null,
+    // E-225: gate telemetry + crawl depth ride the projection too, so an R2-offloaded row is fully scoreable
+    // from SQL (the galadari class: engine-cycle minted with store=r2 and the stage scorecard went blind).
+    llm_gate: payload.llm_gate || null,
+    classifier_gate: (payload.firm_profile && payload.firm_profile.classifier_gate) || null,
+    npc: Array.isArray(payload.pages_crawled) ? payload.pages_crawled.length : 0,
   } : payload;
 
   const expSeconds = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
