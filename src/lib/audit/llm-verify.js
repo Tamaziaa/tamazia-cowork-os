@@ -92,7 +92,7 @@ async function llmVerifyPayload(p) {
   try {
     const { run } = require('../llm/router.js');
     const { system, prompt } = _prompt(p);
-    const r = await run({ role: 'extract', system, prompt, json: true, temperature: 0, max_tokens: 700, lead_id: p.lead_id, scan_id: p.domain, deadline_ms: 40000 });
+    const r = await run({ role: 'extract', system, prompt, json: true, temperature: 0, max_tokens: 700, lead_id: p.lead_id, scan_id: p.domain });
     if (!r || !r.ok || !r.text) return { status: 'unavailable', flags: [], error: (r && r.error) || 'no_response', checked_at: new Date().toISOString() };
     const txt = String(r.text).replace(/```json|```/g, '').trim();
     out = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1));
