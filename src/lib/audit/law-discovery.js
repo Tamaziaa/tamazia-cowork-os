@@ -85,7 +85,9 @@ async function discoverLaws({ sector, sub_sector, jurisdictions, binding, catalo
   ].join('\n');
   const g = await gateLLM({
     role: 'extract', system: 'You are a regulatory-scope analyst. Precise official law names only. Strict JSON. No prose.',
-    prompt, rubric: _rubricFor(jurs, cellCodes), threshold: 7, max_attempts: 3, max_tokens: 600, scan_id: (scan_id || cellKey) + ':lawdisc',
+    prompt, rubric: _rubricFor(jurs, cellCodes), threshold: 7, max_attempts: 3, max_tokens: 600,
+    deadline_ms: 90000,   // E-224: a learning side-channel never runs long enough to matter to anyone
+    scan_id: (scan_id || cellKey) + ':lawdisc',
   });
   if (!g.ok) {
     try { pg(`INSERT INTO cell_law_reviews (cell_key, sector, sub_sector, jurisdictions, catalogue_version, matched, unmatched, score, provider, checked_at) VALUES ('${esc(cellKey)}','${esc(sector)}','${esc(sub_sector || '')}','${esc(jurs.join('+'))}','${esc(catalogue_version || '')}','[]'::jsonb,'[]'::jsonb,${g.score || 0},'gate_dropped',now()) ON CONFLICT (cell_key) DO UPDATE SET score=${g.score || 0}, provider='gate_dropped', checked_at=now()`); } catch (_e) {}

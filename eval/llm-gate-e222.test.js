@@ -55,6 +55,21 @@ const rubricBelow = () => ({ score: 5, deficiencies: ['always wrong'] });
     const idx = catalogueNameIndex();
     A.ok(idx.size > 50, 'seed index loaded (' + idx.size + ')');
   });
+  await t('E-224: attempt 2 carries the FORENSIC protocol, attempt 3 the MAXIMUM-RIGOR protocol + premium chain', async () => {
+    const prompts = []; const chains = [];
+    const run = async ({ prompt, chain }) => { prompts.push(prompt); chains.push(chain || null); return { ok: true, text: '{}', provider: 'mock', model: 'm' }; };
+    const g = await gateLLM({ prompt: 'BASE', rubric: () => ({ score: 3, deficiencies: ['x'] }), runFn: run, premium_chain: [{ provider: 'qwen', model: 'qwen-plus' }] });
+    A.strictEqual(g.attempts, 3);
+    A.ok(!/ESCALATION PROTOCOL/.test(prompts[0]), 'attempt 1 is baseline');
+    A.ok(/attempt 2 \u2014 forensic/.test(prompts[1]), 'attempt 2 forensic protocol');
+    A.ok(/attempt 3 \u2014 maximum rigor/.test(prompts[2]), 'attempt 3 maximum-rigor protocol');
+    A.strictEqual(chains[2][0].provider, 'qwen', 'attempt 3 escalates to the premium chain');
+  });
+  await t('E-224: deadline_ms stops further attempts cleanly', async () => {
+    const run = async () => { await new Promise(r => setTimeout(r, 120)); return { ok: true, text: '{}', provider: 'mock', model: 'm' }; };
+    const g = await gateLLM({ prompt: 'x', rubric: () => ({ score: 1, deficiencies: ['no'] }), runFn: run, deadline_ms: 100 });
+    A.strictEqual(g.ok, false); A.ok(g.attempts <= 2, 'stopped early, attempts=' + g.attempts);
+  });
   console.log(bad ? 'E222 LLM GATE: FAIL' : 'E222 LLM GATE: ALL GREEN (' + n + ' checks)');
   process.exit(bad ? 1 : 0);
 })();

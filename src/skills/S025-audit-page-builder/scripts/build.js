@@ -666,7 +666,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nHighest single statutory penalty ceiling among the applicable frameworks (a per-framework maximum, NOT a sum and NOT an incurred amount): GBP ' + _expo + '.\nSentence 1: the single most serious regulatory or commercial risk and why it matters. Sentence 2: the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.\nReturn STRICT JSON only: {"summary":"<the two sentences>"}';
       const { gateLLM } = require(path.resolve(ROOT, 'src', 'lib', 'llm', 'gate.js'));
       const _g = await gateLLM({
-        role: 'synthesise', prompt: _prompt, threshold: 7, max_attempts: 2, max_tokens: 200, temperature: 0.3, scan_id: domain + ':exec',
+        role: 'synthesise', prompt: _prompt, threshold: 7, max_attempts: 2, max_tokens: 200, temperature: 0.3, deadline_ms: 45000, scan_id: domain + ':exec',
         rubric: (out) => {
           const defs = []; let score = 0;
           const s = out && typeof out.summary === 'string' ? out.summary.trim() : '';
@@ -894,17 +894,19 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     }
   }
   payload.llm_verify = _llmv;
-  // E-223 (v22.6): gated LAW DISCOVERY + self-learning candidate mining. Cell-cached (30d), kill switch
-  // LAW_DISCOVERY=0. Matches confirm the cell; novelties land in framework_candidates for the human-gated
-  // seed pipeline. NEVER touches binding, findings, or any client-facing surface.
+  // E-223/E-224 (v22.6.1): gated LAW DISCOVERY is a LEARNING SIDE-CHANNEL — it must never spend the mint's
+  // wall-clock budget (the worker races build() against MINT_BUILD_TIMEOUT_MS; discovery blocking the await was
+  // one of the three causes of the canary retry storm). FIRE-AND-FORGET: kicked off here, writes its own tables,
+  // never awaited, never throws into the mint. Cell cache still bounds cost. Kill switch LAW_DISCOVERY=0.
   try {
     const { discoverLaws } = require('../../../lib/audit/law-discovery.js');
-    const _ld = await discoverLaws({
+    const _ldArgs = {
       sector: payload.detected_sector, sub_sector: payload.sub_sector,
       jurisdictions: ((payload.jurisdiction_families || {}).families) || [payload.country].filter(Boolean),
       binding: payload.binding, catalogue_version: payload.framework_version, scan_id: domain,
-    });
-    if (_ld) payload.llm_gate = Object.assign({}, payload.llm_gate, { law_discovery: { cached: !!_ld.cached, dropped: !!_ld.dropped, matched: (_ld.matched || []).length, unmatched: (_ld.unmatched || []).length, score: _ld.score == null ? null : _ld.score } });
+    };
+    payload.llm_gate = Object.assign({}, payload.llm_gate, { law_discovery: 'detached' });
+    Promise.resolve().then(() => discoverLaws(_ldArgs)).catch(() => {});
   } catch (_e) {}
   // E-205 (audit-of-the-audits P-007): out-of-ICP hard gate. media/general audits attach the weakest
   // catalogue cells and have zero commercial value; they persist but can never verify or ship.
@@ -969,12 +971,30 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   );
   if (_httpIns && Array.isArray(_httpIns.rows) && _httpIns.rows[0] && _httpIns.rows[0].id != null) insId = _httpIns.rows[0].id;
   else if (_httpIns && _httpIns.error) { _writeErr = String(_httpIns.error); console.error('[write-seam] HTTP INSERT rejected: ' + _writeErr.slice(0, 200)); }
+  let _seam = { http: _writeErr ? 'err' : (insId != null ? 'ok' : 'null'), shim: '-', confirm: 0, adopt: 'no' };
   if (insId == null && !_writeErr) {
     const verifyE = JSON.stringify(_verify).replace(/'/g, "''");
-    const ins = pg(`INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}), ${_verify.verified}, '${verifyE}'::jsonb, '${_outOfIcp ? 'quarantined' : 'live'}') RETURNING id`);
+    const _stmt = `INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}), ${_verify.verified}, '${verifyE}'::jsonb, '${_outOfIcp ? 'quarantined' : 'live'}') RETURNING id`;
+    let ins = null;
+    if (_stmt.length > 100000) {
+      // E-224: a >100KB statement cannot ride execFileSync argv (128KB Linux cap) — write it to a temp file and
+      // run the shim's -f path, then rely on the confirm loop (the -f path executes but returns no RETURNING).
+      try {
+        const _os = require('os'); const _fs = require('fs');
+        const _tmp = path.join(_os.tmpdir(), 'mint-' + hash + '.sql');
+        _fs.writeFileSync(_tmp, _stmt);
+        try { execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL || process.env.NEON_CONNECTION_STRING, '-tA', '-f', _tmp], { encoding: 'utf8' }); } catch (_e) {}
+        try { _fs.unlinkSync(_tmp); } catch (_e) {}
+        _seam.shim = 'file';
+      } catch (_e) { _seam.shim = 'file_err'; }
+    } else {
+      ins = pg(_stmt);
+      _seam.shim = (ins && String(ins).trim()) ? 'ok' : 'null';
+    }
     if (ins && String(ins).trim()) insId = String(ins).trim();
   }
   for (let a = 0; insId == null && a < 3; a++) {
+    _seam.confirm = a + 1;
     const c = await neonHttp(`SELECT id FROM ${AUDIT_TABLE} WHERE slug=$1 AND hash=$2 LIMIT 1`, [slug, hash]);
     if (c && Array.isArray(c.rows) && c.rows[0]) { insId = c.rows[0].id; break; }
     const c2 = pg(`SELECT id FROM ${AUDIT_TABLE} WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
@@ -982,6 +1002,8 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     await new Promise((res) => setTimeout(res, 1200 + a * 800));
   }
   if (insId == null) {
+    // E-224: ADOPTION now has a shim leg too (it was HTTP-only, useless when HTTP is the failing channel).
+    const _adSql = `SELECT id || '|' || slug || '|' || hash FROM ${AUDIT_TABLE} WHERE domain='${domain.replace(/'/g, "''")}' AND status IN ('live','quarantined') AND payload_json->>'engine_version' = '${String(payload.engine_version || '').replace(/'/g, "''")}' AND generated_at > now() - interval '15 minutes' ORDER BY generated_at DESC LIMIT 1`;
     const ad = await neonHttp(
       `SELECT id, slug, hash FROM ${AUDIT_TABLE} WHERE domain=$1 AND status IN ('live','quarantined')
          AND payload_json->>'engine_version' = $2 AND generated_at > now() - interval '15 minutes'
@@ -989,10 +1011,14 @@ async function build({ lead_id, domain, sector, country, company, env }) {
       [domain, String(payload.engine_version || '')]
     );
     if (ad && Array.isArray(ad.rows) && ad.rows[0]) {
-      insId = ad.rows[0].id; finalSlug = ad.rows[0].slug; finalHash = ad.rows[0].hash;
-      console.error('[write-seam] adopted committed-but-unconfirmed row for ' + domain + ' (' + finalSlug + '/' + finalHash + ')');
+      insId = ad.rows[0].id; finalSlug = ad.rows[0].slug; finalHash = ad.rows[0].hash; _seam.adopt = 'http';
+    } else {
+      const ad2 = pg(_adSql);
+      if (ad2 && String(ad2).includes('|')) { const [i2, s2, h2] = String(ad2).trim().split('|'); insId = i2; finalSlug = s2; finalHash = h2; _seam.adopt = 'shim'; }
     }
+    if (_seam.adopt !== 'no') console.error('[write-seam] adopted committed-but-unconfirmed row for ' + domain + ' (' + finalSlug + '/' + finalHash + ')');
   }
+  console.error('[write-seam] ' + domain + ' http=' + _seam.http + ' shim=' + _seam.shim + ' confirm=' + _seam.confirm + ' adopt=' + _seam.adopt + ' id=' + (insId == null ? 'NONE' : insId));
   if (insId == null) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written${_writeErr ? ' (' + _writeErr.slice(0, 140) + ')' : ''}; refusing to return a dead audit link`);
   const signedFinal = (finalSlug === slug && finalHash === hash) ? signed : signUrl({ slug: finalSlug, hash: finalHash, lead_id, expSeconds });
 
