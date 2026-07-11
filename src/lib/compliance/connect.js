@@ -58,11 +58,18 @@ function fwToSectors() {
   try { const { SECTOR_MAP } = require('./jurisdiction-router.js'); for (const [sec, fws] of Object.entries(SECTOR_MAP)) for (const fw of fws) (_fwToSectors[fw] = _fwToSectors[fw] || new Set()).add(sec); } catch (_e) {}
   return _fwToSectors;
 }
+// E-214 (v22.5, S-045/red-team DIFC): SECTOR-AGNOSTIC ESTABLISHMENT REGIMES. The free-zone data-protection laws
+// bind EVERY entity established in their zone regardless of sector (DIFC DPL No.5/2020 Art.6; ADGM DPR 2021
+// reg.6). They are deliberately NOT in any baseline (E-023) and their attachment is gated by the establishment-
+// typed CAP_GATE regex, so sector gate B0 must not be the thing that drops them — that silently removed DIFC law
+// from DIFC-registered firms of every named sector (coverage loss, the red-team DIFC fixture).
+const SECTOR_AGNOSTIC_FW = new Set(['DIFC_DPL', 'ADGM_DPR']);
 // GATE B0 (framework sector): a framework applies to a sector if it is universal, OR the curated sector map
 // lists it for that sector (direct or via parent alias), OR it has a rule whose sector_relevance names the sector.
 function fwSectorOK(fw, sector, rulesForFw) {
   if (!sector) return true;                         // unknown sector: do not over-filter
   if (UNIVERSAL_FW.has(fw)) return true;
+  if (SECTOR_AGNOSTIC_FW.has(fw)) return true;      // establishment-gated free-zone regimes (CAP_GATE still applies)
   const m = fwToSectors()[fw];
   if (m && m.has(sector)) return true;
   // check parent sectors — if 'healthcare' maps to this fw and sector='aesthetics', allow it
@@ -165,7 +172,7 @@ function connectSelfTest(frameworks, jSet, sec, fvJuris, text, opts) {
   const _sx = require('./registry/sector.js');
   const fvReq = (opts && opts.fvReq) || {}; const nx = (opts && opts.nexus) || {};
   const estabAnywhere = Object.keys(nx).some(k => nx[k] && nx[k].established_in);
-  const FAM_OF = j => { j=String(j||'').toUpperCase(); if(j==='UK')return 'UK'; if(j==='EU'||j.indexOf('EU-')===0)return 'EU'; if(j==='US'||j==='USA')return 'USA'; if(j==='AE'||j.indexOf('MENA-AE')===0||j.indexOf('AE-')===0)return 'AE'; return null; };
+  const FAM_OF = j => { j=String(j||'').toUpperCase(); if(j==='UK')return 'UK'; if(j==='EU'||j.indexOf('EU-')===0)return 'EU'; if(j==='US'||j==='USA')return 'USA'; if(j==='AE'||j.indexOf('MENA-AE')===0||j.indexOf('AE-')===0)return 'AE'; if(j==='SA'||j==='KSA'||j.indexOf('MENA-SA')===0)return 'SA'; if(j==='QA'||j.indexOf('MENA-QA')===0)return 'QA'; return null; };
   for (const fw of (frameworks || [])) {
     const jz = (fvJuris && fvJuris[fw]) || '';
     if (!(jz === 'GLOBAL' || jSet.has(jz))) { const e = new Error('connect_self_test:jurisdiction_leak:' + fw + '(' + jz + ')'); e.guardrail = 'jurisdiction_leak'; throw e; }
@@ -219,7 +226,9 @@ function connect({ catalogue, jurisdictions, sector, signals, text, mode }) {
   // establishment-ONLY framework from a firm proven established in a DIFFERENT family (never on absent evidence).
   const _nx = (sig && sig.nexus) || {};
   const _estabAnywhere = Object.keys(_nx).some(k => _nx[k] && _nx[k].established_in);
-  const _FAM_OF = j => { j=String(j||'').toUpperCase(); if(j==='UK')return 'UK'; if(j==='EU'||j.indexOf('EU-')===0)return 'EU'; if(j==='US'||j==='USA')return 'USA'; if(j==='AE'||j.indexOf('MENA-AE')===0||j.indexOf('AE-')===0)return 'AE'; return null; };
+  // E-210 (v22.5): SA/QA recognised as first-class families here too, so the establishment-only NEXUS GATE
+  // applies to SAUDI_/QATAR_ frameworks exactly as it does to UK/EU/US/AE (previously they fell through null).
+  const _FAM_OF = j => { j=String(j||'').toUpperCase(); if(j==='UK')return 'UK'; if(j==='EU'||j.indexOf('EU-')===0)return 'EU'; if(j==='US'||j==='USA')return 'USA'; if(j==='AE'||j.indexOf('MENA-AE')===0||j.indexOf('AE-')===0)return 'AE'; if(j==='SA'||j==='KSA'||j.indexOf('MENA-SA')===0)return 'SA'; if(j==='QA'||j.indexOf('MENA-QA')===0)return 'QA'; return null; };
   const byFw = {}; for (const r of (catalogue.rules || [])) (byFw[r.framework_short] = byFw[r.framework_short] || []).push(r);
   // Knowledge-mode attach set (v22, correct-by-construction): the family's ESTABLISHED baseline statutes plus any
   // framework a catalogue author explicitly sector-tagged for this firm's sector. Trigger-only universal statutes
