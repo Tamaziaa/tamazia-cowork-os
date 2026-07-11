@@ -76,6 +76,8 @@ function _prompt(p) {
       'TASK: (1) Is detected_sector the firm\'s OWN primary business (not its clients\' industry)? ',
       '(2) For each attached framework decide PATH A or PATH B and apply the doctrine above. ',
       '(3) Flag ONLY: a framework whose family is foreign AND lacks serves/establishment evidence (Path B fail); or a sector-implausible attachment (e.g. a healthcare regulator on a law firm). NEVER flag a registered-country-family framework for missing nexus. NEVER flag a code merely for being voluntary, professional, industry or membership-based.',
+      'SECTOR-CORE REGULATORS: never flag a framework that IS this sector\'s own regulator. For a law firm that means the SRA (Code of Conduct, Transparency Rules), the Legal Ombudsman, the Bar Standards Board, the CLC and the Money Laundering Regulations 2017 — solicitors are supervised under MLR 2017 and these are the four regulators that most obviously bind them. Flagging them is always wrong.',
+      'SECTOR-AGNOSTIC LAW: never flag UK GDPR, DPA 2018, PECR/cookies, the Equality Act, the Companies Act, the Consumer Rights Act, the DMCC Act/CMA or the ASA/CAP Code as sector-implausible. They bind EVERY commercial website and every trader, law firms included.',
       'Respond with JSON exactly: {"sector_ok": true|false, "sector_should_be": "<canonical sector or same>", "families_ok": true|false, "wrong_families": ["..."], "flagged_frameworks": [{"code": "...", "reason": "<10 words max>"}], "confidence": 0.0-1.0}'
     ].join('\n')
   };
@@ -102,6 +104,37 @@ async function llmVerifyPayload(p) {
     return { status: 'unavailable', flags: [], error: String(e && e.message || e).slice(0, 160), checked_at: new Date().toISOString() };
   }
   const flags = [];
+  // E-249 (v22.12) — THE LLM MAY NOT OVERRULE OUR OWN REGISTRY ON A SECTOR'S CORE REGULATORS.
+  // wrigleys.co.uk: correctly classified law-firms/solicitors, and the quorum leg flagged UK_SRA_COC,
+  // UK_SRA_TRANSPARENCY, UK_MLR_2017 and UK_LEGAL_OMBUDSMAN as "law-firm sector mismatch". Those are THE FOUR
+  // CORE REGULATORS OF A SOLICITORS' FIRM. The verifier rejected the SRA Code of Conduct for an SRA-regulated
+  // firm and quarantined a perfect audit for it. wardhadaway: same, plus UK_ASA_CAP and UK_CMA — both of which
+  // bind every UK advertiser and trader, law firms included.
+  // This is the E-241 lesson again: a model is being allowed to veto a curated, deterministic fact it cannot
+  // possibly know better than we do. A framework that IS the sector's own regulator is immune to a
+  // sector-implausibility flag, on both the main leg and the quorum leg. Wrong-FAMILY flags still apply — a US
+  // regulator on a UK firm is still catchable; only "this regulator doesn't fit this sector" is refused, and only
+  // for the regulators we have curated as core to that sector.
+  const SECTOR_CORE = {
+    'law-firms': [/SRA/i, /LEGAL_OMBUDSMAN/i, /BSB|BAR_STANDARDS/i, /CLC_/i, /MLR/i, /LSB/i, /SOLICITORS/i],
+    'accounting': [/ICAEW|ACCA|ICAS|CIMA/i, /FRC/i, /HMRC/i, /MLR/i],
+    'healthcare': [/CQC/i, /GMC|GDC|NMC|GPHC/i, /MHRA/i, /HTA/i],
+    'finance': [/FCA/i, /PRA/i, /FSMA/i, /MLR/i, /CONSUMER_DUTY/i],
+    'real-estate': [/RICS/i, /PROPERTY_OMBUDSMAN|TPO/i, /ESTATE_AGENTS|EAA/i, /MLR/i],
+    'hospitality': [/FSA|FOOD/i, /ATOL|ABTA/i, /LICENSING/i],
+  };
+  // Laws that bind EVERY commercial site in a jurisdiction regardless of sector: no sector-implausibility flag
+  // may ever remove them. (UK_CMA on a law firm is not "implausible" — the DMCC Act binds all traders.)
+  const SECTOR_AGNOSTIC = /GDPR|DPA_|PECR|COOKIE|EPRIVACY|EQUALITY|COMPANIES_ACT|CRA_|CONSUMER|DMCC|CMA|ASA|CAP_CODE|ACCESSIB|EAA_|DSA/i;
+  const _secKey = String(p.detected_sector || p.sector || '').toLowerCase();
+  const _coreRx = SECTOR_CORE[_secKey] || [];
+  const _isSectorCore = (code) => {
+    const c = String(code || '').toUpperCase();
+    return _coreRx.some((rx) => rx.test(c)) || SECTOR_AGNOSTIC.test(c);
+  };
+  // Any reason that amounts to "this framework does not fit this sector".
+  const _sectorDoubtRx = /sector.?(implausible|mismatch|inapplicab|irrelevan|specific)|not (the )?(primary|relevant|applicable|correct)? ?(conduct )?regulator|does not (apply|fit|bind)|wrong sector|implausible|not sector|regulator for/i;
+
   // E-228: DETERMINISTIC NEXUS SAFETY NET. Even if a model still flags a registered-country-family framework for
   // "no nexus", drop that flag — registration IS the nexus (establishment limb). This makes the doctrine robust
   // to model drift and permanently closes the Qatar (registered_country) false-quarantine class.
@@ -122,6 +155,8 @@ async function llmVerifyPayload(p) {
     // quarantining otherwise-perfect audits (freeths, brownejacobson: classify 10/10, everything else clean).
     // A GLOBAL code is never flaggable on family/nexus grounds. Sector-implausibility is still catchable.
     if (FAMILY_OF(code) === 'GLOBAL' && (_nexusDoubtRx.test(reason) || /famil|jurisdic|foreign/i.test(reason))) continue;
+    // E-249: the sector's OWN regulator (and any sector-agnostic law) can never be "sector-implausible".
+    if (_isSectorCore(code) && _sectorDoubtRx.test(reason)) continue;
     // v22.3 flag policy: the cross-check exists to catch WRONG-FAMILY and WRONG-SECTOR attachments. Opinions
     // about bindingness, generality or enforcement style are the catalogue's domain (binding labels carry them)
     // and must never quarantine a correct stack. Drop those; keep everything family/sector-shaped; when in doubt
@@ -179,7 +214,8 @@ async function llmVerifyPayload(p) {
           // never be flagged for a foreign family or a missing nexus (the freeths '[quorum] no serves evidence' class).
           if (FAMILY_OF(code) === 'GLOBAL' && (/no nexus|without nexus|no (establishment|evidence|serves)|not established|missing (nexus|evidence)|no serves/i.test(reason) || /famil|jurisdic|foreign/i.test(reason))) continue;
           const _styleOnly2 = /voluntar|not mandatory|industry code|professional code|guideline|only if member|membership|non.?binding|not universally|not a (law|statute|framework)|not sector-specific|general (corporate|consumer|data protection)? ?law|enforcement (agency|body)|applies (to|across) (all|any|every)|umbrella|broad(ly)? applicable/i.test(reason);
-          if (binding.includes(code) && !(_styleOnly2 && _inFam2)) flags.push({ code, reason: '[quorum] ' + reason });
+          if (_isSectorCore(code) && _sectorDoubtRx.test(reason)) continue;   // E-249: same immunity on the quorum leg
+        if (binding.includes(code) && !(_styleOnly2 && _inFam2)) flags.push({ code, reason: '[quorum] ' + reason });
         }
         if (o2.sector_ok === false) flags.push({ code: 'SECTOR', reason: ('[quorum] llm says ' + String(o2.sector_should_be || 'different sector')).slice(0, 70) });
         _quorum = { status: flags.length ? 'disagree' : 'agree', provider: (r2.provider || '') + '/' + (r2.model || '') };
