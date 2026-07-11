@@ -125,8 +125,11 @@ const CAP_GATE = {
   // Free-zone gates require ESTABLISHMENT context, not the bare zone name — a mainland firm that merely SELLS
   // "DIFC company setup" services must NOT inherit DIFC data law (it is not established there). Match an
   // establishment phrase co-located with the zone, a physical DIFC/ADGM address, or zone-registration wording.
-  DIFC_DPL:    { sig: null, rx: /(registered|licen[cs]ed|authorised|regulated|based|established|incorporated|headquarter|domiciled|our (office|firm|practice)|principal place)[^.]{0,40}(difc|dubai international financial centre|dfsa)|(difc|dfsa)[^.]{0,40}(registered|licen[cs]ed|authorised|regulated|established|based)|gate (village|district|avenue)|difc[- ]registered/i },
-  ADGM_DPR:    { sig: null, rx: /(registered|licen[cs]ed|authorised|regulated|based|established|incorporated|headquarter|domiciled|our (office|firm|practice)|principal place)[^.]{0,40}(adgm|abu dhabi global market|fsra)|(adgm|fsra)[^.]{0,40}(registered|licen[cs]ed|authorised|regulated|established|based)|al maryah island|adgm[- ]registered/i },
+  // E-221 (v22.5.1): 'DIFC Courts' advocacy is NOT DIFC establishment — a mainland litigator "registered with
+  // the DIFC Courts" practises BEFORE the court without being zone-established, so the zone tokens exclude an
+  // immediately-following 'Court(s)' in both directions of the co-location match (fichtelegal class).
+  DIFC_DPL:    { sig: null, rx: /(registered|licen[cs]ed|authorised|regulated|based|established|incorporated|headquarter|domiciled|our (office|firm|practice)|principal place)[^.]{0,40}(difc(?!\s+courts?)|dubai international financial centre(?!\s+courts?)|dfsa)|(difc(?!\s+courts?)|dfsa)[^.]{0,40}(registered|licen[cs]ed|authorised|regulated|established|based)|gate (village|district|avenue)|difc[- ]registered/i },
+  ADGM_DPR:    { sig: null, rx: /(registered|licen[cs]ed|authorised|regulated|based|established|incorporated|headquarter|domiciled|our (office|firm|practice)|principal place)[^.]{0,40}(adgm(?!\s+courts?)|abu dhabi global market(?!\s+courts?)|fsra)|(adgm(?!\s+courts?)|fsra)[^.]{0,40}(registered|licen[cs]ed|authorised|regulated|established|based)|al maryah island|adgm[- ]registered/i },
   // Emirate gating (healthcare regulators): DHA binds Dubai-based providers, DOH Abu Dhabi. Without this all three
   // coarse-'AE' authorities attached to every UAE clinic (a Dubai clinic wrongly got the Abu Dhabi regulator and
   // vice-versa). MOHAP (federal) stays the ungated default for the other emirates.
@@ -295,6 +298,13 @@ function connect({ catalogue, jurisdictions, sector, signals, text, mode }) {
     const sraSig = /\b(regulated by the (solicitors regulation authority|sra)|\bsra (number|no|id|regulated)|solicitors? regulation authority)\b/i.test(t);
     if (clcSig && !sraSig) { connectedFw.delete('UK_SRA_COC'); connectedFw.delete('UK_SRA_TRANSPARENCY'); }
   }
+  // E-221 (v22.5.1): FREE-ZONE EXCLUSIVITY. DIFC DPL No.5/2020 and ADGM DPR 2021 DISPLACE federal PDPL for
+  // zone-established entities — the regimes are mutually exclusive, never a stack (V02_multiple_me encodes
+  // this; the E-214 sector-agnostic carve-out exposed the missing displacement: fichtelegal minted
+  // DIFC_DPL+UAE_PDPL and quarantined ×10). Dual-zone text keeps DIFC and drops ADGM (deterministic; a firm
+  // genuinely established in both is a manual-review rarity, and the drop is traced).
+  if (connectedFw.has('DIFC_DPL') && connectedFw.has('ADGM_DPR')) { connectedFw.delete('ADGM_DPR'); gates.nexus_filtered.push('ADGM_DPR'); }
+  if ((connectedFw.has('DIFC_DPL') || connectedFw.has('ADGM_DPR')) && connectedFw.has('UAE_PDPL')) { connectedFw.delete('UAE_PDPL'); gates.jurisdiction_filtered.push('UAE_PDPL'); }
   const _fwArr = Array.from(connectedFw).sort();
   connectSelfTest(_fwArr, J, sec, fvJuris, t, { fvReq, nexus: _nx });   // fail-closed guardrail (jurisdiction+node+nexus)
   const _bind = {}; { const _i = require('./registry/framework-intel.js'); for (const _f of _fwArr) { const _b = _i.bindingStatus(_f); if (_b) _bind[_f] = _b; } }

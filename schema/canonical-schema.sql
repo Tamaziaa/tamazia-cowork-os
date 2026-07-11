@@ -2486,3 +2486,21 @@ CREATE TABLE IF NOT EXISTS llm_verdicts (
   verdict jsonb,
   created_at timestamptz DEFAULT now()
 );
+
+-- E-223 (v22.6): cell-level LLM law-discovery cache (30d TTL in code) + self-learning framework candidates.
+-- Candidates NEVER attach to audits; they feed the human-gated seed pipeline (inactive -> validated -> active).
+CREATE TABLE IF NOT EXISTS cell_law_reviews (
+  cell_key varchar(200) PRIMARY KEY,
+  sector varchar(40), sub_sector varchar(48), jurisdictions varchar(40), catalogue_version varchar(24),
+  matched jsonb, unmatched jsonb, score integer, provider varchar(60),
+  checked_at timestamptz DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS framework_candidates (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name varchar(160) NOT NULL, name_norm varchar(90) NOT NULL,
+  jurisdiction varchar(12) NOT NULL, sector varchar(40) NOT NULL, sub_sector varchar(48) NOT NULL DEFAULT '',
+  scope_note varchar(90), seen_count integer DEFAULT 1,
+  status varchar(16) DEFAULT 'candidate',
+  first_seen timestamptz DEFAULT now(), last_seen timestamptz DEFAULT now(),
+  UNIQUE (name_norm, jurisdiction, sector, sub_sector)
+);
