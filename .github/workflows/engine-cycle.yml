@@ -32,6 +32,9 @@ jobs:
     # D3.2: throughput knobs — overridable via workflow_dispatch inputs or ENV_B64 secret.
     # Defaults match the shell-script fallbacks so behaviour is unchanged until a founder adjusts them.
     env:
+      # E-240: Cloudflare Workers AI = 10,000 free LLM calls/DAY, quota SEPARATE from Groq/Gemini.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       VERIFY_AUDITS_BATCH: '20'
       QUALIFY_BATCH: '50'

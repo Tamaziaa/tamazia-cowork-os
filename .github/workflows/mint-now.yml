@@ -39,6 +39,10 @@ jobs:
       # rate-limited provider burned 30s x retries x 3 gate attempts, stalling every mint for minutes. The
       # gate still drops to the deterministic fallback on failure; it just stops WAITING so long to do it.
       LLM_TIMEOUT_MS: "12000"
+      # E-240: Cloudflare Workers AI = 10,000 free LLM calls/DAY on a quota SEPARATE from Groq/Gemini.
+      # The router auto-leads with it when both vars are present (E-239), so this alone lifts free LLM capacity ~200x.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
