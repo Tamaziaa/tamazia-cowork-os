@@ -772,6 +772,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     llm_gate: { classify: (comp && comp.firm_profile && comp.firm_profile.classifier_gate) || null, exec: _execGate },
     company: (() => { const nm = (company && String(company).trim()) || ''; const fp = (comp && comp.firm_profile) || {}; const scanned = fp.name || fp.legal_name || fp.display_name || fp.trading_name || fp.brand || ''; if (scanned && String(scanned).trim()) return String(scanned).trim(); return nm || null; })(),
     via_archive: !!(comp && comp.via_archive), archive_date: (comp && comp.archive_date) || null,
+    crawl_telemetry: (comp && comp.crawl_telemetry) || null,   // E-230: propagate policy-coverage telemetry to the shipped payload
     engine_jurisdictions: (comp && comp.jurisdictions) || [],
     nexus: (comp && comp.nexus) || null,
     jurisdiction_families: (comp && comp.jurisdiction_families) || null,
@@ -933,6 +934,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     trust_summary: payload.trust_summary || null, exec_summary: payload.exec_summary || '',
     llm_verify: payload.llm_verify || null, compliance_unassessed: !!payload.compliance_unassessed,
     render_mode: payload.render_mode || null, registers: payload.registers || null,
+    llm_gate: payload.llm_gate || null, crawl_telemetry: payload.crawl_telemetry || null,   // E-230: R2 rows stay fully scoreable
   } : payload;
 
   const expSeconds = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
