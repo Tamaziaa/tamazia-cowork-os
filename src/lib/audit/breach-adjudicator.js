@@ -47,6 +47,27 @@ function _highRisk(f) {
 
 // Compact, quotable view of ONE finding. Everything the model needs to rule on it and nothing else, so it cannot
 // read our own confidence off the payload and simply agree with us.
+// E-255 (v23.1) — STATUTE GROUNDING. statute_chunks holds 908 chunks of REAL STATUTE TEXT across 366 laws, and
+// statute-rag.js has read them since the day it was written. NO MINT EVER CALLED IT. The adjudicator was about to
+// judge a breach against OUR OWN PARAPHRASE of the obligation (the `description` column), which means a wrong or
+// stale description would be laundered into a legal claim with a model's endorsement on it.
+// It now judges against the ACTUAL WORDS OF THE LAW, retrieved by full-text search over statute_chunks for exactly
+// the framework being ruled on. This is the difference between "does this look like a breach" and "does this
+// evidence fail the test the statute actually sets".
+function _statuteFor(codes) {
+  let rag = null;
+  try { rag = require('../compliance/statute-rag.js'); } catch (_e) { return {}; }
+  const out = {};
+  for (const code of new Set(codes.filter(Boolean))) {
+    try {
+      const hits = rag.retrieve(String(code), { law_id: String(code), k: 2 }) || [];
+      const text = hits.map((h) => String(h.chunk_text || '').trim()).filter(Boolean).join(' … ').slice(0, 700);
+      if (text) out[code] = text;
+    } catch (_e) { /* a missing statute is not a failure: the adjudicator falls back to the obligation text */ }
+  }
+  return out;
+}
+
 function _brief(f, i) {
   const ev = String(f.evidence_quote || '').trim();
   const ae = f.absence_evidence || {};
@@ -70,10 +91,14 @@ function _system() {
     + 'a legal claim is sent to that company. You do not add findings. You do not soften findings. You rule.';
 }
 
-function _prompt(ctx, briefs) {
+function _prompt(ctx, briefs, statutes) {
+  const st = statutes && Object.keys(statutes).length
+    ? ['', 'THE ACTUAL TEXT OF THE LAW (retrieved from the statute corpus — judge against THIS, not against our summary):',
+       ...Object.entries(statutes).map(([k, v]) => '  [' + k + '] ' + v), '']
+    : [];
   return [
     'FIRM: ' + ctx.domain + ' | SECTOR: ' + ctx.sector + ' | COUNTRY: ' + ctx.country,
-    '',
+    ...st,
     'For EACH candidate below return a verdict:',
     '  "breach"       = the evidence, AS GIVEN, establishes a breach of the stated obligation.',
     '  "no_breach"    = it does not. Use this for FALSE POSITIVES: the matched text means something else in context',
@@ -173,12 +198,15 @@ async function adjudicateBreaches(findings, ctx, opts) {
   for (let start = 0; start < out.length; start += BATCH) {
     const batch = out.slice(start, start + BATCH);
     const briefs = batch.map((f, i) => _brief(f, i));
+    // E-255: retrieve the REAL statute text for every framework in this batch, so the model rules against the law
+    // as enacted rather than against our own description column.
+    const statutes = _statuteFor(batch.map((f) => f.framework || f.framework_short));
 
     let g = null;
     if (Date.now() < deadline) {
       try {
         g = await gateLLM({
-          role: 'extract', system: _system(), prompt: _prompt(ctx, briefs), rubric: _rubric(briefs, batch),
+          role: 'extract', system: _system(), prompt: _prompt(ctx, briefs, statutes), rubric: _rubric(briefs, batch),
           threshold: 7, max_attempts: 3, max_tokens: 900, temperature: 0,
           scan_id: String(ctx.domain || '') + ':adjudicate:' + start,
           deadline_ms: Math.max(8000, deadline - Date.now()),
@@ -222,4 +250,4 @@ async function adjudicateBreaches(findings, ctx, opts) {
   return { findings: kept, report };
 }
 
-module.exports = { adjudicateBreaches, _highRisk, _rubric, _brief, _prompt, _system };
+module.exports = { adjudicateBreaches, _highRisk, _rubric, _brief, _prompt, _system, _statuteFor };
