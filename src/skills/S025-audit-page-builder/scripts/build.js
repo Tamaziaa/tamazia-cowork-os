@@ -421,6 +421,13 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       evidence_url: f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || null,
       evidence_quote: f.evidence_quote || null,
       checked_urls: Array.isArray(f.checked_urls) ? f.checked_urls.slice(0, 6) : null,
+      // v22.4 (V05 closure): an ABSENCE claim must name the page(s) that prove it — the URLs we actually
+      // inspected and found silent. That is honest proof-of-inspection, sourced from the scanner's own
+      // checked_urls / evidence_url, never invented. Without it the write gate rightly quarantined every
+      // must_appear miss (pallmall V05 class).
+      kind: f.kind || ((f.rule_type === 'must_appear' || f.absence_evidence) ? 'absence' : (f.kind || null)),
+      page: f.page || f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || ((comp && comp.final_url) || (scan && scan.final_url) || ('https://' + domain + '/')),
+      proof_url: f.proof_url || f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || ((comp && comp.final_url) || (scan && scan.final_url) || ('https://' + domain + '/')),
       absence_evidence: f.absence_evidence || null,   // A3 — real nearest-miss context (page + what's there vs missing)
       // Element-checklist (Phase 3a): which required elements are present (with a quote) vs missing on the page, so the
       // render can show "you show price and VAT but not timescales, key stages or who does the work".

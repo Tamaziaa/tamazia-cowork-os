@@ -21,7 +21,7 @@ function verifyPayload(p) {
   const _usEst = !!(nexus.USA && nexus.USA.established_in) || !!(nexus.US && nexus.US.established_in);
   for (const t of THRESHOLD_US) ok(!binding.includes(t) || !!(p.threshold_evidence && p.threshold_evidence[t]) || (fams.includes('US') && _usEst), 'V03_threshold_law_unevidenced', t);
   ok(!shipped.some(x => x.gate_reason), 'V04_gated_finding_shipped', (shipped.find(x => x.gate_reason) || {}).gate_reason);
-  ok(!shipped.some(x => (x.kind === 'absence' || x.status === 'miss') && !(x.absence_evidence && (x.absence_evidence.target_url || x.absence_evidence.pages_checked)) && !(x.checked_urls || []).length), 'V05_absence_without_proof', '');
+  ok(!shipped.some(x => (x.kind === 'absence' || x.status === 'miss') && !(x.absence_evidence && (x.absence_evidence.target_url || x.absence_evidence.pages_checked)) && !(x.checked_urls || []).length && !x.proof_url && !x.page), 'V05_absence_without_proof', '');
   ok(!shipped.some(x => String(x.regulator || '') === 'Sector regulator'), 'V06_placeholder_regulator', '');
   const NXC = { UK: ['UK'], EU: ['EU'], US: ['USA', 'US'], AE: ['AE'], SA: ['SA'], QA: ['QA'], ME: ['AE', 'SA', 'QA'] };
   for (const f of fams) { const ks = NXC[f] || [f];
