@@ -155,7 +155,7 @@ async function llmVerifyPayload(p) {
     if (process.env.LLM_VERIFY_QUORUM !== '0' && !flags.length && PRIORITY.has(String(p.detected_sector || '')) && _hasP01) {
       const { run } = require('../llm/router.js');
       const { system, prompt } = _prompt(p);
-      const _chain2 = [{ provider: 'gemini', model: 'gemini-2.0-flash' }, ...(process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: process.env.QWEN_MODEL || 'qwen-plus' }] : [])];
+      const _chain2 = [{ provider: 'gemini', model: 'gemini-2.5-flash-lite' }, ...(process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: process.env.QWEN_MODEL || 'qwen-plus' }] : [])];
       const r2 = await run({ chain: _chain2, role: 'extract', system, prompt, json: true, temperature: 0, max_tokens: 700, lead_id: p.lead_id, scan_id: String(p.domain || '') + ':quorum' });
       if (r2 && r2.ok && r2.text) {
         const t2 = String(r2.text).replace(/```json|```/g, '').trim();

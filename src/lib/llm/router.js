@@ -7,7 +7,7 @@
 //   cloudflare/llama-3.1-8b   : in 0,    out 0       (free tier)
 //   cloudflare/llama-3.3-70b  : in 0,    out 0       (free tier)
 //   groq/llama-3.3-70b        : in 0,    out 0       (free)
-//   gemini-2.0-flash          : in 0.10, out 0.40
+//   gemini-2.5-flash-lite          : in 0.10, out 0.40
 //   claude-haiku-4-5          : in 0.80, out 4.00
 //
 // Each call: { provider, model, prompt, system?, json?, temperature?, max_tokens?, lead_id?, scan_id?, role? }
@@ -53,10 +53,11 @@ const COST = {
   'cloudflare/@cf/google/gemma-3-12b-it': { in: 0, out: 0 },
   'groq/llama-3.3-70b-versatile': { in: 0, out: 0 },
   'groq/llama-3.1-8b-instant':    { in: 0, out: 0 },
-  'gemini/gemini-2.0-flash':      { in: 0.10, out: 0.40 },
+  'gemini/gemini-2.5-flash-lite': { in: 0.10, out: 0.40 },
   'gemini/gemini-2.5-flash':      { in: 0.30, out: 2.50 },
   'anthropic/claude-haiku-4-5':   { in: 0.80, out: 4.00 },
   'qwen/qwen-plus':               { in: 0.40, out: 1.20 },
+  'qwen/qwen-flash':              { in: 0.05, out: 0.40 },
   'qwen/qwen-turbo':              { in: 0.05, out: 0.20 },
   'qwen/qwen-max':                { in: 1.60, out: 6.40 }
 };
@@ -222,7 +223,7 @@ async function callQwen({ system, prompt, model, max_tokens, temperature, json }
   const usage = data.usage || {};
   return { ok: true, text, latency_ms: latency, prompt_tokens: usage.prompt_tokens || 0, completion_tokens: usage.completion_tokens || 0 };
 }
-const _QWEN_MODEL = process.env.QWEN_MODEL || 'qwen-plus';
+const _QWEN_MODEL = process.env.QWEN_MODEL || 'qwen-flash';   // E-237: qwen-plus costs 5x qwen-flash for a JSON classification task
 const _QWEN_STEP = process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: _QWEN_MODEL }] : [];
 
 // Default chain: free first, paid last. NIM inserted as an extra free, separate-quota tier before Gemini.
@@ -231,7 +232,7 @@ const DEFAULT_CHAIN = [
   { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
   { provider: 'groq',       model: 'llama-3.1-8b-instant' },
   ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
-  { provider: 'gemini',     model: 'gemini-2.0-flash' },
+  { provider: 'gemini',     model: 'gemini-2.5-flash-lite' },
   ..._QWEN_STEP
 ];
 
@@ -240,20 +241,20 @@ const ROUTE_BY_ROLE = {
   extract: [
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
     ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
-    { provider: 'gemini',     model: 'gemini-2.0-flash' },
+    { provider: 'gemini',     model: 'gemini-2.5-flash-lite' },
     ..._QWEN_STEP
   ],
   synthesise: [
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
     ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
-    { provider: 'gemini',     model: 'gemini-2.0-flash' },
+    { provider: 'gemini',     model: 'gemini-2.5-flash-lite' },
     ..._QWEN_STEP
   ],
   classify: [
     { provider: 'groq',       model: 'llama-3.1-8b-instant' },
     { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
     ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
-    { provider: 'gemini',     model: 'gemini-2.0-flash' },
+    { provider: 'gemini',     model: 'gemini-2.5-flash-lite' },
     ..._QWEN_STEP
   ]
 };

@@ -20,7 +20,7 @@ async function generate({ prompt, system, model, max_tokens = 1024, temperature 
     return tryGroqFallback({ prompt, system, max_tokens, temperature });
   }
   // Auto-failover across Gemini models on 503/429
-  const models = model ? [model] : ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
+  const models = model ? [model] : ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-flash-latest']   // E-237: gemini-2.0-flash RETIRED 1 Jun 2026, removed from the ladder; flash-lite first (free tier ~1000 RPD covers our quorum);
   let lastErr = null;
   for (const m of models) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key()}`;
