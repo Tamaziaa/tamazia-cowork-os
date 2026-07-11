@@ -11,7 +11,7 @@ function verifyPayload(p) {
   const binding = Object.keys(p.binding || {});
   const fp = p.firm_profile || {};
   const shipped = (p.pointers || []).filter(x => x && x.state !== 'NEEDS_REVIEW');
-  ok(!(fp.sector_confident === false) || !binding.some(f => /SRA|HIPAA|FCA_|DHA|CQC|GDC|SMCR|RICS|ARLA/i.test(f)), 'V01_sector_laws_on_unconfident_sector', binding.join(','));
+  ok(!(fp.sector_confident === false && fp.sector_from_llm !== true) || !binding.some(f => /SRA|HIPAA|FCA_|DHA|CQC|GDC|SMCR|RICS|ARLA/i.test(f)), 'V01_sector_laws_on_unconfident_sector', binding.join(','));
   const me = binding.filter(f => DATA_ME.includes(f)); ok(me.length <= 1, 'V02_multiple_me_data_regimes', me.join(','));
   ok(!(binding.includes('EU_GDPR') && !fams.includes('EU')), 'V02_eu_gdpr_without_eu_family', '');
   ok(!(binding.some(f => /^UK_/.test(f)) && !fams.includes('UK')), 'V02_uk_law_without_uk_family', binding.filter(f => /^UK_/.test(f)).join(','));

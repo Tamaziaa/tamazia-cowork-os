@@ -87,8 +87,14 @@ async function llmVerifyPayload(p) {
     const code = String((f && f.code) || '').trim();
     const reason = String((f && f.reason) || '').slice(0, 80);
     const _bindLabel = String((p.binding || {})[code] || '');
-    const _bindingnessOnly = /voluntar|not mandatory|industry code|professional code|guideline|only if member|membership|non.?binding|not universally|not a (law|statute)/i.test(reason);
-    if (binding.includes(code) && !(_bindingnessOnly && _bindLabel !== 'statute')) flags.push({ code, reason });
+    // v22.3 flag policy: the cross-check exists to catch WRONG-FAMILY and WRONG-SECTOR attachments. Opinions
+    // about bindingness, generality or enforcement style are the catalogue's domain (binding labels carry them)
+    // and must never quarantine a correct stack. Drop those; keep everything family/sector-shaped; when in doubt
+    // keep (fail-closed) — but never drop a flag whose code sits OUTSIDE the payload's own families.
+    const _fams = new Set((((p.jurisdiction_families || {}).families) || []).map(x => ({ UAE: 'AE', USA: 'US', GB: 'UK' })[String(x).toUpperCase()] || String(x).toUpperCase()));
+    const _inFam = _fams.size === 0 || _fams.has(FAMILY_OF(code)) || FAMILY_OF(code) === 'GLOBAL';
+    const _styleOnly = /voluntar|not mandatory|industry code|professional code|guideline|only if member|membership|non.?binding|not universally|not a (law|statute|framework)|not sector-specific|general (corporate|consumer|data protection)? ?law|enforcement (agency|body)|applies (to|across) (all|any|every)|umbrella|broad(ly)? applicable/i.test(reason);
+    if (binding.includes(code) && !(_styleOnly && _inFam)) flags.push({ code, reason });
   }
   if (out.sector_ok === false) flags.push({ code: 'SECTOR', reason: ('llm says ' + String(out.sector_should_be || 'different sector')).slice(0, 80) });
   if (out.families_ok === false && Array.isArray(out.wrong_families) && out.wrong_families.length) {

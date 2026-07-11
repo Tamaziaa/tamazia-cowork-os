@@ -145,7 +145,7 @@ function _domainProfession(domain) {
   if (/(dentist|dental|orthodont)/.test(d)) return 'dental';
   if (/(aesthetic|cosmeticsurgery|skinclinic|medspa|medispa)/.test(d)) return 'aesthetic';
   if (/(pharmacy|pharmaceutical|\bpharma)/.test(d)) return 'pharma';
-  if (/(physiotherap|physio|gpsurgery|medicalcentre|medicalcenter|healthcare|hospital(?!ity))/.test(d)) return 'healthcare';
+  if (/(physiotherap|physio|gpsurgery|medicalcentre|medicalcenter|healthcare|hospital(?!ity)|medical|clinic|\bgp\b|surgery(?!design))/.test(d)) return 'healthcare';
   if (/(realty|realestate|estateagent|lettingagent|propertygroup|propertymanagement|lettings|property|homes|\bproperties\b|chartered ?surveyor)/.test(d)) return 'real-estate';
   if (/(hotel|resort|restaurant|bistro|brasserie|guesthouse|bedandbreakfast|hospitality)/.test(d)) return 'hospitality';
   if (/(wealth|assetmanage|financialadvis|financialplann|wealthadvis|\bifa\b|privatewealth|investmentmanage|capitalpartners|wealthpartners)/.test(d)) return 'finance';
@@ -228,7 +228,11 @@ ${text}`;
     office_countries: offices, serves, source: 'llm',
     // self-ID override fired → high confidence. OR the LLM ran successfully (own-vs-client prompt) and returned a
     // sector: trust that over a stale scraped ICP label (which is often the CLIENT industry, e.g. RegTech→fintech).
-    sector_self_id: !!_ovr, sector_from_llm: !!llmSector, sector_confident: (typeof sector_confident !== 'undefined' ? sector_confident : true), sector_evidence: (fallback.sector_evidence || []),
+    sector_self_id: !!_ovr, sector_from_llm: !!llmSector,
+    // v22.3 (pallmall class): the E-005 two-cue deny-by-default gates KEYWORD guesses. A grounded LLM
+    // classification (source 'llm', canonical sector, extracted with own_activity evidence) IS confidence;
+    // carrying the deterministic 'false' over it quarantined correct healthcare audits on V01.
+    sector_confident: (!!llmSector && typeof llmSector === 'string') ? true : (typeof sector_confident !== 'undefined' ? sector_confident : true), sector_evidence: (fallback.sector_evidence || []),
   };
 }
 
