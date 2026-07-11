@@ -91,7 +91,9 @@ async function llmVerifyPayload(p) {
     // about bindingness, generality or enforcement style are the catalogue's domain (binding labels carry them)
     // and must never quarantine a correct stack. Drop those; keep everything family/sector-shaped; when in doubt
     // keep (fail-closed) — but never drop a flag whose code sits OUTSIDE the payload's own families.
-    const _fams = new Set((((p.jurisdiction_families || {}).families) || []).map(x => ({ UAE: 'AE', USA: 'US', GB: 'UK' })[String(x).toUpperCase()] || String(x).toUpperCase()));
+    let _FAL = { GB: 'UK', GBR: 'UK', EN: 'UK', UAE: 'AE', USA: 'US', KSA: 'SA', SAU: 'SA' };
+    try { _FAL = require('../compliance/registry/jurisdiction.js').FAMILY_ALIAS || _FAL; } catch (_e2) {}   // E-210: one alias map
+    const _fams = new Set((((p.jurisdiction_families || {}).families) || []).map(x => _FAL[String(x).toUpperCase()] || String(x).toUpperCase()));
     const _inFam = _fams.size === 0 || _fams.has(FAMILY_OF(code)) || FAMILY_OF(code) === 'GLOBAL';
     const _styleOnly = /voluntar|not mandatory|industry code|professional code|guideline|only if member|membership|non.?binding|not universally|not a (law|statute|framework)|not sector-specific|general (corporate|consumer|data protection)? ?law|enforcement (agency|body)|applies (to|across) (all|any|every)|umbrella|broad(ly)? applicable/i.test(reason);
     if (binding.includes(code) && !(_styleOnly && _inFam)) flags.push({ code, reason });
@@ -100,11 +102,48 @@ async function llmVerifyPayload(p) {
   if (out.families_ok === false && Array.isArray(out.wrong_families) && out.wrong_families.length) {
     flags.push({ code: 'FAMILY', reason: ('llm rejects ' + out.wrong_families.join(',')).slice(0, 80) });
   }
+  // E-212 (v22.5) PRIORITY-SECTOR QUORUM: for the priority ICP (legal, healthcare, hospitality, real estate,
+  // finance/wealth, accounting) a payload carrying confirmed P0/P1 findings must ALSO pass a second verifier
+  // from a DIFFERENT model family (gemini/qwen vs the groq/llama first leg) before it auto-ships. Research basis:
+  // cross-provider agreement tracks correctness far better than any single model's own confidence; escalate only
+  // where it pays (penalty-bearing findings in the sectors outreach actually targets), so free-tier quota survives
+  // 200-300 mints/day. Fail-open on unavailability (quorum:'single'), fail-closed on disagreement (flags merge).
+  let _quorum = null;
+  try {
+    const PRIORITY = new Set(['law-firms', 'barristers', 'healthcare', 'dental', 'aesthetics', 'pharmacy', 'telemedicine', 'care-homes', 'fertility', 'hospitality', 'real-estate', 'finance', 'fintech', 'insurance', 'accounting']);
+    const _hasP01 = ((p.pointers || [])).some(x => x && x.state !== 'NEEDS_REVIEW' && (x.severity === 'P0' || x.severity === 'P1'));
+    if (process.env.LLM_VERIFY_QUORUM !== '0' && !flags.length && PRIORITY.has(String(p.detected_sector || '')) && _hasP01) {
+      const { run } = require('../llm/router.js');
+      const { system, prompt } = _prompt(p);
+      const _chain2 = [{ provider: 'gemini', model: 'gemini-2.0-flash' }, ...(process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: process.env.QWEN_MODEL || 'qwen-plus' }] : [])];
+      const r2 = await run({ chain: _chain2, role: 'extract', system, prompt, json: true, temperature: 0, max_tokens: 700, lead_id: p.lead_id, scan_id: String(p.domain || '') + ':quorum' });
+      if (r2 && r2.ok && r2.text) {
+        const t2 = String(r2.text).replace(/```json|```/g, '').trim();
+        const o2 = JSON.parse(t2.slice(t2.indexOf('{'), t2.lastIndexOf('}') + 1));
+        const f2raw = Array.isArray(o2.flagged_frameworks) ? o2.flagged_frameworks : [];
+        for (const f of f2raw) {
+          const code = String((f && f.code) || '').trim();
+          const reason = String((f && f.reason) || '').slice(0, 80);
+          let _FAL2 = { GB: 'UK', GBR: 'UK', EN: 'UK', UAE: 'AE', USA: 'US', KSA: 'SA', SAU: 'SA' };
+          try { _FAL2 = require('../compliance/registry/jurisdiction.js').FAMILY_ALIAS || _FAL2; } catch (_e3) {}
+          const _fams2 = new Set((((p.jurisdiction_families || {}).families) || []).map(x => _FAL2[String(x).toUpperCase()] || String(x).toUpperCase()));
+          const _inFam2 = _fams2.size === 0 || _fams2.has(FAMILY_OF(code)) || FAMILY_OF(code) === 'GLOBAL';
+          const _styleOnly2 = /voluntar|not mandatory|industry code|professional code|guideline|only if member|membership|non.?binding|not universally|not a (law|statute|framework)|not sector-specific|general (corporate|consumer|data protection)? ?law|enforcement (agency|body)|applies (to|across) (all|any|every)|umbrella|broad(ly)? applicable/i.test(reason);
+          if (binding.includes(code) && !(_styleOnly2 && _inFam2)) flags.push({ code, reason: '[quorum] ' + reason });
+        }
+        if (o2.sector_ok === false) flags.push({ code: 'SECTOR', reason: ('[quorum] llm says ' + String(o2.sector_should_be || 'different sector')).slice(0, 70) });
+        _quorum = { status: flags.length ? 'disagree' : 'agree', provider: (r2.provider || '') + '/' + (r2.model || '') };
+      } else {
+        _quorum = { status: 'single', provider: null };
+      }
+    }
+  } catch (_qe) { _quorum = { status: 'single', error: String(_qe && _qe.message || _qe).slice(0, 120) }; }
   return {
     status: flags.length ? 'flag' : 'pass',
     flags,
     confidence: (typeof out.confidence === 'number') ? out.confidence : null,
     provider: out._provider || null,
+    quorum: _quorum,
     checked_at: new Date().toISOString()
   };
 }
