@@ -646,24 +646,42 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   // P1.8 BINGO voice: attach the 'Right now / Tamazia' lines to every confirmed finding so the v15 render speaks one voice.
   try { const _ds = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'design-system.js')); for (const f of _confirmed) f.bingo = _ds.bingoLine(f); } catch (_e) {}
   const threeFindings = _confirmed.slice(0, 3);
-  // LLM executive summary (NIM, free) — a 2-sentence synthesis of the REAL findings only. Fallback-safe.
+  // E-211 (v22.5, P-009): the executive summary NEVER ships empty again. Path 1: LLM synthesis through the
+  // shared router (groq -> NIM -> gemini -> Qwen paid fallover, retries + backoff + concurrency gate) instead of
+  // the old single direct NIM|Groq fetch that silently dropped to '' on a 429. Path 2: a deterministic composer
+  // from the counts the payload already proves — always runs when the LLM text is unusable, so V13 can gate on
+  // non-empty without ever quarantining a healthy mint. British English, no dashes-as-pauses, no first person.
   let exec_summary = '';
+  const _ceilByFw = {}; for (const f of _confirmed) { const v = +f.fine_high_gbp || 0; const k = f.framework || f.code || f.rule_id; if (v > (_ceilByFw[k] || 0)) _ceilByFw[k] = v; }
+  const _expo = Object.values(_ceilByFw).reduce((m, v) => Math.max(m, v), 0);
   try {
-    const _key = process.env.NIM_API_KEY || process.env.GROQ_API_KEY;
-    if (_key && _confirmed.length) {
+    if (_confirmed.length) {
       const _top = _confirmed.slice(0, 8).map(f => '- ' + (f.severity || '') + ' ' + String(f.fact || '').slice(0, 90)).join('\n');
       // ADDITIVE-MAXIMA FIX (bug #42/#53): fine_high_gbp is a per-framework STATUTORY MAXIMUM (a ceiling), not an
-      // incurred amount. Summing them (5 GDPR sub-findings -> 5x GBP17.5M) is materially misleading. Dedupe to one
-      // ceiling per framework, then take the SINGLE HIGHEST ceiling as the headline number (maxima are not additive).
-      const _ceilByFw = {}; for (const f of _confirmed) { const v = +f.fine_high_gbp || 0; const k = f.framework || f.code || f.rule_id; if (v > (_ceilByFw[k] || 0)) _ceilByFw[k] = v; }
-      const _expo = Object.values(_ceilByFw).reduce((m, v) => Math.max(m, v), 0);
-      const _base = process.env.NIM_API_KEY ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
-      const _model = process.env.NIM_API_KEY ? (process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct') : 'llama-3.3-70b-versatile';
+      // incurred amount. Maxima are not additive; the single highest ceiling is the only honest headline figure.
       const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nHighest single statutory penalty ceiling among the applicable frameworks (a per-framework maximum, NOT a sum and NOT an incurred amount): GBP ' + _expo + '.\nWrite exactly two sentences: (1) the single most serious regulatory or commercial risk and why it matters, (2) the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.';
-      const _r = await fetch(_base, { method: 'POST', headers: { authorization: 'Bearer ' + _key, 'content-type': 'application/json' }, body: JSON.stringify({ model: _model, messages: [{ role: 'user', content: _prompt }], max_tokens: 170, temperature: 0.3 }), signal: AbortSignal.timeout(25000) });
-      if (_r.ok) { const _j = await _r.json(); const _t = (_j.choices && _j.choices[0] && _j.choices[0].message && _j.choices[0].message.content || '').trim(); if (_t && _t.length > 40) exec_summary = _t.slice(0, 600); }
+      const _router = require(path.resolve(ROOT, 'src', 'lib', 'llm', 'router.js'));
+      const _r = await _router.run({ role: 'synthesise', prompt: _prompt, max_tokens: 170, temperature: 0.3, scan_id: domain + ':exec' });
+      if (_r && _r.ok) { const _t = String(_r.text || '').trim(); if (_t && _t.length > 40 && !/statutory max|maximum fine/i.test(_t.slice(0, 80))) exec_summary = _t.slice(0, 600); }
     }
   } catch (_e) {}
+  if (!exec_summary) {
+    try {
+      const _fwN = (frameworks || []).length;
+      const _sec = String((comp && comp.detected_sector) || sector || 'professional-services').replace(/-/g, ' ');
+      const _ISO2N = { UK: 'the United Kingdom', GB: 'the United Kingdom', US: 'the United States', USA: 'the United States', AE: 'the United Arab Emirates', UAE: 'the United Arab Emirates', SA: 'Saudi Arabia', QA: 'Qatar', IE: 'Ireland', FR: 'France', DE: 'Germany' };
+      const _ctyN = _ISO2N[String(country || '').toUpperCase()] || 'its registered jurisdiction';
+      const _revN = _needsReview.length;
+      if ((comp && comp.render_mode) === 'knowledge') {
+        exec_summary = _fwN + ' statutory frameworks bind a ' + _sec + ' firm established in ' + _ctyN + ' on registration facts alone, each mapped below with its regulator and core obligation. No breach is asserted: the live site could not be assessed on this scan, and a full page-level review is the natural next step.';
+      } else if (_confirmed.length) {
+        const _p01 = _confirmed.filter(f => f.severity === 'P0' || f.severity === 'P1').length;
+        exec_summary = _confirmed.length + ' verified findings stand against ' + domain + ' on this scan' + (_p01 ? ', ' + _p01 + ' of them priority class,' : '') + ' across the ' + _fwN + ' frameworks that bind a ' + _sec + ' firm in ' + _ctyN + '. Resolving the priority items first protects regulatory standing and recovers the search and AI visibility the same gaps are costing.';
+      } else {
+        exec_summary = 'No verified statutory breach surfaced on this scan of ' + domain + ': ' + _fwN + ' binding frameworks were assessed at page level' + (_revN ? ' with ' + _revN + ' items screened for review' : '') + '. The remaining opportunities are commercial, in search visibility and AI answer coverage, and are itemised below.';
+      }
+    } catch (_e) { exec_summary = 'This audit maps the statutory frameworks that bind ' + domain + ' and the verified findings from the live scan, itemised below with evidence.'; }
+  }
 
   return {
     schema_version: 'v2',
@@ -705,6 +723,11 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       } catch (_e) { return considered; }
     })(),
     detected_sector: (comp && comp.detected_sector) || sector,
+    // E-210/E-211 (v22.5): sub-sector as a first-class field (P-030) + the engine version that minted this payload
+    // (S-181/V20) so cohorts, canaries and the renderer can segment by engine, not just catalogue version.
+    sub_sector: (comp && comp.sub_sector) || null,
+    sub_sector_meta: (comp && comp.sub_sector_meta) || null,
+    engine_version: (comp && comp.engine_version) || process.env.COMPLIANCE_ENGINE_VERSION || 'v22.5-2026-07-uniform-tags',
     firm_profile: (comp && comp.firm_profile) || null,
     // #17: propagate the engine's binding-status map (framework -> statute/voluntary_code/...), the drop-trace
     // (why frameworks were screened out), the review-band tri-state, and per-attachment confidence, so the render
@@ -724,6 +747,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     drop_trace: (comp && comp.drop_trace) || null,
     review_candidates: (comp && comp.review_candidates) || [],
     attach_confidence: (comp && comp.attach_confidence) || {},
+    positive_compliance: (comp && comp.positive_compliance) || null,
     company: (() => { const nm = (company && String(company).trim()) || ''; const fp = (comp && comp.firm_profile) || {}; const scanned = fp.name || fp.legal_name || fp.display_name || fp.trading_name || fp.brand || ''; if (scanned && String(scanned).trim()) return String(scanned).trim(); return nm || null; })(),
     via_archive: !!(comp && comp.via_archive), archive_date: (comp && comp.archive_date) || null,
     engine_jurisdictions: (comp && comp.jurisdictions) || [],
@@ -792,21 +816,54 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   }
   // E-203 (audit-of-the-audits P-005): canonical country codes at the write seam. USA/US, UAE/AE and
   // GB/UK coexisting in audit_pages.country silently split every family-keyed computation downstream.
-  const _CANON_COUNTRY = { USA: 'US', UAE: 'AE', GB: 'UK', GBR: 'UK', KSA: 'SA' };
-  { const _cc = String(payload.country || country || '').toUpperCase();
-    const _canon = _CANON_COUNTRY[_cc] || _cc;
+  // E-210 (v22.5): the alias map is now the ONE registry map, not an inline copy.
+  { let _fc = (x) => x; try { _fc = require('../../../lib/compliance/registry/jurisdiction.js').famCanon; } catch (_e) {}
+    const _cc = String(payload.country || country || '').toUpperCase();
+    const _canon = _fc(_cc) || _cc;
     if (payload.country) payload.country = _canon; country = country ? _canon : country; }
+  // E-213 (v22.5, Regulators View module 1): REGISTERED REALITY. Cross-check the firm against the government
+  // registers it is already on (Companies House, FCA, CQC by API; ICO/SRA/DHA as link-out rows). Register data
+  // arrives by API even when the site blocks bots, so this module renders on every audit and cannot be wrong:
+  // every row links to the official source. Fail-open per register; never blocks the mint.
+  try {
+    const _rc = require('../../../lib/audit/register-check.js');
+    payload.registers = await _rc.checkRegisters({
+      domain, company: payload.company || company || null, country: payload.country || country || null,
+      sector: payload.detected_sector || sector || null, positive: payload.positive_compliance || null, env: env || process.env,
+    });
+  } catch (_e) { payload.registers = null; }
   // E-202 (audit-of-the-audits): LLM blind-send cross-verifier. Independent second opinion on sector,
   // families and every bound framework. Fail-closed on disagreement (merged into verify below); recorded
   // in the payload so the renderer and the send gate can see it. Runs BEFORE serialization.
-  let _llmv = { status: 'unavailable', flags: [] };
-  try { _llmv = await require('../../../lib/audit/llm-verify.js').llmVerifyPayload(payload); } catch (_e) { _llmv = { status: 'unavailable', flags: [], error: String(_e).slice(0, 120) }; }
+  // E-212 (v22.5): verdicts are CACHED keyed on everything that affects the answer (domain, engine version,
+  // catalogue version, sector, exact binding set, prompt version). Re-mints and retries stop burning free-tier
+  // quota; a catalogue or engine bump naturally invalidates. 'unavailable' verdicts are never cached.
+  let _llmv = null;
+  const _lvKey = require('crypto').createHash('sha1').update([domain, String(payload.engine_version || ''), String(payload.framework_version || ''), String(payload.detected_sector || ''), Object.keys(payload.binding || {}).sort().join(','), 'pv1'].join('|')).digest('hex');
+  try { const _c = pg(`SELECT verdict::text FROM llm_verdicts WHERE key='${_lvKey}' AND created_at > now() - interval '14 days' LIMIT 1`);
+    if (_c && String(_c).trim()) { _llmv = JSON.parse(String(_c).trim()); _llmv.cached = true; } } catch (_e) {}
+  if (!_llmv) {
+    try { _llmv = await require('../../../lib/audit/llm-verify.js').llmVerifyPayload(payload); } catch (_e) { _llmv = { status: 'unavailable', flags: [], error: String(_e).slice(0, 120) }; }
+    if (_llmv && _llmv.status !== 'unavailable') {
+      try { pg(`INSERT INTO llm_verdicts (key, domain, verdict, created_at) VALUES ('${_lvKey}', '${domain.replace(/'/g, "''")}', '${JSON.stringify(_llmv).replace(/'/g, "''")}'::jsonb, now()) ON CONFLICT (key) DO UPDATE SET verdict=EXCLUDED.verdict, created_at=now()`); } catch (_e) {}
+    }
+  }
   payload.llm_verify = _llmv;
   // E-205 (audit-of-the-audits P-007): out-of-ICP hard gate. media/general audits attach the weakest
   // catalogue cells and have zero commercial value; they persist but can never verify or ship.
   const _ICP_BLOCK = new Set(['media', 'general']);
   const _outOfIcp = _ICP_BLOCK.has(String(payload.detected_sector || '').toLowerCase()) && process.env.ALLOW_NON_ICP !== '1';
-  const neonPayload = (mode === 'r2') ? { r2: true, framework_version: payload.framework_version } : payload;
+  // E-211 (v22.5, S-182/V21): an R2-offloaded row ALWAYS retains an inline compact projection so SQL-side
+  // verification, sanitisation and peer aggregates never skip it silently (the 7 invisible stubs class).
+  const neonPayload = (mode === 'r2') ? {
+    r2: true, framework_version: payload.framework_version, engine_version: payload.engine_version || null,
+    detected_sector: payload.detected_sector || null, sub_sector: payload.sub_sector || null,
+    country: payload.country || null, binding: payload.binding || {},
+    jurisdiction_families: payload.jurisdiction_families || null,
+    trust_summary: payload.trust_summary || null, exec_summary: payload.exec_summary || '',
+    llm_verify: payload.llm_verify || null, compliance_unassessed: !!payload.compliance_unassessed,
+    render_mode: payload.render_mode || null, registers: payload.registers || null,
+  } : payload;
 
   const expSeconds = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
   const signed = signUrl({ slug, hash, lead_id, expSeconds });

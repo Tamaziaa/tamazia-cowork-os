@@ -2477,3 +2477,12 @@ CREATE TABLE IF NOT EXISTS cost_ledger (
   PRIMARY KEY (id)
 );
 CREATE INDEX IF NOT EXISTS idx_cost_ledger_source_run ON cost_ledger (source, run_at);
+
+-- E-212 (v22.5): LLM cross-verifier verdict cache. Keyed on sha1(domain|engine_version|framework_version|sector|
+-- binding-set|prompt-version) so re-mints and retries reuse verdicts and never burn free-tier quota twice.
+CREATE TABLE IF NOT EXISTS llm_verdicts (
+  key varchar(48) PRIMARY KEY,
+  domain varchar(255),
+  verdict jsonb,
+  created_at timestamptz DEFAULT now()
+);

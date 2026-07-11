@@ -53,3 +53,11 @@ jobs:
       - name: send-gate summary
         if: always()
         run: node scripts/send-gate-summary.js || true
+
+      # E-215 (v22.5, P-103/S-193): CI success is no longer decoupled from output validity. If this run minted
+      # >= 5 audits and fewer than half verified, the job goes RED and Telegram gets the quarantine reason mix.
+      - name: verified-rate gate
+        if: always()
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          node scripts/mint-verified-gate.js

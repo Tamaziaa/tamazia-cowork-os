@@ -1,0 +1,48 @@
+# E-217 (v22.5): PRIORITY-SECTOR REMINT — founder-authorised (GATE-REMINT, 11 Jul session).
+# Queues paced batches of live-but-unverified priority-sector audits for a fresh v22.5 mint, then dispatches
+# mint-now to drain. Batch size keeps each run inside crawl budgets and free LLM tiers. Run 'watchlist' FIRST
+# after any engine version bump: it queues the ten-domain watch list + eight-firm matrix as canaries (S-195).
+name: Remint priority sectors (v22.5)
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "watchlist (canaries) or batch"
+        required: true
+        default: "watchlist"
+        type: choice
+        options: [watchlist, batch]
+      batch:
+        description: "batch size when mode=batch"
+        required: false
+        default: "40"
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: remint-priority
+  cancel-in-progress: false
+jobs:
+  queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m pip install --quiet -r requirements.txt
+      - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Queue the remint batch
+        run: |
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          if [ "${{ inputs.mode }}" = "watchlist" ]; then
+            node scripts/queue-priority-remint.js --watchlist
+          else
+            node scripts/queue-priority-remint.js --batch=${{ inputs.batch }}
+          fi
+      - name: Dispatch mint-now to drain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run mint-now.yml --repo ${{ github.repository }} || true

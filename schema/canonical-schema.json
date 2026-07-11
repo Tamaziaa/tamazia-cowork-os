@@ -8695,5 +8695,33 @@
         "identity": false
       }
     }
+  },
+  "llm_verdicts": {
+    "columns": {
+      "key": {
+        "type": "varchar(48)",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "domain": {
+        "type": "varchar(255)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "verdict": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "created_at": {
+        "type": "timestamptz",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      }
+    }
   }
 }

@@ -156,6 +156,10 @@ function routeJurisdictions(opts = {}) {
     out.push('US_FTC', 'US_CPRA');
   } else if (c === 'AE' || c === 'UAE') {
     out.push('UAE_PDPL');
+  } else if (c === 'SA' || c === 'KSA') {
+    out.push('SAUDI_PDPL');            // E-210: Saudi firms take their own regime, never the UAE's
+  } else if (c === 'QA') {
+    out.push('QATAR_PDPPL');
   }
 
   // Sector-specific frameworks (only added when sector is recognised)
@@ -176,9 +180,10 @@ function listAllFrameworks() {
 }
 
 
-// Country name → routing code (for operating-markets routing). Gulf states proxy to UAE_PDPL until
-// dedicated Gulf frameworks are seeded.
-const NAME_TO_CODE = { 'United Kingdom':'UK','United States':'US','United Arab Emirates':'AE','Ireland':'IE','France':'FR','Germany':'DE','Spain':'ES','Italy':'IT','Netherlands':'NL','Belgium':'BE','Portugal':'PT','Sweden':'SE','Denmark':'DK','Finland':'FI','Austria':'AT','Luxembourg':'LU','Poland':'PL','Greece':'GR','Czechia':'CZ','Hungary':'HU','Romania':'RO','Bulgaria':'BG','Croatia':'HR','Slovenia':'SI','Slovakia':'SK','Estonia':'EE','Latvia':'LV','Lithuania':'LT','Cyprus':'CY','Malta':'MT','Saudi Arabia':'AE','Qatar':'AE','Kuwait':'AE','Bahrain':'AE','Oman':'AE' };
+// Country name → routing code. E-210 (v22.5): repointed to the ONE registry map (Gulf DISTINCT — Saudi=SA,
+// Qatar=QA, Kuwait=KW, Bahrain=BH, Oman=OM). The old local copy proxied every Gulf state to 'AE', which attached
+// UAE_PDPL to Saudi/Qatari firms even though SAUDI_PDPL and QATAR_PDPPL are seeded with their own baselines.
+const NAME_TO_CODE = require('./registry/jurisdiction.js').NAME_TO_CODE;
 
 // CONNECTION LAYER · a law attaches only when (a) the firm operates in its jurisdiction AND (b) its real
 // trigger is present (uses AI, takes payments, hosts user content, processes biometrics, reaches US kids).
@@ -223,7 +228,16 @@ function routeForMarkets({ markets, country, sector, signals }) {
   out.add('GOOGLE_EEAT'); // Google ranking standards apply to every site regardless of jurisdiction
   if (ctx.eu) { out.add('EU_GDPR'); out.add('EU_EPRIVACY'); }
   if (ctx.us) { out.add('US_FTC'); out.add('US_CPRA'); out.add('US_CAN_SPAM'); }
-  if (ctx.me) out.add('UAE_PDPL');
+  // E-210 (v22.5): the ME data regime follows the REGISTERED country (or a strong named market), never a blanket
+  // UAE_PDPL for the whole region. A Saudi firm gets SAUDI_PDPL; a Qatari firm QATAR_PDPPL; UAE gets UAE_PDPL.
+  if (ctx.me) {
+    const _ME_REGIME = { AE: 'UAE_PDPL', UAE: 'UAE_PDPL', SA: 'SAUDI_PDPL', KSA: 'SAUDI_PDPL', QA: 'QATAR_PDPPL' };
+    const _own = _ME_REGIME[reg];
+    if (_own) out.add(_own);
+    if (opStrong(['United Arab Emirates'])) out.add('UAE_PDPL');
+    if (opStrong(['Saudi Arabia'])) out.add('SAUDI_PDPL');
+    if (opStrong(['Qatar'])) out.add('QATAR_PDPPL');
+  }
   // trigger layer: inject conditional laws only when their trigger passes, and strip any that slipped in but do not.
   for (const code of CONDITIONAL) { if (conditionalOK(code, ctx)) out.add(code); else out.delete(code); }
   // JURISDICTION GATE: a law only applies if the firm actually operates in its jurisdiction.
@@ -238,6 +252,7 @@ function routeForMarkets({ markets, country, sector, signals }) {
     if (code.startsWith('EU_')) return ctx.eu;
     if (code.startsWith('US_')) return ctx.us;
     if (code.startsWith('UAE_')) return ctx.me;
+    if (code.startsWith('SAUDI_') || code.startsWith('QATAR_')) return ctx.me;
     return true;
   };
   return Array.from(out).filter(jOK);
