@@ -32,12 +32,15 @@ const COUNTRY_CODE = {
   'united kingdom': 'UK', uk: 'UK', britain: 'UK', england: 'UK', scotland: 'UK', wales: 'UK',
   'united states': 'US', usa: 'US', 'u.s.': 'US', 'u.s.a.': 'US', america: 'US',
   'united arab emirates': 'AE', uae: 'AE', dubai: 'AE', 'abu dhabi': 'AE', sharjah: 'AE',
-  'saudi arabia': 'SA', ksa: 'SA', qatar: 'QA', kuwait: 'AE', bahrain: 'AE', oman: 'AE', egypt: 'AE', jordan: 'AE', iraq: 'AE',
+  // E-210 (v22.5): Gulf DISTINCT (mirrors registry/jurisdiction.js NAME_TO_CODE). Kuwait/Bahrain/Oman/Egypt/Jordan
+  // are NOT the UAE: collapsing them to 'AE' attached UAE_PDPL to firms it does not bind. A country outside the
+  // catalogue's family set now routes to its own code and fails CLOSED to registered-country + GLOBAL baseline.
+  'saudi arabia': 'SA', ksa: 'SA', qatar: 'QA', kuwait: 'KW', bahrain: 'BH', oman: 'OM', egypt: 'EG', jordan: 'JO',
   france: 'FR', germany: 'DE', spain: 'ES', italy: 'IT', netherlands: 'NL', ireland: 'IE', belgium: 'BE',
   canada: 'CA', australia: 'AU', singapore: 'SG', switzerland: 'CH',
 };
 const SECTORS = ['law-firms', 'barristers', 'accounting', 'professional-services', 'healthcare', 'pharma', 'dental', 'aesthetic', 'finance', 'fintech', 'insurance', 'real-estate', 'education', 'higher-education', 'charity', 'energy', 'transport', 'aviation', 'media', 'marketing', 'manufacturing', 'construction', 'hospitality', 'food', 'ecommerce', 'retail', 'saas', 'tech', 'fitness', 'automotive'];
-const N2C = { 'United Kingdom': 'UK', 'United States': 'US', 'United Arab Emirates': 'AE', 'Saudi Arabia': 'SA', Qatar: 'QA', Kuwait: 'AE', Bahrain: 'AE', Oman: 'AE', France: 'FR', Germany: 'DE', Spain: 'ES', Italy: 'IT', Netherlands: 'NL', Ireland: 'IE', Belgium: 'BE', Canada: 'CA', Australia: 'AU', Singapore: 'SG', Switzerland: 'CH' };
+const N2C = { 'United Kingdom': 'UK', 'United States': 'US', 'United Arab Emirates': 'AE', 'Saudi Arabia': 'SA', Qatar: 'QA', Kuwait: 'KW', Bahrain: 'BH', Oman: 'OM', France: 'FR', Germany: 'DE', Spain: 'ES', Italy: 'IT', Netherlands: 'NL', Ireland: 'IE', Belgium: 'BE', Canada: 'CA', Australia: 'AU', Singapore: 'SG', Switzerland: 'CH' };
 
 function _cleanSector(s) { const v = String(s || '').toLowerCase().trim().replace(/\s+/g, '-'); return SECTORS.includes(v) ? v : null; }
 function _code(name) { return COUNTRY_CODE[String(name || '').toLowerCase().trim()] || null; }

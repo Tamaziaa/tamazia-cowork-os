@@ -772,7 +772,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.4-2026-07-absence-proof';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.5-2026-07-uniform-tags';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
@@ -845,7 +845,8 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     try { const { connect, loadCatalogue } = require('../../../lib/compliance/connect.js');
       const cx = connect({ catalogue: loadCatalogue(), jurisdictions: jurs, sector: secC, signals: { nexus }, text: '', mode: 'knowledge' });
       fw = cx.frameworks || []; binding = cx.binding || {}; } catch (_e) { fw = []; binding = {}; }
-    return Object.assign({ domain, sector: secC, detected_sector: secC, country: cc || null, ok: true, reachable: false,
+    return Object.assign({ domain, sector: secC, detected_sector: secC, sub_sector: null, sub_sector_meta: null, country: cc || null, ok: true, reachable: false,
+      engine_version: ENGINE_VERSION,
       rules_evaluated: 0, findings: [], frameworks: fw, binding,
       detected_jurisdictions: cc ? [cc] : [], nexus,
       jurisdiction_families: { families: [fam], primary: fam, serves_only: [] },
@@ -966,8 +967,8 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     for (const c of _estF) if (!allJurisdictions.includes(c)) allJurisdictions.push(c);
     if (!allJurisdictions.length) allJurisdictions = _estF.length ? [..._estF] : [String(country || 'UK').toUpperCase()];
   }
-  const _FAMALIAS = { UAE: 'AE', USA: 'US', GB: 'UK', GBR: 'UK', KSA: 'SA' };
-  const _famCanon = (j) => { const u = String(j).toUpperCase(); return _FAMALIAS[u] || u; };
+  // E-210 (v22.5): family aliasing imports the ONE registry map — no more inline copies drifting between files.
+  const { famCanon: _famCanon } = require('../../../lib/compliance/registry/jurisdiction.js');
   _jurFamilies = { families: [...new Set(allJurisdictions.map(_famCanon))],
                          primary: _famCanon(_estF[0] || String(country || allJurisdictions[0] || 'UK')),
                          serves_only: _srvF.filter(c => !_estF.includes(c)) };
@@ -975,7 +976,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // H4 (agents, v22.2): a family kept only by the registered-country fallback must still carry typed nexus
   // evidence, or V07 rightly quarantines it. Company registration IS establishment evidence, so inject it for
   // the registered family when signal derivation found nothing. Foreign families never get this injection.
-  { const _regFam = (() => { const u = String(country || '').toUpperCase(); return ({ UAE: 'AE', USA: 'US', GB: 'UK', GBR: 'UK', KSA: 'SA' })[u] || u; })();
+  { const _regFam = require('../../../lib/compliance/registry/jurisdiction.js').famCanon(String(country || '').toUpperCase());
     const _NXK = { UK: 'UK', EU: 'EU', US: 'USA', AE: 'AE', SA: 'SA', QA: 'QA' };
     for (const f of _jurFamilies.families) {
       const k = _NXK[f] || f;
@@ -1185,13 +1186,30 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     positive_compliance.any = Object.entries(positive_compliance).some(([k, v]) => k !== 'any' && v === true);
   } catch (_pce) {}
 
+  // E-210 (v22.5): CANONICAL SECTOR AT THE EMIT SEAM. The knowledge path canonicalised detected_sector; the live
+  // path shipped the raw profiler/ICP token ('aesthetic', 'higher-education', 'legal'...), so V16 rightly
+  // quarantined priority-ICP firms on a spelling split. One canonicalisation point, here, before anything is
+  // written. sub_sector becomes a FIRST-CLASS payload field (P-030): resolved from the canonical TREE against the
+  // live corpus, accepted ONLY within the firm's own parent so it can sharpen but never flip the sector.
+  let _secCanon = effectiveSector, _subSector = null, _subSectorMeta = null;
+  try {
+    const _sr = require('../../../lib/compliance/registry/sector.js');
+    _secCanon = _sr.canonicalSector(effectiveSector) || String(effectiveSector || '').toLowerCase();
+    const _ownParent = _sr.parentOf(_secCanon) || _secCanon;
+    const _rs = _sr.resolveSubSector(_secCanon, corpusText);
+    if (_rs && _rs.sub && (_rs.parent === _secCanon || _rs.parent === _ownParent)) {
+      _subSector = _rs.sub;
+      _subSectorMeta = { parent: _rs.parent, regulators: _rs.regulators || [], node: _rs.parent + '/' + _rs.sub };
+    }
+  } catch (_e) {}
   const payload = {
     nexus: _nx, jurisdiction_families: _jurFamilies,
     inspected_by_framework: _inspectedByFramework(frameworks, corpus), pages_crawled: (corpus || []).map(x => x && (x.label || x.url)).filter(Boolean),
     domain, sector, country, ok: true, reachable: true,
+    engine_version: ENGINE_VERSION,
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
     frameworks, binding: framework_binding, attach_error: comp_attach_error, drop_trace: comp_gates, review_candidates: comp_review, attach_confidence: comp_confidence, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
-    firm_profile: firmProfile, detected_sector: effectiveSector,
+    firm_profile: firmProfile, detected_sector: _secCanon, sub_sector: _subSector, sub_sector_meta: _subSectorMeta,
     rules_evaluated: rules.length, hits, misses,
     resolver_dropped: _resolverDropped,
     p0_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P0').length,

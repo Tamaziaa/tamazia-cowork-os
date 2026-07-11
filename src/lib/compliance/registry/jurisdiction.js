@@ -23,7 +23,12 @@ const NAME_TO_CODE = {
   'Saudi Arabia':'SA','Qatar':'QA','Kuwait':'KW','Bahrain':'BH','Oman':'OM','Egypt':'EG','Jordan':'JO','Israel':'IL',
   'Ireland':'IE','France':'FR','Germany':'DE','Spain':'ES','Italy':'IT','Netherlands':'NL','Belgium':'BE','Portugal':'PT','Sweden':'SE','Denmark':'DK','Finland':'FI','Austria':'AT','Luxembourg':'LU','Poland':'PL','Greece':'GR','Czechia':'CZ','Hungary':'HU','Romania':'RO','Bulgaria':'BG','Croatia':'HR','Slovenia':'SI','Slovakia':'SK','Estonia':'EE','Latvia':'LV','Lithuania':'LT','Cyprus':'CY','Malta':'MT',
 };
-function normJuris(j){ j=String(j||'').toUpperCase().trim(); if(j==='GB'||j==='GBR')return 'UK'; if(j==='USA')return 'US'; if(j==='UAE')return 'AE'; return j; }
+// E-210 (v22.5): the ONE family-alias map. Every module that folds a country variant to its canonical
+// jurisdiction-family code MUST import this (compliance.js, verify-payload.js, llm-verify.js previously each
+// carried a diverging inline copy — the uniformity defect class behind V02 alias false-trips).
+const FAMILY_ALIAS = { GB:'UK', GBR:'UK', EN:'UK', UAE:'AE', USA:'US', KSA:'SA', SAU:'SA' };
+function famCanon(j){ const u=String(j||'').toUpperCase().trim(); return FAMILY_ALIAS[u] || u; }
+function normJuris(j){ return famCanon(j); }
 function toCanonical(codes=[]){ const out=new Set(); for(const c of codes) for(const m of (JUR_MAP[String(c||'').toUpperCase()]||[])) out.add(m); return out; }
 function region(code){ const u=String(code||'').toUpperCase(); const c=normJuris(u); if(c==='UK')return 'UK'; if(c==='US')return 'US'; if(EU_ISO.has(c)||c==='EU'||/^EU/.test(u))return 'EU'; if(['AE','SA','QA','KW','BH','OM','EG','JO','IL'].includes(c)||/^MENA/.test(u))return 'ME'; return null; }
-module.exports = { EU_ISO, JUR_MAP, NAME_TO_CODE, normJuris, toCanonical, region };
+module.exports = { EU_ISO, JUR_MAP, NAME_TO_CODE, FAMILY_ALIAS, famCanon, normJuris, toCanonical, region };
