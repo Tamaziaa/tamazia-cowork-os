@@ -820,23 +820,41 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
 // call; a blip can COMMIT server-side yet raise client-side (pg8000 semantics), so pg() returns null after a
 // real write. HTTP + params also removes quote-escaping and argv-size limits from the write path entirely and
 // returns structured errors. Fail-open: null on network failure so callers can fall back to the shim.
-async function neonHttp(sqlText, params) {
+// E-248 (v22.12) — THE 20-SECOND TIMEOUT THAT KILLED EVERY LARGE AUDIT.
+// This used to hardcode AbortSignal.timeout(20000) with 2 attempts. An audit payload is a 150-400KB jsonb blob;
+// on the big firms (michelmores, harbottle, stephens-scown, fosterswrigley) the INSERT simply did not finish in
+// 20s, both attempts aborted, and the function returned NULL.
+// The write seam then did this:
+//     if (_httpIns && rows[0].id) insId = ...          // no: _httpIns is null
+//     else if (_httpIns && _httpIns.error) _writeErr = // no: _httpIns is null
+// NEITHER branch fired, _writeErr stayed EMPTY, so the seam concluded "empty RETURNING = idempotent conflict"
+// and went looking for a row to adopt by idem_key... that had never been written. Four of fourteen law firms
+// failed with "audit_pages INSERT failed, no row written" and NO underlying error, because the transport failure
+// was indistinguishable from a conflict. Small sites landed; large ones never could.
+// Timeout is now caller-tunable (the INSERT gets 90s), attempts are 3, and a transport failure is REPORTED as
+// {transport:...} instead of silently masquerading as a conflict.
+async function neonHttp(sqlText, params, opts) {
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
   if (!url || typeof fetch !== 'function') return null;
   const host = ((url.match(/@([^/?]+)\//) || [])[1] || '').replace(/:\d+$/, '');
   if (!host) return null;
-  for (let a = 0; a < 2; a++) {
+  const timeoutMs = Math.max(5000, Number((opts && opts.timeoutMs) || 20000));
+  const attempts = Math.max(1, Number((opts && opts.attempts) || 2));
+  let lastTransport = '';
+  for (let a = 0; a < attempts; a++) {
     try {
       const r = await fetch('https://' + host + '/sql', {
         method: 'POST', headers: { 'Neon-Connection-String': url, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: sqlText, params: params || [] }), signal: AbortSignal.timeout(20000),
+        body: JSON.stringify({ query: sqlText, params: params || [] }), signal: AbortSignal.timeout(timeoutMs),
       });
       if (r.ok) return await r.json();
       if (r.status >= 400 && r.status < 500) return { error: (await r.text()).slice(0, 300) };
-    } catch (_e) { /* retry once, then fall through */ }
+      lastTransport = 'http_' + r.status;
+    } catch (e) { lastTransport = String((e && e.name) || e || 'fetch_failed'); }
     await new Promise((res) => setTimeout(res, 700 + a * 1300));
   }
-  return null;
+  // A transport failure is NOT a conflict. Say so, loudly, so the seam never adopts a row that was never written.
+  return { transport: lastTransport || 'unknown' };
 }
 
 async function build({ lead_id, domain, sector, country, company, env }) {
@@ -990,15 +1008,27 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     if (a2 && String(a2).includes('|')) { const [i, s, h] = String(a2).trim().split('|'); return { id: i, slug: s, hash: h }; }
     return null;
   };
+  // E-248: the payload is a 150-400KB jsonb blob. 20s was never enough for the large firms and the abort was
+  // silently indistinguishable from an idempotent conflict. 90s, 3 attempts, and transport failures are named.
   const _httpIns = await neonHttp(
     `INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status, idem_key)
      VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8::jsonb, to_timestamp($9), $10, $11::jsonb, $12, $13)
      ON CONFLICT (idem_key) DO NOTHING RETURNING id`,
-    [Number.isFinite(leadIdN) ? leadIdN : null, slug, hash, domain, sectorE, countryE, fwE, JSON.stringify(neonPayload), expSeconds, _verify.verified === true, JSON.stringify(_verify), _outOfIcp ? 'quarantined' : 'live', idemKey]
+    [Number.isFinite(leadIdN) ? leadIdN : null, slug, hash, domain, sectorE, countryE, fwE, JSON.stringify(neonPayload), expSeconds, _verify.verified === true, JSON.stringify(_verify), _outOfIcp ? 'quarantined' : 'live', idemKey],
+    { timeoutMs: 90000, attempts: 3 }
   );
+  let _transport = '';
   if (_httpIns && Array.isArray(_httpIns.rows) && _httpIns.rows[0] && _httpIns.rows[0].id != null) insId = _httpIns.rows[0].id;
   else if (_httpIns && _httpIns.error) { _writeErr = String(_httpIns.error); console.error('[write-seam] HTTP INSERT rejected: ' + _writeErr.slice(0, 200)); }
-  let _seam = { http: _writeErr ? 'err' : (insId != null ? 'ok' : 'conflict_or_null'), shim: '-', confirm: 0, adopt: 'no' };
+  else if (_httpIns && _httpIns.transport) {
+    // The write NEVER REACHED the database (timeout / 5xx / DNS). This is NOT a conflict: there is nothing to adopt.
+    // We fall through to the shim + confirm loop deliberately (the INSERT may still have committed server-side
+    // after our client gave up), but we NAME it so a genuine dead write can never again be reported as "no row
+    // written" with no cause.
+    _transport = String(_httpIns.transport);
+    console.error('[write-seam] HTTP INSERT transport failure (' + _transport + ') — the write may not have reached Neon; falling back to shim + confirm');
+  }
+  let _seam = { http: _writeErr ? 'err' : (insId != null ? 'ok' : (_transport ? 'transport:' + _transport : 'conflict')), shim: '-', confirm: 0, adopt: 'no' };
   // HTTP returned no id: either an idempotent CONFLICT (row already there — adopt by key) or a transient null.
   if (insId == null && !_writeErr) {
     const hit = await _adoptByKey();
@@ -1025,14 +1055,17 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     if (ins && String(ins).trim()) insId = String(ins).trim();
   }
   // Confirm loop keyed on idem_key (stable; slug/hash may belong to a competing attempt that lost the conflict).
-  for (let a = 0; insId == null && a < 4; a++) {
+  // E-248: on a transport failure the INSERT may still be committing server-side after our client aborted, so the
+  // confirm loop gets more attempts and a longer backoff before we declare the write dead.
+  const _confirmTries = _transport ? 8 : 4;
+  for (let a = 0; insId == null && a < _confirmTries; a++) {
     _seam.confirm = a + 1;
     const hit = await _adoptByKey();
     if (hit) { insId = hit.id; finalSlug = hit.slug; finalHash = hit.hash; if (_seam.adopt === 'no') _seam.adopt = 'key-confirm'; break; }
     await new Promise((res) => setTimeout(res, 1200 + a * 800));
   }
   console.error('[write-seam] ' + domain + ' http=' + _seam.http + ' shim=' + _seam.shim + ' confirm=' + _seam.confirm + ' adopt=' + _seam.adopt + ' id=' + (insId == null ? 'NONE' : insId));
-  if (insId == null) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written${_writeErr ? ' (' + _writeErr.slice(0, 140) + ')' : ''}; refusing to return a dead audit link`);
+  if (insId == null) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written${_writeErr ? ' (SQL: ' + _writeErr.slice(0, 140) + ')' : ''}${_transport ? ' (TRANSPORT: ' + _transport + ' — the write never reached Neon; payload ' + Math.round(JSON.stringify(neonPayload).length / 1024) + 'KB)' : ''}; refusing to return a dead audit link`);
   const signedFinal = (finalSlug === slug && finalHash === hash) ? signed : signUrl({ slug: finalSlug, hash: finalHash, lead_id, expSeconds });
 
   return { slug: finalSlug, hash: finalHash, signed_url: signedFinal.url, signed_exp: signedFinal.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };
