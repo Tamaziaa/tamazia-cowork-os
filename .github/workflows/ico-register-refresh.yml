@@ -1,0 +1,34 @@
+name: ico-register-refresh
+# E-259 — mirror the ICO Register of Data Controllers into Neon, weekly.
+#
+# WHY: under the Data Protection (Charges and Information) Regulations 2018 (s.137 DPA 2018) any organisation
+# processing personal data must pay the fee and appear on this register. A law firm with a contact form and
+# analytics cookies is unquestionably a controller. So "processes personal data + not on the register" (or
+# "registration EXPIRED") is a BINARY, EVIDENCED breach that needs no regex, no interpretation and no model.
+# It is the only finding we make that a managing partner cannot argue with, because the evidence is the
+# regulator's own public register.
+#
+# The register is a 76 MB ZIP (272 MB CSV, ~1.42M controllers), refreshed DAILY, Open Government Licence v3.0.
+# THE DOWNLOAD LINK CARRIES A ROTATING HASH (/media2/<hash>/...), so it MUST be scraped from the page and can
+# never be hardcoded.
+on:
+  schedule:
+    - cron: '17 4 * * 1'          # Mondays 04:17 UTC
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ico-register-refresh
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Load the ICO register into Neon
+        env:
+          NEON_URL: ${{ secrets.NEON_URL }}
+        run: node scripts/load-ico-register.js
