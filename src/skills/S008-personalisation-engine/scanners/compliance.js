@@ -8,7 +8,8 @@ const path = require('path');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
 const _crypto = require('crypto');
-const { fetchWithRetry, getCached, writeCache } = require('../lib/http.js');
+// E-252 (v23.0): getCached / writeCache are NO LONGER IMPORTED. The scan cache is gone permanently.
+const { fetchWithRetry } = require('../lib/http.js');
 const { routeJurisdictions, normaliseSector: normaliseSectorAlias } = require('../../../lib/compliance/jurisdiction-router.js');
 const { buildCorpusIndex, scanRuleGlobal } = require('./corpus-index.js'); // B2 — every-page/every-word matcher
 const SCANNER = 'compliance';
@@ -836,20 +837,57 @@ function _detectCompromise(corpus, sector) {
 async function scan({ domain, sector, country, cache_max_age = 86400, signals = {} }) {
   domain = String(domain || '').toLowerCase();
   if (!domain) return { ok: false, error: 'domain_required' };
-  // ENGINE_VERSION in the cache key: scanner_cache stores the WHOLE scan (firm_profile + frameworks + findings), so a
-  // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
-  // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
-  // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.12-2026-07-sector-authority';
-  const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
-  const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
-  if (cached) return { ok: true, cached: true, ...cached.payload };
+  // E-252 (v23.0) — THE SCAN CACHE IS GONE. FOREVER. THIS BLOCK IS DELIBERATELY EMPTY.
+  //
+  // scanner_cache used to store the WHOLE scan (firm_profile + frameworks + findings) keyed on ENGINE_VERSION with a
+  // 24h TTL. It was the single most destructive mechanism in this engine, and it failed SILENTLY WHILE REPORTING
+  // SUCCESS, three separate times:
+  //   * A logic fix merged without an ENGINE_VERSION bump => every re-mint REPLAYED THE OLD SCAN. E-234's fake-breach
+  //     kill, E-236, E-241 and E-242 were all merged, tested, green... and never executed on a single audit. A law
+  //     firm kept shipping a fabricated "site compromise" accusation that the code no longer produced.
+  //   * The same stale key made idem_key stale, so the write seam adopted the OLD audit_pages row and the queue
+  //     reported "done" on 8 of 14 firms that had not been re-minted at all.
+  //   * An audit is a LIVE, EVIDENCED, LEGAL claim about a website AS IT IS RIGHT NOW. A 24-hour-old cached scan is
+  //     not evidence. Serving one and dating it today is, at best, wrong.
+  //
+  // The cache existed to save LLM quota during re-mint-heavy work. That is no longer a real constraint: Groq 8B
+  // carries 500k tokens/day and Cloudflare Workers AI adds 10k neurons/day on a SEPARATE quota. Correctness is worth
+  // vastly more than the tokens.
+  //
+  // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
+  // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
+  // `cache_max_age` is accepted and IGNORED so no caller breaks.
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.0-2026-07-adjudicated';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
   const _cg = await gatherCorpus({ domain });
   const corpus = _cg.corpus || [];
   let corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+  // E-250b (v23.0) — THE AUTHORISATION OVERRIDE MUST RUN *BEFORE* ANYTHING CONSUMES THE SECTOR.
+  // E-250 shipped this block AFTER the rules had already been selected and run (normSector at the findings loop,
+  // and connect() before it). So it corrected the LABEL on the payload and changed NOTHING about which laws were
+  // attached or which rules were executed: kingsleynapley was still checked against ACCOUNTANCY rules while the
+  // page said "law firm". A half-applied fix is worse than none, because it looks fixed.
+  // It now runs here, immediately after the corpus is read and before a single rule is chosen, and it mutates
+  // effectiveSector itself so every downstream consumer (connect, ruleCheck, the adjudicator, the payload) agrees.
+  //
+  // A regulatory AUTHORISATION statement is the firm's own statutory disclosure of who regulates it. It is the most
+  // authoritative sector signal a website can carry and it outranks every inference. Each pattern demands the
+  // AUTHORISATION phrasing, so a firm merely DISCUSSING the SRA is untouched.
+  const _AUTH_SECTOR = [
+    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bSolicitors Regulation Authority\b|\bSRA\s*(?:number|no\.?|ID)\b[^.]{0,20}\d|\bregulated by the SRA\b/i, 'law-firms'],
+    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bBar Standards Board\b|\bregulated by the BSB\b/i, 'law-firms'],
+    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bCouncil for Licensed Conveyancers\b/i, 'law-firms'],
+    [/\bregistered with (?:the )?Care Quality Commission\b|\bCQC[- ]registered\b|\bregulated by the Care Quality Commission\b/i, 'healthcare'],
+    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bGeneral (?:Medical|Dental|Pharmaceutical) Council\b/i, 'healthcare'],
+    [/\bregulated by (?:the )?RICS\b|\bRICS[- ]regulated\b/i, 'real-estate'],
+    [/\b(?:authorised|authorized|regulated)\b[^.]{0,70}\bFinancial Conduct Authority\b|\bFCA\s*(?:firm reference|FRN)\b/i, 'finance'],
+    [/\bregistered auditors?\b[^.]{0,40}\b(?:ICAEW|ACCA|ICAS)\b|\b(?:authorised|regulated)\b[^.]{0,40}\bICAEW\b/i, 'accounting'],
+  ];
+  let _authSector = null;
+  try { for (const [rx, sec] of _AUTH_SECTOR) { if (rx.test(corpusText)) { _authSector = sec; break; } } } catch (_ae) {}
+
   // C-1: sector-term rescue — corpus has content (escaped the SPA fallback) but sector-critical keywords are
   // absent because JS-rendered service/treatment pages weren't captured (static HTML had nav/footer >500 chars
   // but the actual service terms live in JS components). Re-fetch up to 3 sector-specific pages via Jina so
@@ -925,7 +963,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     const payload = _knowledgePayload(
       _cg.challenge ? 'held_anti_bot_challenge_not_assessable_without_authorized_access' : ('corpus_unreadable_' + _reason),
       { block_reason: _reason, http_status: _cg.home_status || 0, challenge: !!_cg.challenge, pages_tried: _cg.pages_tried || 0 });
-    writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 3600 });
+    // E-252: cache write removed. Nothing about a scan is ever stored for replay.
     return payload;
   }
   // ENGLISH-LANGUAGE GATE (scope decision): the compliance catalogue's regex disclosures are authored in ENGLISH
@@ -954,7 +992,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       const payload = _knowledgePayload(
         'site primary language is not English (lang="' + (_langAttr || (_foreign >= 8 ? 'non-en' : '?')) + '"); the English-only breach catalogue is out of scope here, so no findings are asserted. The binding obligation map below is catalogue fact for the registered country and needs no site read.',
         { reachable: true, compliance_error: 'non_english_site_out_of_scope' });
-      writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 86400 });
+    // E-252: cache write removed. Nothing about a scan is ever stored for replay.
       return payload;
     }
   }
@@ -1107,12 +1145,21 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       ? _normLeadSec   // regulated ICP sector wins ONLY when profiler is low-confidence fallback
       : (_llmDetectedSec || _normLeadSec || sector)
   );
+  // E-250b: THE AUTHORISATION STATEMENT WINS, and it wins HERE, before connect() and before a single rule is chosen.
+  // A firm's own statutory disclosure of who regulates it ("Authorised and regulated by the Solicitors Regulation
+  // Authority, registration number 500046") is not a hint to be weighed against keyword frequency. It is the answer.
+  // kingsleynapley.co.uk was classified 'accounting' because they run a large practice DEFENDING accountants, so
+  // the corpus is thick with accountancy vocabulary. FRC, ICAEW, HMRC and FSMA were attached as BINDING LAW and the
+  // SRA was not. A firm that WRITES ABOUT a regulator is not REGULATED BY it.
+  const effectiveSectorAuth = (_authSector && _authSector !== String(effectiveSector || '').toLowerCase())
+    ? (console.error('[E-250b] SECTOR OVERRIDE: classifier said "' + effectiveSector + '", the site\'s own regulatory authorisation statement says "' + _authSector + '". The authorisation wins, and it wins BEFORE rule selection.'), _authSector)
+    : effectiveSector;
   // CONNECTION LAYER: jurisdiction-gate the full catalogue (no leakage) before evaluating.
   let frameworks, framework_binding = {}; let comp_attach_error = null;
   let comp_gates = null, comp_review = [], comp_confidence = {}; // Phase 3.5.2 drop-trace + review band
   try {
     const { connect, loadCatalogue } = require('../../../lib/compliance/connect.js');
-    const _cx = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector: effectiveSector, signals, text: corpusText });
+    const _cx = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector: effectiveSectorAuth, signals, text: corpusText });   // E-250b: connect() attaches the law of the sector the firm is AUTHORISED in
     frameworks = _cx.frameworks; framework_binding = _cx.binding || {};
     comp_gates = _cx.gates || null; comp_review = _cx.review_candidates || []; comp_confidence = _cx.confidence || {};
   } catch (_e) {
@@ -1127,7 +1174,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // (botulinum toxin, lip fillers with POM components) — so UK_MHRA is kept for aesthetics/aesthetic
   // sectors even without pharmacy signals. All three require a corpus signal for non-aesthetic healthcare.
   {
-    const _isAesthetics = /^aesthetic/.test(String(effectiveSector || sector || '').toLowerCase());
+    const _isAesthetics = /^aesthetic/.test(String(effectiveSectorAuth || sector || '').toLowerCase());   // E-250b
     // Botox/filler/toxin = POM advertising signals that keep MHRA for aesthetic clinics.
     const _aestheticPomSig = /\b(botox|botulinum|anti.wrinkle|toxin|filler|aesthetic (treat|inj|procedure|clinic)|cosmetic inj|lip enhance|dermal|thread lift|rhinoplasty|medspa|med.spa|skin clinic|injectable)\b/i;
     const _medSig = /\b(pharmac(y|ies|ist)|dispensing chemist|online pharmacy|prescription[- ]only medicine|marketing authorisation|summary of product characteristics|\bSmPC\b|patient information leaflet|\bGPhC\b|superintendent pharmacist|buy[a-z ]{0,25}medicines?|over[- ]the[- ]counter medicine)\b/i;
@@ -1143,7 +1190,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   }
   if (!rules.length) {
     const payload = { domain, sector, country, frameworks, detected_jurisdictions: detectedJurisdictions, nexus: _nx, jurisdiction_families: _jurFamilies, ok: true, rules_evaluated: 0, findings: [], note: 'no_active_rules_for_routing' };
-    writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: 3600 });
+    // E-252: cache write removed. Nothing about a scan is ever stored for replay.
     return payload;
   }
   // P1.5a verify-context: the best relevant page text for LLM-grounding the fine-bearing findings.
@@ -1156,7 +1203,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // normaliseSectorAlias so 'aesthetic'→'aesthetics' and 'legal'→'law-firms' before matching rule.sectors.
   // sector_relevance in Neon uses the SECTOR_MAP canonical keys; without this alias step rules with
   // sector_relevance=['aesthetics'] would silently skip when effectiveSector='aesthetic'. (sector-alias-gate)
-  const normSector = normaliseSectorAlias(String(effectiveSector || sector || ''));
+  const normSector = normaliseSectorAlias(String(effectiveSectorAuth || sector || ''));   // E-250b: the authorised sector selects the rules
   // B2 — build the every-page/every-word index ONCE (strip each page once, not per rule×page) so prohibit rules can
   // flag every offending line across the whole site (blogs included) and evidence stays verbatim + located.
   const corpusIndex = buildCorpusIndex(corpus);
@@ -1176,7 +1223,26 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     // Drop irrelevant rules — trigger_absent, not_applicable_to_sector, no_prohibited_pattern.
   }
   // SITE-INTEGRITY pass: flag a hacked/spam-injected site as a P0 security finding (highest real-world risk).
-  try { const _ci = _detectCompromise(corpus, effectiveSector || sector); if (_ci) { misses++; findings.push(_ci); } } catch (_e) {}
+  try { const _ci = _detectCompromise(corpus, effectiveSectorAuth || sector); if (_ci) { misses++; findings.push(_ci); } } catch (_e) {}
+  // >>> E-253 (v23.0) THE BREACH ADJUDICATION GATE — see src/lib/audit/breach-adjudicator.js <<<
+  // Everything above this line is REGEX. Until now, everything above this line SHIPPED, unreviewed by any model.
+  // That is how a bare-word regex accused a criminal-defence firm of being hacked ("sex discrimination", the HTML
+  // <slot> element, "pornography offences"). The LLM gate was always good; it was pointed at WHICH LAWS ATTACH and
+  // never at WHETHER THEY WERE BROKEN.
+  // Now the model reads every candidate breach, its obligation, its statutory citation and its verbatim evidence,
+  // and rules: BREACH / NO_BREACH / INSUFFICIENT. It is a FILTER: it can only remove or downgrade, never invent.
+  // If no LLM is reachable, NOTHING is removed (zero regression) but every high-risk finding is demoted to
+  // NEEDS_REVIEW, so an unreviewed P0 can never reach a client again.
+  let _adjReport = { ran: false, reason: 'not_attempted' };
+  try {
+    const { adjudicateBreaches } = require('../../../lib/audit/breach-adjudicator.js');
+    const _adj = await adjudicateBreaches(findings, { domain, sector: effectiveSectorAuth || effectiveSector || sector, country: cc || country }, { deadline_ms: 60000 });
+    _adjReport = _adj.report;
+    findings.length = 0; findings.push(..._adj.findings);
+    console.error('[adjudicator] ' + domain + ' total=' + (_adjReport.total || 0) + ' breach=' + (_adjReport.breach || 0)
+      + ' false_positives_dropped=' + (_adjReport.dropped || 0) + ' insufficient=' + (_adjReport.insufficient || 0)
+      + ' unadjudicated=' + (_adjReport.unadjudicated || 0) + (_adjReport.ran ? '' : ' (NO LLM: nothing removed, high-risk demoted)'));
+  } catch (_ae) { console.error('[adjudicator] failed open: ' + String((_ae && _ae.message) || _ae)); }
   // One honest finding in place of the suppressed granular breaches: JS-only legal content is a real AI-visibility + verification gap.
   if (suppressedPrivacy > 0) {
     misses++;
@@ -1212,7 +1278,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     const { buildSignals } = require('../../../lib/compliance/signals.js');
     const idx = canonicalIndex();
     if (idx && idx.size) {
-      const sig = buildSignals({ jurisdictions: allJurisdictions, sector: effectiveSector, corpusText, employees: (signals && (signals.employees || signals.employee_count)) });
+      const sig = buildSignals({ jurisdictions: allJurisdictions, sector: effectiveSectorAuth, corpusText, employees: (signals && (signals.employees || signals.employee_count)) });   // E-250b
       _canonJur = [...sig.jurSet]; // the EXACT canonical jurisdictions applied (incl. DIFC/ADGM free zones) — recorded so the ship-gate re-checks against the same set
       const kept = [];
       for (const f of findings) {
@@ -1273,38 +1339,8 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // quarantined priority-ICP firms on a spelling split. One canonicalisation point, here, before anything is
   // written. sub_sector becomes a FIRST-CLASS payload field (P-030): resolved from the canonical TREE against the
   // live corpus, accepted ONLY within the firm's own parent so it can sharpen but never flip the sector.
-  // E-250 (v22.12) — A REGULATORY AUTHORISATION STATEMENT OUTRANKS EVERY INFERENCE.
-  // kingsleynapley.co.uk, a London law firm, was classified sector 'accounting'. Consequence: FRC, ICAEW,
-  // HMRC_AML and FSMA were attached as BINDING law, the SRA was not, and the audit was unsendable. Cause: the firm
-  // has a large professional-regulation practice DEFENDING accountants, so the corpus is thick with accountancy
-  // vocabulary and the classifier read their PRACTICE-AREA CONTENT as their OWN SECTOR. A firm that writes about a
-  // regulator is not regulated by it.
-  // But their own footer says, verbatim: "Authorised and regulated by the Solicitors Regulation Authority,
-  // registration number ...". That is not a hint, it is the firm's own statutory disclosure of who regulates it —
-  // the single most authoritative sector signal that can exist on a website, and it was being ignored in favour of
-  // keyword frequency. It now decides the sector outright.
-  // Ordered most-specific first. Each pattern demands the AUTHORISATION phrasing ("authorised/regulated by"), never
-  // a bare mention, so a firm merely discussing the SRA is untouched.
-  const _AUTH_SECTOR = [
-    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bSolicitors Regulation Authority\b|\bSRA\s*(?:number|no\.?|ID)\b[^.]{0,20}\d|\bregulated by the SRA\b/i, 'law-firms'],
-    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bBar Standards Board\b|\bregulated by the BSB\b/i, 'law-firms'],
-    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bCouncil for Licensed Conveyancers\b/i, 'law-firms'],
-    [/\bregistered with (?:the )?Care Quality Commission\b|\bCQC[- ]registered\b|\bregulated by the Care Quality Commission\b/i, 'healthcare'],
-    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bGeneral (?:Medical|Dental|Pharmaceutical) Council\b/i, 'healthcare'],
-    [/\bregulated by (?:the )?RICS\b|\bRICS[- ]regulated\b/i, 'real-estate'],
-    [/\b(?:authorised|authorized|regulated)\b[^.]{0,70}\bFinancial Conduct Authority\b|\bFCA\s*(?:firm reference|FRN)\b/i, 'finance'],
-    [/\bregistered auditors?\b[^.]{0,40}\b(?:ICAEW|ACCA|ICAS)\b|\b(?:authorised|regulated)\b[^.]{0,40}\bICAEW\b/i, 'accounting'],
-  ];
-  let _authSector = null;
-  try {
-    for (const [rx, sec] of _AUTH_SECTOR) { if (rx.test(corpusText)) { _authSector = sec; break; } }
-  } catch (_ae) {}
-  let effectiveSectorAuth = effectiveSector;
-  if (_authSector && String(effectiveSector || '').toLowerCase() !== _authSector) {
-    console.error('[E-250] sector override: classifier said "' + effectiveSector + '", the site\'s own regulatory authorisation statement says "' + _authSector + '" — the authorisation wins');
-    effectiveSectorAuth = _authSector;
-  }
-  let _secCanon = effectiveSectorAuth, _subSector = null, _subSectorMeta = null;
+  // E-250 override now runs EARLY (before rule selection). See the block above corpusText.
+  let _secCanon = effectiveSectorAuth, _subSector = null, _subSectorMeta = null;   // E-250b: already the authorised sector
   try {
     const _sr = require('../../../lib/compliance/registry/sector.js');
     _secCanon = _sr.canonicalSector(effectiveSectorAuth) || String(effectiveSectorAuth || '').toLowerCase();
@@ -1342,7 +1378,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     positive_compliance,
     findings
   };
-  writeCache({ domain: cacheKey, scanner: SCANNER, payload, ttl_seconds: cache_max_age });
+    // E-252: cache write removed. Nothing about a scan is ever stored for replay.
   return payload;
 }
 function sevRank(s) { return s === 'P0' ? 0 : s === 'P1' ? 1 : 2; }
