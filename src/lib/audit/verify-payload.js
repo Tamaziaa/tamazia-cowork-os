@@ -5,7 +5,10 @@ const THRESHOLD_US = ['US_CPRA', 'US_CCPA', 'US_VCDPA', 'US_TDPSA'];
 function verifyPayload(p) {
   p = p || {};
   const R = []; const ok = (c, code, detail) => { if (!c) R.push({ code, detail: String(detail == null ? '' : detail).slice(0, 200) }); };
-  const _FA = { UAE: 'AE', USA: 'US', GB: 'UK', GBR: 'UK', KSA: 'SA' };
+  // E-210 (v22.5): family aliases come from the ONE registry map (fallback copy keeps the verifier pure if the
+  // registry is unresolvable in an isolated context — values must match registry FAMILY_ALIAS).
+  let _FA = { GB: 'UK', GBR: 'UK', EN: 'UK', UAE: 'AE', USA: 'US', KSA: 'SA', SAU: 'SA' };
+  try { _FA = require('../compliance/registry/jurisdiction.js').FAMILY_ALIAS || _FA; } catch (_e) {}
   const fams = ((p.jurisdiction_families && p.jurisdiction_families.families) || (p.engine_jurisdictions || [])).map(x => { const u = String(x).toUpperCase(); return _FA[u] || u; });
   const nexus = p.nexus || {};
   const binding = Object.keys(p.binding || {});
@@ -56,6 +59,14 @@ function verifyPayload(p) {
     ok(!!_secOk, 'V16_noncanonical_sector', String(p.detected_sector || '')); } catch (_e) {}
   ok(!!p.domain && !!p.detected_sector, 'V10_missing_core_fields', '');
   ok(!shipped.some(x => x.citation === ''), 'V10_empty_citation', '');
-  return { verified: R.length === 0, reasons: R, checked_at: new Date().toISOString(), verifier: 'v1-blueprint-E101-E110' };
+  // V13 (v22.5, audit-of-the-audits P-009/S-174): the executive summary is the single most read element of the
+  // page; 789 of the latest 800 legacy payloads shipped it EMPTY. build.js now always composes a deterministic
+  // fallback, so an empty summary here means that composer was bypassed — quarantine, never ship a blank lead.
+  { const _es = (typeof p.exec_summary === 'string') ? p.exec_summary : String((p.exec_summary && (p.exec_summary.headline || p.exec_summary.title)) || '');
+    ok(!!_es.trim(), 'V13_empty_exec_summary', ''); }
+  // V20 (v22.5, S-181): every payload carries the engine version that minted it, so cohort analysis and canary
+  // comparisons can segment by engine — framework_version alone was stuck at 4.7 across seven engine versions.
+  ok(!!p.engine_version, 'V20_missing_engine_version', '');
+  return { verified: R.length === 0, reasons: R, checked_at: new Date().toISOString(), verifier: 'v2-E210-uniform' };
 }
 module.exports = { verifyPayload };
