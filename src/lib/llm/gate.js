@@ -53,7 +53,7 @@ async function gateLLM(opts) {
   }
   const _defaultPremium = [
     ...(process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: process.env.QWEN_MODEL || 'qwen-plus' }] : []),
-    { provider: 'gemini', model: 'gemini-2.0-flash' },
+    { provider: 'gemini', model: 'gemini-2.5-flash-lite' },
     { provider: 'groq', model: 'llama-3.3-70b-versatile' },
   ];
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {

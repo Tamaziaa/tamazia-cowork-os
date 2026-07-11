@@ -47,7 +47,7 @@ function _providers(env) {
 async function _geminiPlain(prompt, key, temperature, maxTokens, timeout = 9000) {
   const r = await new Promise((resolve) => {
     const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature, maxOutputTokens: maxTokens } });
-    const req = https.request('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout }, (res) => { let b = ''; res.on('data', d => b += d); res.on('end', () => resolve({ status: res.statusCode, body: b })); });
+    const req = https.request('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout }, (res) => { let b = ''; res.on('data', d => b += d); res.on('end', () => resolve({ status: res.statusCode, body: b })); });
     req.on('error', () => resolve({ status: 0, body: '' })); req.on('timeout', () => { req.destroy(); resolve({ status: 0, body: '' }); });
     req.write(body); req.end();
   });
@@ -84,7 +84,7 @@ async function askGeminiGrounded(prompt, env = process.env, timeout = 12000) {
   const key = env.GEMINI_API_KEY; if (!key) return null;
   const r = await new Promise((resolve) => {
     const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ google_search: {} }] });
-    const req = https.request('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout }, (res) => { let b = ''; res.on('data', d => b += d); res.on('end', () => resolve({ status: res.statusCode, body: b })); });
+    const req = https.request('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout }, (res) => { let b = ''; res.on('data', d => b += d); res.on('end', () => resolve({ status: res.statusCode, body: b })); });
     req.on('error', () => resolve({ status: 0, body: '' })); req.on('timeout', () => { req.destroy(); resolve({ status: 0, body: '' }); });
     req.write(body); req.end();
   });

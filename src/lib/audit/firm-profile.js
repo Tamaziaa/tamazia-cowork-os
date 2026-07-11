@@ -14,7 +14,7 @@ const _PROFILE_CHAIN = [
   { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' }, // free 10k/day, own quota
   { provider: 'groq', model: 'llama-3.3-70b-versatile' },                        // backstop, separate quota
   ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct' }] : []), // dormant free capacity, separate quota
-  { provider: 'gemini', model: 'gemini-2.0-flash' },                             // final backstop
+  { provider: 'gemini', model: 'gemini-2.5-flash-lite' },                             // final backstop
 ];
 async function _profileLLM(prompt, env) {
   // 1) Cloudflare-first router (separate quota, won't 429 with Groq-heavy mint load)
@@ -259,7 +259,7 @@ ${text}`;
       { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
       { provider: 'groq', model: 'llama-3.3-70b-versatile' },
       ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct' }] : []),
-      { provider: 'gemini', model: 'gemini-2.0-flash' },
+      { provider: 'gemini', model: 'gemini-2.5-flash-lite' },
       ...(process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: process.env.QWEN_MODEL || 'qwen-plus' }] : []),
     ];
     const g = await gateLLM({ role: 'extract', chain: _chain, system: 'You are a meticulous compliance analyst. Output ONLY valid JSON, no prose.', prompt, rubric, threshold: 7, max_attempts: 3, max_tokens: 700, deadline_ms: 110000, scan_id: domain + ':classify' });
