@@ -840,7 +840,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.11-2026-07-exposure-truth';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.12-2026-07-sector-authority';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
@@ -1273,10 +1273,41 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // quarantined priority-ICP firms on a spelling split. One canonicalisation point, here, before anything is
   // written. sub_sector becomes a FIRST-CLASS payload field (P-030): resolved from the canonical TREE against the
   // live corpus, accepted ONLY within the firm's own parent so it can sharpen but never flip the sector.
-  let _secCanon = effectiveSector, _subSector = null, _subSectorMeta = null;
+  // E-250 (v22.12) — A REGULATORY AUTHORISATION STATEMENT OUTRANKS EVERY INFERENCE.
+  // kingsleynapley.co.uk, a London law firm, was classified sector 'accounting'. Consequence: FRC, ICAEW,
+  // HMRC_AML and FSMA were attached as BINDING law, the SRA was not, and the audit was unsendable. Cause: the firm
+  // has a large professional-regulation practice DEFENDING accountants, so the corpus is thick with accountancy
+  // vocabulary and the classifier read their PRACTICE-AREA CONTENT as their OWN SECTOR. A firm that writes about a
+  // regulator is not regulated by it.
+  // But their own footer says, verbatim: "Authorised and regulated by the Solicitors Regulation Authority,
+  // registration number ...". That is not a hint, it is the firm's own statutory disclosure of who regulates it —
+  // the single most authoritative sector signal that can exist on a website, and it was being ignored in favour of
+  // keyword frequency. It now decides the sector outright.
+  // Ordered most-specific first. Each pattern demands the AUTHORISATION phrasing ("authorised/regulated by"), never
+  // a bare mention, so a firm merely discussing the SRA is untouched.
+  const _AUTH_SECTOR = [
+    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bSolicitors Regulation Authority\b|\bSRA\s*(?:number|no\.?|ID)\b[^.]{0,20}\d|\bregulated by the SRA\b/i, 'law-firms'],
+    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bBar Standards Board\b|\bregulated by the BSB\b/i, 'law-firms'],
+    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bCouncil for Licensed Conveyancers\b/i, 'law-firms'],
+    [/\bregistered with (?:the )?Care Quality Commission\b|\bCQC[- ]registered\b|\bregulated by the Care Quality Commission\b/i, 'healthcare'],
+    [/\b(?:authorised|authorized|regulated)\b[^.]{0,60}\bGeneral (?:Medical|Dental|Pharmaceutical) Council\b/i, 'healthcare'],
+    [/\bregulated by (?:the )?RICS\b|\bRICS[- ]regulated\b/i, 'real-estate'],
+    [/\b(?:authorised|authorized|regulated)\b[^.]{0,70}\bFinancial Conduct Authority\b|\bFCA\s*(?:firm reference|FRN)\b/i, 'finance'],
+    [/\bregistered auditors?\b[^.]{0,40}\b(?:ICAEW|ACCA|ICAS)\b|\b(?:authorised|regulated)\b[^.]{0,40}\bICAEW\b/i, 'accounting'],
+  ];
+  let _authSector = null;
+  try {
+    for (const [rx, sec] of _AUTH_SECTOR) { if (rx.test(corpusText)) { _authSector = sec; break; } }
+  } catch (_ae) {}
+  let effectiveSectorAuth = effectiveSector;
+  if (_authSector && String(effectiveSector || '').toLowerCase() !== _authSector) {
+    console.error('[E-250] sector override: classifier said "' + effectiveSector + '", the site\'s own regulatory authorisation statement says "' + _authSector + '" — the authorisation wins');
+    effectiveSectorAuth = _authSector;
+  }
+  let _secCanon = effectiveSectorAuth, _subSector = null, _subSectorMeta = null;
   try {
     const _sr = require('../../../lib/compliance/registry/sector.js');
-    _secCanon = _sr.canonicalSector(effectiveSector) || String(effectiveSector || '').toLowerCase();
+    _secCanon = _sr.canonicalSector(effectiveSectorAuth) || String(effectiveSectorAuth || '').toLowerCase();
     const _ownParent = _sr.parentOf(_secCanon) || _secCanon;
     const _rs = _sr.resolveSubSector(_secCanon, corpusText);
     if (_rs && _rs.sub && (_rs.parent === _secCanon || _rs.parent === _ownParent)) {
