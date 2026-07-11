@@ -11,9 +11,22 @@ const { EU_ISO, normJuris } = require('./registry/jurisdiction.js');
 // Frameworks that apply to EVERY sector (privacy, cookies, consumer protection, equality, advertising, Google).
 // E-023 (blind-send): baseline law is a function of the firm's nexus FAMILY, never a global set.
 // UNIVERSAL_FW kept as the derived union so resolver.js gating (line 90-98 contract) cannot drift.
+// E-254 (v23.0) — THE BASELINE IS THE ONLY WAY A UNIVERSAL LAW SURVIVES GATE B0.
+// UNIVERSAL_FW is derived from this table alone (see below), and fwSectorOK() DROPS any framework whose
+// sector_relevance is empty unless it is in UNIVERSAL_FW. So a law that binds EVERY commercial website but is not
+// listed here is silently removed from every audit. That is how the Electronic Commerce (EC Directive) Regulations
+// 2002 — which oblige EVERY UK site to publish its trading name, geographic address, email, company number and,
+// for a regulated profession, its regulator and authorisation number — were sitting in the database with a written
+// obligation and reaching precisely zero audits.
 const BASELINE_BY_FAMILY = {
-  UK: { established: ['UK_GDPR_A13', 'UK_DPA_2018', 'UK_PECR', 'UK_ICO_COOKIES', 'UK_COMPANIES_ACT', 'UK_EQUALITY_2010', 'UK_ASA_CAP'],
-        serves:      ['UK_GDPR_A13', 'UK_PECR', 'UK_CRA_2015', 'UK_DMCC_2024'] },
+  UK: { established: ['UK_GDPR_A13', 'UK_DPA_2018', 'UK_PECR', 'UK_ICO_COOKIES', 'UK_COMPANIES_ACT', 'UK_EQUALITY_2010', 'UK_ASA_CAP', 'UK_ECOMMERCE_2002'],
+        serves:      ['UK_GDPR_A13', 'UK_PECR', 'UK_CRA_2015', 'UK_DMCC_2024', 'UK_ECOMMERCE_2002'] },
+  // E-254: the national business-disclosure regimes. Every commercial website in these countries must carry them,
+  // and they are the single most commonly breached law in each. Germany's Impressumspflicht is enforced by routine
+  // competitor Abmahnung; France's mentions légales by the DGCCRF. This is real, evidenced, sendable law and we had
+  // it written down and unconnected.
+  DE: { established: ['DE_IMPRESSUM', 'EU_GDPR', 'EU_EPRIVACY'], serves: ['DE_IMPRESSUM', 'EU_GDPR'] },
+  FR: { established: ['FR_LCEN', 'EU_GDPR', 'EU_EPRIVACY'], serves: ['FR_LCEN', 'EU_GDPR'] },
   EU: { established: ['EU_GDPR', 'EU_EPRIVACY', 'EU_EAA_2025', 'EU_DSA'],
         serves:      ['EU_GDPR', 'EU_EPRIVACY', 'EU_EAA_2025', 'EU_DSA'] },
   US: { established: ['US_FTC', 'US_ADA'],
