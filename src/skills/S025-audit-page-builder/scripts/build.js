@@ -429,6 +429,17 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       page: f.page || f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || ((comp && comp.final_url) || (scan && scan.final_url) || ('https://' + domain + '/')),
       proof_url: f.proof_url || f.evidence_url || (Array.isArray(f.checked_urls) && f.checked_urls[0]) || ((comp && comp.final_url) || (scan && scan.final_url) || ('https://' + domain + '/')),
       absence_evidence: f.absence_evidence || null,   // A3 — real nearest-miss context (page + what's there vs missing)
+      // E-253b (v23.1) — CARRY THE ADJUDICATION VERDICT THROUGH.
+      // The findings -> pointers transform is an explicit WHITELIST, so anything not named here is silently
+      // dropped. The breach adjudicator ran, ruled on every candidate, and its verdict evaporated at this line:
+      // the first v23.0 mints landed with 38-48 findings and ZERO carrying `adjudicated`. The audit therefore had
+      // no way to say which breaches a model had actually read, the verifier could not gate on it, and the render
+      // could not show it. A verdict that does not survive the seam is a verdict that never happened.
+      adjudicated: (f.adjudicated === true),
+      adjudication: f.adjudication || null,
+      adjudication_reason: f.adjudication_reason || null,
+      adjudication_disproof: f.adjudication_disproof || null,
+      // `state` already flows below, which is what carries a NEEDS_REVIEW demotion.
       // Element-checklist (Phase 3a): which required elements are present (with a quote) vs missing on the page, so the
       // render can show "you show price and VAT but not timescales, key stages or who does the work".
       elements: Array.isArray(f.elements) ? f.elements.slice(0, 12) : null,

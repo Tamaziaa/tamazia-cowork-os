@@ -124,6 +124,23 @@ const REAL_BREACH = {
     A.ok(/normaliseSectorAlias\(String\(effectiveSectorAuth/.test(code), 'rule selection must use the AUTHORISED sector');
   });
 
+
+  await t('E-253b: the adjudication verdict SURVIVES the findings -> pointers seam', async () => {
+    const src = fs.readFileSync(path.join(ROOT, 'src/skills/S025-audit-page-builder/scripts/build.js'), 'utf8');
+    // the transform is an explicit WHITELIST: anything not named is silently dropped. The first v23.0 mints landed
+    // with 38-48 findings and ZERO carrying `adjudicated`, because the verdict evaporated at this seam.
+    // A verdict that does not survive the seam is a verdict that never happened.
+    A.ok(/adjudicated:\s*\(f\.adjudicated === true\)/.test(src), 'pointers must carry `adjudicated`');
+    A.ok(/adjudication:\s*f\.adjudication/.test(src), 'pointers must carry the verdict');
+    A.ok(/adjudication_reason:/.test(src), 'pointers must carry the reason');
+  });
+
+  await t('E-253c: the adjudication report is published on the payload (observability, not guesswork)', async () => {
+    const src = fs.readFileSync(path.join(ROOT, 'src/skills/S008-personalisation-engine/scanners/compliance.js'), 'utf8');
+    A.ok(/adjudication:\s*_adjReport/.test(src),
+      'the payload MUST carry the adjudication report, or "did a model actually read these breaches" is unanswerable from the outside — which is exactly the observability failure that let a stale cache lie to us for five turns');
+  });
+
   console.log(bad ? 'E253/E250b: FAIL' : 'E253/E250b ADJUDICATION + SECTOR AUTHORITY: ALL GREEN (' + n + ' checks)');
   process.exit(bad ? 1 : 0);
 })();
