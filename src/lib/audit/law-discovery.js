@@ -108,8 +108,9 @@ async function discoverLaws({ sector, sub_sector, jurisdictions, binding, catalo
     const url = String((l && l.official_url) || '').trim();
     const officialish = /^https?:\/\/([a-z0-9-]+\.)*(gov(\.[a-z]{2})?|europa\.eu|legislation\.gov\.uk|ecfr\.gov|govinfo\.gov|ico\.org\.uk|sra\.org\.uk|fca\.org\.uk|cqc\.org\.uk|sdaia\.gov\.sa|tdra\.gov\.ae|difc\.ae|adgm\.com|almeezan\.qa|qfc\.qa)(\/|$)/i.test(url);
     if (!officialish) { rejected.push({ name: String(l.name || '').slice(0, 120), reason: 'no_official_url' }); continue; }
-    const resolves = await _headResolves(url);
-    if (!resolves) { rejected.push({ name: String(l.name || '').slice(0, 120), reason: 'url_unresolved' }); continue; }
+    // E-257: the citation must be PROVED, not merely present and not merely 2xx. Unproved => discarded, never stored.
+    const proof = await _citationProved({ name: l.name, official_url: url });
+    if (!proof.ok) { rejected.push({ name: String(l.name || '').slice(0, 120), reason: 'citation_not_proved: ' + proof.reason.slice(0, 90) }); continue; }
     unmatched.push({ name: String(l.name || '').slice(0, 140), jurisdiction: String(l.jurisdiction || '').toUpperCase().slice(0, 12), scope_note: String(l.scope_note || '').slice(0, 80), official_url: url.slice(0, 300) });
   }
   try {
@@ -128,19 +129,41 @@ async function discoverLaws({ sector, sub_sector, jurisdictions, binding, catalo
   return { matched, unmatched, rejected: rejected.length, score: g.score, attempts: g.attempts, provider: g.provider };
 }
 
-// E-229: resolve an official URL with a lightweight HEAD (fallback GET on 405); 2xx/3xx counts as resolvable.
-// Never throws; a network failure returns false so a candidate is held back rather than admitted on faith.
-async function _headResolves(url) {
-  if (process.env.LAW_DISCOVERY_URLCHECK === '0') return true;
-  const tryReq = async (method) => {
-    try {
-      const r = await fetch(url, { method, redirect: 'follow', signal: AbortSignal.timeout(8000), headers: { 'user-agent': 'TamaziaComplianceBot/1.0 (+https://tamazia.co.uk/crawler)' } });
-      return r.status;
-    } catch (_e) { return 0; }
-  };
-  let s = await tryReq('HEAD');
-  if (s === 405 || s === 403 || s === 0) s = await tryReq('GET');
-  return s >= 200 && s < 400;
+// E-257 (v23.2) — THE GATE THAT LET FABRICATED STATUTES THROUGH. THIS IS HOW IT HAPPENED.
+//
+// E-229's "official-URL resolution gate" was this:
+//     let s = await tryReq('HEAD');  ...  return s >= 200 && s < 400;
+// It checked THE HTTP STATUS. It never looked at the page.
+//
+// legislation.gov.uk GENERATES PAGES ON DEMAND and answers **HTTP 202 to a HEAD on ANY URL SHAPE**, real or not.
+// Proven, three requests, same result:
+//     202  /uksi/2020/1370        <- a law that DOES NOT EXIST
+//     202  /uksi/9999/9999        <- obviously nonexistent
+//     202  /ukpga/2010/15         <- the real Equality Act
+// 202 is 2xx. The gate returned TRUE. **Every fabricated citation passed.**
+//
+// That is precisely how "Cookies (Information, Consent and Related Obligations) Regulations 2020" — a statutory
+// instrument that does not exist — was admitted into framework_candidates THREE TIMES, each with a DIFFERENT
+// invented legislation.gov.uk URL (/1370, /1400, /1404). A model that will invent a statute will invent the URL
+// that proves it, and a status-code check will believe both.
+//
+// There was also `if (process.env.LAW_DISCOVERY_URLCHECK === '0') return true;` — an env var that disabled the
+// ONLY safety gate on the whole discovery loop. It is gone. There is no way to turn this off.
+//
+// THE RULE NOW: a discovered law is not persisted AT ALL unless its citation is PROVED. Proof means the URL
+// resolves to HTTP 200 on an official legislative domain AND THE PAGE ACTUALLY IS THAT LAW (its distinctive terms
+// appear in the body). Repealed statutes are rejected by name. Anything we cannot prove is DISCARDED, not stored.
+// Fail-closed, permanently. A law we cannot prove exists must never be written down, because anything written down
+// can one day be promoted, and a fabricated statute in a report to a solicitor ends this company.
+async function _citationProved(law) {
+  let V = null;
+  try { V = require('./candidate-verifier.js'); } catch (_e) { return { ok: false, reason: 'verifier_unavailable' }; }
+  try {
+    const r = await V.verifyCandidate({ name: law && law.name, official_url: law && law.official_url }, { polls: 3, timeoutMs: 10000 });
+    // ONLY 'verified' is admissible. 'unverifiable' (a throttled or 202-pending host) is NOT proof, and a law we
+    // cannot prove is a law we do not write down.
+    return { ok: r.verdict === 'verified', reason: r.verdict + ': ' + r.reason };
+  } catch (e) { return { ok: false, reason: 'verify_failed' }; }
 }
 
 module.exports = { discoverLaws, normName, catalogueNameIndex };
