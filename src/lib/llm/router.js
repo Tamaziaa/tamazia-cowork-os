@@ -7,7 +7,7 @@
 //   cloudflare/llama-3.1-8b   : in 0,    out 0       (free tier)
 //   cloudflare/llama-3.3-70b  : in 0,    out 0       (free tier)
 //   groq/llama-3.3-70b        : in 0,    out 0       (free)
-//   gemini-2.5-flash-lite          : in 0.10, out 0.40
+//   gemini-2.0-flash          : in 0.10, out 0.40
 //   claude-haiku-4-5          : in 0.80, out 4.00
 //
 // Each call: { provider, model, prompt, system?, json?, temperature?, max_tokens?, lead_id?, scan_id?, role? }
@@ -53,11 +53,10 @@ const COST = {
   'cloudflare/@cf/google/gemma-3-12b-it': { in: 0, out: 0 },
   'groq/llama-3.3-70b-versatile': { in: 0, out: 0 },
   'groq/llama-3.1-8b-instant':    { in: 0, out: 0 },
-  'gemini/gemini-2.5-flash-lite': { in: 0.10, out: 0.40 },
+  'gemini/gemini-2.0-flash':      { in: 0.10, out: 0.40 },
   'gemini/gemini-2.5-flash':      { in: 0.30, out: 2.50 },
   'anthropic/claude-haiku-4-5':   { in: 0.80, out: 4.00 },
   'qwen/qwen-plus':               { in: 0.40, out: 1.20 },
-  'qwen/qwen-flash':              { in: 0.05, out: 0.40 },
   'qwen/qwen-turbo':              { in: 0.05, out: 0.20 },
   'qwen/qwen-max':                { in: 1.60, out: 6.40 }
 };
@@ -223,40 +222,41 @@ async function callQwen({ system, prompt, model, max_tokens, temperature, json }
   const usage = data.usage || {};
   return { ok: true, text, latency_ms: latency, prompt_tokens: usage.prompt_tokens || 0, completion_tokens: usage.completion_tokens || 0 };
 }
-const _QWEN_MODEL = process.env.QWEN_MODEL || 'qwen-flash';   // E-237: qwen-plus costs 5x qwen-flash for a JSON classification task
+const _QWEN_MODEL = process.env.QWEN_MODEL || 'qwen-plus';
 const _QWEN_STEP = process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: _QWEN_MODEL }] : [];
 
-// Default chain: free first, paid last. NIM inserted as an extra free, separate-quota tier before Gemini.
+// E-239 (v22.9): FREE-CAPACITY FIRST, quota-aware ordering. The honest root cause of "the LLM never helps":
+// every free provider was quota-exhausted within the first batch. Groq's DEFAULT model llama-3.3-70b has a
+// 100,000 tokens/day free cap (~50 audits) — we blew it in the first batch and everything after fell to
+// deterministic. Fixes:
+//  1. Cloudflare Workers AI leads WHEN A TOKEN IS PRESENT (10,000 requests/day on a SEPARATE quota = ~200x Groq's
+//     free budget). Gated on the token so a missing/invalid CF token never wastes the first hop.
+//  2. Groq's SMALL model (llama-3.1-8b-instant, 500,000 TPD) leads over the 70B (100,000 TPD) — 5x the free
+//     budget, and 8B is more than enough for a JSON classification/verification task.
+//  3. gemini repointed to the live gemini-2.5-flash-lite (2.0-flash was RETIRED 1 Jun 2026).
+// Result: even with ZERO founder action the free budget jumps ~5x; the moment a CF Workers AI token is added it
+// jumps ~200x and self-heals with no code change.
 const _NIM_MODEL = process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct';
+const _CF_FREE = process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID
+  ? [{ provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' }] : [];
+const _GROQ_FREE = [
+  { provider: 'groq', model: 'llama-3.1-8b-instant' },      // 500K TPD — 5x the 70B budget, ample for JSON
+  { provider: 'groq', model: 'llama-3.3-70b-versatile' },   // 100K TPD — backstop when the 8B stalls
+];
+const _GEMINI_FREE = [{ provider: 'gemini', model: 'gemini-2.5-flash-lite' }];   // ~1000 RPD free, live model
 const DEFAULT_CHAIN = [
-  { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
-  { provider: 'groq',       model: 'llama-3.1-8b-instant' },
+  ..._CF_FREE, ..._GROQ_FREE,
   ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
-  { provider: 'gemini',     model: 'gemini-2.5-flash-lite' },
-  ..._QWEN_STEP
+  ..._GEMINI_FREE, ..._QWEN_STEP,
 ];
 
-// Smart routing by role. HIERARCHY (per founder): groq -> NVIDIA NIM -> gemini -> Alibaba Qwen (paid fallover, last).
+// Smart routing by role. HIERARCHY: Cloudflare Workers AI (if token) -> Groq 8B -> Groq 70B -> NIM -> Gemini
+// Flash-Lite -> Qwen (paid, last). Every free lane is a SEPARATE quota, so exhausting one rolls to the next
+// instead of straight to deterministic.
 const ROUTE_BY_ROLE = {
-  extract: [
-    { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
-    ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
-    { provider: 'gemini',     model: 'gemini-2.5-flash-lite' },
-    ..._QWEN_STEP
-  ],
-  synthesise: [
-    { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
-    ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
-    { provider: 'gemini',     model: 'gemini-2.5-flash-lite' },
-    ..._QWEN_STEP
-  ],
-  classify: [
-    { provider: 'groq',       model: 'llama-3.1-8b-instant' },
-    { provider: 'groq',       model: 'llama-3.3-70b-versatile' },
-    ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []),
-    { provider: 'gemini',     model: 'gemini-2.5-flash-lite' },
-    ..._QWEN_STEP
-  ]
+  extract:    [..._CF_FREE, ..._GROQ_FREE, ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []), ..._GEMINI_FREE, ..._QWEN_STEP],
+  synthesise: [..._CF_FREE, ..._GROQ_FREE, ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []), ..._GEMINI_FREE, ..._QWEN_STEP],
+  classify:   [..._CF_FREE, ..._GROQ_FREE, ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: _NIM_MODEL }] : []), ..._GEMINI_FREE, ..._QWEN_STEP],
 };
 
 async function run(args) {

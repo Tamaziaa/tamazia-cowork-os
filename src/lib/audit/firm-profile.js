@@ -11,8 +11,11 @@ const { askLLM } = require('./llm.js');
 // Fail-open: if the router module/path is unavailable we transparently use askLLM as before.
 let _router = null; try { _router = require('../llm/router.js'); } catch (_e) { /* fail-open to askLLM */ }
 const _PROFILE_CHAIN = [
-  { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' }, // free 10k/day, own quota
-  { provider: 'groq', model: 'llama-3.3-70b-versatile' },                        // backstop, separate quota
+  // E-239: Cloudflare only when a token is present (else it wastes the first hop on an auth error). Groq 8B
+  // (500K TPD) leads over 70B (100K TPD): 5x the free budget, ample for JSON classification.
+  ...((process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID) ? [{ provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' }] : []),
+  { provider: 'groq', model: 'llama-3.1-8b-instant' },                           // 500K TPD free
+  { provider: 'groq', model: 'llama-3.3-70b-versatile' },                        // 100K TPD backstop
   ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct' }] : []), // dormant free capacity, separate quota
   { provider: 'gemini', model: 'gemini-2.5-flash-lite' },                             // final backstop
 ];
