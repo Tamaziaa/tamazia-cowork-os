@@ -195,11 +195,21 @@ async function profileFirm({ corpus = '', domain = '', country = '', sector = ''
   const sector_confident = !!_ovr || _kwConfident;
   const fallback = { primary_sector: deterministicSector || null, sectors: deterministicSector ? [deterministicSector] : [], hq_country: country || null, office_countries: [], serves: [], source: 'fallback', sector_self_id: !!_ovr, sector_confident, sector_evidence: _ovr ? ['self_id'] : _scored.evidence };
   if (!text || text.length < 200) return fallback;
+  // E-222 (v22.6): taxonomy-constrained sub-sector in the SAME call, token-light — only the node ids of the
+  // deterministic top candidates are offered, so the model chooses from OUR tree, never invents granularity.
+  let _subNodes = [];
+  try {
+    const _sr = require('../compliance/registry/sector.js');
+    const _cands = [...new Set([_ovr, _scored.top, _kwSector].filter(Boolean).map((s) => _sr.canonicalSector(s)).filter(Boolean))].slice(0, 2);
+    for (const c of _cands) { const node = _sr.TREE[c] || _sr.TREE[_sr.parentOf(c) || '']; if (node && node.sub) _subNodes.push(...Object.keys(node.sub)); }
+    _subNodes = [...new Set(_subNodes)].slice(0, 14);
+  } catch (_e) { _subNodes = []; }
   const prompt = `You are a meticulous compliance analyst. From the WEBSITE TEXT below, extract ONLY what the text actually evidences — never guess or infer beyond it.
 Return STRICT JSON only:
 {"own_activity": a short phrase describing what THIS firm itself does (its own product/service),
  "client_industries": [industries the firm SELLS TO or SERVES — these are NOT the firm's own sector; list them so they are excluded],
  "primary_sector": one value from [${SECTORS.join(', ')}] — the firm's OWN business from own_activity, NEVER any value in client_industries,
+ "sub_sector": ${_subNodes.length ? 'one value from [' + _subNodes.join(', ') + '] when the text clearly evidences it, else null' : 'null'},
  "secondary_sectors": [zero or more from the same list, only if the firm itself also operates in them],
  "hq_country": the country of the firm's LEGAL HEADQUARTERS / registered entity (full name). Distinguish the HQ from branch/representative/regional offices — the HQ is where it is incorporated or states its head office, NOT merely where it has a branch,
  "office_countries": [{"country": full name, "evidence": verbatim phrase, "role": "headquarters" | "branch" | "subsidiary" | "representative"}],
@@ -211,10 +221,51 @@ services' (NOT 'hospitality'); a marketing agency for clinics is 'marketing' (NO
 the company NAME — classify by the actual service described. office_countries = ONLY countries with a stated office, address, or "based in / headquartered in". served_markets = countries it explicitly says it advises/serves clients in. A country mentioned only inside a case study, a news item, or a single passing reference is NOT an office or a served market — omit it. Use full country names. Output JSON only.
 WEBSITE TEXT:
 ${text}`;
-  const raw = await _profileLLM(prompt, env);
-  if (!raw) return fallback;
-  let p; try { p = JSON.parse(String(raw || '').replace(/^[\s\S]*?\{/, '{').replace(/```/g, '').replace(/\}[^}]*$/, '}')); } catch (_e) { return fallback; }
-  if (!p || typeof p !== 'object') return fallback;
+  // E-222 (v22.6): the classification call now runs through THE LLM GATE — a 0-10 deterministic rubric, pass at
+  // >=7, up to 3 attempts with targeted-deficiency feedback, then DROP to the deterministic fallback below.
+  // Rubric: schema 3 · sector-enum 2 · sub-sector-enum 1 · evidence anchoring 2 · self-ID/own-vs-client agreement 2.
+  let p = null; let _gateMeta = null;
+  try {
+    const { gateLLM, H } = require('../llm/gate.js');
+    const _lcText = String(text || '').toLowerCase();
+    const _nodeSet = new Set(_subNodes.map((s) => String(s).toLowerCase()));
+    const _secSet = new Set(SECTORS.map((s) => s.toLowerCase()));
+    const rubric = (out) => {
+      const defs = []; let score = 0;
+      if (out && typeof out === 'object' && out.primary_sector) score += 3; else defs.push('return the strict JSON object with "primary_sector" set');
+      if (out) {
+        const e1 = H.inSet(out.primary_sector, _secSet, 2, 'primary_sector', SECTORS.join(', ')); score += e1.pts; if (e1.def) defs.push(e1.def);
+        const sub = out.sub_sector == null ? null : String(out.sub_sector).toLowerCase();
+        if (sub == null || _nodeSet.has(sub)) score += 1; else defs.push('sub_sector "' + sub + '" is not an offered node; use one of [' + _subNodes.join(', ') + '] or null');
+        const _ev = [...(Array.isArray(out.office_countries) ? out.office_countries : []), ...(Array.isArray(out.served_markets) ? out.served_markets : [])]
+          .map((o) => o && o.evidence).filter(Boolean).slice(0, 4);
+        if (!_ev.length) score += 2; else { const a = H.anchored(_ev, _lcText, 2, 'office/served_markets'); score += a.pts; if (a.def) defs.push(a.def); }
+        const _llmSec = String(out.primary_sector || '').toLowerCase();
+        let cons = 2;
+        if (_ovr && _llmSec && _llmSec !== _ovr) { cons -= 1; defs.push('the site SELF-IDENTIFIES as "' + _ovr + '" (own-business phrase); primary_sector must not contradict it'); }
+        const _clients = (Array.isArray(out.client_industries) ? out.client_industries : []).map((x) => String(x).toLowerCase());
+        if (_llmSec && _clients.includes(_llmSec)) { cons -= 1; defs.push('primary_sector must be the firm\'s OWN business, never one of its client_industries'); }
+        score += Math.max(0, cons);
+      }
+      return { score, deficiencies: defs };
+    };
+    const _chain = [
+      { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
+      { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+      ...(process.env.NIM_API_KEY ? [{ provider: 'nim', model: process.env.NIM_MODEL || 'meta/llama-3.3-70b-instruct' }] : []),
+      { provider: 'gemini', model: 'gemini-2.0-flash' },
+      ...(process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: process.env.QWEN_MODEL || 'qwen-plus' }] : []),
+    ];
+    const g = await gateLLM({ role: 'extract', chain: _chain, system: 'You are a meticulous compliance analyst. Output ONLY valid JSON, no prose.', prompt, rubric, threshold: 7, max_attempts: 3, max_tokens: 700, scan_id: domain + ':classify' });
+    _gateMeta = { score: g.score, attempts: g.attempts, provider: g.provider, deficiencies: g.ok ? [] : g.deficiencies };
+    if (g.ok) p = g.out;
+  } catch (_e) { _gateMeta = { score: 0, attempts: 0, provider: null, deficiencies: ['gate_crash'] }; }
+  // Legacy single-shot path only if the gate module itself was unavailable (never after a scored drop).
+  if (!p && _gateMeta && _gateMeta.deficiencies && _gateMeta.deficiencies[0] === 'gate_crash') {
+    const raw = await _profileLLM(prompt, env);
+    if (raw) { try { p = JSON.parse(String(raw || '').replace(/^[\s\S]*?\{/, '{').replace(/```/g, '').replace(/\}[^}]*$/, '}')); } catch (_e) { p = null; } }
+  }
+  if (!p || typeof p !== 'object') return Object.assign({}, fallback, { classifier_gate: _gateMeta });
   const offices = (Array.isArray(p.office_countries) ? p.office_countries : []).map((o) => ({ country: o && o.country, code: _code(o && o.country), evidence: String((o && o.evidence) || '').slice(0, 160) })).filter((o) => o.code);
   const serves = (Array.isArray(p.served_markets) ? p.served_markets : []).map((o) => ({ country: o && o.country, code: _code(o && o.country), evidence: String((o && o.evidence) || '').slice(0, 160) })).filter((o) => o.code);
   // R-1: if LLM returns null/unrecognised sector, fall back to deterministic corpus classifier (never "General").
@@ -224,9 +275,13 @@ ${text}`;
   // corpus unambiguously self-identifies the firm's OWN regulated profession/structure, that wins over the LLM.
   // Conservative: only fires on strong self-identifying phrases, never on a passing mention.
   const resolvedSector = _ovr || llmSector || deterministicSector || null;
+  // E-222: gate-validated sub-sector rides along (already enum-checked by the rubric; belt-and-braces re-check).
+  const _subLLM = (() => { const s = p.sub_sector == null ? null : String(p.sub_sector).toLowerCase(); return (s && _subNodes.map((x) => x.toLowerCase()).includes(s)) ? s : null; })();
   return {
     primary_sector: resolvedSector,
     sectors: Array.from(new Set([resolvedSector, ...(Array.isArray(p.secondary_sectors) ? p.secondary_sectors.map(_cleanSector) : [])].filter(Boolean))),
+    sub_sector_llm: _subLLM,
+    classifier_gate: _gateMeta,
     hq_country: p.hq_country || country || null,
     office_countries: offices, serves, source: 'llm',
     // self-ID override fired → high confidence. OR the LLM ran successfully (own-vs-client prompt) and returned a

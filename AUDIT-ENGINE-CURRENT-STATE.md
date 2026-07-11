@@ -148,3 +148,14 @@ Defect-ledger mapping (S-200): every change carries an E-number tied to the 11 J
 ENGINE_VERSION: `v22.5-2026-07-uniform-tags`. Renderer-side truth filter for legacy/unverified rows ships in tamazia-website (same session): verified!=true rows render evidence-clean content only (family-nexus filter, absence-without-proof drop, short-evidence drop, fines withheld unless evidence-clean) with value-mode fallback, point-in-time banner, Registered Reality + binding map; beacon now writes open_count/last_opened_at to Neon (P-010).
 
 Founder items still open: rotate GH PAT + Neon password (P-107/S-198, they were pasted in chat); Perplexity key absent (router runs groq→NIM→gemini→qwen fine without it); Sweep module 3 (twelve binary checks) is the next build after this ships; precedent-panel curation pipeline (module 4) still manual-seeded.
+
+## 14. 2026-07-11 session III — v22.6 (the LLM gate + self-learning law discovery + write-seam hotfixes)
+
+| ID | What shipped |
+|---|---|
+| E-220 | RESILIENT WRITE SEAM (root cause of the canary storm: INSERT committed server-side, psql shim raised client-side, build threw after a real write, worker retried -> 4 duplicate rows/domain + queue 'failed'). Order now: parameterised Neon-HTTP INSERT w/ RETURNING -> shim fallback -> cross-channel confirm loop -> idempotent ADOPTION of a <15min row by the same engine version. No escaping, no argv limits, structured errors. |
+| E-221 | FREE-ZONE EXCLUSIVITY: DIFC_DPL/ADGM_DPR DISPLACE UAE_PDPL (never stack; DIFC>ADGM precedence, drops traced) + 'DIFC Courts' advocacy no longer reads as DIFC establishment (fichtelegal V02 x10 class). eval/me-exclusivity-e221 4/4 GREEN. |
+| E-222 | THE LLM GATE (src/lib/llm/gate.js): every LLM decision scored 0-10 by DETERMINISTIC rubrics (schema/enum/verbatim-evidence/cross-signal agreement — never self-reported confidence), pass >=7, targeted-deficiency retry, 3 strikes -> drop to deterministic fallback. Wired: firm-profile classification (taxonomy-constrained prompt now also asks sub_sector from OUR tree nodes; rubric 3+2+1+2+2), exec_summary (2 attempts, then composer). Telemetry per mint in payload.llm_gate. eval/llm-gate-e222 8/8 GREEN. |
+| E-223 | SELF-LEARNING LAW DISCOVERY: per-CELL (sector×sub×jurisdictions×catalogue_version) gated LLM query for digital-exposure laws, diffed against the catalogue by order-insensitive name matching. Matches = confirmation signal; novelties -> framework_candidates (deduped, seen_count) for the HUMAN-GATED seed pipeline — discovery NEVER touches binding/render. Cell-cached 30d in cell_law_reviews (steady-state ≈ one call/cell/month). Kill switch LAW_DISCOVERY=0. Weekly audit-of-the-audits now reports gate scores + the candidate queue. |
+
+ENGINE_VERSION v22.6-2026-07-llm-gate. Candidate activation path: framework_candidates (status='candidate') -> human review via weekly Telegram digest -> seed as INACTIVE rule -> validate -> activate (guardrail #50 unchanged).

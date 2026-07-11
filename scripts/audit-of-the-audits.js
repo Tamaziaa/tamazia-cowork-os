@@ -31,6 +31,11 @@ async function tg(text) {
   add('LLM verify status mix (7d)', "SELECT COALESCE(payload_json->'llm_verify'->>'status','(none)') || '  x' || count(*) FROM audit_pages WHERE generated_at > now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC");
   add('Sub-sector coverage (7d mints)', "SELECT COALESCE(payload_json->>'sub_sector','(none)') || '  x' || count(*) FROM audit_pages WHERE generated_at > now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC LIMIT 12");
   add('Opens recorded (P-010 watch: should rise once the beacon writes)', "SELECT 'rows_with_opens=' || count(*) FILTER (WHERE open_count > 0) || ' total_opens=' || COALESCE(sum(open_count),0) FROM audit_pages");
+  // E-222/E-223 (v22.6): the self-learning loop's weekly read-out — gate health + the law candidates the LLM
+  // keeps rediscovering. High seen_count candidates are the seed-pipeline queue (human-gated, never auto-attached).
+  add('LLM gate scores (7d): classify pass rate + attempts', "SELECT 'classify avg_score=' || round(avg((payload_json->'llm_gate'->'classify'->>'score')::numeric),1) || ' avg_attempts=' || round(avg((payload_json->'llm_gate'->'classify'->>'attempts')::numeric),1) || ' gated_mints=' || count(*) FROM audit_pages WHERE generated_at > now() - interval '7 days' AND payload_json->'llm_gate'->'classify'->>'score' IS NOT NULL");
+  add('Law-discovery cells reviewed (30d) + drop rate', "SELECT 'cells=' || count(*) || ' dropped=' || count(*) FILTER (WHERE provider='gate_dropped') || ' avg_score=' || COALESCE(round(avg(score),1),0) FROM cell_law_reviews WHERE checked_at > now() - interval '30 days'");
+  add('TOP FRAMEWORK CANDIDATES awaiting review (the self-learning queue)', "SELECT name || ' [' || jurisdiction || '/' || sector || COALESCE('/'||NULLIF(sub_sector,''),'') || '] seen x' || seen_count FROM framework_candidates WHERE status='candidate' ORDER BY seen_count DESC, last_seen DESC LIMIT 12");
   const dir = path.join(ROOT, 'reports', 'audit-of-audits');
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, d + '.md');

@@ -8723,5 +8723,139 @@
         "identity": false
       }
     }
+  },
+  "cell_law_reviews": {
+    "columns": {
+      "cell_key": {
+        "type": "varchar(200)",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "sector": {
+        "type": "varchar(40)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "sub_sector": {
+        "type": "varchar(48)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "jurisdictions": {
+        "type": "varchar(40)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "catalogue_version": {
+        "type": "varchar(24)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "matched": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "unmatched": {
+        "type": "jsonb",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "score": {
+        "type": "integer",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "provider": {
+        "type": "varchar(60)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "checked_at": {
+        "type": "timestamptz",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      }
+    }
+  },
+  "framework_candidates": {
+    "columns": {
+      "id": {
+        "type": "bigint",
+        "default": null,
+        "notnull": true,
+        "identity": true
+      },
+      "name": {
+        "type": "varchar(160)",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "name_norm": {
+        "type": "varchar(90)",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "jurisdiction": {
+        "type": "varchar(12)",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "sector": {
+        "type": "varchar(40)",
+        "default": null,
+        "notnull": true,
+        "identity": false
+      },
+      "sub_sector": {
+        "type": "varchar(48)",
+        "default": "''::character varying",
+        "notnull": true,
+        "identity": false
+      },
+      "scope_note": {
+        "type": "varchar(90)",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "seen_count": {
+        "type": "integer",
+        "default": "1",
+        "notnull": false,
+        "identity": false
+      },
+      "status": {
+        "type": "varchar(16)",
+        "default": "'candidate'::character varying",
+        "notnull": false,
+        "identity": false
+      },
+      "first_seen": {
+        "type": "timestamptz",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      },
+      "last_seen": {
+        "type": "timestamptz",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      }
+    }
   }
 }
