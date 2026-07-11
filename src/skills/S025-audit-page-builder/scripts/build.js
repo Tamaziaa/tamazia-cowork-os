@@ -828,7 +828,7 @@ async function neonHttp(sqlText, params) {
     try {
       const r = await fetch('https://' + host + '/sql', {
         method: 'POST', headers: { 'Neon-Connection-String': url, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: sqlText, params: params || [] }), signal: AbortSignal.timeout(20000),
+        body: JSON.stringify({ query: sqlText, params: params || [] }), signal: AbortSignal.timeout(32000),
       });
       if (r.ok) return await r.json();
       if (r.status >= 400 && r.status < 500) return { error: (await r.text()).slice(0, 300) };
@@ -998,7 +998,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     }
     if (ins && String(ins).trim()) insId = String(ins).trim();
   }
-  for (let a = 0; insId == null && a < 3; a++) {
+  for (let a = 0; insId == null && a < 4; a++) {
     _seam.confirm = a + 1;
     const c = await neonHttp(`SELECT id FROM ${AUDIT_TABLE} WHERE slug=$1 AND hash=$2 LIMIT 1`, [slug, hash]);
     if (c && Array.isArray(c.rows) && c.rows[0]) { insId = c.rows[0].id; break; }
@@ -1008,10 +1008,10 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   }
   if (insId == null) {
     // E-224: ADOPTION now has a shim leg too (it was HTTP-only, useless when HTTP is the failing channel).
-    const _adSql = `SELECT id || '|' || slug || '|' || hash FROM ${AUDIT_TABLE} WHERE domain='${domain.replace(/'/g, "''")}' AND status IN ('live','quarantined') AND payload_json->>'engine_version' = '${String(payload.engine_version || '').replace(/'/g, "''")}' AND generated_at > now() - interval '15 minutes' ORDER BY generated_at DESC LIMIT 1`;
+    const _adSql = `SELECT id || '|' || slug || '|' || hash FROM ${AUDIT_TABLE} WHERE domain='${domain.replace(/'/g, "''")}' AND status IN ('live','quarantined') AND payload_json->>'engine_version' = '${String(payload.engine_version || '').replace(/'/g, "''")}' AND generated_at > now() - interval '45 minutes' ORDER BY generated_at DESC LIMIT 1`;
     const ad = await neonHttp(
       `SELECT id, slug, hash FROM ${AUDIT_TABLE} WHERE domain=$1 AND status IN ('live','quarantined')
-         AND payload_json->>'engine_version' = $2 AND generated_at > now() - interval '15 minutes'
+         AND payload_json->>'engine_version' = $2 AND generated_at > now() - interval '45 minutes'
        ORDER BY generated_at DESC LIMIT 1`,
       [domain, String(payload.engine_version || '')]
     );
