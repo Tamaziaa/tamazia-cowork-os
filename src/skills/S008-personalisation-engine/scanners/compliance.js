@@ -768,22 +768,50 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
 // engine only checked for ABSENT compliance elements. Flag injected off-topic spam INCONGRUENT with the firm's
 // sector as a P0 security finding (no fine — urgent remediation). Gated to avoid false positives: needs a
 // cluster (>=6 hits, >=2 distinct terms) and exempts firms whose sector legitimately uses those terms.
-const _SPAM_RX = /\b(1xbet|melbet|betway|casino|slots?\b|sportsbook|\bbetting\b|payday loan|viagra|cialis|tadalafil|replica (watch|rolex|handbag|bag)|\bescort(s)?\b|porn|adult cam|crypto (giveaway|airdrop|doubler)|forex signals|essay writing service|cbd gummies|\bsex\b)\b/gi;
+// E-234 (v22.8) — REWRITTEN AFTER A LIVE FALSE POSITIVE ON A REAL LAW FIRM (freeths.co.uk, 11 Jul).
+// The old detector regex-matched BARE WORDS over RAW HTML: `\bsex\b` matched "sex discrimination", `slots?\b`
+// matched the HTML <slot> element and "time slot", `porn` matched "pornography" in a criminal-law page. Six such
+// hits across a large firm's site and the engine published a P0 headline accusing them of being HACKED. That is a
+// defamation-adjacent fabrication and it led the audit. Never again.
+//
+// What SEO-spam injection ACTUALLY is: injected outbound LINKS (anchors/hrefs) to spam domains, usually hidden.
+// So we now detect exactly that, and nothing else:
+//   1. Parse ANCHORS only (href + anchor text) — never body prose, never raw HTML/CSS/JS.
+//   2. Require HIGH-CONFIDENCE spam BRAND/product tokens (no ambiguous English words like sex/slot/adult/betting,
+//      which are legitimate vocabulary for a law firm's practice areas).
+//   3. Require the link to point OFF-SITE (an injected link goes somewhere).
+//   4. Require a CLUSTER: >=3 distinct off-site spam links.
+//   5. Evidence = the injected URLs, quoted verbatim (satisfies P-011; the render-side gate also demands this).
+// If any condition fails we return null. A false accusation is infinitely worse than a missed one.
+const _SPAM_BRAND_RX = /(1xbet|melbet|betway|bet365|parimatch|stake\.com|sportsbook|pokerstars|viagra|cialis|tadalafil|sildenafil|payday ?loan|replica ?(watch|rolex|handbag)|escort ?service|adult ?cam|crypto ?(giveaway|airdrop|doubler)|forex ?signals|essay ?writing ?service|cbd ?gummies|casino ?(online|bonus|slot)|judi ?bola|situs ?(slot|judi)|slot ?(gacor|online|deposit)|togel|pkv ?games|sbobet)/i;
 function _detectCompromise(corpus, sector) {
   if (/gambl|casino|\bbet\b|betting|adult|pharma|crypto|cannabis|cbd/i.test(String(sector || ''))) return null; // legit use of these terms
-  let hits = 0; const samples = new Set(); let firstUrl = null;
+  const injected = new Map();   // url -> anchor text
+  let firstUrl = null;
   for (const c of (corpus || [])) {
-    const m = String(c.body || '').match(_SPAM_RX);
-    if (m) { hits += m.length; if (!firstUrl) firstUrl = c.url || null; m.slice(0, 4).forEach(x => samples.add(x.toLowerCase().trim())); }
+    const html = String(c.body || '');
+    let host = ''; try { host = new URL(c.url || 'https://x.invalid').hostname.replace(/^www\./, ''); } catch (_e) {}
+    const anchorRx = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]{0,120}?)<\/a>/gi;
+    let m;
+    while ((m = anchorRx.exec(html)) !== null) {
+      const href = String(m[1] || '').trim();
+      const text = String(m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!/^https?:\/\//i.test(href)) continue;                       // injected spam links are absolute + off-site
+      let lhost = ''; try { lhost = new URL(href).hostname.replace(/^www\./, ''); } catch (_e) { continue; }
+      if (!lhost || (host && (lhost === host || lhost.endsWith('.' + host)))) continue;   // same-site: not injected
+      if (!(_SPAM_BRAND_RX.test(href) || _SPAM_BRAND_RX.test(text))) continue;            // high-confidence brand only
+      if (!injected.has(href)) { injected.set(href, text); if (!firstUrl) firstUrl = c.url || null; }
+    }
   }
-  if (hits < 6 || samples.size < 2) return null;
-  const ex = Array.from(samples).slice(0, 5);
+  if (injected.size < 3) return null;                                   // needs a real cluster, not one stray link
+  const urls = Array.from(injected.keys()).slice(0, 6);
+  const quote = urls.join(' , ');                                       // verbatim injected URLs = the evidence
   return {
     status: 'miss', severity: 'P0', framework: 'SITE_INTEGRITY', code: 'SUSPECTED_COMPROMISE', bucket: 'security',
-    description: 'Suspected site compromise: injected spam / off-topic content',
-    layman_explanation: 'Your website appears to be serving injected spam content (' + ex.join(', ') + ') unrelated to your business — a strong indicator the site has been hacked or hit by an SEO-spam injection. This poisons your Google reputation, can trigger a manual penalty / "this site may be hacked" label, and exposes visitors to harm.',
-    tamazia_fix_short: 'Urgent: scan for malware/injected content, remove the spam, patch and harden the CMS/plugins, rotate credentials, then request a Google security review.',
-    evidence_quote: ex.join(', '), evidence_url: firstUrl, checked_urls: (corpus || []).map(x => x && x.url).filter(Boolean).slice(0, 12), penalty_basis: 'non_monetary', penalty_note: 'urgent security remediation (reputational + Google manual-action risk)',
+    description: 'Suspected site compromise: injected outbound spam links',
+    layman_explanation: 'Your pages carry ' + injected.size + ' injected outbound links to unrelated spam domains (' + urls.slice(0, 3).join(', ') + '). Injected link clusters are the signature of an SEO-spam compromise; they poison your Google reputation and can trigger a "this site may be hacked" label.',
+    tamazia_fix_short: 'Urgent: scan for injected content, remove the spam links, patch and harden the CMS and plugins, rotate credentials, then request a Google security review.',
+    evidence_quote: quote, evidence_url: firstUrl, checked_urls: (corpus || []).map(x => x && x.url).filter(Boolean).slice(0, 12), penalty_basis: 'non_monetary', penalty_note: 'urgent security remediation (reputational + Google manual-action risk)',
   };
 }
 
@@ -794,7 +822,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // re-mint of a domain scanned <1 day ago would otherwise return the PRE-FIX result after any engine change. Bumping
   // this on logic changes auto-invalidates stale entries; within a version, re-mints hit cache and skip the LLM
   // entirely (the cheapest fix for LLM-capacity during re-mint-heavy work). Override with COMPLIANCE_ENGINE_VERSION.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.7-2026-07-idempotent-nexus';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v22.8-2026-07-integrity-fix';
   const cacheKey = `${domain}|${sector}|${country}|${ENGINE_VERSION}`;
   const cached = getCached({ domain: cacheKey, scanner: SCANNER, max_age_seconds: cache_max_age });
   if (cached) return { ok: true, cached: true, ...cached.payload };
