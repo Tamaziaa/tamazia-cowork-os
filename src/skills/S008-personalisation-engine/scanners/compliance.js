@@ -857,7 +857,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.0-2026-07-adjudicated';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.1-2026-07-adjudicated-seam';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
@@ -1368,6 +1368,10 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     crawl_telemetry: _cg.crawl_telemetry || null,   // E-230: policy-page coverage + via + challenge, visible in SQL
     via_archive: !!_cg.via_archive, archive_date: _cg.archive_date || null,
     frameworks, binding: framework_binding, attach_error: comp_attach_error, drop_trace: comp_gates, review_candidates: comp_review, attach_confidence: comp_confidence, jurisdictions: allJurisdictions, canonical_jurisdictions: _canonJur, detected_jurisdictions: detectedJurisdictions,
+    // E-253c (v23.1): the adjudication report is a FIRST-CLASS PAYLOAD FIELD. Without it, "did a model actually read
+    // these breaches" is unanswerable from the outside, which is precisely the observability failure that let a
+    // stale cache and an unbumped version lie to us for five turns. Now the audit says so, on its face.
+    adjudication: _adjReport,
     firm_profile: firmProfile, detected_sector: _secCanon, sub_sector: _subSector, sub_sector_meta: _subSectorMeta,
     rules_evaluated: rules.length, hits, misses,
     resolver_dropped: _resolverDropped,
