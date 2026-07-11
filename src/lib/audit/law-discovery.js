@@ -81,7 +81,10 @@ async function discoverLaws({ sector, sub_sector, jurisdictions, binding, catalo
     ' firm is established in: ' + jurs.join(', ') + '.',
     'List the statutes, regulations and mandatory regulator rules that govern its DIGITAL EXPOSURE ONLY: the public website, online marketing and advertising, e-commerce/booking flows, personal-data collection, cookies, accessibility, and mandatory online disclosures.',
     'EXCLUDE: case law, proposed bills, tax/employment/premises law, and anything not enforceable against the website or online conduct.',
-    'Return STRICT JSON only: {"laws":[{"name":"<official short name>","jurisdiction":"<one of ' + jurs.join('|') + '>","scope_note":"<max 10 words>"}]} with 3 to 15 laws, most important first.',
+    // E-229 (v22.7): registry-resolution hard gate. Every law MUST carry a resolvable OFFICIAL source URL; a
+    // fabricated Act rarely resolves to a real legislation.gov.uk / eur-lex / eCFR / official-gazette page.
+    'For EACH law include "official_url": the canonical government or regulator page for it (legislation.gov.uk, eur-lex.europa.eu, ecfr.gov, or the national gazette/regulator). If you cannot give a REAL official URL, DO NOT list the law.',
+    'Return STRICT JSON only: {"laws":[{"name":"<official short name>","jurisdiction":"<one of ' + jurs.join('|') + '>","official_url":"<https official source>","scope_note":"<max 10 words>"}]} with 3 to 15 laws, most important first.',
   ].join('\n');
   const g = await gateLLM({
     role: 'extract', system: 'You are a regulatory-scope analyst. Precise official law names only. Strict JSON. No prose.',
@@ -94,23 +97,50 @@ async function discoverLaws({ sector, sub_sector, jurisdictions, binding, catalo
     return { dropped: true, score: g.score, attempts: g.attempts };
   }
   const idx = catalogueNameIndex();
-  const matched = [], unmatched = [];
+  const matched = [], unmatched = [], rejected = [];
   for (const l of (g.out.laws || []).slice(0, 15)) {
     const short = idx.get(normName(l && l.name));
-    if (short) matched.push({ name: l.name, code: short });
-    else unmatched.push({ name: String(l.name || '').slice(0, 140), jurisdiction: String(l.jurisdiction || '').toUpperCase().slice(0, 12), scope_note: String(l.scope_note || '').slice(0, 80) });
+    if (short) { matched.push({ name: l.name, code: short }); continue; }
+    // E-229: HALLUCINATION HARD GATE before anything becomes a candidate. A novel law must (1) carry a
+    // plausibly-official government/regulator URL and (2) that URL must actually resolve (HEAD 2xx/3xx). Anything
+    // failing either is discarded to `rejected` and NEVER written to framework_candidates — a hallucinated Act
+    // that resolves to nothing can never enter the review queue.
+    const url = String((l && l.official_url) || '').trim();
+    const officialish = /^https?:\/\/([a-z0-9-]+\.)*(gov(\.[a-z]{2})?|europa\.eu|legislation\.gov\.uk|ecfr\.gov|govinfo\.gov|ico\.org\.uk|sra\.org\.uk|fca\.org\.uk|cqc\.org\.uk|sdaia\.gov\.sa|tdra\.gov\.ae|difc\.ae|adgm\.com|almeezan\.qa|qfc\.qa)(\/|$)/i.test(url);
+    if (!officialish) { rejected.push({ name: String(l.name || '').slice(0, 120), reason: 'no_official_url' }); continue; }
+    const resolves = await _headResolves(url);
+    if (!resolves) { rejected.push({ name: String(l.name || '').slice(0, 120), reason: 'url_unresolved' }); continue; }
+    unmatched.push({ name: String(l.name || '').slice(0, 140), jurisdiction: String(l.jurisdiction || '').toUpperCase().slice(0, 12), scope_note: String(l.scope_note || '').slice(0, 80), official_url: url.slice(0, 300) });
   }
   try {
     pg(`INSERT INTO cell_law_reviews (cell_key, sector, sub_sector, jurisdictions, catalogue_version, matched, unmatched, score, provider, checked_at)
         VALUES ('${esc(cellKey)}','${esc(sector)}','${esc(sub_sector || '')}','${esc(jurs.join('+'))}','${esc(catalogue_version || '')}','${esc(JSON.stringify(matched))}'::jsonb,'${esc(JSON.stringify(unmatched))}'::jsonb,${g.score},'${esc(g.provider || '')}',now())
         ON CONFLICT (cell_key) DO UPDATE SET matched=EXCLUDED.matched, unmatched=EXCLUDED.unmatched, score=EXCLUDED.score, provider=EXCLUDED.provider, checked_at=now()`);
     for (const u of unmatched) {
-      pg(`INSERT INTO framework_candidates (name, name_norm, jurisdiction, sector, sub_sector, scope_note)
-          VALUES ('${esc(u.name)}','${esc(normName(u.name))}','${esc(u.jurisdiction)}','${esc(sector)}','${esc(sub_sector || '')}','${esc(u.scope_note)}')
-          ON CONFLICT (name_norm, jurisdiction, sector, sub_sector) DO UPDATE SET seen_count = framework_candidates.seen_count + 1, last_seen = now()`);
+      // Provenance (W3C-PROV shape): who/what/when proposed it + the resolvable evidence URL + engine version.
+      // status stays 'candidate'; it becomes review-eligible only at seen_count>=2 (frequency = distant
+      // supervision: a real law recurs across independent cell runs, a one-off hallucination does not).
+      pg(`INSERT INTO framework_candidates (name, name_norm, jurisdiction, sector, sub_sector, scope_note, official_url, provider, engine_version)
+          VALUES ('${esc(u.name)}','${esc(normName(u.name))}','${esc(u.jurisdiction)}','${esc(sector)}','${esc(sub_sector || '')}','${esc(u.scope_note)}','${esc(u.official_url)}','${esc(g.provider || '')}','${esc(catalogue_version || '')}')
+          ON CONFLICT (name_norm, jurisdiction, sector, sub_sector) DO UPDATE SET seen_count = framework_candidates.seen_count + 1, last_seen = now(), official_url = COALESCE(framework_candidates.official_url, EXCLUDED.official_url)`);
     }
   } catch (_e) {}
-  return { matched, unmatched, score: g.score, attempts: g.attempts, provider: g.provider };
+  return { matched, unmatched, rejected: rejected.length, score: g.score, attempts: g.attempts, provider: g.provider };
+}
+
+// E-229: resolve an official URL with a lightweight HEAD (fallback GET on 405); 2xx/3xx counts as resolvable.
+// Never throws; a network failure returns false so a candidate is held back rather than admitted on faith.
+async function _headResolves(url) {
+  if (process.env.LAW_DISCOVERY_URLCHECK === '0') return true;
+  const tryReq = async (method) => {
+    try {
+      const r = await fetch(url, { method, redirect: 'follow', signal: AbortSignal.timeout(8000), headers: { 'user-agent': 'TamaziaComplianceBot/1.0 (+https://tamazia.co.uk/crawler)' } });
+      return r.status;
+    } catch (_e) { return 0; }
+  };
+  let s = await tryReq('HEAD');
+  if (s === 405 || s === 403 || s === 0) s = await tryReq('GET');
+  return s >= 200 && s < 400;
 }
 
 module.exports = { discoverLaws, normName, catalogueNameIndex };

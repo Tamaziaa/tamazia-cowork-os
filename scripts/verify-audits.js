@@ -54,12 +54,30 @@ async function main() {
           }
         } catch (e) { /* mint failed, fall through to held */ }
       }
+      // E-231 (v22.7): TRUST THE VERIFIED RECORD, NOT THE ARTIFACT. verifyAuditUrl only proves the page renders
+      // (HTTP 200 + signature) — that is authenticity, not verification. Outreach eligibility additionally
+      // REQUIRES the audit_pages row to have passed the verifier (verified=TRUE) and, for the priority ICP, the
+      // LLM cross-verifier (llm_verify=pass). A quarantined-but-live audit is authentic yet must never be sent.
+      // The write is idempotent (E-227) so this read is stable. Fail-closed: unknown/missing record => not eligible.
+      let recordOk = false, recReason = 'no_audit_record';
       if (v.ok) {
+        try {
+          const rec = pg(`SELECT (verified IS TRUE) || '|' || COALESCE(sector,'') || '|' || COALESCE(payload_json->'llm_verify'->>'status','') FROM ${'audit_pages'} WHERE domain=${esc(domain)} AND status='live' ORDER BY generated_at DESC LIMIT 1`);
+          if (rec && String(rec).includes('|')) {
+            const [vFlag, secR, llmR] = String(rec).trim().split('|');
+            const PRIORITY = new Set(['law-firms', 'barristers', 'legal', 'healthcare', 'dental', 'aesthetic', 'aesthetics', 'hospitality', 'real-estate', 'finance', 'fintech', 'insurance', 'accounting']);
+            const isPriority = PRIORITY.has(String(secR).toLowerCase());
+            if (vFlag === 'true') { recordOk = !isPriority || llmR === 'pass'; recReason = recordOk ? 'ok' : 'priority_needs_llm_pass(' + (llmR || 'none') + ')'; }
+            else recReason = 'audit_record_unverified';
+          }
+        } catch (_e) { recReason = 'record_check_error'; }
+      }
+      if (v.ok && recordOk) {
         pg(`UPDATE leads SET audit_verified=TRUE, audit_verified_at=NOW() WHERE id=${id}`);
         verified++;
       } else {
         pg(`UPDATE leads SET audit_verified=FALSE, audit_verified_at=NOW() WHERE id=${id}`);
-        held++; heldList.push(`${company || domain} [${id}] ${v.reason}`);
+        held++; heldList.push(`${company || domain} [${id}] ${v.ok ? recReason : v.reason}`);
       }
     } catch (e) { console.error('[verify-audits] ' + id + ': ' + e.message); }
   }

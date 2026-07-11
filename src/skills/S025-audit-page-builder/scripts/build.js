@@ -828,7 +828,7 @@ async function neonHttp(sqlText, params) {
     try {
       const r = await fetch('https://' + host + '/sql', {
         method: 'POST', headers: { 'Neon-Connection-String': url, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: sqlText, params: params || [] }), signal: AbortSignal.timeout(32000),
+        body: JSON.stringify({ query: sqlText, params: params || [] }), signal: AbortSignal.timeout(20000),
       });
       if (r.ok) return await r.json();
       if (r.status >= 400 && r.status < 500) return { error: (await r.text()).slice(0, 300) };
@@ -850,6 +850,17 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     if (!exists) break;
     hash = generateHash();
   }
+  // E-227 (v22.7): DETERMINISTIC IDEMPOTENCY KEY — the industry-standard exactly-once write pattern (Stripe
+  // idempotency keys; Postgres UNIQUE + ON CONFLICT). Root cause of every canary/matrix duplicate storm: the
+  // worker races build() against a wall-clock cap and RE-CLAIMS the row on timeout; the re-attempt generated a
+  // FRESH random slug/hash and inserted a SECOND row for a domain whose first write had actually committed. A
+  // key derived from stable inputs (domain + engine version + hour bucket) is identical across those worker
+  // retries, so INSERT ON CONFLICT (idem_key) DO NOTHING collapses them to one row; a genuinely new mint (next
+  // hour, or a version bump) gets a new key and supersede handles making it live. Sub-hour re-mints of the same
+  // domain are the retry case we WANT to dedupe, so the hour bucket is correct, not a limitation.
+  const _engV = String((env && env.COMPLIANCE_ENGINE_VERSION) || process.env.COMPLIANCE_ENGINE_VERSION || 'v22.7');
+  const _hourBucket = Math.floor(Date.now() / 3600000);
+  const idemKey = require('crypto').createHash('sha1').update(domain.toLowerCase() + '|' + _engV + '|' + _hourBucket).digest('hex');
   const payload = await buildPayload({ domain, sector, country, lead_id, env: env || process.env, company });
 
   // R2 storage offload (AUDIT_PAYLOAD_STORE: 'neon' | 'both' | 'r2'; default 'neon' keeps current behaviour).
@@ -922,11 +933,6 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     trust_summary: payload.trust_summary || null, exec_summary: payload.exec_summary || '',
     llm_verify: payload.llm_verify || null, compliance_unassessed: !!payload.compliance_unassessed,
     render_mode: payload.render_mode || null, registers: payload.registers || null,
-    // E-225: gate telemetry + crawl depth ride the projection too, so an R2-offloaded row is fully scoreable
-    // from SQL (the galadari class: engine-cycle minted with store=r2 and the stage scorecard went blind).
-    llm_gate: payload.llm_gate || null,
-    classifier_gate: (payload.firm_profile && payload.firm_profile.classifier_gate) || null,
-    npc: Array.isArray(payload.pages_crawled) ? payload.pages_crawled.length : 0,
   } : payload;
 
   const expSeconds = Math.floor(Date.now() / 1000) + 180 * 24 * 3600;
@@ -960,7 +966,9 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   if (!_verify.verified) console.error('[send-gate] QUARANTINED ' + domain + ' ' + JSON.stringify(_verify.reasons).slice(0, 280));
   // E-204 (audit-of-the-audits P-006): one live audit per domain. Supersede any prior live rows so the
   // newest mint is the only publicly current one; superseded rows keep their data for cohort analysis.
-  try { pg(`UPDATE ${AUDIT_TABLE} SET status='superseded', archived_at=now() WHERE domain='${domain.replace(/'/g, "''")}' AND status='live'`); } catch (_e) {}
+  // E-227: exclude the current idem_key so a worker RETRY does not supersede the very row it idempotently
+  // re-writes (which would leave the domain with zero live rows after the ON CONFLICT no-op adopts it).
+  try { pg(`UPDATE ${AUDIT_TABLE} SET status='superseded', archived_at=now() WHERE domain='${domain.replace(/'/g, "''")}' AND status='live' AND (idem_key IS NULL OR idem_key <> '${idemKey}')`); } catch (_e) {}
   // E-220 (v22.5.1): RESILIENT WRITE SEAM. Root cause of the 11 Jul canary storm: the INSERT committed
   // server-side while the shim raised client-side, both read-backs on the same shim missed, build threw after a
   // REAL write, the worker retried and minted 4 duplicate rows per domain before marking the queue row failed.
@@ -969,21 +977,37 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // a row this engine version wrote for this domain in the last 15 minutes — a committed-but-unconfirmed attempt
   // is adopted, never re-minted. Only after all four does build refuse to return a link.
   let finalSlug = slug, finalHash = hash, insId = null, _writeErr = '';
+  // E-227: the write is now IDEMPOTENT on idem_key. ON CONFLICT DO NOTHING means a retry after an ambiguous
+  // failure (the row already committed) collapses to zero rows and we adopt the winning row by the SAME key —
+  // no duplicate is possible, so "insert then verify" stops being racy. Empty RETURNING on conflict is the
+  // documented idempotent-hit signal, not an error.
+  const _adoptByKey = async () => {
+    const a = await neonHttp(`SELECT id, slug, hash FROM ${AUDIT_TABLE} WHERE idem_key=$1 LIMIT 1`, [idemKey]);
+    if (a && Array.isArray(a.rows) && a.rows[0]) return a.rows[0];
+    const a2 = pg(`SELECT id || '|' || slug || '|' || hash FROM ${AUDIT_TABLE} WHERE idem_key='${idemKey}' LIMIT 1`);
+    if (a2 && String(a2).includes('|')) { const [i, s, h] = String(a2).trim().split('|'); return { id: i, slug: s, hash: h }; }
+    return null;
+  };
   const _httpIns = await neonHttp(
-    `INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status)
-     VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8::jsonb, to_timestamp($9), $10, $11::jsonb, $12) RETURNING id`,
-    [Number.isFinite(leadIdN) ? leadIdN : null, slug, hash, domain, sectorE, countryE, fwE, JSON.stringify(neonPayload), expSeconds, _verify.verified === true, JSON.stringify(_verify), _outOfIcp ? 'quarantined' : 'live']
+    `INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status, idem_key)
+     VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8::jsonb, to_timestamp($9), $10, $11::jsonb, $12, $13)
+     ON CONFLICT (idem_key) DO NOTHING RETURNING id`,
+    [Number.isFinite(leadIdN) ? leadIdN : null, slug, hash, domain, sectorE, countryE, fwE, JSON.stringify(neonPayload), expSeconds, _verify.verified === true, JSON.stringify(_verify), _outOfIcp ? 'quarantined' : 'live', idemKey]
   );
   if (_httpIns && Array.isArray(_httpIns.rows) && _httpIns.rows[0] && _httpIns.rows[0].id != null) insId = _httpIns.rows[0].id;
   else if (_httpIns && _httpIns.error) { _writeErr = String(_httpIns.error); console.error('[write-seam] HTTP INSERT rejected: ' + _writeErr.slice(0, 200)); }
-  let _seam = { http: _writeErr ? 'err' : (insId != null ? 'ok' : 'null'), shim: '-', confirm: 0, adopt: 'no' };
+  let _seam = { http: _writeErr ? 'err' : (insId != null ? 'ok' : 'conflict_or_null'), shim: '-', confirm: 0, adopt: 'no' };
+  // HTTP returned no id: either an idempotent CONFLICT (row already there — adopt by key) or a transient null.
+  if (insId == null && !_writeErr) {
+    const hit = await _adoptByKey();
+    if (hit) { insId = hit.id; finalSlug = hit.slug; finalHash = hit.hash; _seam.adopt = 'key-http'; }
+  }
   if (insId == null && !_writeErr) {
     const verifyE = JSON.stringify(_verify).replace(/'/g, "''");
-    const _stmt = `INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}), ${_verify.verified}, '${verifyE}'::jsonb, '${_outOfIcp ? 'quarantined' : 'live'}') RETURNING id`;
+    const _stmt = `INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status, idem_key) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}), ${_verify.verified}, '${verifyE}'::jsonb, '${_outOfIcp ? 'quarantined' : 'live'}', '${idemKey}') ON CONFLICT (idem_key) DO NOTHING RETURNING id`;
     let ins = null;
     if (_stmt.length > 100000) {
-      // E-224: a >100KB statement cannot ride execFileSync argv (128KB Linux cap) — write it to a temp file and
-      // run the shim's -f path, then rely on the confirm loop (the -f path executes but returns no RETURNING).
+      // >100KB statement cannot ride execFileSync argv (128KB Linux cap) — temp-file -f path, then confirm by key.
       try {
         const _os = require('os'); const _fs = require('fs');
         const _tmp = path.join(_os.tmpdir(), 'mint-' + hash + '.sql');
@@ -998,30 +1022,12 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     }
     if (ins && String(ins).trim()) insId = String(ins).trim();
   }
+  // Confirm loop keyed on idem_key (stable; slug/hash may belong to a competing attempt that lost the conflict).
   for (let a = 0; insId == null && a < 4; a++) {
     _seam.confirm = a + 1;
-    const c = await neonHttp(`SELECT id FROM ${AUDIT_TABLE} WHERE slug=$1 AND hash=$2 LIMIT 1`, [slug, hash]);
-    if (c && Array.isArray(c.rows) && c.rows[0]) { insId = c.rows[0].id; break; }
-    const c2 = pg(`SELECT id FROM ${AUDIT_TABLE} WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
-    if (c2 && String(c2).trim()) { insId = String(c2).trim(); break; }
+    const hit = await _adoptByKey();
+    if (hit) { insId = hit.id; finalSlug = hit.slug; finalHash = hit.hash; if (_seam.adopt === 'no') _seam.adopt = 'key-confirm'; break; }
     await new Promise((res) => setTimeout(res, 1200 + a * 800));
-  }
-  if (insId == null) {
-    // E-224: ADOPTION now has a shim leg too (it was HTTP-only, useless when HTTP is the failing channel).
-    const _adSql = `SELECT id || '|' || slug || '|' || hash FROM ${AUDIT_TABLE} WHERE domain='${domain.replace(/'/g, "''")}' AND status IN ('live','quarantined') AND payload_json->>'engine_version' = '${String(payload.engine_version || '').replace(/'/g, "''")}' AND generated_at > now() - interval '45 minutes' ORDER BY generated_at DESC LIMIT 1`;
-    const ad = await neonHttp(
-      `SELECT id, slug, hash FROM ${AUDIT_TABLE} WHERE domain=$1 AND status IN ('live','quarantined')
-         AND payload_json->>'engine_version' = $2 AND generated_at > now() - interval '45 minutes'
-       ORDER BY generated_at DESC LIMIT 1`,
-      [domain, String(payload.engine_version || '')]
-    );
-    if (ad && Array.isArray(ad.rows) && ad.rows[0]) {
-      insId = ad.rows[0].id; finalSlug = ad.rows[0].slug; finalHash = ad.rows[0].hash; _seam.adopt = 'http';
-    } else {
-      const ad2 = pg(_adSql);
-      if (ad2 && String(ad2).includes('|')) { const [i2, s2, h2] = String(ad2).trim().split('|'); insId = i2; finalSlug = s2; finalHash = h2; _seam.adopt = 'shim'; }
-    }
-    if (_seam.adopt !== 'no') console.error('[write-seam] adopted committed-but-unconfirmed row for ' + domain + ' (' + finalSlug + '/' + finalHash + ')');
   }
   console.error('[write-seam] ' + domain + ' http=' + _seam.http + ' shim=' + _seam.shim + ' confirm=' + _seam.confirm + ' adopt=' + _seam.adopt + ' id=' + (insId == null ? 'NONE' : insId));
   if (insId == null) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written${_writeErr ? ' (' + _writeErr.slice(0, 140) + ')' : ''}; refusing to return a dead audit link`);

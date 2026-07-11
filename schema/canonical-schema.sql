@@ -2504,3 +2504,26 @@ CREATE TABLE IF NOT EXISTS framework_candidates (
   first_seen timestamptz DEFAULT now(), last_seen timestamptz DEFAULT now(),
   UNIQUE (name_norm, jurisdiction, sector, sub_sector)
 );
+
+-- E-227 (v22.7): deterministic idempotency key for exactly-once mint writes (Stripe idempotency-key pattern).
+-- idem_key = sha1(domain|engine_version|hour_bucket); partial unique index so legacy NULL rows never collide.
+ALTER TABLE audit_pages ADD COLUMN IF NOT EXISTS idem_key varchar(64);
+CREATE UNIQUE INDEX IF NOT EXISTS audit_pages_idem_key_uidx ON audit_pages (idem_key);  -- NULLs distinct: legacy rows never collide
+
+-- E-229 (v22.7): framework_candidates provenance (W3C-PROV shape) — every self-learning candidate carries its
+-- resolvable official-source URL, the proposing provider, the engine version, and human-review stamps.
+ALTER TABLE framework_candidates ADD COLUMN IF NOT EXISTS official_url varchar(300);
+ALTER TABLE framework_candidates ADD COLUMN IF NOT EXISTS provider varchar(60);
+ALTER TABLE framework_candidates ADD COLUMN IF NOT EXISTS engine_version varchar(40);
+ALTER TABLE framework_candidates ADD COLUMN IF NOT EXISTS reviewed_at timestamptz;
+ALTER TABLE framework_candidates ADD COLUMN IF NOT EXISTS reviewed_by varchar(60);
+
+-- E-231 (v22.7): send-eligibility view — the SINGLE source of truth for "safe to cold-outreach". Trust the
+-- VERIFIED RECORD, not the artifact: a live audit is authentic (renders, signed) but only eligible when the
+-- verifier passed AND, for the priority ICP, the LLM cross-verifier passed. The send path reads ONLY this view.
+CREATE OR REPLACE VIEW v_send_eligible AS
+SELECT ap.domain, ap.slug, ap.hash, ap.sector, ap.country, ap.generated_at
+FROM audit_pages ap
+WHERE ap.status='live' AND ap.verified IS TRUE
+  AND (lower(coalesce(ap.sector,'')) NOT IN ('law-firms','barristers','legal','healthcare','dental','aesthetic','aesthetics','hospitality','real-estate','finance','fintech','insurance','accounting')
+       OR ap.payload_json->'llm_verify'->>'status' = 'pass');

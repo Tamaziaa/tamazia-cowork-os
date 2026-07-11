@@ -28,10 +28,23 @@ const FAMILY_OF = (code) => {
   return 'GLOBAL';
 };
 
+// E-228 (v22.7): the REGISTERED COUNTRY family, derived from the trusted registration fact, not from the crawl.
+// registered_country: nexus (source: company_registration) is authoritative establishment evidence.
+function _registeredFamily(p) {
+  const nx = p.nexus || {};
+  for (const [fam, v] of Object.entries(nx)) {
+    if (v && typeof v.established_in === 'string' && /registered_country:/.test(v.established_in)) {
+      const u = String(fam).toUpperCase(); return ({ USA: 'US', UAE: 'AE', GB: 'UK', GBR: 'UK', KSA: 'SA' })[u] || u;
+    }
+  }
+  const c = String(p.country || '').toUpperCase();
+  return ({ USA: 'US', UAE: 'AE', GB: 'UK', GBR: 'UK', KSA: 'SA' })[c] || c || null;
+}
 function _prompt(p) {
   const fams = ((p.jurisdiction_families && p.jurisdiction_families.families) || []).join(', ') || '(none)';
   const nexus = JSON.stringify(p.nexus || {}).slice(0, 900);
   const binding = Object.keys(p.binding || {});
+  const regFam = _registeredFamily(p);
   const rows = binding.map((c) => `${c} [family:${FAMILY_OF(c)}] [${(p.binding || {})[c]}]`).join('\n');
   const fp = p.firm_profile || {};
   const evidence = [
@@ -45,6 +58,9 @@ function _prompt(p) {
     prompt: [
       '<DOC>', evidence, '</DOC>',
       '',
+      'TRUSTED REGISTRATION FACT (NOT website-derived, do NOT require on-page evidence for it):',
+      'registered_country_family: ' + (regFam || '(unknown)'),
+      '',
       'ENGINE CLAIMS TO VERIFY:',
       'detected_sector: ' + String(p.detected_sector || ''),
       'jurisdiction_families: ' + fams,
@@ -52,9 +68,13 @@ function _prompt(p) {
       'attached_frameworks (code [family] [binding label]):',
       rows || '(none)',
       '',
+      'NEXUS DOCTRINE — apply exactly, two independent sufficiency paths:',
+      'PATH A (ESTABLISHMENT): a firm ESTABLISHED / INCORPORATED / REGISTERED in country X is, by that registration ALONE, subject to X\'s data-protection law and X\'s professional-conduct regulation. This is the establishment limb (e.g. GDPR Art 3(1); UAE/KSA/Qatar PDPL territorial scope). Therefore ACCEPT any attached framework whose family EQUALS registered_country_family on registration alone. The ABSENCE of an on-page nexus quote is NOT evidence against a registered-country attachment; never flag it for "no nexus evidence".',
+      'PATH B (TARGETING/SERVES): a FOREIGN framework (family NOT equal to registered_country_family) requires real serves/establishment evidence in the DATA (an office, local clientele, local language/currency, an explicit "we serve <country>"). If that evidence is absent, FLAG it.',
+      '',
       'TASK: (1) Is detected_sector the firm\'s OWN primary business (not its clients\' industry)? ',
-      '(2) Does each jurisdiction family have plausible nexus evidence? ',
-      '(3) Flag every attached framework whose family is NOT in jurisdiction_families, or which is sector-implausible for this firm (e.g. a healthcare regulator on a law firm, food law on a wealth manager). Be conservative: flag only clear errors, not debatable edge cases. NEVER flag a code merely for being voluntary, professional, industry, or membership-based; binding labels other than statute are intentional. Flag ONLY wrong-family or wrong-sector attachments.',
+      '(2) For each attached framework decide PATH A or PATH B and apply the doctrine above. ',
+      '(3) Flag ONLY: a framework whose family is foreign AND lacks serves/establishment evidence (Path B fail); or a sector-implausible attachment (e.g. a healthcare regulator on a law firm). NEVER flag a registered-country-family framework for missing nexus. NEVER flag a code merely for being voluntary, professional, industry or membership-based.',
       'Respond with JSON exactly: {"sector_ok": true|false, "sector_should_be": "<canonical sector or same>", "families_ok": true|false, "wrong_families": ["..."], "flagged_frameworks": [{"code": "...", "reason": "<10 words max>"}], "confidence": 0.0-1.0}'
     ].join('\n')
   };
@@ -81,12 +101,20 @@ async function llmVerifyPayload(p) {
     return { status: 'unavailable', flags: [], error: String(e && e.message || e).slice(0, 160), checked_at: new Date().toISOString() };
   }
   const flags = [];
+  // E-228: DETERMINISTIC NEXUS SAFETY NET. Even if a model still flags a registered-country-family framework for
+  // "no nexus", drop that flag — registration IS the nexus (establishment limb). This makes the doctrine robust
+  // to model drift and permanently closes the Qatar (registered_country) false-quarantine class.
+  const _regFam = _registeredFamily(p);
+  const _nexusDoubtRx = /no nexus|without nexus|lacks? nexus|no (establishment|evidence)|not established|no on.?page|no proof|unverified nexus|missing (nexus|evidence)/i;
   // Whitelist intersection: the model may only flag codes the engine actually attached.
   const flagged = Array.isArray(out.flagged_frameworks) ? out.flagged_frameworks : [];
   for (const f of flagged) {
     const code = String((f && f.code) || '').trim();
     const reason = String((f && f.reason) || '').slice(0, 80);
     const _bindLabel = String((p.binding || {})[code] || '');
+    // Path A guard: a framework in the registered-country family, flagged only for missing nexus, is a correct
+    // establishment attachment — never quarantine it.
+    if (_regFam && FAMILY_OF(code) === _regFam && _nexusDoubtRx.test(reason)) continue;
     // v22.3 flag policy: the cross-check exists to catch WRONG-FAMILY and WRONG-SECTOR attachments. Opinions
     // about bindingness, generality or enforcement style are the catalogue's domain (binding labels carry them)
     // and must never quarantine a correct stack. Drop those; keep everything family/sector-shaped; when in doubt
@@ -98,9 +126,21 @@ async function llmVerifyPayload(p) {
     const _styleOnly = /voluntar|not mandatory|industry code|professional code|guideline|only if member|membership|non.?binding|not universally|not a (law|statute|framework)|not sector-specific|general (corporate|consumer|data protection)? ?law|enforcement (agency|body)|applies (to|across) (all|any|every)|umbrella|broad(ly)? applicable/i.test(reason);
     if (binding.includes(code) && !(_styleOnly && _inFam)) flags.push({ code, reason });
   }
-  if (out.sector_ok === false) flags.push({ code: 'SECTOR', reason: ('llm says ' + String(out.sector_should_be || 'different sector')).slice(0, 80) });
+  // E-228: a SECTOR flag quarantines ONLY when the model asserts a CONFIDENT, DIFFERENT, real sector. On a thin
+  // crawl the model often says "unknown"/"unclear"/same — that is absence of evidence, not evidence of a wrong
+  // sector, and must not override a deterministic classification (the sultan/thin-crawl class). Fail-open on
+  // "can't tell"; fail-closed only on a genuine disagreement.
+  {
+    const _sb = String(out.sector_should_be || '').toLowerCase().trim();
+    const _det = String(p.detected_sector || '').toLowerCase().trim();
+    const _uninformative = !_sb || /unknown|unclear|uncertain|cannot|can't|n\/a|none|unsure|insufficient/.test(_sb) || _sb === _det;
+    if (out.sector_ok === false && !_uninformative) flags.push({ code: 'SECTOR', reason: ('llm says ' + _sb).slice(0, 80) });
+  }
   if (out.families_ok === false && Array.isArray(out.wrong_families) && out.wrong_families.length) {
-    flags.push({ code: 'FAMILY', reason: ('llm rejects ' + out.wrong_families.join(',')).slice(0, 80) });
+    // E-228: the registered-country family can never be a "wrong family" — a firm is bound by its own country's
+    // law by registration. Strip it from the rejection list; only genuinely foreign families remain flaggable.
+    const _wrong = out.wrong_families.map(x => { const u = String(x).toUpperCase(); return ({ USA: 'US', UAE: 'AE', GB: 'UK', GBR: 'UK', KSA: 'SA' })[u] || u; }).filter(x => x !== _regFam);
+    if (_wrong.length) flags.push({ code: 'FAMILY', reason: ('llm rejects ' + _wrong.join(',')).slice(0, 80) });
   }
   // E-212 (v22.5) PRIORITY-SECTOR QUORUM: for the priority ICP (legal, healthcare, hospitality, real estate,
   // finance/wealth, accounting) a payload carrying confirmed P0/P1 findings must ALSO pass a second verifier
