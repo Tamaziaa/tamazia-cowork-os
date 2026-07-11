@@ -652,6 +652,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   // from the counts the payload already proves — always runs when the LLM text is unusable, so V13 can gate on
   // non-empty without ever quarantining a healthy mint. British English, no dashes-as-pauses, no first person.
   let exec_summary = '';
+  let _execGate = null;
   const _ceilByFw = {}; for (const f of _confirmed) { const v = +f.fine_high_gbp || 0; const k = f.framework || f.code || f.rule_id; if (v > (_ceilByFw[k] || 0)) _ceilByFw[k] = v; }
   const _expo = Object.values(_ceilByFw).reduce((m, v) => Math.max(m, v), 0);
   try {
@@ -659,10 +660,26 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       const _top = _confirmed.slice(0, 8).map(f => '- ' + (f.severity || '') + ' ' + String(f.fact || '').slice(0, 90)).join('\n');
       // ADDITIVE-MAXIMA FIX (bug #42/#53): fine_high_gbp is a per-framework STATUTORY MAXIMUM (a ceiling), not an
       // incurred amount. Maxima are not additive; the single highest ceiling is the only honest headline figure.
-      const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nHighest single statutory penalty ceiling among the applicable frameworks (a per-framework maximum, NOT a sum and NOT an incurred amount): GBP ' + _expo + '.\nWrite exactly two sentences: (1) the single most serious regulatory or commercial risk and why it matters, (2) the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.';
-      const _router = require(path.resolve(ROOT, 'src', 'lib', 'llm', 'router.js'));
-      const _r = await _router.run({ role: 'synthesise', prompt: _prompt, max_tokens: 170, temperature: 0.3, scan_id: domain + ':exec' });
-      if (_r && _r.ok) { const _t = String(_r.text || '').trim(); if (_t && _t.length > 40 && !/statutory max|maximum fine/i.test(_t.slice(0, 80))) exec_summary = _t.slice(0, 600); }
+      // E-222 (v22.6): the summary runs through THE LLM GATE like every other LLM decision — rubric: strict JSON 3 ·
+      // exactly two sentences 3 · length 2 · no fine-theatrics phrasing 2; two attempts, then the deterministic
+      // composer below takes over (so V13 never quarantines a healthy mint).
+      const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nHighest single statutory penalty ceiling among the applicable frameworks (a per-framework maximum, NOT a sum and NOT an incurred amount): GBP ' + _expo + '.\nSentence 1: the single most serious regulatory or commercial risk and why it matters. Sentence 2: the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.\nReturn STRICT JSON only: {"summary":"<the two sentences>"}';
+      const { gateLLM } = require(path.resolve(ROOT, 'src', 'lib', 'llm', 'gate.js'));
+      const _g = await gateLLM({
+        role: 'synthesise', prompt: _prompt, threshold: 7, max_attempts: 2, max_tokens: 200, temperature: 0.3, scan_id: domain + ':exec',
+        rubric: (out) => {
+          const defs = []; let score = 0;
+          const s = out && typeof out.summary === 'string' ? out.summary.trim() : '';
+          if (s) score += 3; else defs.push('return strict JSON {"summary":"..."} only');
+          const _sent = (s.match(/[.!?](\s|$)/g) || []).length;
+          if (_sent === 2) score += 3; else if (s) defs.push('write EXACTLY two sentences (found ' + _sent + ')');
+          if (s.length >= 60 && s.length <= 600) score += 2; else if (s) defs.push('length must be 60-600 characters');
+          if (!/statutory max|maximum fine|17\.5m or 4%|up to £?\d+m/i.test(s)) score += 2; else defs.push('never lead with statutory-maximum fine theatrics');
+          return { score, deficiencies: defs };
+        },
+      });
+      _execGate = { score: _g.score, attempts: _g.attempts, provider: _g.provider };
+      if (_g.ok) exec_summary = String(_g.out.summary).slice(0, 600);
     }
   } catch (_e) {}
   if (!exec_summary) {
@@ -725,7 +742,9 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     detected_sector: (comp && comp.detected_sector) || sector,
     // E-210/E-211 (v22.5): sub-sector as a first-class field (P-030) + the engine version that minted this payload
     // (S-181/V20) so cohorts, canaries and the renderer can segment by engine, not just catalogue version.
-    sub_sector: (comp && comp.sub_sector) || null,
+    // corpus-regex sub-sector first (structural); the gate-validated LLM sub-sector fills the gap when the
+    // regexes were silent (both are enum-checked against the same TREE, so the field is always canonical).
+    sub_sector: (comp && comp.sub_sector) || (comp && comp.firm_profile && comp.firm_profile.sub_sector_llm) || null,
     sub_sector_meta: (comp && comp.sub_sector_meta) || null,
     engine_version: (comp && comp.engine_version) || process.env.COMPLIANCE_ENGINE_VERSION || 'v22.5-2026-07-uniform-tags',
     firm_profile: (comp && comp.firm_profile) || null,
@@ -748,6 +767,9 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     review_candidates: (comp && comp.review_candidates) || [],
     attach_confidence: (comp && comp.attach_confidence) || {},
     positive_compliance: (comp && comp.positive_compliance) || null,
+    // E-222 (v22.6): LLM-gate telemetry — every gated decision records its score, attempts and answering
+    // provider, so accuracy can be segmented by classification source (S-180) and degradation is visible.
+    llm_gate: { classify: (comp && comp.firm_profile && comp.firm_profile.classifier_gate) || null, exec: _execGate },
     company: (() => { const nm = (company && String(company).trim()) || ''; const fp = (comp && comp.firm_profile) || {}; const scanned = fp.name || fp.legal_name || fp.display_name || fp.trading_name || fp.brand || ''; if (scanned && String(scanned).trim()) return String(scanned).trim(); return nm || null; })(),
     via_archive: !!(comp && comp.via_archive), archive_date: (comp && comp.archive_date) || null,
     engine_jurisdictions: (comp && comp.jurisdictions) || [],
@@ -791,6 +813,29 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     jurisdiction_statement,
     glossary: (() => { try { const _g = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'glossary.js')); const _txt = (_confirmed || []).map(f => (f.fact || '') + ' ' + (f.citation || '') + ' ' + (f.layman_explanation || '')).join(' '); return { terms: _g.GLOSSARY, used: _g.termsUsed(_txt) }; } catch (_e) { return null; } })(),
   };
+}
+
+// E-220 (v22.5.1): parameterised SQL over the Neon HTTP API. The psql shim spawns one TCP+TLS connection per
+// call; a blip can COMMIT server-side yet raise client-side (pg8000 semantics), so pg() returns null after a
+// real write. HTTP + params also removes quote-escaping and argv-size limits from the write path entirely and
+// returns structured errors. Fail-open: null on network failure so callers can fall back to the shim.
+async function neonHttp(sqlText, params) {
+  const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
+  if (!url || typeof fetch !== 'function') return null;
+  const host = ((url.match(/@([^/?]+)\//) || [])[1] || '').replace(/:\d+$/, '');
+  if (!host) return null;
+  for (let a = 0; a < 2; a++) {
+    try {
+      const r = await fetch('https://' + host + '/sql', {
+        method: 'POST', headers: { 'Neon-Connection-String': url, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: sqlText, params: params || [] }), signal: AbortSignal.timeout(20000),
+      });
+      if (r.ok) return await r.json();
+      if (r.status >= 400 && r.status < 500) return { error: (await r.text()).slice(0, 300) };
+    } catch (_e) { /* retry once, then fall through */ }
+    await new Promise((res) => setTimeout(res, 700 + a * 1300));
+  }
+  return null;
 }
 
 async function build({ lead_id, domain, sector, country, company, env }) {
@@ -849,6 +894,18 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     }
   }
   payload.llm_verify = _llmv;
+  // E-223 (v22.6): gated LAW DISCOVERY + self-learning candidate mining. Cell-cached (30d), kill switch
+  // LAW_DISCOVERY=0. Matches confirm the cell; novelties land in framework_candidates for the human-gated
+  // seed pipeline. NEVER touches binding, findings, or any client-facing surface.
+  try {
+    const { discoverLaws } = require('../../../lib/audit/law-discovery.js');
+    const _ld = await discoverLaws({
+      sector: payload.detected_sector, sub_sector: payload.sub_sector,
+      jurisdictions: ((payload.jurisdiction_families || {}).families) || [payload.country].filter(Boolean),
+      binding: payload.binding, catalogue_version: payload.framework_version, scan_id: domain,
+    });
+    if (_ld) payload.llm_gate = Object.assign({}, payload.llm_gate, { law_discovery: { cached: !!_ld.cached, dropped: !!_ld.dropped, matched: (_ld.matched || []).length, unmatched: (_ld.unmatched || []).length, score: _ld.score == null ? null : _ld.score } });
+  } catch (_e) {}
   // E-205 (audit-of-the-audits P-007): out-of-ICP hard gate. media/general audits attach the weakest
   // catalogue cells and have zero commercial value; they persist but can never verify or ship.
   const _ICP_BLOCK = new Set(['media', 'general']);
@@ -897,15 +954,49 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // E-204 (audit-of-the-audits P-006): one live audit per domain. Supersede any prior live rows so the
   // newest mint is the only publicly current one; superseded rows keep their data for cohort analysis.
   try { pg(`UPDATE ${AUDIT_TABLE} SET status='superseded', archived_at=now() WHERE domain='${domain.replace(/'/g, "''")}' AND status='live'`); } catch (_e) {}
-  const verifyE = JSON.stringify(_verify).replace(/'/g, "''");
-  let ins = pg(`INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}), ${_verify.verified}, '${verifyE}'::jsonb, '${_outOfIcp ? 'quarantined' : 'live'}') RETURNING id`);
-  // A >100KB payload is routed by pg() through the psql -f path, which EXECUTES the INSERT but returns no RETURNING
-  // output — so confirm the row with a small SELECT before declaring failure (else a successful large-payload mint
-  // is wrongly rejected as a dead link).
-  if (!ins || !String(ins).trim()) ins = pg(`SELECT id FROM ${AUDIT_TABLE} WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
-  if (!ins || !String(ins).trim()) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written; refusing to return a dead audit link`);
+  // E-220 (v22.5.1): RESILIENT WRITE SEAM. Root cause of the 11 Jul canary storm: the INSERT committed
+  // server-side while the shim raised client-side, both read-backs on the same shim missed, build threw after a
+  // REAL write, the worker retried and minted 4 duplicate rows per domain before marking the queue row failed.
+  // Order now: (1) parameterised HTTP INSERT with RETURNING; (2) legacy shim INSERT only if HTTP carried no
+  // structured error; (3) independent confirm loop across BOTH channels with backoff; (4) idempotent ADOPTION of
+  // a row this engine version wrote for this domain in the last 15 minutes — a committed-but-unconfirmed attempt
+  // is adopted, never re-minted. Only after all four does build refuse to return a link.
+  let finalSlug = slug, finalHash = hash, insId = null, _writeErr = '';
+  const _httpIns = await neonHttp(
+    `INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status)
+     VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8::jsonb, to_timestamp($9), $10, $11::jsonb, $12) RETURNING id`,
+    [Number.isFinite(leadIdN) ? leadIdN : null, slug, hash, domain, sectorE, countryE, fwE, JSON.stringify(neonPayload), expSeconds, _verify.verified === true, JSON.stringify(_verify), _outOfIcp ? 'quarantined' : 'live']
+  );
+  if (_httpIns && Array.isArray(_httpIns.rows) && _httpIns.rows[0] && _httpIns.rows[0].id != null) insId = _httpIns.rows[0].id;
+  else if (_httpIns && _httpIns.error) { _writeErr = String(_httpIns.error); console.error('[write-seam] HTTP INSERT rejected: ' + _writeErr.slice(0, 200)); }
+  if (insId == null && !_writeErr) {
+    const verifyE = JSON.stringify(_verify).replace(/'/g, "''");
+    const ins = pg(`INSERT INTO ${AUDIT_TABLE} (workspace_id, lead_id, slug, hash, domain, sector, country, framework_version, payload_json, expires_at, verified, verify_report, status) VALUES (1, ${Number.isFinite(leadIdN) ? leadIdN : 'NULL'}, '${slug}', '${hash}', '${domain.replace(/'/g, "''")}', '${sectorE}', '${countryE}', '${fwE}', '${payloadJsonE}'::jsonb, to_timestamp(${expSeconds}), ${_verify.verified}, '${verifyE}'::jsonb, '${_outOfIcp ? 'quarantined' : 'live'}') RETURNING id`);
+    if (ins && String(ins).trim()) insId = String(ins).trim();
+  }
+  for (let a = 0; insId == null && a < 3; a++) {
+    const c = await neonHttp(`SELECT id FROM ${AUDIT_TABLE} WHERE slug=$1 AND hash=$2 LIMIT 1`, [slug, hash]);
+    if (c && Array.isArray(c.rows) && c.rows[0]) { insId = c.rows[0].id; break; }
+    const c2 = pg(`SELECT id FROM ${AUDIT_TABLE} WHERE slug='${slug}' AND hash='${hash}' LIMIT 1`);
+    if (c2 && String(c2).trim()) { insId = String(c2).trim(); break; }
+    await new Promise((res) => setTimeout(res, 1200 + a * 800));
+  }
+  if (insId == null) {
+    const ad = await neonHttp(
+      `SELECT id, slug, hash FROM ${AUDIT_TABLE} WHERE domain=$1 AND status IN ('live','quarantined')
+         AND payload_json->>'engine_version' = $2 AND generated_at > now() - interval '15 minutes'
+       ORDER BY generated_at DESC LIMIT 1`,
+      [domain, String(payload.engine_version || '')]
+    );
+    if (ad && Array.isArray(ad.rows) && ad.rows[0]) {
+      insId = ad.rows[0].id; finalSlug = ad.rows[0].slug; finalHash = ad.rows[0].hash;
+      console.error('[write-seam] adopted committed-but-unconfirmed row for ' + domain + ' (' + finalSlug + '/' + finalHash + ')');
+    }
+  }
+  if (insId == null) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written${_writeErr ? ' (' + _writeErr.slice(0, 140) + ')' : ''}; refusing to return a dead audit link`);
+  const signedFinal = (finalSlug === slug && finalHash === hash) ? signed : signUrl({ slug: finalSlug, hash: finalHash, lead_id, expSeconds });
 
-  return { slug, hash, signed_url: signed.url, signed_exp: signed.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };
+  return { slug: finalSlug, hash: finalHash, signed_url: signedFinal.url, signed_exp: signedFinal.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };
 }
 
 function parseArgs(argv) {
