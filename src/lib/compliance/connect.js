@@ -27,8 +27,14 @@ const BASELINE_BY_FAMILY = {
   // it written down and unconnected.
   DE: { established: ['DE_IMPRESSUM', 'EU_GDPR', 'EU_EPRIVACY'], serves: ['DE_IMPRESSUM', 'EU_GDPR'] },
   FR: { established: ['FR_LCEN', 'EU_GDPR', 'EU_EPRIVACY'], serves: ['FR_LCEN', 'EU_GDPR'] },
-  EU: { established: ['EU_GDPR', 'EU_EPRIVACY', 'EU_EAA_2025', 'EU_DSA'],
-        serves:      ['EU_GDPR', 'EU_EPRIVACY', 'EU_EAA_2025', 'EU_DSA'] },
+  // E-261: the two instruments that bind EVERY service provider established in the EU, lawyers expressly included.
+  // Services Directive 2006/123 Art.22 and E-Commerce Directive 2000/31 Art.5 both carry a SPECIFIC limb for
+  // REGULATED PROFESSIONS: the professional body, the professional title, the Member State that granted it, and a
+  // reference to the applicable professional rules. That is the EU law-firm website regime, and we had none of it.
+  // They carry NO sector tag (they bind everyone), so WITHOUT this baseline entry fwSectorOK would silently drop
+  // them from every audit — exactly the E-254 bug that hid the E-Commerce Regs 2002 for months.
+  EU: { established: ['EU_GDPR', 'EU_EPRIVACY', 'EU_EAA_2025', 'EU_DSA', 'EU_SERVICES_DIRECTIVE', 'EU_ECD_ART5'],
+        serves:      ['EU_GDPR', 'EU_EPRIVACY', 'EU_EAA_2025', 'EU_DSA', 'EU_ECD_ART5'] },
   US: { established: ['US_FTC', 'US_ADA'],
         serves:      ['US_FTC', 'US_FTC_ENDORSE', 'US_CANSPAM', 'US_TCPA'] },
   AE: { established: ['UAE_PDPL', 'UAE_CONSUMER', 'UAE_ECOMMERCE'],
