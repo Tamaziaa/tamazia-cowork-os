@@ -1,0 +1,27 @@
+name: tracker-oracle-refresh
+# E-260 — refresh the tracker oracle weekly.
+#   EasyPrivacy (CC BY-SA 3.0 limb of the dual licence) -> 50,079 tracker hosts: what IS a tracker.
+#   Open Cookie Database (Apache-2.0)                   -> 2,239 purpose-labelled cookies: what a cookie is FOR.
+# NOT used, and deliberately: DuckDuckGo Tracker Radar and Ghostery TrackerDB are CC BY-NC-SA, and
+# cookiedatabase.org is CC BY-NC-ND. All NonCommercial. Tamazia charges money, so using them in a paid COMPLIANCE
+# product would itself be a licence breach.
+on:
+  schedule: [{ cron: '31 5 * * 1' }]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: node scripts/refresh-tracker-oracle.js
+      - name: Commit if changed
+        run: |
+          git config user.name tamazia-engine
+          git config user.email founder@tamazia.co.uk
+          git add data/tracker-oracle.json
+          git diff --staged --quiet || git commit -m "chore: refresh tracker oracle (EasyPrivacy + Open Cookie Database)"
+          git push || true

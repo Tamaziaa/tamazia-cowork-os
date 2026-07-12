@@ -857,7 +857,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.2-2026-07-ico-register';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.3-2026-07-cookie-evidence';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
@@ -1222,6 +1222,32 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     }
     // Drop irrelevant rules — trigger_absent, not_applicable_to_sector, no_prohibited_pattern.
   }
+  // E-260 (v23.3) — COOKIE EVIDENCE. THE PECR BREACH WE HAVE BEEN STRUCTURALLY BLIND TO SINCE DAY ONE.
+  // Every finding this engine ever made was read out of CRAWLED HTML. But the PECR breach is not IN the HTML. It is
+  // in BEHAVIOUR: cookies WRITTEN TO THE BROWSER before consent, and network calls fired at tracker hosts on load.
+  // You cannot see any of that with a fetch and a regex. We have been auditing law firms on cookie compliance while
+  // unable to observe a single cookie.
+  // A real Chromium (Playwright), fresh isolated context, navigate, TOUCH NOTHING. Everything observed is therefore
+  // pre-consent by construction. Classified against the tracker oracle: EasyPrivacy (50,079 tracker hosts, CC BY-SA)
+  // and the Open Cookie Database (2,239 purpose-labelled cookies, 1,234 consent-required, Apache-2.0).
+  // FAIL-OPEN: no browser, no claim. A missing observation is not evidence of compliance, and never of a breach.
+  try {
+    const { observe, cookieFindings } = require('../../../lib/evidence/cookie-evidence.js');
+    if (process.env.COOKIE_EVIDENCE !== '0') {
+      const _u = 'https://' + domain + '/';
+      const _obs = await observe(_u, { timeoutMs: 30000 });
+      if (_obs && _obs.ok) {
+        const _cf = cookieFindings(_obs, { country: cc || country, url: _u });
+        for (const _f of _cf) { misses++; findings.push(_f); }
+        console.error('[cookie-evidence] ' + domain + ' pre-consent: ' + (_obs.pre_consent.cookies.length) + ' cookies ('
+          + _obs.pre_consent.non_essential.length + ' NON-ESSENTIAL), ' + _obs.pre_consent.tracker_requests.length
+          + ' tracker hosts -> ' + _cf.length + ' PECR finding(s) in ' + _obs.ms + 'ms');
+      } else {
+        console.error('[cookie-evidence] ' + domain + ': no observation (fail-open, nothing asserted)');
+      }
+    }
+  } catch (_ce) { console.error('[cookie-evidence] skipped: ' + String((_ce && _ce.message) || _ce)); }
+
   // E-259 (v23.2) — THE ICO REGISTER. THE FIRST FINDING THAT IS NOT AN INTERPRETATION.
   // Every other finding we make is, at bottom, a judgement: does this text satisfy this obligation. A partner can
   // argue with a judgement. NOBODY CAN ARGUE WITH A PUBLIC REGISTER.

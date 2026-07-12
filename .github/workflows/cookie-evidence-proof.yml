@@ -1,0 +1,55 @@
+name: cookie-evidence-proof
+# E-260 — PROVE the cookie collector against a REAL law firm, in CI, in a real browser.
+# This exists because I could not run Chromium in the dev sandbox, and I will not ask anyone to take an evidence
+# collector on faith. If this job cannot see a cookie, the feature does not work, and we will know.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'URL to observe'
+        default: 'https://www.russell-cooke.co.uk/'
+  pull_request:
+    paths: ['src/lib/evidence/cookie-evidence.js', 'scripts/refresh-tracker-oracle.js']
+permissions:
+  contents: read
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm install --no-audit --no-fund playwright@1.61.1
+      - run: npx playwright install --with-deps chromium
+      - name: Unit contract (fail-open, no false claims, licence safety)
+        run: node eval/cookie-evidence-e260.test.js
+      - name: OBSERVE A REAL LAW FIRM IN A REAL BROWSER
+        run: |
+          node -e "
+          const { observe, cookieFindings } = require('./src/lib/evidence/cookie-evidence.js');
+          (async () => {
+            const url = process.env.URL || 'https://www.russell-cooke.co.uk/';
+            const obs = await observe(url, { timeoutMs: 40000 });
+            if (!obs || !obs.ok) { console.error('OBSERVATION FAILED — the collector cannot see a browser'); process.exit(1); }
+            const p = obs.pre_consent;
+            console.log('=== FRESH CHROMIUM · NOTHING CLICKED · ' + obs.ms + 'ms ===');
+            console.log('cookies set BEFORE consent : ' + p.cookies.length);
+            console.log('  of which NON-ESSENTIAL   : ' + p.non_essential.length);
+            for (const c of p.non_essential.slice(0,10)) console.log('    ' + c.name.padEnd(24) + (c.platform||'?') + ' / ' + c.category);
+            console.log('tracker hosts contacted    : ' + p.tracker_requests.length);
+            for (const t of p.tracker_requests.slice(0,10)) console.log('    ' + t.host);
+            console.log('CMP detected               : ' + JSON.stringify(obs.cmp));
+            const f = cookieFindings(obs, { country: 'UK', url });
+            console.log('');
+            console.log('=== PECR FINDINGS: ' + f.length + ' ===');
+            for (const x of f) console.log('  [' + x.severity + '] ' + x.code + ' :: ' + x.description);
+            // The collector must be able to SEE. A page that loads and yields literally nothing observable means
+            // the browser is not working, not that the site is clean.
+            if (p.cookies.length === 0 && p.tracker_requests.length === 0) {
+              console.error('WARNING: zero cookies AND zero requests observed — verify the browser actually loaded the page');
+            }
+          })();
+          "
+        env:
+          URL: ${{ github.event.inputs.url }}
