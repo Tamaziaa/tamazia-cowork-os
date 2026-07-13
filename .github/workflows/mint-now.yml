@@ -53,7 +53,12 @@ jobs:
       # E-267: playwright must be resolvable AND its browser present, or the cookie collector silently returns null.
       # Install it explicitly (not just from the lockfile) and download chromium with its OS deps.
       - run: npm install playwright@1.61.1 --no-save || true
-      - run: npx playwright install --with-deps chromium || npx playwright install chromium || true
+      # E-269: the browser needs OS shared libraries (libnss3, libatk...). 'playwright install --with-deps' apt-gets
+      # them on ubuntu-latest, but the old '|| npx playwright install chromium' fallback silently installed a browser
+      # with NO libraries when --with-deps hit any hiccup, so every launch died 'Host system is missing dependencies'
+      # and the cookie collector fail-opened. Install the deps EXPLICITLY first, then the browser, and do not mask it.
+      - run: sudo npx playwright install-deps chromium || sudo apt-get update && sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 libatspi2.0-0 || true
+      - run: npx playwright install chromium
       - run: python -m pip install --quiet -r requirements.txt
       - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       # E-260: the cookie-evidence collector needs a real browser. This is the ONLY way to observe the actual PECR
