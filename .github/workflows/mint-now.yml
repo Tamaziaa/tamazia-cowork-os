@@ -75,9 +75,23 @@ jobs:
 
       - name: Drain the mint queue
         run: |
+          # E-273: .env WINS OVER THE WORKFLOW, AND NOBODY KNEW.
+          # This loop exports every line of the decoded ENV_B64 secret AFTER the job-level `env:` block has been
+          # applied, so any MINT_* key inside .env SILENTLY OVERRIDES the workflow. Two bugs I chased for hours were
+          # both this: MINT_CONCURRENCY was pinned to "1" in the workflow and the worker still claimed three rows at
+          # once; and the build timed out at "300000ms", a number that appears NOWHERE in this repo (the default is
+          # 120000, this workflow says 720000). The settings in this file were never actually in charge.
+          # Fix: source .env for the credentials it exists to carry, then RE-ASSERT the operational knobs from the
+          # workflow, which is the file under version control and code review.
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          export MINT_CONCURRENCY="${MINT_CONCURRENCY_OVERRIDE}"
+          export MINT_BUILD_TIMEOUT_MS="${MINT_BUILD_TIMEOUT_MS_OVERRIDE}"
+          echo "[env] effective MINT_CONCURRENCY=$MINT_CONCURRENCY MINT_BUILD_TIMEOUT_MS=$MINT_BUILD_TIMEOUT_MS"
           node scripts/ensure-schema.js || true
           AUDIT_PAYLOAD_STORE=both node scripts/mint-worker.js --once --reclaim-startup
+        env:
+          MINT_CONCURRENCY_OVERRIDE: "1"
+          MINT_BUILD_TIMEOUT_MS_OVERRIDE: "720000"
 
       - name: send-gate summary
         if: always()
