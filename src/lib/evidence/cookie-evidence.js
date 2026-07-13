@@ -117,9 +117,17 @@ async function observe(url, opts) {
       } catch (_e) { /* ignore */ }
     });
 
-    await page.goto(url, { waitUntil: 'networkidle', timeout: Number((opts && opts.timeoutMs) || 30000) }).catch(() => {});
+    // E-270: waitUntil MUST NOT be 'networkidle'. The very sites we are hunting for PECR breaches — analytics- and
+    // ad-tag-heavy law-firm sites — keep the network busy indefinitely, so 'networkidle' NEVER fires and goto burns
+    // its entire timeout on exactly our targets, which (with a cold Chromium launch on the CI runner) blew past the
+    // 35s outer race every single time and returned null. Cookies and trackers set ON LOAD are already captured: the
+    // request listener is attached BEFORE goto, and the cookie jar is read AFTER a settle. 'domcontentloaded' + a
+    // short settle is exactly how Blacklight and Cookiepedia observe pre-consent state. Correct on the merits AND
+    // inside budget. Internal goto timeout is deliberately tight so a genuinely hung page can never eat the budget.
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: Number((opts && opts.timeoutMs) || 15000) }).catch(() => {});
     // We deliberately do NOT click, scroll, or dismiss anything. Whatever exists now existed BEFORE consent.
-    await page.waitForTimeout(2500);
+    // Settle long enough for on-load analytics/ad tags to fire and drop their cookies, but no interaction of any kind.
+    await page.waitForTimeout(3500);
 
     const raw = await ctx.cookies();
     const cookies = raw.map((c) => {
