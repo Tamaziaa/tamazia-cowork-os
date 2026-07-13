@@ -1445,7 +1445,7 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { scan, ruleCheck, gatherCorpus, loadRules };
+module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v23.4-2026-07-adjudication-payload'), scan, ruleCheck, gatherCorpus, loadRules };
 
 // ---- blind-send helpers (blueprint E-041/E-044) ----
 function _evidenceGate(findings, pages) {
