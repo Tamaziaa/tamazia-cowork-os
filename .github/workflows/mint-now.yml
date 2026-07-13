@@ -32,7 +32,14 @@ jobs:
       # keeps each audit's LLM calls inside the free per-minute budget (groq recovers immediately when not hammered),
       # so grounding actually runs. Slower throughput, correct audits. Raise again only once a PAID fallover key
       # (ANTHROPIC_API_KEY) is present in ENV_B64 so free-tier 429s route to a provider that will not rate-limit.
-      MINT_CONCURRENCY: "3"
+      # E-271: SERIALISE. The engine now makes far more LLM calls per audit than it did when concurrency 3 was set:
+      # classification + cross-verification + (new in v23.0) breach ADJUDICATION, batched over every finding. All three
+      # draw on the same free-tier quota (Groq/Cloudflare), which rate-limits hard in parallel. Under 3-way concurrency
+      # the VERIFIER is the one that loses the race, the payload lands with NO llm_verify, and the database gate quite
+      # correctly throws the row away as a stub ("audit_pages INSERT failed - no row written"). We were not losing rows
+      # to a write bug; we were losing them to 429s we inflicted on ourselves. One worker at a time turns a 429-storm
+      # into successful calls. Slower per batch, but a slow audit that lands beats a fast one the database rejects.
+      MINT_CONCURRENCY: "1"
       # LLM in-process concurrency 1 so a single audit's calls are also paced (free tiers 429 on simultaneous requests).
       LLM_MAX_CONCURRENCY: "1"
       # E-238: a JSON classification that has not answered in 12s is not coming. The 30s default meant a
