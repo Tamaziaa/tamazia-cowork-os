@@ -857,7 +857,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.10-2026-07-browser-deps';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.11-2026-07-cookie-domcontentloaded';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
@@ -1236,8 +1236,8 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     if (process.env.COOKIE_EVIDENCE !== '0') {
       const _u = 'https://' + domain + '/';
       const _obs = await Promise.race([
-        observe(_u, { timeoutMs: 20000 }),
-        new Promise((res) => setTimeout(() => { console.error('[cookie-evidence] ' + domain + ' hard-timeout at 35s — fail-open, no cookie claim'); res(null); }, 35000)),
+        observe(_u, { timeoutMs: 15000 }),
+        new Promise((res) => setTimeout(() => { console.error('[cookie-evidence] ' + domain + ' hard-timeout at 45s — fail-open, no cookie claim'); res(null); }, 45000)),
       ]);
       if (_obs && _obs.ok) {
         const _cf = cookieFindings(_obs, { country, url: _u });
@@ -1465,7 +1465,7 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v23.10-2026-07-browser-deps'), scan, ruleCheck, gatherCorpus, loadRules };
+module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v23.11-2026-07-cookie-domcontentloaded'), scan, ruleCheck, gatherCorpus, loadRules };
 
 // ---- blind-send helpers (blueprint E-041/E-044) ----
 function _evidenceGate(findings, pages) {
