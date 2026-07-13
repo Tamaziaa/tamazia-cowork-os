@@ -89,9 +89,15 @@ function _classifyCookie(name) {
  * Loads the page in a FRESH context and touches nothing. Everything observed is, by construction, PRE-CONSENT.
  */
 async function observe(url, opts) {
-  let chromium = null;
-  try { ({ chromium } = require('playwright')); } catch (_e) { return null; }   // FAIL-OPEN: no browser, no claim
-  if (!chromium) return null;
+  // E-267: resolve the browser driver robustly, and SAY why if we cannot. `require('playwright')` was failing in
+  // the mint (the driver installs into a node_modules the build could not resolve), observe() returned null, and
+  // the fail-open path was SILENT — so the cookie collector produced nothing and no log said why. A missing
+  // browser is a legitimate fail-open, but it must be OBSERVABLE, not invisible.
+  let chromium = null, _drv = '';
+  for (const mod of ['playwright', 'playwright-core', '@playwright/test']) {
+    try { const m = require(mod); chromium = m.chromium || (m.default && m.default.chromium); if (chromium) { _drv = mod; break; } } catch (_e) { /* try next */ }
+  }
+  if (!chromium) { console.error('[cookie-evidence] no playwright driver resolvable (tried playwright, playwright-core, @playwright/test) — install it in the mint or set COOKIE_EVIDENCE=0'); return null; }
 
   const t0 = Date.now();
   let browser = null;
@@ -156,7 +162,8 @@ async function observe(url, opts) {
     };
   } catch (_e) {
     try { if (browser) await browser.close(); } catch (_e2) {}
-    return null;   // FAIL-OPEN
+    console.error('[cookie-evidence] browser observation failed for ' + url + ': ' + String((_e && _e.message) || _e).slice(0, 120));
+    return null;   // FAIL-OPEN, but never silent
   }
 }
 
