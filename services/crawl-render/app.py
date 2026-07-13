@@ -40,9 +40,10 @@ log = logging.getLogger("crawl-render")
 
 def _log_safe(v, limit=300):
     """Neutralise CR/LF and other control chars before a caller-supplied value reaches a log record.
-    Without this, a URL containing %0d%0a lets the caller forge additional (fake) log lines."""
-    t = str(v)[:limit]
-    return "".join(ch if (ch.isprintable() and ch not in "\r\n") else "?" for ch in t)
+    Without this, a URL containing %0d%0a lets the caller forge additional (fake) log lines.
+    The explicit .replace() chain is deliberate: it is the form CodeQL recognises as a log-injection barrier."""
+    t = str(v)[:limit].replace("\r", "").replace("\n", "").replace("\t", " ")
+    return "".join(ch if ch.isprintable() else "?" for ch in t)
 
 
 app = FastAPI(title="tamazia-crawl-render", version="1.0")
