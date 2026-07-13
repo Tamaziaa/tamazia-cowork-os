@@ -784,6 +784,14 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     company: (() => { const nm = (company && String(company).trim()) || ''; const fp = (comp && comp.firm_profile) || {}; const scanned = fp.name || fp.legal_name || fp.display_name || fp.trading_name || fp.brand || ''; if (scanned && String(scanned).trim()) return String(scanned).trim(); return nm || null; })(),
     via_archive: !!(comp && comp.via_archive), archive_date: (comp && comp.archive_date) || null,
     crawl_telemetry: (comp && comp.crawl_telemetry) || null,   // E-230: propagate policy-coverage telemetry to the shipped payload
+    // E-253e (v23.4) — THE ADJUDICATION REPORT DROPPED AT THE *PAYLOAD* SEAM TOO.
+    // E-253b fixed the findings->pointers whitelist so each finding kept its verdict. But build.js constructs the
+    // TOP-LEVEL payload as its own whitelist as well, and it never copied `adjudication` off the scan result. So
+    // the report the scanner emitted (E-253c) was silently discarded here, and `payload_json ? 'adjudication'`
+    // came back FALSE on a v23.3 mint — meaning "did a model read these breaches" was STILL unanswerable from the
+    // outside, which is the exact observability hole E-253c existed to close.
+    // Two whitelists, two chances to lose the same fact. This is the second one.
+    adjudication: (comp && comp.adjudication) || null,
     engine_jurisdictions: (comp && comp.jurisdictions) || [],
     nexus: (comp && comp.nexus) || null,
     jurisdiction_families: (comp && comp.jurisdiction_families) || null,
