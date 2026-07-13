@@ -18,6 +18,7 @@ Notes
 - Returns ok:false with a reason on failure; the caller falls back to the free Jina reader, never blocking a mint.
 """
 import asyncio
+import logging
 import os
 import time
 from urllib.parse import urlparse
@@ -32,6 +33,9 @@ try:
 except Exception:  # pragma: no cover - import-time capability probe
     _HAVE_CRAWL4AI = False
     from playwright.async_api import async_playwright  # type: ignore
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+log = logging.getLogger("crawl-render")
 
 app = FastAPI(title="tamazia-crawl-render", version="1.0")
 
@@ -90,8 +94,12 @@ async def render(url: str = Query(..., description="absolute http(s) URL to rend
                 html, text = await _render_crawl4ai(url)
             else:
                 html, text = await _render_playwright(url)
-        except Exception as e:  # graceful — caller falls back to the free reader
-            return JSONResponse({"ok": False, "reason": str(e)[:200], "url": url}, status_code=200)
+        except Exception:  # graceful — caller falls back to the free reader
+            # The exception text (and, for some Playwright/crawl4ai errors, a full traceback) can carry internal
+            # paths, env values and upstream detail. Log it server-side with the stack; return a generic reason.
+            # The caller (compliance.js gatherCorpus) only branches on ok:false, never on the reason string.
+            log.exception("render failed for %s", url)
+            return JSONResponse({"ok": False, "reason": "render_failed", "url": url}, status_code=200)
     return {
         "ok": bool(text and len(text) > 80),
         "url": url,

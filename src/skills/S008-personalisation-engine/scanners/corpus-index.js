@@ -16,9 +16,16 @@ const JOIN_CAP = 2000000;    // absolute memory ceiling (≈2MB) — 30 pages ×
 
 // ── verbatim from scanners/compliance.js (kept in sync by test-corpus-index.js) ──────────────────────────────
 function _stripText(html) {
-  return String(html || '')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
+  // Tag removal loops to a FIXED POINT: a single pass is defeatable by nesting — deleting the inner match from
+  // `<scr<script>ipt>alert(1)<\/script>` re-forms a live `<script>` in the "stripped" text. Well-formed HTML is
+  // fully stripped on pass 1, so this is a no-op for every real page and only closes the nesting bypass.
+  let t = String(html || ''), prev;
+  do {
+    prev = t;
+    t = t.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+         .replace(/<[^>]+>/g, ' ');
+  } while (t !== prev);
+  return t
     .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&[a-z]+;/gi, ' ')
     .replace(/\s+/g, ' ').trim();
 }

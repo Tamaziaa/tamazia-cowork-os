@@ -6,6 +6,9 @@
 //           (4) Ad-pixel detection
 //           (5) Gemini-composed personalised Touch 0 with REAL specifics
 
+// Strip HTML tags to a FIXED POINT. A single .replace() pass is defeatable by nesting: removing the inner
+// match from `<scr<script>ipt>` re-forms `<script>` in the output. Loop until the string stops changing.
+function stripTagsFP(s) { let t = String(s == null ? '' : s), prev; do { prev = t; t = t.replace(/<[^>]+>/g, ''); } while (t !== prev); return t; }
 const path = require('path');
 const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
@@ -51,7 +54,7 @@ async function ddgRecentNews({ company }) {
   while ((m = re.exec(r.body)) !== null && items.length < 8) {
     let href = m[1];
     if (href.includes('uddg=')) { try { href = decodeURIComponent(href.match(/uddg=([^&]+)/)[1]); } catch (_e) {} }
-    items.push({ url: href, title: m[2].trim(), snippet: m[3].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() });
+    items.push({ url: href, title: m[2].trim(), snippet: stripTagsFP(m[3]).replace(/\s+/g, ' ').trim() });
   }
   return items;
 }

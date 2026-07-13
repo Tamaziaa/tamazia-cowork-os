@@ -3,9 +3,12 @@
 
 function stripTags(s) { return String(s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); }
 function decode(s) {
+  // &amp; MUST be decoded LAST. Decoding it first re-forms entities from escaped text: `&amp;lt;script&amp;gt;`
+  // would become `&lt;script&gt;` and then `<script>` — a double-unescaping that manufactures live markup.
   return String(s || '')
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&');
 }
 
 function extractTitle(html) {

@@ -3,6 +3,9 @@
 // Each source: {id, jurisdiction, url, parse}. fetchFeed retries with backoff (self-healing). detectChanges checksums
 // every entry and classifies new/updated/unchanged vs the stored state -> law_change_events (event-sourced). A legal
 // re-review BLOCKING flag is set on any new/updated entry. FAIL-OPEN: unreachable feed => [] (no crash, staleness noted).
+// Strip HTML tags to a FIXED POINT. A single .replace() pass is defeatable by nesting: removing the inner
+// match from `<scr<script>ipt>` re-forms `<script>` in the output. Loop until the string stops changing.
+function stripTagsFP(s) { let t = String(s == null ? '' : s), prev; do { prev = t; t = t.replace(/<[^>]+>/g, ''); } while (t !== prev); return t; }
 const https = require('https'); const crypto = require('crypto');
 
 const FEED_SOURCES = [
@@ -35,7 +38,7 @@ function parseAtom(xml) {
     const id = (b.match(/<id[^>]*>([\s\S]*?)<\/id>/i) || b.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i) || [])[1] || (b.match(/<link[^>]*href="([^"]+)"/i) || [])[1] || t;
     const url = (b.match(/<link[^>]*href="([^"]+)"/i) || b.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1] || '';
     const upd = (b.match(/<(?:updated|pubDate|published)[^>]*>([\s\S]*?)<\/(?:updated|pubDate|published)>/i) || [])[1] || '';
-    if (id || t) out.push({ entry_id: String(id).trim().slice(0, 300), title: String(t).replace(/<[^>]+>/g, '').trim().slice(0, 400), url: String(url).trim(), updated: String(upd).trim() });
+    if (id || t) out.push({ entry_id: String(id).trim().slice(0, 300), title: stripTagsFP(t).trim().slice(0, 400), url: String(url).trim(), updated: String(upd).trim() });
   }
   return out;
 }

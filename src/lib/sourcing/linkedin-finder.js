@@ -2,6 +2,9 @@
 // Uses DuckDuckGo HTML site-search (Google rate-limits but DDG is permissive).
 // Returns ranked candidate URLs by name + company + jurisdiction match.
 
+// Strip HTML tags to a FIXED POINT. A single .replace() pass is defeatable by nesting: removing the inner
+// match from `<scr<script>ipt>` re-forms `<script>` in the output. Loop until the string stops changing.
+function stripTagsFP(s) { let t = String(s == null ? '' : s), prev; do { prev = t; t = t.replace(/<[^>]+>/g, ''); } while (t !== prev); return t; }
 const { fetchWithRetry } = require('../../skills/S008-personalisation-engine/lib/http.js');
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
@@ -23,8 +26,8 @@ async function ddgSearch(query) {
         if (encoded) href = decodeURIComponent(encoded[1]);
       } catch (_e) {}
     }
-    const title = m[2].replace(/<[^>]+>/g, '').trim();
-    const snippet = m[3].replace(/<[^>]+>/g, '').trim();
+    const title = stripTagsFP(m[2]).trim();
+    const snippet = stripTagsFP(m[3]).trim();
     results.push({ url: href, title, snippet });
   }
   return results;

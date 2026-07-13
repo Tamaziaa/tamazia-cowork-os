@@ -79,7 +79,15 @@ async function fetchBody(url) {
     const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; TamaziaComplianceBot/1.0; +https://tamazia.co.uk)' }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
     if (!r.ok) return '';
     const html = await r.text();
-    return html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&pound;/gi, '£').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 5000);
+    // Strip to a FIXED POINT: one pass is defeatable by nesting (`<scr<script>ipt>` re-forms `<script>` after a
+    // single removal). Loop until the string stops changing, then decode entities with &amp; LAST so that
+    // `&amp;pound;` cannot double-decode into `£`.
+    let t = html, prev;
+    do {
+      prev = t;
+      t = t.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+    } while (t !== prev);
+    return t.replace(/&nbsp;/gi, ' ').replace(/&pound;/gi, '£').replace(/&(?!amp;)[a-z]+;/gi, ' ').replace(/&amp;/gi, '&').replace(/\s+/g, ' ').trim().slice(0, 5000);
   } catch (_e) { return ''; }
 }
 

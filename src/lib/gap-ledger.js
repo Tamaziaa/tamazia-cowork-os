@@ -97,16 +97,25 @@ function appendLedgerMd(gap, sig, opts) {
   const detail = gap.gap_detail ? (() => { try { return JSON.stringify(gap.gap_detail); } catch (_e) { return '{}'; } })() : '{}';
   const line = `- ${ts} · **${gap.gap_type || 'gap'}** · \`${gap.domain || '?'}\` (${gap.sector || '?'}) · sig=\`${sig}\` · audit=\`${gap.audit_hash || '?'}\` · root_cause: ${gap.root_cause || '(pending)'} · detail: \`${detail}\`\n`;
   if (isDry(opts)) { console.log('[gap-ledger][dry] would append to ' + LEDGER_MD + ':\n' + line.trimEnd()); return { ok: true, dry: true }; }
+  // No existsSync-then-write: that check-then-act window is a TOCTOU race (two concurrent mints could both
+  // see "missing" and one would truncate the other's header away). Just append — the fs does the atomic thing —
+  // and only if the OS tells us the file/dir is genuinely absent do we lay down the header and retry the append.
   try {
-    if (!fs.existsSync(LEDGER_MD)) {
+    fs.appendFileSync(LEDGER_MD, line, 'utf8');
+    return { ok: true, path: LEDGER_MD };
+  } catch (e) {
+    if (e && e.code !== 'ENOENT') return { ok: false, reason: e.message };
+    try {
       // create-if-missing header so the file is valid even before WS4 commits its canonical version.
       const header = '# CLAUDE-GAP-LEDGER\n\nHuman-readable log of audit gaps caught by the Layer-3 safeguard and the fix that closed each one. One bullet per gap; the machine record lives in the `engine_gap_fixes` Neon table. (Appended at runtime by `src/lib/gap-ledger.js`.)\n\n';
       fs.mkdirSync(path.dirname(LEDGER_MD), { recursive: true });
-      fs.writeFileSync(LEDGER_MD, header, 'utf8');
-    }
-    fs.appendFileSync(LEDGER_MD, line, 'utf8');
-    return { ok: true, path: LEDGER_MD };
-  } catch (e) { return { ok: false, reason: e.message }; }
+      // wx = create-exclusively; if a racing writer won, EEXIST just means the header is already there.
+      try { fs.writeFileSync(LEDGER_MD, header, { encoding: 'utf8', flag: 'wx' }); }
+      catch (e2) { if (!e2 || e2.code !== 'EEXIST') throw e2; }
+      fs.appendFileSync(LEDGER_MD, line, 'utf8');
+      return { ok: true, path: LEDGER_MD };
+    } catch (e2) { return { ok: false, reason: e2.message }; }
+  }
 }
 
 /**

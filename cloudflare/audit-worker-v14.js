@@ -1485,6 +1485,8 @@ function renderV21Page(audit){
 // Tamazia audit render v21 — billionaire-grade, Claude-aesthetic. Self-contained, CSP-safe (no inline JS;
 // CSS-only tabs/accordions), responsive, print-friendly. Consumes the adapted audit + a computed ctx.
 const vesc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// Strip tags to a FIXED POINT — one pass is defeatable by nesting (`<scr<script>ipt>` re-forms `<script>`).
+const vstrip = s => { let t = String(s==null?'':s), prev; do { prev = t; t = t.replace(/<[^>]+>/g,''); } while (t !== prev); return t; };
 const vgbp = n => { n=Number(n)||0; if(!n) return '£0'; if(n>=1e6) return '£'+(n/1e6).toFixed(n>=1e7?0:1).replace(/\.0$/,'')+'m'; if(n>=1e3) return '£'+Math.round(n/1e3)+'k'; return '£'+n.toLocaleString(); };
 const titleCase = s => String(s||'').replace(/\b([a-z])/g,(m,c)=>c.toUpperCase());
 const V21SEV = { P0:{l:'Critical',c:'#b3261e',bg:'linear-gradient(90deg,#fbeceb,#fff)'}, P1:{l:'High',c:'#9a6212',bg:'linear-gradient(90deg,#fdf3e2,#fff)'}, P2:{l:'Standard',c:'#5b6b78',bg:'#fff'}, P3:{l:'Minor',c:'#8595a1',bg:'#fff'} };
@@ -1517,7 +1519,7 @@ function findingRow(p){ const s=vsev(p.severity); const fine=p.fine_high_gbp?`<s
   const ev = p.evidence_quote?`<div class="fr-ev">“${vesc(String(p.evidence_quote).slice(0,160))}”</div>`:'';
   const enf = p.enforcement_example?`<div class="fr-enf">Precedent: ${vesc(String(p.enforcement_example).slice(0,140))}</div>`:'';
   return `<details class="fr"><summary><span class="fr-dot" style="background:${s.c}"></span><span class="fr-title">${vesc(p.desc||p.citation||'')}</span>${fine}</summary>
-  <div class="fr-body"><div class="fr-meta">${cite}${enf?' · '+enf.replace(/<[^>]+>/g,''):''}</div>${ev}<p class="fr-lay">${vesc((p.layman_explanation||'').slice(0,320))}</p><p class="fr-fix"><strong>Tamazia:</strong> ${vesc((p.tamazia_fix_short||'').slice(0,200))}</p></div></details>`; }
+  <div class="fr-body"><div class="fr-meta">${cite}${enf?' · '+vstrip(enf):''}</div>${ev}<p class="fr-lay">${vesc((p.layman_explanation||'').slice(0,320))}</p><p class="fr-fix"><strong>Tamazia:</strong> ${vesc((p.tamazia_fix_short||'').slice(0,200))}</p></div></details>`; }
 
 function tabPanel(id, label, checked, body, count){ return { label:`<label class="tab" for="tab-${id}">${label}${count!=null?` <span class="tab-n">${count}</span>`:''}</label>`,
   input:`<input class="tabin" type="radio" name="tabs" id="tab-${id}"${checked?' checked':''}>`, body:`<section class="tabbody" id="body-${id}">${body}</section>` }; }
