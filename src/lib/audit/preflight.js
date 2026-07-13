@@ -1,4 +1,5 @@
 'use strict';
+const { htmlToText } = require('../util/html-text.js');
 // P1.1 Render-quality preflight. Pure + testable. Classifies a fetched page so the engine never
 // asserts findings against a bot wall, a JS shell, a soft-404, a login gate, a staging URL, or a redirect stub.
 const SPA_MARKERS = [/__NEXT_DATA__/, /id=["']__next["']/, /ng-version=/i, /data-reactroot/i, /window\.__NUXT__/, /data-server-rendered/i, /__remixContext/, /data-sveltekit/i];
@@ -7,15 +8,7 @@ const LOGIN_TITLE_RX = /\b(log ?in|sign ?in|members? area|password required|acce
 const STAGING_HOST_RX = /(^|\.)(staging|stage|dev|develop|test|uat|preview|sandbox|demo)\./i;
 const STAGING_PLATFORM_RX = /\.(vercel\.app|netlify\.app|pages\.dev|herokuapp\.com|web\.app|firebaseapp\.com|onrender\.com|github\.io|wixsite\.com|myshopify\.com)$/i;
 
-function visibleText(html) {
-  return String(html || '')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&[a-z#0-9]+;/gi, ' ')
-    .replace(/\s+/g, ' ').trim();
-}
+function visibleText(html) { return htmlToText(html); }   // D-01
 function wordCount(html) { const t = visibleText(html); return t ? t.split(' ').filter(Boolean).length : 0; }
 function detectLang(html) { const m = String(html || '').match(/<html[^>]+lang=["']?([a-z]{2})/i); return m ? m[1].toLowerCase() : null; }
 function ogSiteName(html) { const m = String(html || '').match(/property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i); return m ? m[1].trim() : null; }

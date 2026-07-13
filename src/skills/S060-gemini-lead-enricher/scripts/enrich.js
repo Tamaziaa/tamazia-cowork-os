@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const { htmlToText } = require('../../../lib/util/html-text.js');
 // S060 Gemini-powered lead enricher · Phase 7.5
 // Takes leads with only company name → fills in domain, contact name, sector, real research notes.
 // Uses Gemini 2.5 Flash (free tier 1500/day) + web search via fetch.
@@ -75,7 +76,7 @@ async function enrichLead(lead) {
 
     if (body) {
       // Strip script/style noise to keep prompt small
-      body = body.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 12000);
+      body = htmlToText(body).slice(0, 12000);   // D-01
       const r = await extractJson({
         prompt: `Analyse this UK/international business website homepage. Company: "${lead.company}". Extract:
 - canonical_sector: one of [law-firms, barristers, accounting, professional-services, healthcare, dental, pharma, finance, fintech, insurance, real-estate, hospitality, ecommerce, retail, education, higher-education, charity, energy, transport, manufacturing, marketing, media, saas, tech, restaurants, wellness]

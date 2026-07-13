@@ -8,54 +8,59 @@
 
 const { fetchWithRetry } = require('../../skills/S008-personalisation-engine/lib/http.js');
 
+// D-04 (CodeQL js/regex/missing-regexp-anchor) — EVERY DOMAIN SIGNATURE BELOW NOW REQUIRES URL CONTEXT ("//").
+// These patterns are matched against the RAW PAGE HTML, so an unanchored /connect\.facebook\.net/ matched the bare
+// string ANYWHERE — including in visible prose. A law firm blogging about ad-tech or cookie enforcement (which is
+// literally what our ICP writes about) would be reported as RUNNING a Meta Pixel because it named one in an article.
+// Requiring "//" before the host means we only fire on a real script/beacon URL, never on a firm's own words.
 // Pixel + ad-tech fingerprint patterns
 const SIGNATURES = {
   meta: [
-    { pattern: /connect\.facebook\.net/i, signal: 'Meta Pixel script' },
+    { pattern: /\/\/[^\"'\s]*connect\.facebook\.net/i, signal: 'Meta Pixel script' },
     { pattern: /fbq\(['"]init['"]\s*,\s*['"]?(\d{10,18})['"]?/, signal: 'Meta Pixel ID', extract: m => ({ pixel_id: m[1] }) },
-    { pattern: /facebook\.com\/tr\?id=(\d+)/, signal: 'Meta Pixel tracker', extract: m => ({ pixel_id: m[1] }) },
+    { pattern: /\/\/[^\"'\s]*facebook\.com\/tr\?id=(\d+)/, signal: 'Meta Pixel tracker', extract: m => ({ pixel_id: m[1] }) },
     { pattern: /\bfbq\(/, signal: 'Meta Pixel function call' }
   ],
   google: [
     { pattern: /\b(G-[A-Z0-9]{6,12})\b/, signal: 'GA4 tag', extract: m => ({ tag_id: m[1] }) },
     { pattern: /\b(AW-\d{6,12})\b/, signal: 'Google Ads conversion tag', extract: m => ({ ads_id: m[1] }) },
     { pattern: /\b(GTM-[A-Z0-9]{5,9})\b/, signal: 'Google Tag Manager', extract: m => ({ gtm_id: m[1] }) },
-    { pattern: /googleadservices\.com\/pagead\/conversion\/(\d+)/, signal: 'Google Ads conversion script', extract: m => ({ ads_id: m[1] }) },
-    { pattern: /doubleclick\.net/, signal: 'DoubleClick (Display & Video 360)' }
+    { pattern: /\/\/[^\"'\s]*googleadservices\.com\/pagead\/conversion\/(\d+)/, signal: 'Google Ads conversion script', extract: m => ({ ads_id: m[1] }) },
+    { pattern: /\/\/[^\"'\s]*doubleclick\.net/i, signal: 'DoubleClick (Display & Video 360)' }
   ],
   linkedin: [
-    { pattern: /snap\.licdn\.com\/li\.lms-analytics/i, signal: 'LinkedIn Insight Tag' },
+    { pattern: /\/\/[^\"'\s]*snap\.licdn\.com\/li\.lms-analytics/i, signal: 'LinkedIn Insight Tag' },
     { pattern: /_linkedin_partner_id\s*=\s*["']?(\d+)["']?/, signal: 'LinkedIn partner ID', extract: m => ({ partner_id: m[1] }) },
-    { pattern: /linkedin\.com\/px\/i\.gif/i, signal: 'LinkedIn tracker pixel' },
+    { pattern: /\/\/[^\"'\s]*linkedin\.com\/px\/i\.gif/i, signal: 'LinkedIn tracker pixel' },
     { pattern: /_linkedin_data_partner_id/, signal: 'LinkedIn data partner ID' }
   ],
   tiktok: [
-    { pattern: /analytics\.tiktok\.com/i, signal: 'TikTok Pixel script' },
+    { pattern: /\/\/[^\"'\s]*analytics\.tiktok\.com/i, signal: 'TikTok Pixel script' },
     { pattern: /ttq\.load\(['"]?([A-Z0-9]+)['"]?/, signal: 'TikTok Pixel ID', extract: m => ({ pixel_id: m[1] }) },
     { pattern: /\bttq\.(track|page)\b/, signal: 'TikTok event tracking' }
   ],
   x: [
-    { pattern: /static\.ads-twitter\.com\/uwt\.js/i, signal: 'X (Twitter) Ads UWT' },
+    { pattern: /\/\/[^\"'\s]*static\.ads-twitter\.com\/uwt\.js/i, signal: 'X (Twitter) Ads UWT' },
     { pattern: /twq\(['"]config['"]\s*,\s*['"]?([a-z0-9]+)['"]?/, signal: 'X Pixel ID', extract: m => ({ pixel_id: m[1] }) },
     { pattern: /\btwq\(/, signal: 'X tracking function' }
   ],
   snapchat: [
-    { pattern: /sc-static\.net\/scevent\.min\.js/i, signal: 'Snap Pixel script' },
+    { pattern: /\/\/[^\"'\s]*sc-static\.net\/scevent\.min\.js/i, signal: 'Snap Pixel script' },
     { pattern: /snaptr\(['"]init['"]\s*,\s*['"]?([\w-]+)['"]?/, signal: 'Snap Pixel ID', extract: m => ({ pixel_id: m[1] }) }
   ],
   reddit: [
-    { pattern: /redditstatic\.com\/ads\/pixel\.js/i, signal: 'Reddit Pixel script' },
+    { pattern: /\/\/[^\"'\s]*redditstatic\.com\/ads\/pixel\.js/i, signal: 'Reddit Pixel script' },
     { pattern: /rdt\(['"]init['"]\s*,\s*['"]?([\w-]+)['"]?/, signal: 'Reddit Pixel ID', extract: m => ({ pixel_id: m[1] }) }
   ],
   pinterest: [
-    { pattern: /s\.pinimg\.com\/ct\/core\.js/i, signal: 'Pinterest Tag script' },
+    { pattern: /\/\/[^\"'\s]*s\.pinimg\.com\/ct\/core\.js/i, signal: 'Pinterest Tag script' },
     { pattern: /pintrk\(['"]load['"]\s*,\s*['"]?(\d+)['"]?/, signal: 'Pinterest Tag ID', extract: m => ({ tag_id: m[1] }) }
   ],
   hubspot: [
-    { pattern: /js\.hs-(analytics|scripts|forms)\.(com|net)/i, signal: 'HubSpot tracking (B2B intent)' }
+    { pattern: /\/\/[^\"'\s]*js\.hs-(analytics|scripts|forms)\.(com|net)/i, signal: 'HubSpot tracking (B2B intent)' }
   ],
   hotjar: [
-    { pattern: /static\.hotjar\.com/i, signal: 'Hotjar (CRO investment signal)' }
+    { pattern: /\/\/[^\"'\s]*static\.hotjar\.com/i, signal: 'Hotjar (CRO investment signal)' }
   ]
 };
 

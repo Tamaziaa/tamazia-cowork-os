@@ -45,7 +45,13 @@ function _fam(fw) {
   if (fw.startsWith('UK_') || /SRA|FCA|ICO|CMA|ASA|OFCOM|OFGEM|RICS|HMRC/.test(fw)) return 'The relevant UK regulator: statutory penalties, enforcement notices and published decisions (see citation).';
   if (fw.startsWith('EU_')) return 'The competent EU or national authority: administrative fines and enforcement measures (see citation).';
   if (fw.startsWith('US_')) return 'The relevant US regulator or State Attorney General: civil penalties and consent orders (see citation).';
-  if (/^UAE|DIFC|ADGM|SAUDI|QATAR|DHA|DOH|RERA|TDRA/.test(fw)) return 'The relevant UAE/GCC regulator: fines and licensing sanctions (see citation).';
+  // D-02 (CodeQL js/regex/missing-regexp-anchor) — THIS ATTRIBUTED THE WRONG REGULATOR TO A CLIENT'S LAW.
+  // `/^UAE|DIFC|ADGM|SAUDI|QATAR|DHA|DOH|RERA|TDRA/` does NOT mean "starts with any of these". Alternation binds
+  // loosest, so it parses as `(^UAE) | (DIFC) | (ADGM) | ...` — only the FIRST branch is anchored. Every other
+  // branch matches ANYWHERE in the framework code. A UK Department of Health framework (…DOH…) would be told its
+  // regulator is "the relevant UAE/GCC regulator". Wrong regulator on a compliance report is not a typo, it is a
+  // fabricated legal claim. The anchor must wrap the whole group.
+  if (/^(UAE|DIFC|ADGM|SAUDI|QATAR|DHA|DOH|RERA|TDRA)/.test(fw)) return 'The relevant UAE/GCC regulator: fines and licensing sanctions (see citation).';
   return 'Enforced by the framework regulator through penalties and sanctions per the statute (see citation).';
 }
 // fw may be a clean code or a compound citation ("UK PECR + UK GDPR · consent functionality").

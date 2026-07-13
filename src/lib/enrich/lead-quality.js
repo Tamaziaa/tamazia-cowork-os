@@ -1,3 +1,5 @@
+
+const { htmlToText } = require('../util/html-text.js');
 // 10-layer lead quality scorer + 3-TIER ICP gate. Proves a lead is a REAL regulated business that
 // genuinely needs compliance + visibility, and a REACHABLE decision-maker exists, before auto-send.
 // Returns { score 0-100, pass, fit, tier, layers[] }.
@@ -123,12 +125,7 @@ function visibleText(html) {
   let meta = '';
   const t = html.match(/<title[^>]*>([^<]{2,200})<\/title>/i); if (t) meta += ' ' + t[1];
   for (const m of html.matchAll(/<meta[^>]+(?:name|property)=["'](?:description|og:title|og:site_name|og:description|application-name)["'][^>]+content=["']([^"']{2,300})["']/gi)) meta += ' ' + m[1];
-  const body = String(html)
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&[a-z#0-9]+;/gi, ' ');
+  const body = htmlToText(html);   // D-01
   return (meta + ' ' + body).replace(/\s+/g, ' ').slice(0, 24000);
 }
 

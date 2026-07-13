@@ -5,6 +5,7 @@
 // findings, never an exception. Output pointers match the audit renderer's pointer shape.
 
 'use strict';
+const { htmlToText } = require('../util/html-text.js');
 
 let _http = null;
 try { _http = require(require('path').resolve(__dirname, '..', '..', 'skills', 'S008-personalisation-engine', 'lib', 'http.js')); } catch (_) {}
@@ -83,8 +84,7 @@ function extractSignals({ body, headers }) {
   const h1Count = (lc.match(/<h1[\s>]/g) || []).length;
   // #17 keyword spine: a bounded plain-text corpus of the homepage so the category-noun classifier reads the
   // firm's ACTUAL body copy (what it sells), not just the <title>. Additive — nothing read signals.corpus before.
-  const _corpus = b.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 4000);
+  const _corpus = htmlToText(b).slice(0, 4000);   // D-01
   return {
     corpus: _corpus,
     title: titleMatch ? titleMatch[1].trim() : '',
@@ -433,7 +433,7 @@ function geoPointers({ html, signals, sector, wikidata, domain }) {
 const _SPELL_ALLOW = new Set(['gdpr','ukgdpr','pecr','ico','sra','fca','cqc','ofcom','ofsted','dpa','dpia','ccpa','cpra','vcdpa','tdpsa','hipaa','ferpa','coppa','glba','finra','nydfs','sec','ftc','difc','adgm','dfsa','rera','dld','trakheesi','tdra','pdpl','pdppl','sdaia','mhra','asa','cap','cma','dmcc','eaa','dsa','dma','nis2','eidas','psd2','psd','aml','kyc','llp','ltd','plc','vat','seo','geo','ai','llm','llms','faq','url','cta','nap','ux','ui','b2b','b2c','saas','api','crm','roi','kpi','tamazia','lexquity']);
 async function spellCheck(html){
   try {
-    const text=String(html||'').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&[a-z]+;/gi,' ').replace(/\s+/g,' ').trim().slice(0,1600);
+    const text=htmlToText(html).slice(0,1600);   // D-01
     if(text.length<120) return [];
     const r=await timed((sig)=>fetch('https://api.languagetool.org/v2/check',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:'language=en-GB&text='+encodeURIComponent(text),signal:sig}),12000);
     if(!r.ok) return [];
@@ -518,7 +518,7 @@ async function scanSite({ domain, sector, env }) {
   for (const gp of geoPointers({ html: page.body, signals: sig, sector: sector || '', wikidata, domain: clean })) pointers.push(gp);
   // content depth (thin content = poor ranking + nothing for AI to cite)
   try {
-    const vw = String(page.body || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length;
+    const vw = htmlToText(page.body).split(' ').filter(Boolean).length;   // D-01: script bodies were inflating the word count
     if (vw < 600) pointers.push(P('content_depth', vw < 300 ? 'P1' : 'P2', 'Thin page content', 'The homepage has only ' + vw + ' words of crawlable text; competitive ranking pages average 1,200+.', 'Thin content gives Google and AI engines little to rank or cite and signals low authority. Depth on the topic wins both the rankings and the AI citations.', 'Tamazia expands the homepage and key service pages with substantive, E-E-A-T-rich content targeting your buyer queries.', 'homepage - ' + vw + ' words of visible text'));
   } catch (_e) {}
   if (robots === false) pointers.push(P('technical_seo', 'P2', 'robots.txt', 'No robots.txt found.', 'Search and AI crawlers have no crawl directives, and you cannot point them at your sitemap, slowing how fast new pages get indexed.', 'Tamazia publishes a robots.txt that points crawlers at the sitemap.', 'GET /robots.txt · 404'));

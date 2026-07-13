@@ -1,8 +1,9 @@
 'use strict';
+const { htmlToText } = require('../util/html-text.js');
 // P2.2 Cookie-policy vs actual-tracker diff. Pure + testable. The self-incriminating finding:
 // the site declares N trackers/cookies in its cookie policy but actually runs M, including undeclared ones.
 // Builds on tracker-detect.js (what actually loads) vs what the policy page text declares.
-function _text(html) { return String(html || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase(); }
+function _text(html) { return htmlToText(html).toLowerCase(); }   // D-01
 function _isPolicyUrl(u) { return /(cookie|privacy|data-protection)/i.test(String(u || '').replace(/^https?:\/\/[^/]+/, '')); }
 
 // Given the multi-page corpus + the trackers tracker-detect found running, return undeclared trackers.

@@ -16,11 +16,16 @@ function detectAdTech(html) {
   // X / Twitter pixel
   if (/static\.ads-twitter\.com|twq\(\s*['"]|t\.co\/i\/adsct/.test(b)) { platforms.push('x-ads'); signals.push('X/Twitter Pixel'); }
   // Microsoft / Bing UET
-  if (/bat\.bing\.com|uetq|uet_/.test(b)) { platforms.push('bing-ads'); signals.push('Microsoft/Bing UET'); }
+  if (/\/\/[^"'\s]*bat\.bing\.com|\buetq\b|\buet_[a-z]/i.test(b)) { platforms.push('bing-ads'); signals.push('Microsoft/Bing UET'); }   // D-04: 'uetq' was a bare substring
   // DoubleClick / display
   if (/fls\.doubleclick\.net|\.doubleclick\.net\/(?!.*pagead)/.test(b)) { platforms.push('display-ads'); signals.push('DoubleClick/Display'); }
   // Native ads
-  if (/criteo|taboola|outbrain/.test(b)) { platforms.push('native-ads'); signals.push('Native (Criteo/Taboola/Outbrain)'); }
+  // D-04 (CodeQL js/regex/missing-regexp-anchor) — `/criteo|taboola|outbrain/` matched THE BARE WORD anywhere in the
+  // page. A law firm publishing an article about ad-tech regulation, or a GDPR case note naming Criteo (the CNIL
+  // fined Criteo EUR 40m — our exact ICP writes about this), was reported to be RUNNING Criteo ads. We would tell a
+  // solicitor they run native advertising because they blogged about someone else's enforcement action. The tracker
+  // must be a real DOMAIN in a URL, not a word in prose.
+  if (/\/\/[^"'\s]*\b(criteo|taboola|outbrain)\.(com|net)\b/i.test(b)) { platforms.push('native-ads'); signals.push('Native (Criteo/Taboola/Outbrain)'); }
   const uniq = Array.from(new Set(platforms));
   return { platforms: uniq, runs_ads: uniq.length > 0, count: uniq.length, signals };
 }

@@ -1,4 +1,5 @@
 'use strict';
+const { isHostPath } = require('./util/url-safe.js');
 // ============================================================================================================
 // LLM-RESCUE — the GENERATION-FIRST worker. (LLM-QA-DESIGN.md north star, ENGINE-FUNCTION-MAP-V4.md Part C.)
 // ============================================================================================================
@@ -287,7 +288,7 @@ async function findLinkedinViaSerp({ company, dm_name, dm_role, domain, jurisdic
     let s = 0;
     if (dmIsPerson) { if (hasLast) s += 55; if (inText(hay, tok(first))) s += 30; }
     if (coTokens.some(c => hay.includes(c))) s += 20;
-    if (/linkedin\.com\/in\//i.test(r.url)) s += 5;
+    if (isHostPath(r.url, 'linkedin.com', '/in/')) s += 5;   // D-05
     // jurisdiction penalty: a foreign-TLD linkedin host (other than the neutral www./global) for a UK/UAE firm.
     const hostCc = (String(r.url).match(/https?:\/\/([a-z]{2})\.linkedin\.com/i) || [, ''])[1].toLowerCase();
     if (jcc && hostCc && hostCc !== jcc && hostCc !== 'www') s -= 20;

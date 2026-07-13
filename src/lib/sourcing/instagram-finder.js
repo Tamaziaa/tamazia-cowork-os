@@ -1,3 +1,4 @@
+const { isHost } = require('../util/url-safe.js');
 // Instagram handle finder · no key, no Instagram login.
 // DuckDuckGo HTML site:instagram.com search. Ranked by name + company match in title/snippet.
 
@@ -29,7 +30,7 @@ async function findHandle({ first, last, company }) {
   const q = `site:instagram.com "${company || (first + ' ' + last)}"`;
   const results = await ddgSearch(q);
   const candidates = results
-    .filter(r => r.url && r.url.includes('instagram.com/'))
+    .filter(r => r.url && isHost(r.url, 'instagram.com'))   // D-05
     .map(r => ({ ...r, handle: extractHandle(r.url), score: scoreCandidate({ first, last, company }, r) }))
     .filter(r => r.handle)
     .sort((a, b) => b.score - a.score);

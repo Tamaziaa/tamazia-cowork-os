@@ -1,3 +1,4 @@
+const { isNonCrawlable } = require('../../../lib/util/url-safe.js');
 // HTML extraction helpers · plain regex + light DOM. No external parser dependency.
 // All returns include the source URL so the hallucination guard can validate every fact has provenance.
 
@@ -38,7 +39,7 @@ function extractLinks(html, baseHost) {
   let m;
   while ((m = re.exec(html)) !== null) {
     const href = m[1]; const txt = decode(stripTags(m[2])).slice(0, 120);
-    if (!href || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#') || href.startsWith('javascript:')) continue;
+    if (isNonCrawlable(href)) continue;   // D-03
     try {
       const u = new URL(href, `https://${baseHost}/`);
       if (u.host === baseHost) internal.push({ href: u.href, text: txt });
