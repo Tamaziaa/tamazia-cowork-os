@@ -37,8 +37,8 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - name: Install deps
@@ -57,15 +57,19 @@ jobs:
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/v3/normalise-names.js 99999
       - name: Phase 3 - re-tier all leads to 1/2/3 + canonical sectors (no-send)
+        env:
+          REQUAL_VERSION_IN: ${{ inputs.requal_version }}
+          PASSES: ${{ inputs.passes }}
+          BATCH: ${{ inputs.batch }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          if [ -n "${{ inputs.requal_version }}" ]; then export REQUAL_VERSION="${{ inputs.requal_version }}"; fi
+          if [ -n "$REQUAL_VERSION_IN" ]; then export REQUAL_VERSION="$REQUAL_VERSION_IN"; fi
           # Heartbeat the whole re-tier window so the engine-cycle race guard (heartbeat.js active-writer) sees
           # v3-rerun as a live heavy writer and skips its qualify/enqueue/mint/render steps while this runs.
           HB=$(node scripts/heartbeat.js start v3-rerun 2>/dev/null || echo "")
-          for i in $(seq 1 ${{ inputs.passes }}); do
-            echo "=== requalify pass $i / ${{ inputs.passes }} ==="
-            node scripts/requalify-all-leads.js ${{ inputs.batch }} || true
+          for i in $(seq 1 "$PASSES"); do
+            echo "=== requalify pass $i / $PASSES ==="
+            node scripts/requalify-all-leads.js $BATCH || true
           done
           node scripts/heartbeat.js finish "$HB" ok 2>/dev/null || true
       - name: Funnel summary (tiers + canonical sectors + names)

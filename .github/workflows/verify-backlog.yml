@@ -26,10 +26,10 @@ jobs:
       VERIFY_REOON_RETRY: "1"     # re-select stranded 'unknown' (reoon_status IS NULL) so Reoon retries them
       REOON_DAILY_CAP: "500"      # Reoon plan cap, counted off Neon across all waves
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: '24' }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.12' }
       - name: Install Node deps
         run: npm install --omit=dev || npm install || true
@@ -42,9 +42,11 @@ jobs:
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/db-preflight.js
       - name: Verify backlog (free MX/SMTP first, Reoon for unknown, cap-respected)
+        env:
+          LIMIT: ${{ github.event.inputs.limit || '300' }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          node scripts/heartbeat.js wrap verify-backlog -- node scripts/verify-contacts.js "${{ github.event.inputs.limit || '300' }}"
+          node scripts/heartbeat.js wrap verify-backlog -- node scripts/verify-contacts.js "$LIMIT"
       - name: Alert on failure
         if: failure()
         run: |

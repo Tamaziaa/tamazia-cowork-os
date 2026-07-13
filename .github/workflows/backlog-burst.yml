@@ -41,8 +41,8 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - name: Install Node deps
@@ -59,23 +59,31 @@ jobs:
           node scripts/v3/migrate-v3-schema.js || true   # guarantee requal_version + v3 cols before requalify (canonical-schema now also carries them; this is belt-and-suspenders)
           node scripts/cc2-provision.js
       - name: Re-qualify the existing pile (current Tier-1 criteria)
+        env:
+          REQUALIFY: ${{ inputs.requalify }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # Heartbeat the re-tier pass too (the advance step below is already wrapped). Keeps backlog-burst visible
           # to the engine-cycle race guard (heartbeat.js active-writer) during requalify, which rewrites the same
           # tier/lifecycle columns the cycle's qualify->mint seam touches.
           export HEARTBEAT_WRAP_TIMEOUT_MS=3300000  # 55 min: backlog-burst job = 120 min; 2 wraps max; 55+55<120
-          node scripts/heartbeat.js wrap backlog-burst -- node scripts/requalify-all-leads.js ${{ inputs.requalify }} || true
+          node scripts/heartbeat.js wrap backlog-burst -- node scripts/requalify-all-leads.js $REQUALIFY || true
       - name: Advance the backlog (no-send)
+        env:
+          ENRICH: ${{ inputs.enrich }}
+          RESEARCH: ${{ inputs.research }}
+          VERIFY: ${{ inputs.verify }}
+          QUALIFY: ${{ inputs.qualify }}
+          MINT: ${{ inputs.mint }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/heartbeat.js wrap backlog-burst -- bash -c '
-            node scripts/enrich-and-queue-channels.js ${{ inputs.enrich }} || true
-            node scripts/run-deep-research-batch.js ${{ inputs.research }} || true
-            node scripts/verify-contacts.js ${{ inputs.verify }}         || true
+            node scripts/enrich-and-queue-channels.js $ENRICH || true
+            node scripts/run-deep-research-batch.js $RESEARCH || true
+            node scripts/verify-contacts.js $VERIFY         || true
             node scripts/dedupe-leads.js                                  || true
-            node scripts/qualify-and-queue.js ${{ inputs.qualify }}       || true
-            node scripts/enqueue-leads.js ${{ inputs.mint }}             || true
+            node scripts/qualify-and-queue.js $QUALIFY       || true
+            node scripts/enqueue-leads.js $MINT             || true
             node scripts/mint-worker.js --once                            || true
           ' || true   # outer guard: a heartbeat-wrap timeout (exit 124 on a large burst, e.g. verify=400) must NOT fail this best-effort no-send drain — partial progress is kept (matches the requalify step's guard)
       - name: Funnel summary

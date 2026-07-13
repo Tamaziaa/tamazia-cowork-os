@@ -27,8 +27,8 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - name: Install deps
@@ -44,12 +44,13 @@ jobs:
           node scripts/v3/migrate-v3-schema.js || true
       - name: Re-score a small batch with the gap-fixed scorer
         env:
+          BATCH: ${{ inputs.batch }}
           REQUAL_VERSION: ${{ inputs.version }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # Heartbeat so the engine-cycle race guard (heartbeat.js active-writer) sees this re-tier as a live
           # writer and skips its tier/lifecycle steps while it runs.
-          node scripts/heartbeat.js wrap v3-validate -- node scripts/requalify-all-leads.js ${{ inputs.batch }}
+          node scripts/heartbeat.js wrap v3-validate -- node scripts/requalify-all-leads.js $BATCH
       - name: Show what the gap-fixed scorer produced (this batch only)
         env:
           REQUAL_VERSION: ${{ inputs.version }}

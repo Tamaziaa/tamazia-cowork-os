@@ -24,11 +24,11 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Install Python deps (pg8000 for DB shim)
@@ -43,9 +43,11 @@ jobs:
             echo "OPENPAGERANK_API_KEY=${{ secrets.OPENPAGERANK_API_KEY }}" >> .env
           fi
       - name: Re-mint all stale audit rows
+        env:
+          HASHES_IN: ${{ inputs.hashes }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          export REMINT_HASHES="${{ inputs.hashes }}"
+          export REMINT_HASHES="$HASHES_IN"
           # A4/IG2: heartbeat-wrap so this long server-side re-mint is visible in engine_runs
           # (engine_health / check-stuck-jobs). Fallback to a bare call so a heartbeat hiccup never blocks the re-mint.
           # This job legitimately runs for hours (timeout-minutes: 350), so lift the wrap's hung-step guard above the

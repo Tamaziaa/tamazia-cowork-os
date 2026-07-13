@@ -22,25 +22,29 @@ jobs:
       MINT_BUILD_TIMEOUT_MS: "300000"
       DEFAULT_HASHES: "Wd0diK57,tY4JGaqQ,oVXQF41x,hd4miaDW,swm0stTZ,PHOIxv7S,x05wbxbc,n8fDbxyR"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with: { ref: compliance-ssot }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: "24" }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "3.12" }
       - run: npm install --omit=dev || npm install || true
       - run: python -m pip install --quiet -r requirements.txt
       - run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Seed shadow rows from live (so the in-place re-mint has rows to update)
+        env:
+          HASHES_IN: ${{ inputs.hashes }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          H="${{ inputs.hashes }}"; [ -z "$H" ] && H="$DEFAULT_HASHES"
+          H="$HASHES_IN"; [ -z "$H" ] && H="$DEFAULT_HASHES"
           Q=$(echo "$H" | sed "s/[^,]*/'&'/g")
           ./scripts/psql "$NEON_URL" -c "INSERT INTO audit_pages_shadow SELECT * FROM audit_pages WHERE hash IN ($Q) ON CONFLICT DO NOTHING;"
       - name: Shadow re-mint golden sample (writes ONLY audit_pages_shadow)
+        env:
+          HASHES_IN: ${{ inputs.hashes }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          export REMINT_HASHES="${{ inputs.hashes }}"; [ -z "$REMINT_HASHES" ] && export REMINT_HASHES="$DEFAULT_HASHES"
+          export REMINT_HASHES="$HASHES_IN"; [ -z "$REMINT_HASHES" ] && export REMINT_HASHES="$DEFAULT_HASHES"
           echo "shadow-minting: $REMINT_HASHES"
           node scripts/heartbeat.js wrap shadow-validate -- node scripts/remint-audits.js || node scripts/remint-audits.js
           node eval/shadow-diff.js

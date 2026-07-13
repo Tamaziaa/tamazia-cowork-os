@@ -24,8 +24,8 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - name: Install deps
@@ -35,6 +35,8 @@ jobs:
       - name: Materialise .env from secret
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Resolve registry domains (logs each resolution + a summary)
+        env:
+          LIMIT: ${{ inputs.limit }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          node scripts/resolve-registry-domains.js ${{ inputs.limit }}
+          node scripts/resolve-registry-domains.js $LIMIT
