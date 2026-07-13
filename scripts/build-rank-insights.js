@@ -29,6 +29,5 @@ async function main() {
   }
   console.log(`[rank-insights] built ${built}, gated-out ${gated_out} of ${leads.length}`);
 }
-if (require.main === module) if (require.main === module) main().catch(e => { console.error('[rank-insights] fatal (fail-open):', e.message); process.exit(0); });
-module.exports = { main };
+if (require.main === module) main().catch(e => { console.error('[rank-insights] fatal (fail-open):', e.message); process.exit(0); });
 module.exports = { main };

@@ -57,7 +57,11 @@ function rssItems(xml) {
   if (!xml) return []; const items = []; const re = /<item[\s\S]*?<\/item>/gi; let m;
   while ((m = re.exec(xml))) {
     const blk = m[0];
-    const g = (tag) => { const x = blk.match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'i')); return x ? x[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, '').trim() : ''; };
+    // js/incomplete-multi-character-sanitization: a single `.replace(/<[^>]+>/g,'')` pass lets nested constructs
+    // such as `<<a>script>` collapse back into `<script>`. Strip to a fixed point instead. Title/desc from a
+    // third-party RSS feed end up in generated copy, so the strip has to actually be complete.
+    const stripTags = (v) => { let out = String(v == null ? '' : v); for (;;) { const next = out.replace(/<[^<>]*>/g, ''); if (next === out) return next; out = next; } };
+    const g = (tag) => { const x = blk.match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'i')); return x ? stripTags(x[1].replace(/<!\[CDATA\[|\]\]>/g, '')).trim() : ''; };
     let d = g('pubDate'); const dt = d ? new Date(d) : null; const date = (dt && !isNaN(dt)) ? dt.toISOString().slice(0, 10) : '';
     items.push({ title: g('title'), url: g('link'), date, desc: g('description').slice(0, 300) });
   }

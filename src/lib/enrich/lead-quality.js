@@ -514,7 +514,11 @@ async function tierInputsFromPersisted(lead) {
   // LinkedIn from persisted socials / contact_linkedin (the rescue folds a found URL into all_socials.linkedin).
   const socials = asObj(lead.all_socials);
   const liUrl = (socials.linkedin && (socials.linkedin.url || socials.linkedin)) || lead.contact_linkedin || '';
-  const hasLinkedin = !!(socials && socials.linkedin) || /linkedin\.com\/(company|in)\//i.test(String(liUrl));
+  // js/regex/missing-regexp-anchor — this one IS applied to a URL (liUrl), unlike the page-body probes above.
+  // Unanchored, https://evil.example.com/linkedin.com/in/x scored as a LinkedIn profile. Anchor at the host,
+  // tolerating the scheme-less form ('linkedin.com/in/x') we also persist.
+  const LINKEDIN_URL_RX = /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)*linkedin\.com\/(?:company|in)\//i;
+  const hasLinkedin = !!(socials && socials.linkedin) || LINKEDIN_URL_RX.test(String(liUrl).trim());
 
   // named-DM-role: a clean own-domain personal email + (a role-titled name OR just a named clean email), mirroring scoreLead.
   const _ROLE_TITLES = /(founder|owner|principal|partner|director|ceo|cfo|coo|cto|cmo|president|head of|managing|proprietor|chief|md\b)/i;

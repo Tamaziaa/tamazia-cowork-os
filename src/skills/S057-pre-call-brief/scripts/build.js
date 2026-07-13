@@ -12,7 +12,12 @@ function pg(sql) {
   if (!url) return null;
   try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; }
 }
-function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// js/incomplete-html-attribute-sanitization: esc() escaped & < > but NOT quotes, and its output lands inside
+// href="..." — a value containing a double quote could close the attribute and add its own. Escape quotes too.
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+// Only ever emit http(s) URLs in an href. `javascript:` / `data:` survive HTML-escaping untouched and would still
+// execute; escaping is not a scheme check. Anything else collapses to '#'.
+function safeUrl(u) { const t = String(u == null ? '' : u).replace(/[\u0000-\u0020\u00a0\u200b\ufeff]/g, ''); return /^https?:\/\//i.test(t) ? t : '#'; }
 
 function loadLead(lead_id) {
   const raw = pg(`SELECT id::text, company, COALESCE(domain,''), COALESCE(sector,''), COALESCE(jurisdiction,'UK'), COALESCE(audit_url,''), ad_intel::text, COALESCE(priority_score,50)::text FROM leads WHERE id=${lead_id}`);
@@ -83,7 +88,7 @@ ${topCritical.map((p, i) => `
   <p style="margin:2px 0">${esc(p.layman_explanation || p.fact || '')}</p>
   <p style="margin:2px 0;color:#3D0E0E"><strong>Tamazia fix:</strong> ${esc(p.tamazia_fix_short || p.recommendation || '')}</p>
 `).join('')}
-${lead.audit_url ? `<p><a href="${esc(lead.audit_url)}">Full audit on file →</a></p>` : ''}
+${lead.audit_url ? `<p><a href="${esc(safeUrl(lead.audit_url))}">Full audit on file →</a></p>` : ''}
 </div>` : ''}
 
 <div class="section">

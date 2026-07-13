@@ -37,6 +37,14 @@ except Exception:  # pragma: no cover - import-time capability probe
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("crawl-render")
 
+
+def _log_safe(v, limit=300):
+    """Neutralise CR/LF and other control chars before a caller-supplied value reaches a log record.
+    Without this, a URL containing %0d%0a lets the caller forge additional (fake) log lines."""
+    t = str(v)[:limit]
+    return "".join(ch if (ch.isprintable() and ch not in "\r\n") else "?" for ch in t)
+
+
 app = FastAPI(title="tamazia-crawl-render", version="1.0")
 
 _CONCURRENCY = int(os.environ.get("RENDER_CONCURRENCY", "4"))
@@ -98,7 +106,9 @@ async def render(url: str = Query(..., description="absolute http(s) URL to rend
             # The exception text (and, for some Playwright/crawl4ai errors, a full traceback) can carry internal
             # paths, env values and upstream detail. Log it server-side with the stack; return a generic reason.
             # The caller (compliance.js gatherCorpus) only branches on ok:false, never on the reason string.
-            log.exception("render failed for %s", url)
+            # py/log-injection: `url` is caller-supplied. A CR/LF (or an escaped \r\n) in it can forge a whole
+            # extra log record. Flatten every control char before it reaches the log line.
+            log.exception("render failed for %s", _log_safe(url))
             return JSONResponse({"ok": False, "reason": "render_failed", "url": url}, status_code=200)
     return {
         "ok": bool(text and len(text) > 80),
