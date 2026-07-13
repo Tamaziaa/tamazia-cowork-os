@@ -876,8 +876,50 @@ async function neonHttp(sqlText, params, opts) {
   return { transport: lastTransport || 'unknown' };
 }
 
+// E-262 (v23.4) — THE VERSION GATE. EVERY MINTER, EVERYWHERE, MINTS AT THE LATEST VERSION OR IT DOES NOT MINT.
+//
+// THE PROBLEM. There is not one minter. There are at least three, and only one of them is reachable from GitHub:
+//   1. GitHub Actions mint-now      — dispatched on `ref: main`, so it always has the latest code. Fine.
+//   2. The Oracle VM pm2 worker     — runs its own checkout on a box we cannot disable through the GitHub API.
+//                                     It minted nypost.com and therealdeal.com AFTER I disabled every workflow.
+//   3. The Hetzner mint fallback    — /opt/tamazia-mint, pinned at v19, and I have no SSH key for that box.
+// So "I stopped the mints" was TRUE of GitHub and FALSE of the estate. Worse: a stale worker will happily ship
+// audits built by two-versions-old code, which is exactly how a fabricated hacking accusation stayed live for days.
+//
+// THE FIX, and it works on a box we cannot even log into. The DATABASE is the one thing every minter must touch.
+// `engine_flags` holds the REQUIRED ENGINE_VERSION and a global mint_enabled switch. Before a single row is
+// claimed, EVERY minter reads it and REFUSES to build if:
+//     * mint_enabled is false                     -> a true global kill switch, Oracle and Hetzner included; or
+//     * its own ENGINE_VERSION != the required one -> a stale checkout physically cannot ship an audit.
+// Fail-CLOSED on purpose: if the flags cannot be read we still mint (a DB blip must not halt the business), but a
+// version MISMATCH always refuses, because shipping a stale audit is worse than shipping none.
+async function _versionGate() {
+  const required = (() => {
+    try {
+      const r = pg("SELECT COALESCE(required_engine_version,'') || '|' || mint_enabled::text FROM engine_flags WHERE id=1");
+      return String(r || '').trim();
+    } catch (_e) { return ''; }
+  })();
+  if (!required) return { ok: true, reason: 'flags_unreadable_fail_open' };   // a DB blip must not stop the business
+  const [want, enabled] = required.split('|');
+  if (String(enabled).toLowerCase() === 'f' || String(enabled).toLowerCase() === 'false') {
+    return { ok: false, reason: 'MINTING IS GLOBALLY DISABLED (engine_flags.mint_enabled = false). This switch reaches every minter, including the Oracle VM and the Hetzner fallback.' };
+  }
+  let mine = '';
+  try { mine = String(require('../../S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION || process.env.COMPLIANCE_ENGINE_VERSION || ''); } catch (_e) { mine = String(process.env.COMPLIANCE_ENGINE_VERSION || ''); }
+  if (!mine) { try { mine = String(require('child_process').execFileSync('node', ['-e', "const s=require('fs').readFileSync(require('path').join(process.cwd(),'src/skills/S008-personalisation-engine/scanners/compliance.js'),'utf8');const m=s.match(/COMPLIANCE_ENGINE_VERSION \|\| '([^']+)'/);process.stdout.write(m?m[1]:'')"], { encoding: 'utf8' })).trim(); } catch (_e) { mine = ''; }
+  }
+  if (want && mine && want !== mine) {
+    return { ok: false, reason: 'STALE MINTER REFUSED. This worker is on ENGINE_VERSION "' + mine + '" but the estate requires "' + want + '". Update the checkout (git pull) or it cannot ship an audit. Shipping a stale audit is worse than shipping none.' };
+  }
+  return { ok: true, version: mine };
+}
+
 async function build({ lead_id, domain, sector, country, company, env }) {
   if (!domain || !sector) throw new Error('domain and sector required');
+  // E-262: the gate runs BEFORE anything else. A stale or disabled minter never even crawls.
+  const _gate = await _versionGate();
+  if (!_gate.ok) { console.error('[version-gate] REFUSED ' + domain + ': ' + _gate.reason); throw new Error('version_gate: ' + _gate.reason); }
   const slug = slugify(company || domain.split('.')[0]);
   let hash = generateHash();
   // Shadow-validation redirect (default 'audit_pages' = prod unchanged; allow-list guarded, no injection).
