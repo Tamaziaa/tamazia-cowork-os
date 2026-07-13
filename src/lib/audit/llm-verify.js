@@ -213,6 +213,16 @@ async function llmVerifyPayload(p) {
           // E-241: the quorum leg gets the same GLOBAL guard — a GLOBAL framework has no jurisdiction and so can
           // never be flagged for a foreign family or a missing nexus (the freeths '[quorum] no serves evidence' class).
           if (FAMILY_OF(code) === 'GLOBAL' && (/no nexus|without nexus|no (establishment|evidence|serves)|not established|missing (nexus|evidence)|no serves/i.test(reason) || /famil|jurisdic|foreign/i.test(reason))) continue;
+          // E-266 (v23.7) — THE QUORUM LEG NEVER GOT THE E-228 NEXUS GUARD. The main leg has had it since June:
+          //     if (_regFam && FAMILY_OF(code) === _regFam && _nexusDoubtRx.test(reason)) continue;
+          // The quorum leg did not, so a SECOND model could veto a UK law on a UK firm and quarantine the audit.
+          // wardhadaway.com, a UK firm, was failed with:
+          //     UK_SRA_COC:[quorum] no nexus evidence for EU
+          //     UK_DMCC_2024:[quorum] no nexus evidence for EU
+          //     UK_ASA_CAP:[quorum] no nexus evidence for EU
+          // The SRA Code of Conduct does not need EU nexus evidence to bind an English solicitors' firm. The model
+          // invented an EU family for UK codes and the quorum had no guard to stop it. Registration IS the nexus.
+          if (_regFam && FAMILY_OF(code) === _regFam && _nexusDoubtRx.test(reason)) continue;
           const _styleOnly2 = /voluntar|not mandatory|industry code|professional code|guideline|only if member|membership|non.?binding|not universally|not a (law|statute|framework)|not sector-specific|general (corporate|consumer|data protection)? ?law|enforcement (agency|body)|applies (to|across) (all|any|every)|umbrella|broad(ly)? applicable/i.test(reason);
           if (_isSectorCore(code) && _sectorDoubtRx.test(reason)) continue;   // E-249: same immunity on the quorum leg
         if (binding.includes(code) && !(_styleOnly2 && _inFam2)) flags.push({ code, reason: '[quorum] ' + reason });
