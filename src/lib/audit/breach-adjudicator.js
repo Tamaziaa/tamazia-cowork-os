@@ -37,6 +37,28 @@ const VERDICTS = new Set(['breach', 'no_breach', 'insufficient']);
 // The rule types most prone to false positives. A `prohibit` rule fires when a PATTERN IS PRESENT, which is exactly
 // how "sex discrimination" became "injected pornography spam". A P0 is the loudest claim we make. Neither may ever
 // ship unadjudicated.
+// E-272 — AN OBSERVED FACT IS NOT AN INTERPRETATION, AND THE MODEL MUST NOT BE ASKED TO RULE ON ONE.
+//
+// THE BUG THIS KILLS (caught on the live russell-cooke page): the browser watched 11 tracking hosts and a
+// non-essential cookie fire BEFORE any consent. That is a completed breach of PECR reg.6 — a P0, and the single most
+// un-arguable finding this engine can produce. The adjudicator then DROPPED it, and the page told the client
+// "No critical statutory breach surfaced this scan."
+//
+// WHY: the adjudicator was built to kill REGEX false positives. Its whole method is to check a QUOTED PASSAGE OF
+// TEXT against the statute. A cookie observation has no text quote to check — the evidence is a cookie jar and a
+// network log, which the model cannot see. So the model, correctly following its own rubric, returns
+// "insufficient" / "no_breach", and our best evidence is suppressed by a judge who was handed no exhibit.
+//
+// THE RULE: findings whose evidence is a DIRECT OBSERVATION (a real browser reading the cookie jar) or a PUBLIC
+// REGISTER lookup (the ICO Register of Data Controllers) are FACTS, not readings of a page. They bypass adjudication
+// entirely and ship as observed. The adjudicator keeps full authority over every text-derived finding, which is the
+// only class that ever fabricated anything.
+const OBSERVED_STATES = new Set(['observed_in_browser', 'public_register_checked']);
+function _observedFact(f) {
+  const st = f && f.absence_evidence && f.absence_evidence.state;
+  return !!(st && OBSERVED_STATES.has(String(st)));
+}
+
 function _highRisk(f) {
   if (!f) return false;
   if (String(f.severity || '') === 'P0') return true;
@@ -185,6 +207,8 @@ async function adjudicateBreaches(findings, ctx, opts) {
   const _fallback = (reason) => {
     let demoted = 0;
     for (const f of out) {
+      // E-272: an observed fact needs no model. It is not demoted when the LLM is down; it was never in doubt.
+      if (_observedFact(f)) { f.adjudicated = true; f.adjudication = 'observed_fact'; continue; }
       f.adjudicated = false;
       if (_highRisk(f)) { f.state = 'NEEDS_REVIEW'; f.adjudication = 'unadjudicated_high_risk'; demoted++; }
     }
@@ -195,8 +219,18 @@ async function adjudicateBreaches(findings, ctx, opts) {
   const deadline = Date.now() + Number((opts && opts.deadline_ms) || 60000);
   const report = { ran: true, total: out.length, breach: 0, no_breach: 0, insufficient: 0, unadjudicated: 0, dropped: 0, batches: [] };
 
-  for (let start = 0; start < out.length; start += BATCH) {
-    const batch = out.slice(start, start + BATCH);
+  // E-272: observed facts are ring-fenced BEFORE batching. They are never shown to the model, so it can never
+  // "insufficient" away a cookie it structurally cannot see.
+  let observed = 0;
+  for (const f of out) {
+    if (_observedFact(f)) { f.adjudicated = true; f.adjudication = 'observed_fact'; observed++; }
+  }
+  report.observed_fact = observed;
+  const judgeable = out.filter((f) => !_observedFact(f));
+  report.total = judgeable.length;
+
+  for (let start = 0; start < judgeable.length; start += BATCH) {
+    const batch = judgeable.slice(start, start + BATCH);
     const briefs = batch.map((f, i) => _brief(f, i));
     // E-255: retrieve the REAL statute text for every framework in this batch, so the model rules against the law
     // as enacted rather than against our own description column.
