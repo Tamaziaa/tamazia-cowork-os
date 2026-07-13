@@ -29,10 +29,10 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: "24" }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "3.12" }
       - name: Install deps (pg8000 shim + JobSpy)
         run: |
@@ -45,14 +45,17 @@ jobs:
           if ! grep -q '^PAGESPEED_API_KEY=' .env && [ -n "${{ secrets.PAGESPEED_API_KEY }}" ]; then echo "PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}" >> .env; fi
       - name: Run gated scrapers
         env:
+          T1_TARGET: ${{ github.event.inputs.t1_target || '50' }}
+          SOURCES: ${{ github.event.inputs.sources || 'serp-top,maps,jobspy,reddit,youtube,x-ads,social-ads' }}
+          MAX: ${{ github.event.inputs.max || '200' }}
           # heartbeat.js default wrap timeout = 20 min (1200000 ms). The scraper run regularly
           # approaches 20 min, causing the heartbeat wrapper to SIGKILL the child and exit 124.
           # Set to 35 min — safely below the 40-min job timeout — so the scraper always finishes.
           HEARTBEAT_WRAP_TIMEOUT_MS: "2100000"
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
-          export SOURCE_T1_TARGET="${{ github.event.inputs.t1_target || '50' }}"
-          node scripts/heartbeat.js wrap scrapers -- node scripts/source-leads.js --source ${{ github.event.inputs.sources || 'serp-top,maps,jobspy,reddit,youtube,x-ads,social-ads' }} --max ${{ github.event.inputs.max || '200' }}
+          export SOURCE_T1_TARGET="$T1_TARGET"
+          node scripts/heartbeat.js wrap scrapers -- node scripts/source-leads.js --source $SOURCES --max $MAX
       - name: Alert on failure
         if: failure()
         run: |

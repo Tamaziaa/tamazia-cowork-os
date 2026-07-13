@@ -48,11 +48,11 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
       - name: Install Node deps
@@ -65,22 +65,31 @@ jobs:
       - name: Run Layer-3 complete batch
         id: layer3
         continue-on-error: true
+        env:
+          MAX_IN: ${{ github.event.inputs.max || '400' }}
+          RECHECK_IN: ${{ github.event.inputs.recheck_hours || '24' }}
+          APPLY_INPUT: ${{ github.event.inputs.apply }}
+          FORCE_IN: ${{ github.event.inputs.force || '0' }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # Cron events always apply (times already staggered clear of heavy writers + race-guard as belt+braces).
           # Dispatch with apply=0 for a forced dry run; dispatch with apply=1 (the default) for a real run.
-          MAX="${{ github.event.inputs.max || '400' }}"
-          RECHECK="${{ github.event.inputs.recheck_hours || '24' }}"
+          MAX="$MAX_IN"
+          RECHECK="$RECHECK_IN"
           APPLY_FLAG=""
-          APPLY_IN="${{ github.event.inputs.apply }}"
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${APPLY_IN:-1}" = "1" ]; then APPLY_FLAG="--apply"; fi
+          APPLY_IN="$APPLY_INPUT"
+          if [ "$EVENT_NAME" = "schedule" ] || [ "${APPLY_IN:-1}" = "1" ]; then APPLY_FLAG="--apply"; fi
           FORCE_FLAG=""
-          [ "${{ github.event.inputs.force || '0' }}" = "1" ] && FORCE_FLAG="--force"
+          [ "$FORCE_IN" = "1" ] && FORCE_FLAG="--force"
           echo "[layer3-wf] max=$MAX recheck=$RECHECK apply='${APPLY_FLAG:-(dry)}' force='${FORCE_FLAG:-no}'"
           node scripts/layer3-complete-batch.js --max "$MAX" --recheck-hours "$RECHECK" $APPLY_FLAG $FORCE_FLAG 2>&1 | tee /tmp/layer3_out.txt
           if grep -q "RACE-GUARD: heavy writer" /tmp/layer3_out.txt; then echo "DEFERRED=1" >> "$GITHUB_OUTPUT"; fi
       - name: Self-retry after race-guard deferral
         if: steps.layer3.outputs.DEFERRED == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           # Re-queue this workflow (apply=1 force=0 recheck_hours=0) so it runs as soon as the heavy writer clears.
           # force=0: keeps LLM in-band disabled (force=1 would re-enable inline LLM and exhaust the 60-min budget).
@@ -90,9 +99,9 @@ jobs:
           echo "[layer3-wf] deferred by race-guard — sleeping 10m before re-queue to avoid tight loop..."
           sleep 600
           curl -s -X POST \
-            -H "Authorization: token ${{ github.token }}" \
+            -H "Authorization: token $GH_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/layer3-complete.yml/dispatches" \
+            "https://api.github.com/repos/$REPO/actions/workflows/layer3-complete.yml/dispatches" \
             -d '{"ref":"main","inputs":{"max":"400","apply":"1","recheck_hours":"0","force":"0"}}' && \
           echo "[layer3-wf] re-queued OK (will run when backlog-burst/llm-rescue finishes)"
       - name: Alert on failure
