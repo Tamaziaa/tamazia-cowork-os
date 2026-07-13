@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
+# SEC-02: these values were HARDCODED IN A PUBLIC REPOSITORY.
+# SESSION_SECRET signs admin cockpit sessions; anyone reading this file could forge one. PASS_HASH was the admin
+# password hash and ADMIN_USER was a guessable literal. They are now required from the environment.
+# REMOVING THEM FROM THE FILE DOES NOT UN-PUBLISH THEM: they remain in git history on a public repo, so every one
+# of them MUST BE ROTATED. See the note in the pull request.
+
 # Deploy the admin dashboard Worker to tamazia.co.uk/admin*
 set -e
 cd "$(dirname "$0")/.."
 source .env
 
 ACCT="78c7941714fccce82e777108db054961"
-ZONE_ID="a564b60458bb5eec33bbe7f13eb0e4e1"
+ZONE_ID="${CF_ZONE_ID:?CF_ZONE_ID is required}"
 SCRIPT_NAME="tamazia-admin"
 TOKEN="${CLOUDFLARE_API_TOKEN:?required}"
-PASS_HASH="57bcf6bbac2e657c7278fe53da3218803622c1a4eb5a0f674ad534312d08ceda"
-SESSION_SECRET="5a65dc9f35f824f66e7b5ada10df7a03c26b8ad7d90ecc1769d6427059e58363"
-ADMIN_USER="admin123"
+PASS_HASH="${ADMIN_PASS_HASH:?ADMIN_PASS_HASH is required — never hardcode it, this repo is PUBLIC}"
+SESSION_SECRET="${ADMIN_SESSION_SECRET:?ADMIN_SESSION_SECRET is required — never hardcode it, this repo is PUBLIC}"
+ADMIN_USER="${ADMIN_USER:?ADMIN_USER is required}"
 
 echo "[1/3] Substituting secrets into worker..."
 WORKER_TMP="/tmp/admin-worker-deploy.js"
