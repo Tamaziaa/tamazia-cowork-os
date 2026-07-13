@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+const { isHostPath } = require('../src/lib/util/url-safe.js');
 // 24/7 enrichment worker — the binding throttle of the pipeline. Drains un-enriched leads at concurrency,
 // runs the website-first DIY waterfall (enrichCompany) with the cost-governed Apify escalation on served
 // verticals, then persists THE decision-maker (primary_email/role/source/confidence) + the secondary cc/bcc
@@ -67,7 +68,7 @@ async function enrichOne(row) {
   // jsonb [{name,title,linkedin,source}]. This is additive — the legacy single linkedin_url is still written.
   const liNames = (() => {
     const out = []; const seen = new Set();
-    const isPersonal = (u) => /linkedin\.com\/in\//i.test(String(u || ''));
+    const isPersonal = (u) => isHostPath(u, 'linkedin.com', '/in/');   // D-05
     for (const d of (rec.decisionMakers || [])) {
       if (out.length >= 3) break;
       const u = d.linkedin || '';

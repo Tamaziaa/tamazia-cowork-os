@@ -1,3 +1,4 @@
+const { isHost } = require('../util/url-safe.js');
 // Multi-channel enrichment waterfall · FREE sources only (no API keys required).
 // For each lead: discover website → scrape published emails → find LinkedIn + Instagram →
 // decide best_channel (email > linkedin > instagram). Brief/news handled by S063 separately.
@@ -102,7 +103,7 @@ async function findSocial(company, kind, domain) {
   // 2) DDG site search
   const site = kind === 'linkedin' ? 'linkedin.com/company' : 'instagram.com';
   const hits = await ddg(`site:${site} ${company}`);
-  if (hits.length) { const h = hits.find(x => x.includes(kind === 'linkedin' ? 'linkedin.com' : 'instagram.com')); if (h) return h.split('?')[0]; }
+  if (hits.length) { const h = hits.find(x => isHost(x, kind === 'linkedin' ? 'linkedin.com' : 'instagram.com')); if (h) return h.split('?')[0]; }   // D-05: host, not substring
   return '';
 }
 

@@ -1,3 +1,5 @@
+const { htmlToText } = require('../../../lib/util/html-text.js');
+const { isNonCrawlable } = require('../../../lib/util/url-safe.js');
 // Compliance scanner · Phase 6 task 6.2.4
 // Loads compliance_rules per the jurisdiction-router output for (country, sector).
 // For each rule, runs regex_pattern + url_check against home and standard policy pages.
@@ -185,7 +187,7 @@ function _discoverLinks(html, base, accepted) {
   const out = [];
   const re = /href\s*=\s*["']([^"'#]+)/gi; let m; // allow '?' so CMS pages (/privacy?page_id=) are discovered (bug #45)
   while ((m = re.exec(html)) && out.length < 600) {
-    let href = m[1].trim(); if (!href || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) continue;
+    let href = m[1].trim(); if (isNonCrawlable(href)) continue;   // D-03: case/whitespace tolerant; also blocks vbscript:/data:
     let abs; try { abs = new URL(href, base).toString(); } catch (_e) { continue; }
     if (_sameSite(abs, accepted)) out.push(abs.split('#')[0]);   // same registrable site → includes subdomains + www
   }
@@ -484,18 +486,7 @@ function detectOperatingJurisdictions(corpus) {
 // Word-level evidence: given a page body + a regex, return the matched term AND the enclosing sentence
 // from the client's own copy, cleaned of markup. This is what lets a finding quote their exact offending words.
 function _stripText(html) {
-  // Tag removal loops to a FIXED POINT: a single pass is defeatable by nesting — deleting the inner match from
-  // `<scr<script>ipt>alert(1)<\/script>` re-forms a live `<script>` in the "stripped" text. Well-formed HTML is
-  // fully stripped on pass 1, so this is a no-op for every real page and only closes the nesting bypass.
-  let t = String(html || ''), prev;
-  do {
-    prev = t;
-    t = t.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-         .replace(/<[^>]+>/g, ' ');
-  } while (t !== prev);
-  return t
-    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&[a-z]+;/gi, ' ')
-    .replace(/\s+/g, ' ').trim();
+  return htmlToText(html);   // D-01: THIS builds the corpus every evidence_quote is cut from
 }
 const _PROSE_WORDS = /\b(the|a|an|of|to|your|our|we|you|is|are|was|were|will|may|can|must|with|for|that|this|and|or|but|if|when|how|all|any|please|do|not|no|on|in|at|by|as|it|they|their|these|those|because|so|than|then|from|have|has|had)\b/gi;
 // Decide whether a candidate string is a genuine prose sentence vs nav/footer/boilerplate (Title-Case link runs).
@@ -638,7 +629,7 @@ function _dpPolicyPageUnread(rule, corpus) {
     /supervisory\s+authority|autorit[ée]\s+de\s+contr[ôo]le|aufsichtsbeh[öo]rde|\bCNIL\b|\bICO\b|garante\s+per\s+la\s+protezione/i,
     /personal\s+data|donn[ée]es\s+(?:[àa]\s+caract[èe]re\s+)?personnel|personenbezogene\s+daten|dati\s+personali|datos\s+personales/i
   ];
-  const _stripHtml = (h) => String(h || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  const _stripHtml = (h) => htmlToText(h);   // D-01
   // DEEP markers appear ONLY in real policy BODY text, never in a homepage footer's link labels. A homepage footer
   // carries shallow labels like "Politique de confidentialité / Mentions légales / Données personnelles" (that tripped
   // the old >=2-shallow check off the homepage on ramsaysante.fr). It NEVER says "responsable de traitement", "droit à
@@ -982,7 +973,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   {
     const _home = (corpus[0] && corpus[0].body) || '';
     const _langAttr = (String(_home).match(/<html[^>]*lang\s*=\s*["']?\s*([a-z]{2})/i) || [])[1] || '';
-    const _visible = corpusText.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').toLowerCase();
+    const _visible = htmlToText(corpusText).toLowerCase();   // D-01: JS keywords were skewing the language vote
     const _count = (rx) => (_visible.match(rx) || []).length;
     const _en = _count(/(the|and|of|to|for|with|your|our|we|you|is|are|this|that|from|please|contact|about|services?)/g);
     const _fr = _count(/(le|la|les|des|une?|nous|vous|votre|nos|pour|avec|est|sont|cette|vie priv[ée]e|donn[ée]es|mentions l[ée]gales|acc[eé]der|d[ée]couvrir|nos services)/g);
@@ -1201,7 +1192,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     return payload;
   }
   // P1.5a verify-context: the best relevant page text for LLM-grounding the fine-bearing findings.
-  const _stripTxt = (h) => String(h || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const _stripTxt = (h) => htmlToText(h);   // D-01: this text is what the LLM verifier is grounded on
   const _policyText = _policyPages.map(p => _stripTxt(p.body)).join(' \n ').slice(0, 2600);
   const _homeText = _stripTxt((corpus[0] && corpus[0].body) || '').slice(0, 2600);
   const findings = [];

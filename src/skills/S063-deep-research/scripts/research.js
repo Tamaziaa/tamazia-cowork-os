@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const { htmlToText } = require('../../../lib/util/html-text.js');
 // S063 · Deep per-lead research → personalised Touch 0
 // Combines: (1) Gemini extraction of full company profile from website
 //           (2) DDG search for recent news + press + leadership changes
@@ -33,7 +34,7 @@ async function fetchSite(domain, paths = ['/', '/about', '/about-us', '/services
     try {
       const r = await fetchWithRetry(`https://${domain}${p}`, { headers: BROWSER, timeout: 9000, retries: 0 });
       if (r.ok && r.body && r.body.length > 1000) {
-        const clean = r.body.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 8000);
+        const clean = htmlToText(r.body).slice(0, 8000);   // D-01
         combined += `\n\n=== ${p} ===\n${clean}`;
         evidence_urls.push(`https://${domain}${p}`);
         if (combined.length > 40000) break;

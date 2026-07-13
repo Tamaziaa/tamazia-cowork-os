@@ -3,6 +3,7 @@
 // name -> candidate email + MX/disposable/role verification (no SMTP, port 25 is blocked everywhere).
 // Hunter/NeverBounce are optional boosters. Every result cached in Neon so a domain is enriched once.
 'use strict';
+const { isHostPath } = require('../util/url-safe.js');
 const dns = require('dns').promises;
 const UA = 'Mozilla/5.0 (compatible; TamaziaBot/1.0; +https://tamazia.co.uk)';
 const DM = /(owner|founder|co-?founder|ceo|chief executive|managing director|\bmd\b|managing partner|senior partner|\bpartner\b|principal|\bdirector\b|head of|vice president|\bvp\b|chief|\bcmo\b|\bcto\b|\bcoo\b|\bcfo\b|business development|sales director|sales manager|marketing director|practice manager|clinic director|general manager)/i;
@@ -141,7 +142,7 @@ async function serperDecisionMakers(company, key) {
   if (!key || !company) return [];
   const q = `site:linkedin.com/in ${company} (CEO OR "Managing Director" OR Founder OR Owner OR Partner OR Director)`;
   const d = await getJSON('https://google.serper.dev/search', { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ q, num: 8 }) }, 15000);
-  return ((d && d.organic) || []).filter(o => /linkedin\.com\/in\//i.test(o.link || '')).map(o => { const t = (o.title || '').replace(/\s*\|\s*LinkedIn.*/i, ''); const [name, ...rest] = t.split(/\s[-–]\s/); const nm = (name || '').trim(); const [first, ...lr] = nm.split(/\s+/); return { name: nm, first_name: first || '', last_name: lr.join(' '), title: rest.join(' - ').trim(), linkedin: o.link, source: 'serper' }; });
+  return ((d && d.organic) || []).filter(o => isHostPath(o.link || '', 'linkedin.com', '/in/')).map(o => { const t = (o.title || '').replace(/\s*\|\s*LinkedIn.*/i, ''); const [name, ...rest] = t.split(/\s[-–]\s/); const nm = (name || '').trim(); const [first, ...lr] = nm.split(/\s+/); return { name: nm, first_name: first || '', last_name: lr.join(' '), title: rest.join(' - ').trim(), linkedin: o.link, source: 'serper' }; });
 }
 // The firm's OWN website is the strongest email signal. Pull every address (mailto + plain-text +
 // common obfuscations), and for each, bind a nearby NAME + ROLE from the surrounding HTML so the

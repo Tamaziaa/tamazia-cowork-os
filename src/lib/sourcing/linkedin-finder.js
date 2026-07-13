@@ -1,3 +1,4 @@
+const { isHostPath } = require('../util/url-safe.js');
 // LinkedIn profile finder · no key, no LinkedIn login required.
 // Uses DuckDuckGo HTML site-search (Google rate-limits but DDG is permissive).
 // Returns ranked candidate URLs by name + company + jurisdiction match.
@@ -49,7 +50,7 @@ function scoreCandidate({ first, last, company, jurisdiction }, candidate) {
   if (last && hasWord(t, last)) score += 35;
   if (company && hasWord(t, company)) score += 25;
   // URL pattern match for linkedin.com/in/
-  if (candidate.url && /linkedin\.com\/in\//i.test(candidate.url)) score += 10;
+  if (candidate.url && isHostPath(candidate.url, 'linkedin.com', '/in/')) score += 10;   // D-05
   if (jurisdiction) {
     const jurMap = { UK: ['united kingdom', 'london', 'manchester', 'edinburgh', 'birmingham'], US: ['united states', 'new york', 'san francisco', 'los angeles', 'chicago'], FR: ['france', 'paris'], DE: ['germany', 'berlin', 'munich'], UAE: ['uae', 'dubai', 'abu dhabi'] };
     const tokens = jurMap[jurisdiction] || [];

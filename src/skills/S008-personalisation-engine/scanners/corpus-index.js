@@ -1,4 +1,5 @@
 'use strict';
+const { htmlToText } = require('../../../lib/util/html-text.js');
 // WS-B2 — corpus word-index. Scans EVERY word/line of EVERY crawled page (homepage, policy pages, AND blog posts,
 // FAQs, testimonials, footers) so a single offending line ANYWHERE on the site is flagged with its exact page URL +
 // the verbatim sentence. Two problems it solves vs the legacy first-hit matcher:
@@ -15,20 +16,7 @@ const PER_PAGE_CAP = 80000;  // per-page budget: one huge page can't crowd later
 const JOIN_CAP = 2000000;    // absolute memory ceiling (≈2MB) — 30 pages × 80KB fits, so EVERY page is indexed
 
 // ── verbatim from scanners/compliance.js (kept in sync by test-corpus-index.js) ──────────────────────────────
-function _stripText(html) {
-  // Tag removal loops to a FIXED POINT: a single pass is defeatable by nesting — deleting the inner match from
-  // `<scr<script>ipt>alert(1)<\/script>` re-forms a live `<script>` in the "stripped" text. Well-formed HTML is
-  // fully stripped on pass 1, so this is a no-op for every real page and only closes the nesting bypass.
-  let t = String(html || ''), prev;
-  do {
-    prev = t;
-    t = t.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-         .replace(/<[^>]+>/g, ' ');
-  } while (t !== prev);
-  return t
-    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&[a-z]+;/gi, ' ')
-    .replace(/\s+/g, ' ').trim();
-}
+function _stripText(html) { return htmlToText(html); }   // D-01 (kept in sync with compliance.js)
 const _PROSE_WORDS = /\b(the|a|an|of|to|your|our|we|you|is|are|was|were|will|may|can|must|with|for|that|this|and|or|but|if|when|how|all|any|please|do|not|no|on|in|at|by|as|it|they|their|these|those|because|so|than|then|from|have|has|had)\b/gi;
 function _isProse(str) {
   const words = str.split(/\s+/).filter(Boolean);
