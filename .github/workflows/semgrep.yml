@@ -1,0 +1,39 @@
+name: Semgrep
+# Semgrep OSS: free, no account, no token, no MCP required. Runs the community rulesets in CI and
+# uploads SARIF so findings appear in Security > Code scanning alongside CodeQL.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '30 3 * * 1'
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep scan (OSS rules)
+        # p/default = curated OSS ruleset. p/secrets catches leaked keys, which matters because this
+        # repo carries an ENV_B64 secret and a Neon URL. p/javascript + p/python for language depth.
+        run: |
+          semgrep scan \
+            --config=p/default \
+            --config=p/secrets \
+            --config=p/javascript \
+            --config=p/python \
+            --sarif --output=semgrep.sarif \
+            --metrics=off \
+            --error || true
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
