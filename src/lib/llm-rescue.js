@@ -231,7 +231,8 @@ async function llmJson({ system, prompt, role = 'classify', max_tokens = 400, le
 // nothing). Keeps the leading brandable tokens; never fabricates.
 function cleanCompanyForQuery(company) {
   let c = String(company || '')
-    .replace(/&amp;/gi, '&').replace(/&#0?38;/g, '&').replace(/&quot;/gi, '"').replace(/&#0?39;|&apos;/gi, "'").replace(/&nbsp;/gi, ' ')
+    // &amp; is decoded LAST: decoding it first makes `&amp;quot;` collapse to `"` (double-unescaping).
+    .replace(/&quot;/gi, '"').replace(/&#0?39;|&apos;/gi, "'").replace(/&nbsp;/gi, ' ').replace(/&amp;|&#0?38;/gi, '&')
     .replace(/\s+/g, ' ').trim();
   // drop a leading SEO prefix ('Home - ', 'Welcome to ') and a trailing pipe/dash tagline.
   c = c.replace(/^(home|welcome to|home page|homepage)\s*[-|:–]\s*/i, '').split(/\s*[|]\s*/)[0].trim();

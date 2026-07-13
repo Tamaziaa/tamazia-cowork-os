@@ -33,8 +33,10 @@ const body = rows.join('\n');
 const hash = crypto.createHash('sha256').update(body).digest('hex');
 module.exports = { body, hash, cells: rows.length };
 if (require.main === module) {
-  const fs = require('fs');
-  const out = process.argv[2] || '/tmp/shadow_baseline.txt';
+  const fs = require('fs'); const os = require('os'); const path = require('path');
+  // default to a private mkdtemp dir rather than a guessable /tmp path (symlink-hijackable by any local user)
+  const out = process.argv[2] || path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tamazia-')), 'shadow_baseline.txt');
   fs.writeFileSync(out, body);
+  console.log('baseline written to ' + out);
   console.log(`cells=${rows.length} sha256=${hash}`);
 }

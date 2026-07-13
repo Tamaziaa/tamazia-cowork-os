@@ -15,7 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const DISCLAIMER_PATH = path.join(ROOT, 'signatures', 'disclaimer.txt');
@@ -58,8 +58,10 @@ function lookupFramework() {
     const psql = path.resolve(__dirname, '..', '..', '..', '..', 'scripts', 'psql');
     const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
     if (!url || !fs.existsSync(psql)) throw new Error('no psql');
-    const v = execSync(`${psql} "${url}" -tA -c "SELECT MAX(version) FROM framework_versions WHERE status='active'"`).toString().trim();
-    const d = execSync(`${psql} "${url}" -tA -c "SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'"`).toString().trim().slice(0,10);
+    // execFileSync + argv array: no shell, so the connection URL (which carries the DB password) cannot be
+    // interpreted as shell syntax and is not exposed on a shell command line.
+    const v = execFileSync(psql, [url, '-tA', '-c', "SELECT MAX(version) FROM framework_versions WHERE status='active'"]).toString().trim();
+    const d = execFileSync(psql, [url, '-tA', '-c', "SELECT MAX(last_reviewed_at) FROM framework_versions WHERE status='active'"]).toString().trim().slice(0,10);
     return { version: v || '1.0.0', date: d || new Date().toISOString().slice(0,10) };
   } catch (_e) {
     return { version: process.env.FRAMEWORK_VERSION || '1.0.0', date: new Date().toISOString().slice(0,10) };

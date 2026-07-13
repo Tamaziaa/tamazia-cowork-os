@@ -11,6 +11,10 @@ for (const [code, r] of Object.entries(INTEL)) {
   for (const ev of (r.evidence || [])) sql += `INSERT INTO law_obligations(law_id,obligation_type,plain_text,evidence_type) VALUES('${code}','obligation','${q(ev)}','element_present') ON CONFLICT (law_id,plain_text) DO NOTHING;\n`;
   if (r.enforcement) sql += `INSERT INTO law_enforcement(law_id,authority,summary,source_note) VALUES('${code}','${q(r.regulator)}','${q(r.enforcement)}','framework-intel') ON CONFLICT (law_id,summary) DO NOTHING;\n`;
 }
-const f = '/tmp/_load-law.sql'; require('fs').writeFileSync(f, sql);
+const fs = require('fs'); const os = require('os');
+// mkdtempSync (0700, unpredictable name) — a fixed /tmp path is symlink-hijackable by any local user.
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tamazia-'));
+const f = path.join(tmpDir, '_load-law.sql'); fs.writeFileSync(f, sql);
 execFileSync(path.join(__dirname, 'psql'), [NEON, '-f', f], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+try { fs.unlinkSync(f); fs.rmdirSync(tmpDir); } catch (_e) {}
 console.log('loaded law_records from framework-intel (' + Object.keys(INTEL).length + ' laws)');

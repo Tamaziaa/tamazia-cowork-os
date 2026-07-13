@@ -104,7 +104,11 @@ class ImapClient {
   }
 
   async login() {
-    const r = await this.send(`LOGIN "${this.user.replace(/"/g, '\\"')}" "${this.pass.replace(/"/g, '\\"')}"`);
+    // RFC 3501 quoted-string: both quoted-specials (" and \) must be backslash-escaped. The old code escaped
+    // only " — so a credential containing a backslash escaped the trailing quote and injected an IMAP command.
+    // Single regex pass over BOTH chars = the escape char cannot be used to smuggle an unescaped quote.
+    const qq = s => String(s == null ? '' : s).replace(/[\\"]/g, c => '\\' + c);
+    const r = await this.send(`LOGIN "${qq(this.user)}" "${qq(this.pass)}"`);
     if (r.status !== 'OK') throw new Error(`IMAP LOGIN failed: ${r.status} ${r.text}`);
     return r;
   }

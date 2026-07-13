@@ -11,6 +11,13 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 COPY app.py .
 
+# Drop root. This service executes attacker-influenced content (it renders arbitrary third-party pages in a real
+# browser), so a Chromium/renderer escape must not land on a root shell. `pwuser` (uid 1000) ships with the
+# Playwright base image and already has read access to the browsers under /ms-playwright and a writable $HOME
+# for the crawl4ai cache. /app is chowned so nothing in the app tree needs root to read.
+RUN chown -R pwuser:pwuser /app
+USER pwuser
+
 ENV RENDER_CONCURRENCY=4 \
     RENDER_TIMEOUT_MS=25000 \
     PORT=8080

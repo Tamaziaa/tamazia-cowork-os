@@ -447,13 +447,17 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       present_elements: Array.isArray(f.present_elements) ? f.present_elements : null,
       rule_type: f.rule_type || null,
       fine_low_gbp: f.fine_low_gbp || null, fine_high_gbp: f.fine_high_gbp || null,
-      penalty_basis: f.penalty_basis || null, penalty_note: f.penalty_note || null, enforce_typical_low_gbp: f.enforce_typical_low_gbp || null, enforce_typical_high_gbp: f.enforce_typical_high_gbp || null, enforce_methodology: f.enforce_methodology || null, enforce_context: f.enforce_context || null, enforce_max_rare: !!f.enforce_max_rare, statutory_citation: f.statutory_citation || null,
+      penalty_note: f.penalty_note || null, enforce_typical_low_gbp: f.enforce_typical_low_gbp || null, enforce_typical_high_gbp: f.enforce_typical_high_gbp || null, enforce_methodology: f.enforce_methodology || null, enforce_context: f.enforce_context || null, enforce_max_rare: !!f.enforce_max_rare, statutory_citation: f.statutory_citation || null,
       verify_context: f.verify_context || null,
       enforcement_example: f.enforcement_example || null,
       // ── B2/B3 backend→frontend sync: the per-breach panel + every-word locations (for the rich render) ──
       regulator,
       penalty: bp && bp.penalty ? bp.penalty.headline : (f.enforcement_example || null),
-      penalty_basis: bp && bp.penalty ? bp.penalty.basis : null,
+      // NOTE (js/overwritten-property): this key was previously declared TWICE in this literal — once as
+      // `f.penalty_basis` and again here — so the rule-level penalty_basis the scanner attaches to every
+      // finding was silently discarded, and became null on every finding without a breach_panel.
+      // Same fallback shape as `penalty:` above: prefer the breach-panel value, else keep the rule's.
+      penalty_basis: (bp && bp.penalty && bp.penalty.basis) || f.penalty_basis || null,
       recent_ruling: bp ? bp.recent_ruling : null,
       recent_news: bp ? bp.recent_news : null,
       impact: bp ? bp.impact : null,
@@ -1103,10 +1107,14 @@ async function build({ lead_id, domain, sector, country, company, env }) {
       // >100KB statement cannot ride execFileSync argv (128KB Linux cap) — temp-file -f path, then confirm by key.
       try {
         const _os = require('os'); const _fs = require('fs');
-        const _tmp = path.join(_os.tmpdir(), 'mint-' + hash + '.sql');
+        // mkdtempSync → 0700 dir with an unpredictable suffix: a predictable /tmp path can be pre-created as a
+        // symlink by any local user and turn this write into an arbitrary-file overwrite.
+        const _tmpDir = _fs.mkdtempSync(path.join(_os.tmpdir(), 'tamazia-'));
+        const _tmp = path.join(_tmpDir, 'mint-' + hash + '.sql');
         _fs.writeFileSync(_tmp, _stmt);
         try { execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL || process.env.NEON_CONNECTION_STRING, '-tA', '-f', _tmp], { encoding: 'utf8' }); } catch (_e) {}
         try { _fs.unlinkSync(_tmp); } catch (_e) {}
+        try { _fs.rmdirSync(_tmpDir); } catch (_e) {}
         _seam.shim = 'file';
       } catch (_e) { _seam.shim = 'file_err'; }
     } else {

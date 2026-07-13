@@ -5,7 +5,7 @@
 // Retention: 7 daily + 4 weekly (Sundays). Off-Neon copy survives provider loss (Oracle death proved single-provider loss).
 // Usage: node scripts/neon-backup.js            (full run)
 //        node scripts/neon-backup.js --dry      (no upload, no branch, no prune — prints plan)
-const path = require('path'); const fs = require('fs'); const { execFileSync, execSync } = require('child_process');
+const path = require('path'); const fs = require('fs'); const zlib = require('zlib'); const { execFileSync, spawn } = require('child_process');
 const { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const ROOT = path.resolve(__dirname, '..');
 const ENV = {}; try { for (const l of fs.readFileSync(path.join(ROOT, '.env'), 'utf8').split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m) ENV[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {}
@@ -22,13 +22,37 @@ const r2 = E('R2_ENDPOINT') ? new S3Client({ region: 'auto', endpoint: E('R2_END
   requestHandler: { requestTimeout: 300000, connectionTimeout: 15000 }, maxAttempts: 3 }) : null;
 const BUCKET = E('R2_BUCKET');
 
+// pg_dump | gzip > file WITHOUT a shell. The old form interpolated NEON (which carries the DB password) into a
+// shell command line: any metacharacter in the URL became command execution, and the secret was visible in the
+// process table to every local user. spawn() with an argv array never invokes a shell, and gzip is done
+// in-process by zlib, so there is no pipeline to quote. Same output file, same 20-minute cap.
+function pgDumpGz(neonUrl, outPath) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('pg_dump', ['--no-owner', '--no-privileges', '--format=plain', neonUrl], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const gz = zlib.createGzip({ level: 9 });
+    const out = fs.createWriteStream(outPath);
+    let settled = false, exitCode = null, fileClosed = false;
+    const timer = setTimeout(() => fail(new Error('pg_dump timed out after 20m')), 1000 * 60 * 20);
+    function fail(e) { if (settled) return; settled = true; clearTimeout(timer); try { child.kill('SIGKILL'); } catch (_) {} reject(e); }
+    function maybeDone() {
+      if (settled || exitCode === null || !fileClosed) return;
+      settled = true; clearTimeout(timer);
+      if (exitCode === 0) resolve(); else reject(new Error('pg_dump exited ' + exitCode));
+    }
+    child.on('error', fail); gz.on('error', fail); out.on('error', fail);
+    child.on('close', (c) => { exitCode = c; maybeDone(); });
+    out.on('close', () => { fileClosed = true; maybeDone(); });
+    child.stdout.pipe(gz).pipe(out);
+  });
+}
+
 async function dumpToR2() {
   if (!NEON) { logRun('pg_dump', 'fail', 'NEON_URL blank'); notify('🔴 Neon backup: NEON_URL blank — no dump taken'); return false; }
   if (!r2 || !BUCKET) { logRun('pg_dump', 'fail', 'R2 not configured'); notify('🔴 Neon backup: R2 not configured — no off-site copy'); return false; }
   const tmp = path.join(ROOT, `neondb-${ts}.sql.gz`);
   try {
     // pg_dump streams straight through gzip to a temp file. --no-owner/--no-privileges = portable restore into a fresh branch.
-    execSync(`pg_dump --no-owner --no-privileges --format=plain "${NEON}" | gzip -9 > "${tmp}"`, { stdio: ['ignore', 'ignore', 'inherit'], timeout: 1000 * 60 * 20 });
+    await pgDumpGz(NEON, tmp);
     const buf = fs.readFileSync(tmp); const bytes = buf.length;
     if (bytes < 1024) { logRun('pg_dump', 'fail', `dump suspiciously small (${bytes}B)`); notify(`🔴 Neon backup: dump only ${bytes}B — treating as FAILED`); fs.unlinkSync(tmp); return false; }
     const key = `backups/neon/${date}/neondb-${ts}.sql.gz`;

@@ -23,7 +23,9 @@ const SL = { booking: ':calendar:', reply: ':email:', stuck: ':rotating_light:' 
 // a subject "Re: your_offer [URGENT]" or an address "jane_doe@firm.com". A rejected message is swallowed by the
 // catch in postTelegram, so the alert would be SILENTLY DROPPED — the exact important-only event we must not lose.
 // Escape those four metachars in the user-supplied body only (the bold header we add ourselves stays intact).
-const tgEscape = s => String(s == null ? '' : s).replace(/([_*`[])/g, '\\$1');
+// NB: the backslash MUST be in the class and escaped first-class, otherwise a body containing `\` produces a
+// dangling escape that re-forms/neutralises the next escape (\ + \_ -> \\_ = literal backslash + active _).
+const tgEscape = s => String(s == null ? '' : s).replace(/([\\_*`[])/g, '\\$1');
 
 async function postSlack(text) { const tok = ENV.SLACK_BOT_TOKEN; if (!tok) return; try { await fetch('https://slack.com/api/chat.postMessage', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ channel: '#all-tamazia', text }), signal: AbortSignal.timeout(12000) }); } catch (_e) {} }
 async function postTelegram(text) { const tok = ENV.TELEGRAM_BOT_TOKEN, chat = ENV.TELEGRAM_CHAT_ID; if (!tok || !chat) return; try { await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text, parse_mode: 'Markdown' }), signal: AbortSignal.timeout(12000) }); } catch (_e) {} }

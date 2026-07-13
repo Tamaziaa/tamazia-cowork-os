@@ -1,4 +1,7 @@
 'use strict';
+// Strip HTML tags to a FIXED POINT. A single .replace() pass is defeatable by nesting: removing the inner
+// match from `<scr<script>ipt>` re-forms `<script>` in the output. Loop until the string stops changing.
+function stripTagsFP(s) { let t = String(s == null ? '' : s), prev; do { prev = t; t = t.replace(/<[^>]+>/g, ''); } while (t !== prev); return t; }
 const http = require('http');
 // Free, scalable SERP for the audit engine. £0 path to 15k+ audits/mo:
 //   query-level Neon cache (the SERP for "solicitors london" is shared by every London law-firm audit)
@@ -23,7 +26,7 @@ function parseDdgHtml(html) {
   const out = []; const re = /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi; let m;
   while ((m = re.exec(html)) && out.length < 20) {
     let href = m[1]; const um = href.match(/uddg=([^&]+)/); if (um) { try { href = decodeURIComponent(um[1]); } catch {} }
-    const title = m[2].replace(/<[^>]+>/g, '').trim();
+    const title = stripTagsFP(m[2]).trim();
     if (/^https?:/.test(href)) out.push({ title, url: href, domain: rootDomain(href), rank: out.length + 1 });
   }
   return out.length ? { organic: out, ads: [], provider: 'duckduckgo' } : null;

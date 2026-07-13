@@ -3,6 +3,9 @@
 // Polls public RSS/HTML feeds from key UK + EU + US regulators.
 // Writes new items to intel_items. No LLM. Deterministic. Free.
 
+// Strip HTML tags to a FIXED POINT. A single .replace() pass is defeatable by nesting: removing the inner
+// match from `<scr<script>ipt>` re-forms `<script>` in the output. Loop until the string stops changing.
+function stripTagsFP(s) { let t = String(s == null ? '' : s), prev; do { prev = t; t = t.replace(/<[^>]+>/g, ''); } while (t !== prev); return t; }
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
@@ -51,9 +54,11 @@ function parseRss(body) {
   let m;
   while ((m = itemRe.exec(body)) !== null) {
     const block = m[2];
-    const title = (block.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/) || [, ''])[1].replace(/<[^>]+>/g, '').trim();
+    const titleRaw = (block.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/) || [, ''])[1];
+    const title = stripTagsFP(titleRaw).trim();
     const link = (block.match(/<link[^>]*(?:href="([^"]+)"|>([\s\S]*?)<\/link>)/) || [])[1] || (block.match(/<link>([\s\S]*?)<\/link>/) || [, ''])[1].trim();
-    const desc = (block.match(/<(description|summary|content)[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(description|summary|content)>/) || [, , ''])[2].replace(/<[^>]+>/g, '').trim().slice(0, 800);
+    const descRaw = (block.match(/<(description|summary|content)[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(description|summary|content)>/) || [, , ''])[2];
+    const desc = stripTagsFP(descRaw).trim().slice(0, 800);
     const date = (block.match(/<(pubDate|updated|published)[^>]*>([\s\S]*?)<\/(pubDate|updated|published)>/) || [, , ''])[2].trim();
     if (title && (link || desc)) items.push({ title, link, desc, date });
   }

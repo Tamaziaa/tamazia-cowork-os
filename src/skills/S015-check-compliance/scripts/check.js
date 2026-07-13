@@ -10,7 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 const { routeJurisdictions } = require(path.resolve(__dirname, '..', '..', '..', 'lib', 'compliance', 'jurisdiction-router.js'));
 
@@ -31,7 +31,10 @@ function pgQuery(sql) {
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
   if (!url || !fs.existsSync(psql)) return null;
   try {
-    return execSync(`${psql} "${url}" -tA -c ${JSON.stringify(sql)}`, { encoding: 'utf8' }).trim();
+    // execFileSync + argv array: no shell is spawned, so neither the connection URL (which carries the DB
+    // password) nor the SQL can break out through a shell metacharacter, and the URL no longer appears in a
+    // shell command line visible in the process table.
+    return execFileSync(psql, [url, '-tA', '-c', sql], { encoding: 'utf8' }).trim();
   } catch (_e) { return null; }
 }
 

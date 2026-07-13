@@ -20,20 +20,57 @@ function notify(text) {
   try { execFileSync(path.resolve(ROOT, 'scripts', 'notify-telegram.sh'), [text], { stdio: 'pipe' }); } catch (_e) { /* */ }
 }
 
-function probe(host) {
+// TLS-validation errors that mean "we DID receive a certificate, we just refused to trust it".
+// These are precisely the states this monitor exists to alert on, so they get a scoped inspection retry.
+const CERT_VALIDATION_ERRORS = new Set([
+  'CERT_HAS_EXPIRED', 'CERT_NOT_YET_VALID', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'CERT_UNTRUSTED', 'CERT_REVOKED', 'ERR_TLS_CERT_ALTNAME_INVALID', 'HOSTNAME_MISMATCH',
+]);
+
+function readCert(socket, host) {
+  const cert = socket.getPeerCertificate();
+  if (!cert || !cert.valid_to) return null;
+  const not_before = new Date(cert.valid_from);
+  const not_after = new Date(cert.valid_to);
+  const days = Math.floor((not_after.getTime() - Date.now()) / 86400000);
+  return { host, issuer: cert.issuer?.O || cert.issuer?.CN || 'unknown', not_before, not_after, days, authorized: socket.authorized === true };
+}
+
+// `inspectOnly` opens a certificate-INSPECTION socket: it completes the handshake without enforcing chain
+// trust, reads the presented certificate, and closes. It never sends a byte of application data, never
+// carries a credential, and its result is only ever written to ssl_cert_state. It is used ONLY as the
+// phase-2 fallback below — every other TLS connection in this repo keeps full validation.
+function connectTls(host, inspectOnly) {
   return new Promise((resolve, reject) => {
-    const socket = tls.connect({ host, port: 443, servername: host, timeout: 10000, rejectUnauthorized: false }, () => {
-      const cert = socket.getPeerCertificate();
+    const socket = tls.connect({
+      host, port: 443, servername: host, timeout: 10000,
+      rejectUnauthorized: !inspectOnly, // eslint-disable-line no-unneeded-ternary
+    }, () => {
+      const r = readCert(socket, host);
       socket.end();
-      if (!cert || !cert.valid_to) return resolve(null);
-      const not_before = new Date(cert.valid_from);
-      const not_after = new Date(cert.valid_to);
-      const days = Math.floor((not_after.getTime() - Date.now()) / 86400000);
-      resolve({ host, issuer: cert.issuer?.O || cert.issuer?.CN || 'unknown', not_before, not_after, days });
+      resolve(r);
     });
     socket.on('error', reject);
     socket.on('timeout', () => { socket.destroy(); reject(new Error('timeout')); });
   });
+}
+
+// Phase 1: connect with certificate validation FULLY ON. Healthy hosts (the overwhelmingly common case)
+// never disable verification any more.
+// Phase 2: if — and only if — phase 1 failed because the certificate itself did not validate, re-probe on a
+// cert-inspection socket to actually read the bad certificate. Node destroys the TLS socket on a failed
+// handshake (getPeerCertificate() returns {} in the error handler — verified against expired.badssl.com),
+// so without this scoped fallback the monitor would go blind on expired/self-signed certs, i.e. it would
+// stop alerting in exactly the situation it was built for.
+async function probe(host) {
+  try {
+    return await connectTls(host, false);
+  } catch (e) {
+    const code = (e && (e.code || e.message)) || '';
+    if (!CERT_VALIDATION_ERRORS.has(code)) throw e; // network/timeout/DNS — surface as before
+    return await connectTls(host, true);
+  }
 }
 
 (async () => {

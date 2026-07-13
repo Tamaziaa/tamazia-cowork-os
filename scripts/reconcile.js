@@ -8,7 +8,7 @@
 //   4. Mint truth             -> a lead whose audit_url points to NO audit_pages row is flagged
 //                                (audit_url cleared so verify-audits re-mints it next pass).
 // Idempotent, fail-open per step. Usage: node scripts/reconcile.js
-const { execFileSync, execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const ROOT = path.resolve(__dirname, '..');
@@ -16,7 +16,9 @@ const ROOT = path.resolve(__dirname, '..');
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
 function pg(sql) { try { return execFileSync(path.join(ROOT, 'scripts', 'psql'), [NEON, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (e) { return ''; } }
 function runScript(rel) {
-  try { execSync(`node ${path.join(ROOT, rel)}`, { stdio: 'inherit', env: process.env, timeout: 10 * 60 * 1000 }); return true; }
+  // execFileSync + argv array (and process.execPath, not a PATH lookup of "node"): no shell, so a repo path
+  // containing a space or a metacharacter cannot become a second command.
+  try { execFileSync(process.execPath, [path.join(ROOT, rel)], { stdio: 'inherit', env: process.env, timeout: 10 * 60 * 1000 }); return true; }
   catch (e) { console.error(`  ${rel} non-fatal:`, String(e.message || e).slice(0, 100)); return false; }
 }
 
