@@ -169,7 +169,9 @@ async function _pageSpeedOne(domain, key, strategy) {
       if (r.ok) {
         const j = await r.json();
         if (j && j.lighthouseResult && j.lighthouseResult.audits) {
-          try { const dir = process.env.PSI_CACHE_DIR; if (dir) { const fs = require('fs'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(dir + '/' + domain + '-' + strategy + '.json', JSON.stringify(j)); } } catch (_e) {}
+          // js/http-to-file-access: `domain` came straight from the lead row into a filesystem path — a value
+          // containing ../ or / would escape PSI_CACHE_DIR. Whitelist the characters a hostname can legally have.
+          try { const dir = process.env.PSI_CACHE_DIR; if (dir) { const fs = require('fs'); const safe = String(domain).toLowerCase().replace(/[^a-z0-9.-]/g, '_').replace(/\.+/g, '.').slice(0, 100); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(dir + '/' + safe + '-' + strategy + '.json', JSON.stringify(j)); } } catch (_e) {}
           return _parsePsi(j, strategy);
         }
         // 200 but no lighthouseResult — transient glitch; retry.

@@ -97,7 +97,9 @@ async function _gatherSite(domain, prov) {
     // Homepage signals via site-scan's extractSignals (headers + HTML fingerprints). Best-effort; never fatal.
     let signals = {};
     try {
-      const home = corpus.find(c => c && /^https?:\/\/[^/]+\/?$/.test((c.url || '').replace(/\/$/, '/'))) || corpus[0];
+      // js/identity-replacement: this used to `.replace(/\/$/, '/')` — replacing '/' with '/', a no-op. The regex
+      // already tolerates the optional trailing slash, so the dead replace is simply removed. Behaviour identical.
+      const home = corpus.find(c => c && /^https?:\/\/[^/]+\/?$/.test(String(c.url || ''))) || corpus[0];
       if (home && _siteScan && typeof _siteScan.extractSignals === 'function') {
         signals = _siteScan.extractSignals({ body: home.body || '', headers: home.headers || {} }) || {};
         // Trim the bulky raw-text corpus field out of signals — callers want fingerprints, not the page dump.
