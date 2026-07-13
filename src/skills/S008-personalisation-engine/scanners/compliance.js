@@ -857,7 +857,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.4-2026-07-adjudication-payload';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v23.5-2026-07-evidence-live';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
@@ -1237,7 +1237,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       const _u = 'https://' + domain + '/';
       const _obs = await observe(_u, { timeoutMs: 30000 });
       if (_obs && _obs.ok) {
-        const _cf = cookieFindings(_obs, { country: cc || country, url: _u });
+        const _cf = cookieFindings(_obs, { country, url: _u });
         for (const _f of _cf) { misses++; findings.push(_f); }
         console.error('[cookie-evidence] ' + domain + ' pre-consent: ' + (_obs.pre_consent.cookies.length) + ' cookies ('
           + _obs.pre_consent.non_essential.length + ' NON-ESSENTIAL), ' + _obs.pre_consent.tracker_requests.length
@@ -1246,7 +1246,11 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
         console.error('[cookie-evidence] ' + domain + ': no observation (fail-open, nothing asserted)');
       }
     }
-  } catch (_ce) { console.error('[cookie-evidence] skipped: ' + String((_ce && _ce.message) || _ce)); }
+  } catch (_ce) {
+    const _m = String((_ce && _ce.message) || _ce);
+    if (_ce instanceof ReferenceError || /is not defined/.test(_m)) console.error('[cookie-evidence] *** BUG *** ' + _m + ' — a coding error, NOT a fail-open. No cookie was observed.');
+    else console.error('[cookie-evidence] skipped: ' + _m);
+  }
 
   // E-259 (v23.2) — THE ICO REGISTER. THE FIRST FINDING THAT IS NOT AN INTERPRETATION.
   // Every other finding we make is, at bottom, a judgement: does this text satisfy this obligation. A partner can
@@ -1261,7 +1265,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     const { checkRegistration, registrationFinding } = require('../../../lib/evidence/ico-register.js');
     const _cc2 = String(country || '').toUpperCase();
     if (!_cc2 || _cc2 === 'UK' || _cc2 === 'GB' || _cc2 === 'GBR') {
-      const _co = (firmProfile && (firmProfile.company_name || firmProfile.legal_name)) || company || domain.split('.')[0];
+      const _co = (firmProfile && (firmProfile.company_name || firmProfile.legal_name || firmProfile.name)) || String(domain).replace(/\.(co\.uk|com|org|net|uk|law)$/i, '').replace(/[-_]/g, ' ');
       const _reg = checkRegistration({ company: _co, domain });
       const _sig = { has_form: /<form|contact us|get in touch|enquir/i.test(corpusText),
                      trackers: /gtag|googletagmanager|google-analytics|fbq|hotjar/i.test(corpusText),
@@ -1270,7 +1274,11 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
       if (_f) { misses++; findings.push(_f); }
       console.error('[ico-register] ' + domain + ' -> ' + _reg.status + (_reg.registration_number ? ' (' + _reg.registration_number + ')' : '') + (_f ? ' BREACH' : ''));
     }
-  } catch (_ie) { console.error('[ico-register] skipped: ' + String((_ie && _ie.message) || _ie)); }
+  } catch (_ie) {
+    const _m = String((_ie && _ie.message) || _ie);
+    if (_ie instanceof ReferenceError || /is not defined/.test(_m)) console.error('[ico-register] *** BUG *** ' + _m + ' — a coding error, NOT a fail-open. The register was never checked.');
+    else console.error('[ico-register] skipped: ' + _m);
+  }
 
   // SITE-INTEGRITY pass: flag a hacked/spam-injected site as a P0 security finding (highest real-world risk).
   try { const _ci = _detectCompromise(corpus, effectiveSectorAuth || sector); if (_ci) { misses++; findings.push(_ci); } } catch (_e) {}
@@ -1286,13 +1294,22 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   let _adjReport = { ran: false, reason: 'not_attempted' };
   try {
     const { adjudicateBreaches } = require('../../../lib/audit/breach-adjudicator.js');
-    const _adj = await adjudicateBreaches(findings, { domain, sector: effectiveSectorAuth || effectiveSector || sector, country: cc || country }, { deadline_ms: 60000 });
+    const _adj = await adjudicateBreaches(findings, { domain, sector: effectiveSectorAuth || effectiveSector || sector, country }, { deadline_ms: 60000 });
     _adjReport = _adj.report;
     findings.length = 0; findings.push(..._adj.findings);
     console.error('[adjudicator] ' + domain + ' total=' + (_adjReport.total || 0) + ' breach=' + (_adjReport.breach || 0)
       + ' false_positives_dropped=' + (_adjReport.dropped || 0) + ' insufficient=' + (_adjReport.insufficient || 0)
       + ' unadjudicated=' + (_adjReport.unadjudicated || 0) + (_adjReport.ran ? '' : ' (NO LLM: nothing removed, high-risk demoted)'));
-  } catch (_ae) { console.error('[adjudicator] failed open: ' + String((_ae && _ae.message) || _ae)); }
+  } catch (_ae) {
+    // E-263: a ReferenceError here is a BUG, not a runtime condition. Failing open on it is how the adjudicator,
+    // the cookie collector and the ICO check all ran for two whole versions DOING NOTHING, while every log line
+    // said "failed open" and every audit shipped as if they had run. Scream, loudly, and mark the payload.
+    const _msg = String((_ae && _ae.message) || _ae);
+    if (_ae instanceof ReferenceError || /is not defined/.test(_msg)) {
+      console.error('[adjudicator] *** BUG *** ' + _msg + ' — this is a coding error, not a fail-open. The adjudicator DID NOT RUN.');
+      _adjReport = { ran: false, reason: 'BUG:' + _msg.slice(0, 60) };
+    } else { console.error('[adjudicator] failed open: ' + _msg); _adjReport = { ran: false, reason: _msg.slice(0, 60) }; }
+  }
   // One honest finding in place of the suppressed granular breaches: JS-only legal content is a real AI-visibility + verification gap.
   if (suppressedPrivacy > 0) {
     misses++;
@@ -1445,7 +1462,7 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v23.4-2026-07-adjudication-payload'), scan, ruleCheck, gatherCorpus, loadRules };
+module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v23.5-2026-07-evidence-live'), scan, ruleCheck, gatherCorpus, loadRules };
 
 // ---- blind-send helpers (blueprint E-041/E-044) ----
 function _evidenceGate(findings, pages) {
