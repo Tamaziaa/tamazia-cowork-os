@@ -1126,7 +1126,29 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     await new Promise((res) => setTimeout(res, 1200 + a * 800));
   }
   console.error('[write-seam] ' + domain + ' http=' + _seam.http + ' shim=' + _seam.shim + ' confirm=' + _seam.confirm + ' adopt=' + _seam.adopt + ' id=' + (insId == null ? 'NONE' : insId));
-  if (insId == null) throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written${_writeErr ? ' (SQL: ' + _writeErr.slice(0, 140) + ')' : ''}${_transport ? ' (TRANSPORT: ' + _transport + ' — the write never reached Neon; payload ' + Math.round(JSON.stringify(neonPayload).length / 1024) + 'KB)' : ''}; refusing to return a dead audit link`);
+  // E-264: WHEN THE WRITE FAILS, SAY WHY. The seam has branches for a SQL error and for a transport error, and on
+  // four straight failures NEITHER fired — it reported "no row written" with no cause at all, which told me
+  // nothing and cost hours. A write that fails must dump the EXACT response it got, the idem_key it used, and
+  // whether that key exists in the table. Then one run answers the question instead of five.
+  if (insId == null) {
+    try {
+      const _probe = await neonHttp('SELECT id, slug, hash, status FROM ' + AUDIT_TABLE + ' WHERE idem_key=$1', [idemKey]);
+      const _rows = (_probe && Array.isArray(_probe.rows)) ? _probe.rows : null;
+      console.error('[write-seam:DIAGNOSTIC] ' + domain
+        + '\n  idem_key      = ' + idemKey
+        + '\n  http response = ' + JSON.stringify(_httpIns).slice(0, 300)
+        + '\n  rows for key  = ' + (_rows ? JSON.stringify(_rows) : 'PROBE FAILED: ' + JSON.stringify(_probe).slice(0, 200))
+        + '\n  payload has llm_verify = ' + (!!(neonPayload && neonPayload.llm_verify))
+        + '\n  payload KB    = ' + Math.round(JSON.stringify(neonPayload).length / 1024));
+    } catch (_de) { console.error('[write-seam:DIAGNOSTIC] probe threw: ' + String((_de && _de.message) || _de)); }
+  }
+  if (insId == null) {
+    // E-264: never again throw "no row written" with no cause. If neither branch fired, say EXACTLY what came back.
+    const _cause = _writeErr ? ('SQL: ' + _writeErr.slice(0, 160))
+      : _transport ? ('TRANSPORT: ' + _transport + ' — the write never reached Neon')
+        : ('UNEXPLAINED: the INSERT returned ' + JSON.stringify(_httpIns).slice(0, 160) + ' and idem_key ' + idemKey + ' could not be adopted');
+    throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written [${_cause}] [llm_verify=${!!(neonPayload && neonPayload.llm_verify)}, payload ${Math.round(JSON.stringify(neonPayload).length / 1024)}KB]; refusing to return a dead audit link`);
+  }
   const signedFinal = (finalSlug === slug && finalHash === hash) ? signed : signUrl({ slug: finalSlug, hash: finalHash, lead_id, expSeconds });
 
   return { slug: finalSlug, hash: finalHash, signed_url: signedFinal.url, signed_exp: signedFinal.exp, framework_version: payload.framework_version, applicable_frameworks: payload.applicable_frameworks, pointers: payload.pointers || [], reachable: !!(payload.scan && payload.scan.reachable) };
