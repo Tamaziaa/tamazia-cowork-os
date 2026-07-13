@@ -68,7 +68,10 @@ const path = require('path');
 let pgQuery;
 try {
   const { Client } = require('pg');
-  const client = new Client({ connectionString: process.env.NEON_URL, ssl: { rejectUnauthorized: false } });
+  // insecure-transport/bypass-tls-verification: this was `rejectUnauthorized: false`, which turns off certificate
+  // validation on the Postgres TLS session — any MITM between the Hetzner box and Neon could read/alter the whole
+  // connection, credentials included. Neon serves a publicly-trusted certificate; verify it.
+  const client = new Client({ connectionString: process.env.NEON_URL, ssl: { rejectUnauthorized: true } });
   let connected = false;
   pgQuery = async (sql, params = []) => {
     if (!connected) { await client.connect(); connected = true; }

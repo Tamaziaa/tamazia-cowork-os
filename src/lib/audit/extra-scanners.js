@@ -1,3 +1,7 @@
+'use strict';
+// js/useless-expression: the 'use strict' directive used to sit BELOW _cookieRegimes(), so it was an ordinary
+// no-op string expression and this file was never actually in strict mode. Hoisted to the true prologue.
+// Verified no-op: the file has no implicit globals, no `with`, no octal literals and no arguments.callee.
 // E-023 twin (blind-send): consent regime keyed on the firm's OWN families, never hardcoded UK.
 function _cookieRegimes(m) {
   const fams = ((m && (m.families || m.regions)) || []).map(x => String(x).toUpperCase());
@@ -12,7 +16,6 @@ function _cookieRegimes(m) {
 // Phase B audit scanners — Node-native, no Chrome, no host, fail-open. Each returns evidence-tied
 // pointers in the engine's standard shape. Attached to the converged scanSite. Every check degrades
 // to an empty result on failure, never throws.
-'use strict';
 const dns = require('dns').promises;
 const UA = 'Mozilla/5.0 (compatible; TamaziaAuditBot/1.0; +https://tamazia.co.uk)';
 function P(bucket, severity, citation, fact, layman, fix, evidence) {
