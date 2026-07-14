@@ -1243,6 +1243,49 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   payload.stage_manifest = _SM.seal(_manifest);
   payload.sendable = payload.stage_manifest.sendable;
 
+  // ─── CITATION GATE (wired v25.13 — written months ago, NEVER RAN) ──────────────────────────────────────
+  // Every legal claim we print must be citable. This gate existed and was dead, and it was RIGHT to leave it
+  // dead: its gateMint() keyed violations by FRAMEWORK while the filter keyed framework-FIRST, so one uncited
+  // UK_PECR rule DELETED EVERY UK_PECR FINDING — including fully-cited P0s. A gate built to protect the client
+  // would have silently deleted the client's breaches. Identity is now per-FINDING (rule_id), so a violation can
+  // only ever remove the finding that caused it. eval/citation-gate.test.js FAILS on the old keying.
+  //
+  // NON-DESTRUCTIVE BY DEFAULT. We RECORD the uncited findings and mark the audit unsendable — we do not silently
+  // delete a client's breach. Deleting evidence to make a gate go green is how the 1,004 phantom audits happened.
+  // Set CITATION_GATE_DROP=1 to drop instead of quarantine.
+  try {
+    const _cg = require('../../../lib/audit/citation-gate.js');
+    const _v = _cg.verifyCitations(payload.pointers || []);
+    payload.citation_gate = { ok: _v.ok, violations: _v.violations.slice(0, 30), mode: String(process.env.CITATION_GATE_DROP || '') === '1' ? 'drop' : 'quarantine' };
+    if (!_v.ok) {
+      if (payload.citation_gate.mode === 'drop') {
+        const _g = _cg.gateMint(payload.pointers || []);
+        payload.pointers = _g.safe;
+        payload.citation_gate.dropped = _g.dropped;
+      } else {
+        payload.sendable = false;
+      }
+      for (const _vi of _v.violations.slice(0, 10)) _warn('citation-gate', new Error(_vi.label + ': ' + _vi.reason));
+    }
+  } catch (_e) { _warn('citation-gate', _e); }
+
+  // ─── COVERAGE CONTRACT (wired v25.13 — REPORTING only, and here is why) ───────────────────────────────────
+  // An audit built on a blocked crawl must SAY so. A firm whose WAF blocked us was getting the same confident
+  // document as a firm we read in full — and it is precisely the firm most likely to challenge us.
+  // We wire the VERDICT (render_class), NOT applyCoverage(): that function filters on `f.status`, but pointers
+  // carry `state`, never `status`. It is a no-op that LOOKS like a filter. Wiring it would be wiring a lie.
+  try {
+    const _cc = require('../../../lib/audit/coverage-contract.js');
+    const _pages = Array.isArray(payload.pages_crawled) ? payload.pages_crawled : [];   // set at the payload seam above; classify() accepts a URL string or {url}
+    const _cov = _cc.computeCoverage(_pages, payload.sector, {});
+    payload.coverage = _cov;
+    // 'screened' = we did not read enough of the site to make a fair compliance judgement. Say so, do not send.
+    if (_cov && _cov.render_class !== 'assessable') {
+      payload.sendable = false;
+      _warn('coverage-contract', new Error('render_class=' + _cov.render_class + '; missing page-classes: ' + (_cov.missing || []).join(',')));
+    }
+  } catch (_e) { _warn('coverage-contract', _e); }
+
   // ZOD AT THE WRITE SEAM. Everything above this line is a best effort. Below it, this is a LEGAL DOCUMENT
   // ADDRESSED TO A LAW FIRM. Each rule in payload-schema.js exists because the exact thing it forbids ALREADY
   // SHIPPED: "Bristol Office" as a firm name, "Sector regulator" as the enforcing authority, a stale engine

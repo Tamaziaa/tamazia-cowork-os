@@ -263,8 +263,31 @@ async function mintOne(row) {
       const _chk = (pg(`SELECT 1 FROM ${AUDIT_TABLE} WHERE slug='${q(r.slug)}' AND hash='${q(r.hash)}' LIMIT 1;`) || '').trim();
       if (!_chk) {
         throw new Error('POST-WRITE ASSERTION FAILED: the builder returned ' + r.slug + '/' + r.hash
-          + ' but no such row exists in ' + AUDIT_TABLE + '. The audit does not exist, so the queue will NOT say '
-          + 'done and no lead will be given a link to a 404. This is exactly how 1,004 phantom audits were created.');
+          + ' but no such row exists in ' + AUDIT_TABLE + '. The mint is NOT done. This is exactly how 1,004 phantom'
+          + ' audits and 412 dead lead URLs were created.');
+      }
+    }
+
+    // ── AND THE SECOND HALF: THE PAGE MUST ACTUALLY LOAD. ────────────────────────────────────────────────────
+    // A row in audit_pages is necessary, not sufficient. The prospect clicks a URL, not a row. verify-audit-url.js
+    // has existed for months as the declared "SINGLE SOURCE OF TRUTH: is an audit URL 100% correct AND live?" and
+    // was reachable from NOTHING — the exact class this whole cleanup is about. Merged in here rather than
+    // reimplemented, so there is ONE door to "is this link safe to send".
+    //
+    // FAIL-OPEN ON INFRASTRUCTURE, FAIL-CLOSED ON TRUTH: a network blip must not fail a good mint, so a check that
+    // cannot run leaves the audit 'done' but records why. A check that RUNS and returns non-200 fails the mint.
+    if (String(process.env.VERIFY_AUDIT_URL || '1') === '1') {
+      let _vau = null;
+      try { _vau = require('../src/lib/audit/verify-audit-url.js'); } catch (e) { _sentry(e, { stage: 'verify-audit-url:require' }); }
+      if (_vau && typeof _vau.verifyAuditUrl === 'function') {
+        const _url = r.signed_url || ((process.env.PUBLIC_BASE_URL || 'https://tamazia.co.uk') + '/audit/' + r.slug + '/' + r.hash);
+        let _res = null;
+        try { _res = _vau.verifyAuditUrl(_url, { live: true, timeoutSec: 15 }); } catch (e) { _sentry(e, { stage: 'verify-audit-url:run' }); }
+        if (_res && _res.ok === false && _res.status && String(_res.status) !== '0') {
+          throw new Error('POST-WRITE ASSERTION FAILED (live URL): ' + _url + ' returned HTTP ' + _res.status
+            + ' (' + (_res.reason || 'not ok') + '). The row exists but the PAGE DOES NOT LOAD. A prospect clicking'
+            + ' this link in a cold email from a compliance firm would hit a broken page.');
+        }
       }
     }
     pg(`UPDATE minting_queue SET status='done', slug='${q(r.slug)}', hash='${q(r.hash)}', minted_at=now(), error=NULL WHERE id=${row.id};`);
