@@ -747,7 +747,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   try { const _enf = _M_enforcement_map; for (const _f of findings) { if (_f && _f.bucket === 'compliance' && !_f.enforcement_example) _f.enforcement_example = _enf.enforcementFor(_f.framework_short || _f.citation); } } catch (_e) { _warn('build.js:716', _e); }
   const _ft = _M_finding_trust;
   const _corpusAdequate = _assessable && !(comp && comp.challenge);
-  let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class, jurisdictions: (comp && comp.jurisdictions) || [], sector, via_archive: !!(comp && comp.via_archive), corpus_truncated: !!(scan && scan.signals && scan.signals.corpus_truncated) });
+  let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class, jurisdictions: (comp && comp.jurisdictions) || [], sector, via_archive: !!(comp && comp.via_archive), corpus_truncated: !!(scan && scan.signals && scan.signals.corpus_truncated), pages_fetched: ((comp && comp.pages_crawled) || (scan && scan.pages_crawled) || []).length });
   try { _classified = await verifyTopFindings(_classified, env || process.env); } catch (_e) { _warn('build.js:720', _e); }
   // FINDING-INTEGRITY GATE (legal-QA P0 fabricated-finding, 14 hits): never render a legal finding that is
   // unmapped or textless. A compliance-bucket finding with no framework_short, or any finding whose title/fact
