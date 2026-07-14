@@ -78,7 +78,18 @@ function locateSegment(segments, offset) {
 
 // Run a rule's regex across the WHOLE site in one pass; return every located occurrence (capped for safety).
 // `proseOnly` keeps only genuine sentences (drops nav/footer boilerplate) for client-facing evidence.
-function scanRuleGlobal(re, index, { max = 500, proseOnly = false, skipTestimonial = false } = {}) {
+// NEGATION GUARD (v25.13). A PROHIBITION rule fires when the firm MAKES the forbidden claim. A firm that says
+// "we do NOT offer dermal filler to under-18s" is DECLARING COMPLIANCE — and a naive prohibit pattern fires on it,
+// because the forbidden words are all there. That is the polarity trap that made MED_CLAIMS breach every clinic for
+// not advertising a miracle cure, wearing a different hat.
+//
+// UK_BOTOX_FILLERS_U18 is a CRIMINAL OFFENCE. Accusing a compliant clinic of it because its policy page says the
+// word "under-18" is not an acceptable failure mode. So: if the SENTENCE carrying the match is negated, it is not
+// a claim. ONE DOOR — every prohibit rule inherits this; no rule re-implements it in its own regex.
+const NEGATION_RX = /\b(?:do not|don't|does not|doesn't|did not|never|cannot|can't|will not|won't|no longer|refuse[sd]?|declin|not (?:offer|available|suitable|permitted|provide)|must be (?:over|aged|18)|18\s*(?:years\s*)?(?:and|or)\s*(?:over|older|above)|over[-\s]?18s?\s*only|strictly\s*18|prohibit|unlawful|illegal|we\s+comply)\b/i;
+function isNegated(sentence) { return NEGATION_RX.test(String(sentence || '')); }
+
+function scanRuleGlobal(re, index, { max = 500, proseOnly = false, skipTestimonial = false, skipNegated = false } = {}) {
   let rx;
   // force a clean GLOBAL flag set — drop any sticky('y') or duplicate 'g' so lastIndex stepping can't anchor/mis-scan
   try { rx = new RegExp(re.source, 'g' + String(re.flags || '').replace(/[gy]/g, '')); } catch (_e) { return []; }
@@ -87,7 +98,8 @@ function scanRuleGlobal(re, index, { max = 500, proseOnly = false, skipTestimoni
     if (m.index === rx.lastIndex) rx.lastIndex++; // zero-width-match guard
     const seg = locateSegment(index.segments, m.index);
     // skipTestimonial: never attribute a customer's review sentence to the firm (claims/prohibit rules).
-    if (seg && (!proseOnly || seg.prose) && !(skipTestimonial && seg.testimonial)) out.push({ url: seg.url, line_index: seg.lineIdx, matched: String(m[0]).slice(0, 80), line: seg.text, prose: seg.prose });
+    // skipNegated: "we do NOT offer filler to under-18s" is a COMPLIANCE STATEMENT, not a prohibited claim.
+    if (seg && (!proseOnly || seg.prose) && !(skipTestimonial && seg.testimonial) && !(skipNegated && isNegated(seg.text))) out.push({ url: seg.url, line_index: seg.lineIdx, matched: String(m[0]).slice(0, 80), line: seg.text, prose: seg.prose });
     if (out.length >= max) break;
   }
   return out;
@@ -102,4 +114,4 @@ function mightMatch(pattern, joinedLower) {
   return joinedLower.includes(longest);
 }
 
-module.exports = { buildCorpusIndex, locateSegment, scanRuleGlobal, splitSentences, mightMatch, _stripText, _isProse, RS };
+module.exports = { buildCorpusIndex, locateSegment, scanRuleGlobal, splitSentences, mightMatch, isNegated, NEGATION_RX, _stripText, _isProse, RS };

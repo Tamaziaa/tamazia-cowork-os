@@ -806,7 +806,10 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
   if (rule.rule_type === 'prohibit') {
     // EVERY-WORD scan: collect EVERY offending line across EVERY crawled page (blog posts, FAQs, testimonials,
     // footers included) — so a prohibited claim in a 2019 article is flagged, not just the first homepage hit.
-    const occ = (corpusIndex && corpusIndex.segments && corpusIndex.segments.length) ? scanRuleGlobal(re, corpusIndex, { proseOnly: true, max: 50, skipTestimonial: true }) : [];
+    // skipNegated (v25.13): a prohibition fires when the firm MAKES the claim. "We do NOT offer filler to
+    // under-18s" is a compliance statement — accusing a clinic of a CRIMINAL OFFENCE for its own policy page
+    // is the polarity trap in a different hat. The guard lives in corpus-index.js: ONE door for every rule.
+    const occ = (corpusIndex && corpusIndex.segments && corpusIndex.segments.length) ? scanRuleGlobal(re, corpusIndex, { proseOnly: true, max: 50, skipTestimonial: true, skipNegated: true }) : [];
     if (occ.length) {
       const first = occ[0];
       return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, enforce_typical_low_gbp: rule.enforce_typical_low_gbp, enforce_typical_high_gbp: rule.enforce_typical_high_gbp, enforce_methodology: rule.enforce_methodology, enforce_context: rule.enforce_context, enforce_max_rare: rule.enforce_max_rare, statutory_citation: rule.statutory_citation, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: first.url, evidence_snippet: first.matched, evidence_quote: first.line, occurrence_count: occ.length, occurrences: occ };
@@ -814,6 +817,9 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
     // Fallback: the pattern hit raw markup (not visible prose) — keep the legacy first-page behaviour so status never regresses.
     for (const c of corpus) {
       const m = c.body.match(re);
+      // THE BACK DOOR: this legacy raw-markup fallback bypassed the prose index — and therefore the negation guard.
+      // A negated sentence must not become a P0 here either. Same rule, same door.
+      if (m && require('./corpus-index.js').isNegated(_extractQuote(c.body, re) && _extractQuote(c.body, re).quote)) continue;
       if (m) { const q = _extractQuote(c.body, re); return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'miss', rule_type: rule.rule_type || 'must_appear', description: rule.description, citation_url: rule.citation_url, fine_low_gbp: rule.fine_low_gbp, fine_high_gbp: rule.fine_high_gbp, penalty_basis: rule.penalty_basis, penalty_note: rule.penalty_note, enforce_typical_low_gbp: rule.enforce_typical_low_gbp, enforce_typical_high_gbp: rule.enforce_typical_high_gbp, enforce_methodology: rule.enforce_methodology, enforce_context: rule.enforce_context, enforce_max_rare: rule.enforce_max_rare, statutory_citation: rule.statutory_citation, layman_explanation: rule.layman_explanation, tamazia_fix_short: rule.tamazia_fix_short, service_page_path: rule.service_page_path, pricing_tier: rule.pricing_tier, enforcement_example: rule.enforcement_example, evidence_url: c.url, evidence_snippet: (q && q.matched) || m[0].slice(0, 80), evidence_quote: q && q.quote }; }
     }
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'no_prohibited_pattern' };
@@ -931,7 +937,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.12-2026-07-nexus-polarity';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.13-2026-07-reachability-prohibitions';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
@@ -1618,7 +1624,7 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.12-2026-07-nexus-polarity'), scan, ruleCheck, gatherCorpus, loadRules };
+module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.13-2026-07-reachability-prohibitions'), scan, ruleCheck, gatherCorpus, loadRules };
 
 // ---- blind-send helpers (blueprint E-041/E-044) ----
 function _evidenceGate(findings, pages) {
