@@ -260,6 +260,31 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   // C-jur: resolve the REAL home jurisdiction from TLD + detected strong-markets when country is blank, instead of
   // blind-defaulting to 'UK'. effCountry feeds every jurisdiction-bearing call below so a US/AE firm never inherits
   // the UK framework stack. '' (unknown) means only GOOGLE_EEAT + genuinely-detected markets attach.
+  // ── RC-1 (E01/E20): THE FIRM HAS A NAME. ────────────────────────────────────────────────────────
+  // Every `company:` below used to be (domain||'').replace(/^www\./,'').split('.')[0] — the DOMAIN STEM. That is
+  // why a shipped report said "Kingsleynapley", and why another was addressed to "Bristol Office" (a page heading).
+  // firm-identity.js resolves the real name off schema.org Organization -> og:site_name -> Companies House ->
+  // <title> -> (last resort) the cleaned stem, rejecting generic page furniture and any candidate untied to the
+  // domain. Fail-open: on any error we land back on the cleaned stem, never on a fabricated name.
+  let firm_identity = null;
+  try {
+    firm_identity = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'firm-identity.js'))
+      .resolveFirmIdentity({ domain, signals: scan.signals || {}, corpus: (scan.signals && scan.signals.corpus) || '', env: env || process.env });
+  } catch (_e) { firm_identity = null; }
+  const _firmName = (firm_identity && firm_identity.display_name)
+    || (() => { try { return require(path.resolve(ROOT, 'src', 'lib', 'audit', 'firm-identity.js')).cleanDomainStem(domain); } catch (_e) { return null; } })()
+    || (domain || '').replace(/^www\./, '').split('.')[0];
+  // RC-2 Tier-A: a CONFIRMED Companies House record is an official register entry — the dispositive proof of a UK
+  // legal seat. Fold it into the jurisdiction evidence matrix (additive; it can only add a register-proven nexus).
+  if (firm_identity && firm_identity.company_number) {
+    try {
+      scan.markets = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).attachRegisterEvidence(scan.markets, {
+        country: 'United Kingdom', register: 'Companies House', name: firm_identity.legal_name,
+        number: firm_identity.company_number,
+        url: 'https://find-and-update.company-information.service.gov.uk/company/' + encodeURIComponent(firm_identity.company_number),
+      });
+    } catch (_e) { /* fail-open: the keyless matrix stands */ }
+  }
   const effCountry = resolveHomeCountry(domain, scan.markets, country);
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
@@ -327,7 +352,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       // No city gate: buildKeywordMap handles no-city/global sites internally (category-level queries), so the
       // ranking ladder populates for ecommerce/global too. (P6.4 caught this gate silently zeroing the keyword map.)
       const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
-      keyword_map = await ri.buildKeywordMap({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city, html: [scan.signals && scan.signals.title, scan.signals && scan.signals.meta_description].filter(Boolean).join(' '), corpus: (scan.signals && scan.signals.corpus) || '', country: country || 'UK', env, max: 7, jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [], firmProfile: (comp && comp.firm_profile) || null });
+      keyword_map = await ri.buildKeywordMap({ domain, company: _firmName, sector, city, html: [scan.signals && scan.signals.title, scan.signals && scan.signals.meta_description].filter(Boolean).join(' '), corpus: (scan.signals && scan.signals.corpus) || '', country: country || 'UK', env, max: 7, jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [], firmProfile: (comp && comp.firm_profile) || null });
     } catch (_e) {}
     })(),
     // REAL AI-citation probe (cog): who owns the answer surface for the firm's category, and is the firm cited?
@@ -336,7 +361,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
       const _city = (scan.markets && scan.markets.primary_city) || '';
       const _wd = (scan.signals && scan.signals.wikidata) || scan.wikidata || null;
-      ai_citation = await ri.aiCitationProbe({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city: _city, html: (scan.signals && scan.signals.title) || '', corpus: (scan.signals && scan.signals.corpus) || '', country: country || 'UK', wikidata: _wd, jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [], firmProfile: (comp && comp.firm_profile) || null });
+      ai_citation = await ri.aiCitationProbe({ domain, company: _firmName, sector, city: _city, html: (scan.signals && scan.signals.title) || '', corpus: (scan.signals && scan.signals.corpus) || '', country: country || 'UK', wikidata: _wd, jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [], firmProfile: (comp && comp.firm_profile) || null });
       if (ai_citation && ai_citation.ok) {
         const comps = (ai_citation.competitors || []).map(c => c.domain);
         if (ai_citation.firm_position == null && comps.length) {
@@ -367,7 +392,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     (async () => {
     try {
       const _air = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'ai-readiness.js'));
-      const _airRes = await _air.aiReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], env });
+      const _airRes = await _air.aiReadiness({ domain, company: _firmName, env });
       if (_airRes && _airRes.ok) { _aiReadyFindings = _airRes.findings || []; payload_ai_readiness = { score: _airRes.score, blocked_ai_bots: _airRes.blocked_ai_bots, has_llms_txt: _airRes.has_llms_txt, has_org_schema: _airRes.has_org_schema, has_same_as: _airRes.has_same_as, in_wikidata: _airRes.in_wikidata, schema_types: _airRes.schema_types || [], has_localbusiness: !!_airRes.has_localbusiness, has_service: !!_airRes.has_service, has_faq: !!_airRes.has_faq }; }
     } catch (_e) {}
     })(),
@@ -376,7 +401,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     try {
       const _lp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'local-pack.js'));
       const _lpCity = (scan.markets && scan.markets.primary_city) || '';
-      const _lpRes = await _lp.localPackReadiness({ domain, company: (domain || '').replace(/^www\./, '').split('.')[0], sector, city: _lpCity, env });
+      const _lpRes = await _lp.localPackReadiness({ domain, company: _firmName, sector, city: _lpCity, env });
       if (_lpRes && _lpRes.finding) _localFindings = [_lpRes.finding];
     } catch (_e) {}
     })(),
@@ -520,7 +545,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     try {
       const _gp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-probe.js'));
       const _q = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
-      if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, competitor_consistency: _gpr.competitor_consistency ?? null, providers_used: _gpr.providers_used || null, from_cache: _gpr.from_cache || false, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
+      if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: _firmName, domain, env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, competitor_consistency: _gpr.competitor_consistency ?? null, providers_used: _gpr.providers_used || null, from_cache: _gpr.from_cache || false, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
     } catch (_e) {}
     })(),
     // P3.6 source-gap (free SERP authority sources)
@@ -581,7 +606,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   // Step C (serial): MUST stay after geoProbe — it augments the payload_geo_probe geoProbe set (ai_knows / ai_sentiment),
   // so running it concurrently would race and drop those fields.
   try {
-    const _hr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'hallucination.js')).hallucinationCheck({ company: (domain || '').replace(/^www\./, '').split('.')[0], domain, env });
+    const _hr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'hallucination.js')).hallucinationCheck({ company: _firmName, domain, env });
     if (_hr && _hr.ok) { payload_geo_probe = payload_geo_probe || {}; payload_geo_probe.ai_knows = _hr.ai_knows; payload_geo_probe.ai_sentiment = _hr.sentiment; if (_hr.finding) _geoFindings.push(_hr.finding); }
   } catch (_e) {}
   // P3.V1-3 GEO visuals + P3.8 screenshots, built from the live GEO data
@@ -601,7 +626,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       { label: 'Citations', value: youCited ? 100 : 0 },
     ];
     const nodes = [].concat((gp.top_competitors || []).map(c => ({ label: c.name, type: 'competitor' })), ((gp.grounded && gp.grounded.source_domains) || []).map(d => ({ label: d, type: 'source' })));
-    payload_geo_visuals = { ai_engine_grid: _v.aiEngineGrid(engines), ai_radar: _v.aiRadar(radarAxes), entity_web_map: _v.entityWebMap({ you: (domain || '').replace(/^www\./, '').split('.')[0], nodes }) };
+    payload_geo_visuals = { ai_engine_grid: _v.aiEngineGrid(engines), ai_radar: _v.aiRadar(radarAxes), entity_web_map: _v.entityWebMap({ you: _firmName, nodes }) };
     payload_screenshots = _sc.screenshotUrls({ domain, query: (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '') });
   } catch (_e) {}
   // Ground the jurisdiction statement in the regions the engine ACTUALLY attached binding frameworks for (not raw
@@ -617,7 +642,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       _boundRegions = Array.from(new Set(jr.split('\n').map((x) => R(x.trim())).filter(Boolean)));
     }
   } catch (_e) {}
-  try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: displayCountry, company: (domain || '').replace(/^www\./, '').split('.')[0], boundRegions: _boundRegions }); } catch (_e) {}
+  try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: displayCountry, company: _firmName, boundRegions: _boundRegions }); } catch (_e) {}
   let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings, ..._aiReadyFindings, ..._geoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // ── REACHABILITY RECONCILIATION (anti-fabrication red line) ──────────────────────────────────
   // Two independent corpus paths can disagree: site-scan's direct fetch + PSI may fail (timeout / bot-block)
@@ -762,7 +787,19 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     sub_sector: (comp && comp.sub_sector) || (comp && comp.firm_profile && comp.firm_profile.sub_sector_llm) || null,
     sub_sector_meta: (comp && comp.sub_sector_meta) || null,
     engine_version: (comp && comp.engine_version) || process.env.COMPLIANCE_ENGINE_VERSION || 'v22.5-2026-07-uniform-tags',
-    firm_profile: (comp && comp.firm_profile) || null,
+    firm_profile: (() => {
+      const fp = (comp && comp.firm_profile) ? Object.assign({}, comp.firm_profile) : null;
+      const fi = firm_identity;
+      if (!fp && !fi) return null;
+      return Object.assign({}, fp || {}, fi ? {
+        display_name: fi.display_name || null,
+        legal_name: fi.legal_name || null,
+        company_number: fi.company_number || null,
+        registered_office: fi.registered_office || null,
+        identity_source: fi.source || null,
+        identity_confidence: fi.confidence != null ? fi.confidence : null,
+      } : {});
+    })(),
     // #17: propagate the engine's binding-status map (framework -> statute/voluntary_code/...), the drop-trace
     // (why frameworks were screened out), the review-band tri-state, and per-attachment confidence, so the render
     // can show binding labels, the screening trace, and the attach/review/exclude states honestly.
@@ -785,7 +822,38 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     // E-222 (v22.6): LLM-gate telemetry — every gated decision records its score, attempts and answering
     // provider, so accuracy can be segmented by classification source (S-180) and degradation is visible.
     llm_gate: { classify: (comp && comp.firm_profile && comp.firm_profile.classifier_gate) || null, exec: _execGate },
-    company: (() => { const nm = (company && String(company).trim()) || ''; const fp = (comp && comp.firm_profile) || {}; const scanned = fp.name || fp.legal_name || fp.display_name || fp.trading_name || fp.brand || ''; if (scanned && String(scanned).trim()) return String(scanned).trim(); return nm || null; })(),
+    // RC-1: the RESOLVED display name wins (schema.org / og:site_name / Companies House / <title>). Only when the
+    // resolver had to fall back to the bare domain stem do we prefer the lead-supplied name, which is at least a
+    // human-written string. Never a page heading, never a raw stem when a real name exists.
+    company: (() => {
+      const nm = (company && String(company).trim()) || '';
+      const fi = firm_identity || {};
+      if (fi.display_name && fi.source && fi.source !== 'domain_stem') return String(fi.display_name).trim();
+      if (nm) return nm;
+      const fp = (comp && comp.firm_profile) || {};
+      const scanned = fp.name || fp.legal_name || fp.display_name || fp.trading_name || fp.brand || '';
+      if (scanned && String(scanned).trim()) return String(scanned).trim();
+      return (fi.display_name && String(fi.display_name).trim()) || null;
+    })(),
+    // RC-1: the renderer can now print the legal name, the company number and the registered office (Companies
+    // Act 2006 s.82 requires them on the client's own site — we cannot demand it while getting their name wrong).
+    // Any field the register could not confirm is NULL, and `identity_notes` says why. Never guessed.
+    firm_identity: firm_identity ? {
+      display_name: firm_identity.display_name || null,
+      legal_name: firm_identity.legal_name || null,
+      company_number: firm_identity.company_number || null,
+      registered_office: firm_identity.registered_office || null,
+      source: firm_identity.source || null,
+      confidence: firm_identity.confidence != null ? firm_identity.confidence : null,
+      companies_house_status: firm_identity.companies_house_status || null,
+      rejected_candidates: firm_identity.rejected || [],
+      notes: firm_identity.notes || [],
+    } : null,
+    // RC-2: the evidence that attached each jurisdiction — tier, signal type and the verbatim quote — so the audit
+    // can SHOW why a law applies, and `bound` (legal nexus) stays separate from `serves` (marketing reach).
+    jurisdiction_evidence: (scan.markets && scan.markets.jurisdiction_evidence) || null,
+    jurisdictions_bound: (scan.markets && scan.markets.bound) || [],
+    jurisdictions_served: (scan.markets && scan.markets.serves) || [],
     via_archive: !!(comp && comp.via_archive), archive_date: (comp && comp.archive_date) || null,
     crawl_telemetry: (comp && comp.crawl_telemetry) || null,   // E-230: propagate policy-coverage telemetry to the shipped payload
     // E-253e (v23.4) — THE ADJUDICATION REPORT DROPPED AT THE *PAYLOAD* SEAM TOO.
