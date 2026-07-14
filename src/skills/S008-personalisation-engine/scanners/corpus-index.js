@@ -17,25 +17,13 @@ const JOIN_CAP = 2000000;    // absolute memory ceiling (≈2MB) — 30 pages ×
 
 // ── verbatim from scanners/compliance.js (kept in sync by test-corpus-index.js) ──────────────────────────────
 function _stripText(html) { return htmlToText(html); }   // D-01 (kept in sync with compliance.js)
-const _PROSE_WORDS = /\b(the|a|an|of|to|your|our|we|you|is|are|was|were|will|may|can|must|with|for|that|this|and|or|but|if|when|how|all|any|please|do|not|no|on|in|at|by|as|it|they|their|these|those|because|so|than|then|from|have|has|had)\b/gi;
-function _isProse(str) {
-  const words = str.split(/\s+/).filter(Boolean);
-  if (words.length < 6 || words.length > 60) return false;
-  if (/\b(menu|toggle|skip to|breadcrumb|navigation)\b/i.test(str)) return false;
-  const fn = (str.match(_PROSE_WORDS) || []).length;
-  if (fn < 3) return false;
-  const lower = words.filter(w => /^[a-z]/.test(w)).length;
-  if (lower / words.length < 0.5) return false;
-  if (fn / words.length < 0.15) return false;
-  let run = 0; for (const w of words) { if (/^[A-Z][a-zA-Z]{1,}$/.test(w)) { run++; if (run >= 3) return false; } else run = 0; }
-  return true;
-}
+// ONE DOOR. These used to be duplicated from compliance.js under a "kept in sync" comment.
+const { isProse: _isProse, splitSentences } = require('../../../lib/util/prose.js');
+
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 // Sentence/line boundaries — identical set to _extractQuote in compliance.js (. ! ? • newline) plus the RS.
-function splitSentences(text) {
-  return String(text || '').split(/[.!?•\n␞]+/).map(s => s.trim()).filter(Boolean);
-}
+
 
 // Extract the visible TEXT of testimonial/review regions from RAW HTML (before stripping), so the index can mark which
 // sentences are a CUSTOMER'S words. A prohibit/claims rule (e.g. "guaranteed", "Harvard-approved") must never quote a

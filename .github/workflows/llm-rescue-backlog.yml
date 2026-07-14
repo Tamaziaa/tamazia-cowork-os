@@ -88,7 +88,7 @@ jobs:
           # job budget (timeout-minutes:45). factcheck + apply-review are lighter and finish in <5min.
           HEARTBEAT_WRAP_TIMEOUT_MS: '2280000'  # 38 min (job timeout=45min)
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # manual dispatch can force-enable for one run (does not change the secret).
           if [ "$FORCE_ENABLE" = "1" ]; then export LLM_QA_ENABLED=1; fi
           # If LLM_QA_ENABLED came in from ENV_B64 as 1/true, that wins over the workflow-level '0'

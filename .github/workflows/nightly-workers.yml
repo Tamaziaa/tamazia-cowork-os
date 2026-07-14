@@ -33,12 +33,12 @@ jobs:
         run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
       - name: Schema provision (idempotent)
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ensure-schema.js
           node scripts/cc2-provision.js
       - name: Reconcile + recycle (Neon <-> Mystrika <-> cal <-> audits, then recycle)
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # One heartbeat spanning the bundle: recycle.js re-tiers leads back to lifecycle_stage='qualified', and
           # reconcile.js flips leads to 'booked' — both write the tier/lifecycle columns the engine cycle's seam
           # reads. Wrapping them keeps nightly-workers visible to the engine-cycle race guard (heartbeat.js
@@ -54,7 +54,7 @@ jobs:
           '
       - name: Compute nightly metrics (per-source + per-pipeline deliverability/cost -> metrics table)
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # P3-5: aggregate sends/bounce_events/inbound_emails/lead_sources/leads into the `metrics` table,
           # idempotent per metric_date. Read-mostly (only writes the metrics table, not lead tier columns) so it
           # is NOT a re-tier writer and gets its OWN heartbeat job name (not nightly-workers / not guarded).
@@ -62,7 +62,7 @@ jobs:
           node scripts/heartbeat.js wrap compute-metrics -- node scripts/compute-metrics.js || true
       - name: Health check (Z17-08 — wire the orphaned health-check.js)
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # Z17-08: health-check.js was never attached to a workflow, so the health row went 51h stale.
           # Run it nightly, fail-open (|| true) so a probe hiccup never reds the workflow; it self-alerts
           # to Telegram/Slack on _overall=fail. Cheap, high-value observability (no writes beyond health row).

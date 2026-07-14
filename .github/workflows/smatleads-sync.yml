@@ -49,7 +49,7 @@ jobs:
           FORCE_IN: ${{ github.event.inputs.force }}
           DRY_IN: ${{ github.event.inputs.dry }}
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           MAX="$MAX_SEARCHES"
           FORCE_FLAG=""
           DRY_FLAG=""

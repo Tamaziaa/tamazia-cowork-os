@@ -40,43 +40,43 @@ jobs:
           echo "Updated line count: $(wc -l < updated.env)"
           
           python3 - << 'EOF'
-import base64, json, urllib.request, os
-from nacl import encoding, public
+          import base64, json, urllib.request, os
+          from nacl import encoding, public
 
-pat = os.environ['GH_TOKEN_PAT']
+          pat = os.environ['GH_TOKEN_PAT']
 
-# Read updated.env and encode
-with open('updated.env', 'rb') as f:
-    env_content = f.read()
-new_b64 = base64.b64encode(env_content).decode().replace('\n', '')
-print(f"New ENV_B64 length: {len(new_b64)} chars")
+          # Read updated.env and encode
+          with open('updated.env', 'rb') as f:
+              env_content = f.read()
+          new_b64 = base64.b64encode(env_content).decode().replace('\n', '')
+          print(f"New ENV_B64 length: {len(new_b64)} chars")
 
-# Get repo public key
-req = urllib.request.Request(
-    'https://api.github.com/repos/Tamaziaa/tamazia-cowork-os/actions/secrets/public-key',
-    headers={'Authorization': f'token {pat}', 'Accept': 'application/vnd.github+json'}
-)
-pk_data = json.load(urllib.request.urlopen(req))
-key_id = pk_data['key_id']
-pub_key_b64 = pk_data['key']
-print(f"Got public key: {key_id}")
+          # Get repo public key
+          req = urllib.request.Request(
+              'https://api.github.com/repos/Tamaziaa/tamazia-cowork-os/actions/secrets/public-key',
+              headers={'Authorization': f'token {pat}', 'Accept': 'application/vnd.github+json'}
+          )
+          pk_data = json.load(urllib.request.urlopen(req))
+          key_id = pk_data['key_id']
+          pub_key_b64 = pk_data['key']
+          print(f"Got public key: {key_id}")
 
-# Encrypt the new ENV_B64 value
-public_key = public.PublicKey(pub_key_b64.encode('utf-8'), encoding.Base64Encoder())
-sealed_box = public.SealedBox(public_key)
-encrypted = sealed_box.encrypt(new_b64.encode('utf-8'))
-encrypted_b64 = base64.b64encode(encrypted).decode('utf-8')
+          # Encrypt the new ENV_B64 value
+          public_key = public.PublicKey(pub_key_b64.encode('utf-8'), encoding.Base64Encoder())
+          sealed_box = public.SealedBox(public_key)
+          encrypted = sealed_box.encrypt(new_b64.encode('utf-8'))
+          encrypted_b64 = base64.b64encode(encrypted).decode('utf-8')
 
-# Update the secret via API
-payload = json.dumps({'encrypted_value': encrypted_b64, 'key_id': key_id}).encode()
-update_req = urllib.request.Request(
-    'https://api.github.com/repos/Tamaziaa/tamazia-cowork-os/actions/secrets/ENV_B64',
-    data=payload, method='PUT',
-    headers={'Authorization': f'token {pat}', 'Content-Type': 'application/json', 'Accept': 'application/vnd.github+json'}
-)
-try:
-    r = urllib.request.urlopen(update_req)
-    print(f'SUCCESS: ENV_B64 updated, status {r.status}')
-except urllib.error.HTTPError as e:
-    print(f'Error: {e.code} {e.read().decode()}')
-EOF
+          # Update the secret via API
+          payload = json.dumps({'encrypted_value': encrypted_b64, 'key_id': key_id}).encode()
+          update_req = urllib.request.Request(
+              'https://api.github.com/repos/Tamaziaa/tamazia-cowork-os/actions/secrets/ENV_B64',
+              data=payload, method='PUT',
+              headers={'Authorization': f'token {pat}', 'Content-Type': 'application/json', 'Accept': 'application/vnd.github+json'}
+          )
+          try:
+              r = urllib.request.urlopen(update_req)
+              print(f'SUCCESS: ENV_B64 updated, status {r.status}')
+          except urllib.error.HTTPError as e:
+              print(f'Error: {e.code} {e.read().decode()}')
+          EOF

@@ -41,7 +41,7 @@ jobs:
         env:
           LIMIT: ${{ github.event.inputs.limit }}
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           run_once() { node scripts/heartbeat.js wrap match-inbound-replies -- node scripts/match-inbound-replies.js $LIMIT || node scripts/match-inbound-replies.js $LIMIT; }
           # Retry-once on a transient Neon cold-start / HTTP blip. Previously this ended in `|| true`, which
           # GREENED every failure and hid real breakage; now it retries, then fails honestly so the
