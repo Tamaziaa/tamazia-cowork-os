@@ -85,8 +85,15 @@ function extractSignals({ body, headers }) {
   // #17 keyword spine: a bounded plain-text corpus of the homepage so the category-noun classifier reads the
   // firm's ACTUAL body copy (what it sells), not just the <title>. Additive — nothing read signals.corpus before.
   const _corpus = htmlToText(b).slice(0, 4000);   // D-01
+  // RC-1 (E01/E20): the firm's REAL name lives in schema.org JSON-LD / og:site_name — both of which are stripped
+  // out of `corpus` by htmlToText. Extract the identity candidates from the RAW html once, here, so build.js can
+  // resolve a company name instead of falling back to the domain stem ("Kingsleynapley") or a page heading
+  // ("Bristol Office"). Small + JSON-safe, so it rides on signals into the payload at no meaningful cost.
+  let _identity = null;
+  try { _identity = require('./firm-identity.js').extractIdentityCandidates(b); } catch (_e) { _identity = null; }
   return {
     corpus: _corpus,
+    identity: _identity,
     title: titleMatch ? titleMatch[1].trim() : '',
     title_len: titleMatch ? titleMatch[1].trim().length : 0,
     meta_description: !!descMatch,
