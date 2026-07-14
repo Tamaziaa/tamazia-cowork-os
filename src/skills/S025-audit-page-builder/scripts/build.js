@@ -20,9 +20,9 @@ const { execFileSync } = require('child_process');
 // ONLY benign network/stream errors so the mint completes with what it gathered; re-throw everything else so real bugs
 // still surface. (mint-resilience-20260629)
 const _BENIGN_NET = /UND_ERR_SOCKET|ECONNRESET|ERR_HTTP2|other side closed|terminated|socket hang up|EPIPE|ECONNREFUSED|ETIMEDOUT|UND_ERR_CONNECT/i;
-const _isBenignNet = (e) => { try { return _BENIGN_NET.test(String((e && (e.code || e.message)) || '')); } catch (_) { return false; } };
-process.on('uncaughtException', (e) => { if (_isBenignNet(e)) { try { console.error('[mint] swallowed benign network error:', (e && (e.code || e.message))); } catch (_) {} return; } throw e; });
-process.on('unhandledRejection', (e) => { if (_isBenignNet(e)) { try { console.error('[mint] swallowed benign rejection:', (e && (e.code || e.message))); } catch (_) {} return; } throw e; });
+const _isBenignNet = (e) => { try { return _BENIGN_NET.test(String((e && (e.code || e.message)) || '')); } catch (_) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return false; } };
+process.on('uncaughtException', (e) => { if (_isBenignNet(e)) { try { console.error('[mint] swallowed benign network error:', (e && (e.code || e.message))); } catch (_) { _warn('build.js:24', _);} return; } throw e; });
+process.on('unhandledRejection', (e) => { if (_isBenignNet(e)) { try { console.error('[mint] swallowed benign rejection:', (e && (e.code || e.message))); } catch (_) { _warn('build.js:25', _);} return; } throw e; });
 const { scanSite } = require('../../../lib/audit/site-scan.js');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
@@ -90,10 +90,10 @@ function pg(sql) {
       const fsx = require('fs'); const f = path.join(ROOT, '.mint-' + process.pid + '_' + Date.now() + '.sql');
       fsx.writeFileSync(f, sql.endsWith(';') ? sql : sql + ';');
       try { return execFileSync(pgPath(), [url, '-f', f], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 }).toString().trim(); }
-      finally { try { fsx.unlinkSync(f); } catch (_) {} }
+      finally { try { fsx.unlinkSync(f); } catch (_) { _warn('build.js:93', _);} }
     }
     return execFileSync(pgPath(), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim();
-  } catch (_e) { return null; }
+  } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
 }
 
 // Cached canonical law index (framework_short → law) for the per-mint fail-closed guard. Built once per process.
@@ -105,7 +105,7 @@ function _mintGateIndex() {
     const m = new Map();
     for (const l of laws) for (const t of String(l.neon_framework_short || '').split(',').map(s => s.trim()).filter(Boolean)) if (!m.has(t)) m.set(t, l);
     _MGIDX = m;
-  } catch (_e) { _MGIDX = null; }
+  } catch (_e) { _warn('build.js:108', _e); _MGIDX = null; }
   return _MGIDX;
 }
 
@@ -138,7 +138,7 @@ function signUrl({ slug, hash, lead_id, expSeconds }) {
 function _sigEq(a, b) {
   const ab = Buffer.from(String(a || ''), 'utf8'); const bb = Buffer.from(String(b || ''), 'utf8');
   if (ab.length !== bb.length) return false;
-  try { return crypto.timingSafeEqual(ab, bb); } catch (_e) { return false; }
+  try { return crypto.timingSafeEqual(ab, bb); } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return false; }
 }
 function verifySignedUrl(url) {
   const secret = process.env.TAMAZIA_HMAC_SECRET || 'NOT_CONFIGURED';
@@ -158,7 +158,7 @@ function verifySignedUrl(url) {
     if (!_sigEq(sig, expected)) return { ok: false, reason: 'sig_mismatch' };
     if (Number(exp) < Math.floor(Date.now() / 1000)) return { ok: false, reason: 'expired' };
     return { ok: true, slug, hash, lead_id: Number(lead_id), exp: Number(exp) };
-  } catch (_e) { return { ok: false, reason: 'parse_error' }; }
+  } catch (_e) { _warn('build.js:161', _e); return { ok: false, reason: 'parse_error' }; }
 }
 
 // Build the payload that the Astro page will hydrate. Pulls applicable frameworks + rules
@@ -203,7 +203,7 @@ async function verifyTopFindings(classified, env, cap = 4) {
       const _first = _raw.split(/\n|[.,]/)[0].toUpperCase();
       if (/^\s*NO\b/.test(_first)) { f.state = 'NEEDS_REVIEW'; f.fine_low_gbp = null; f.fine_high_gbp = null; f.fine_withheld = true; f.signals = (f.signals || []).concat('nim_not_entailed'); }
       else if (/^\s*YES\b/.test(_first)) { f.signals = (f.signals || []).concat('nim_entailed'); }
-    } catch (_e) { /* fail-open */ }
+    } catch (_e) { _warn('build.js:206', _e); /* fail-open */ }
   }
   // P1.5a immaculate fines: LLM-verify the top fine-bearing ABSENCE findings against the real page text.
   const absTargets = classified
@@ -228,7 +228,7 @@ async function verifyTopFindings(classified, env, cap = 4) {
       } else if (/^\s*MISSING/.test(firstLine)) {
         f.signals = (f.signals || []).concat('nim_gap_confirmed');
       }
-    } catch (_e) { /* fail-open */ }
+    } catch (_e) { _warn('build.js:231', _e); /* fail-open */ }
   }
   for (const f of classified) { if (f.verify_context) delete f.verify_context; }
   return classified;
@@ -337,7 +337,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     _SM.ran(_manifest, 'firm_identity');
   } catch (_e) { _SM.failed(_manifest, 'firm_identity', _e); firm_identity = null; }
   const _firmName = (firm_identity && firm_identity.display_name)
-    || (() => { try { return _M_firm_identity.cleanDomainStem(domain); } catch (_e) { return null; } })()
+    || (() => { try { return _M_firm_identity.cleanDomainStem(domain); } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; } })()
     || (domain || '').replace(/^www\./, '').split('.')[0];
   // RC-2 Tier-A: a CONFIRMED Companies House record is an official register entry — the dispositive proof of a UK
   // legal seat. Fold it into the jurisdiction evidence matrix (additive; it can only add a register-proven nexus).
@@ -348,7 +348,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
         number: firm_identity.company_number,
         url: 'https://find-and-update.company-information.service.gov.uk/company/' + encodeURIComponent(firm_identity.company_number),
       });
-    } catch (_e) { /* fail-open: the keyless matrix stands */ }
+    } catch (_e) { _warn('build.js:351', _e); /* fail-open: the keyless matrix stands */ }
   }
   const effCountry = resolveHomeCountry(domain, scan.markets, country);
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
@@ -806,10 +806,16 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       } else {
         exec_summary = 'No verified statutory breach surfaced on this scan of ' + domain + ': ' + _fwN + ' binding frameworks were assessed at page level' + (_revN ? ' with ' + _revN + ' items screened for review' : '') + '. The remaining opportunities are commercial, in search visibility and AI answer coverage, and are itemised below.';
       }
-    } catch (_e) { exec_summary = 'This audit maps the statutory frameworks that bind ' + domain + ' and the verified findings from the live scan, itemised below with evidence.'; }
+    } catch (_e) { _warn('build.js:809', _e); exec_summary = 'This audit maps the statutory frameworks that bind ' + domain + ' and the verified findings from the live scan, itemised below with evidence.'; }
   }
 
   return {
+    // THE MANIFEST TRAVELS ON THE PAYLOAD.
+    // It is OPENED here in buildPayload() but SEALED in build(), a different function. The first cut declared it
+    // as a local const in buildPayload and referenced it from build() -> ReferenceError '_manifest is not defined',
+    // which killed every mint. The contract that exists to stop a stage failing silently was itself the failing
+    // stage. A value used across two functions must be PASSED between them, not assumed to be in scope.
+    _stage_manifest: _manifest,
     schema_version: 'v2',
     domain,
     sector,
@@ -846,7 +852,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
         const _fromFw = [...jr].map((iso) => Object.keys(ISO2NAME).includes(iso) ? ISO2NAME[iso] : null).filter(Boolean);
         if (_fromFw.length) return Array.from(new Set(_fromFw));
         return considered;
-      } catch (_e) { return considered; }
+      } catch (_e) { _warn('build.js:855', _e); return considered; }
     })(),
     detected_sector: (comp && comp.detected_sector) || sector,
     // E-210/E-211 (v22.5): sub-sector as a first-class field (P-030) + the engine version that minted this payload
@@ -1009,7 +1015,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     // Curated regulatory-intelligence per framework (obligations the regulator assesses + focus + a verified recent
     // enforcement action + recent guidance). Returned as one JSON blob keyed by framework_short; the render attaches
     // it to each framework card (breached or screened). Whole table (~35 rows) so screened + baseline laws are covered.
-    framework_intel: (() => { try { const r = pg("SELECT COALESCE(json_object_agg(framework_short, json_build_object('obligations', key_obligations, 'focus', regulator_focus, 'enforcement', recent_enforcement, 'enforcement_url', recent_enforcement_url, 'guidance', recent_guidance))::text, '{}') FROM framework_intelligence"); return r ? JSON.parse(r) : {}; } catch (_e) { return {}; } })(),
+    framework_intel: (() => { try { const r = pg("SELECT COALESCE(json_object_agg(framework_short, json_build_object('obligations', key_obligations, 'focus', regulator_focus, 'enforcement', recent_enforcement, 'enforcement_url', recent_enforcement_url, 'guidance', recent_guidance))::text, '{}') FROM framework_intelligence"); return r ? JSON.parse(r) : {}; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return {}; } })(),
     keyword_map: keyword_map && keyword_map.ok ? keyword_map : null,
     ai_citation: ai_citation && ai_citation.ok ? ai_citation : null,
     scan: { scanned_at: scan.scanned_at, reachable: _assessable, site_scan_reachable: !!(scan && scan.reachable), final_url: scan.final_url, counts: scan.counts, signals: scan.signals, psi: scan.psi || null, markets: scan.markets || null },
@@ -1021,7 +1027,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     screenshots: payload_screenshots,
     content_gap: payload_content_gap,
     jurisdiction_statement,
-    glossary: (() => { try { const _g = _M_glossary; const _txt = (_confirmed || []).map(f => (f.fact || '') + ' ' + (f.citation || '') + ' ' + (f.layman_explanation || '')).join(' '); return { terms: _g.GLOSSARY, used: _g.termsUsed(_txt) }; } catch (_e) { return null; } })(),
+    glossary: (() => { try { const _g = _M_glossary; const _txt = (_confirmed || []).map(f => (f.fact || '') + ' ' + (f.citation || '') + ' ' + (f.layman_explanation || '')).join(' '); return { terms: _g.GLOSSARY, used: _g.termsUsed(_txt) }; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; } })(),
   };
 }
 
@@ -1059,7 +1065,7 @@ async function neonHttp(sqlText, params, opts) {
       if (r.ok) return await r.json();
       if (r.status >= 400 && r.status < 500) return { error: (await r.text()).slice(0, 300) };
       lastTransport = 'http_' + r.status;
-    } catch (e) { lastTransport = String((e && e.name) || e || 'fetch_failed'); }
+    } catch (e) { _warn('build.js:1068', e); lastTransport = String((e && e.name) || e || 'fetch_failed'); }
     await new Promise((res) => setTimeout(res, 700 + a * 1300));
   }
   // A transport failure is NOT a conflict. Say so, loudly, so the seam never adopts a row that was never written.
@@ -1088,7 +1094,7 @@ async function _versionGate() {
     try {
       const r = pg("SELECT COALESCE(required_engine_version,'') || '|' || mint_enabled::text FROM engine_flags WHERE id=1");
       return String(r || '').trim();
-    } catch (_e) { return ''; }
+    } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return ''; }
   })();
   if (!required) return { ok: true, reason: 'flags_unreadable_fail_open' };   // a DB blip must not stop the business
   const [want, enabled] = required.split('|');
@@ -1096,8 +1102,8 @@ async function _versionGate() {
     return { ok: false, reason: 'MINTING IS GLOBALLY DISABLED (engine_flags.mint_enabled = false). This switch reaches every minter, including the Oracle VM and the Hetzner fallback.' };
   }
   let mine = '';
-  try { mine = String(require('../../S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION || process.env.COMPLIANCE_ENGINE_VERSION || ''); } catch (_e) { mine = String(process.env.COMPLIANCE_ENGINE_VERSION || ''); }
-  if (!mine) { try { mine = String(require('child_process').execFileSync('node', ['-e', "const s=require('fs').readFileSync(require('path').join(process.cwd(),'src/skills/S008-personalisation-engine/scanners/compliance.js'),'utf8');const m=s.match(/COMPLIANCE_ENGINE_VERSION \|\| '([^']+)'/);process.stdout.write(m?m[1]:'')"], { encoding: 'utf8' })).trim(); } catch (_e) { mine = ''; }
+  try { mine = String(require('../../S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION || process.env.COMPLIANCE_ENGINE_VERSION || ''); } catch (_e) { _warn('build.js:1105', _e); mine = String(process.env.COMPLIANCE_ENGINE_VERSION || ''); }
+  if (!mine) { try { mine = String(require('child_process').execFileSync('node', ['-e', "const s=require('fs').readFileSync(require('path').join(process.cwd(),'src/skills/S008-personalisation-engine/scanners/compliance.js'),'utf8');const m=s.match(/COMPLIANCE_ENGINE_VERSION \|\| '([^']+)'/);process.stdout.write(m?m[1]:'')"], { encoding: 'utf8' })).trim(); } catch (_e) { _warn('build.js:1106', _e); mine = ''; }
   }
   if (want && mine && want !== mine) {
     return { ok: false, reason: 'STALE MINTER REFUSED. This worker is on ENGINE_VERSION "' + mine + '" but the estate requires "' + want + '". Update the checkout (git pull) or it cannot ship an audit. Shipping a stale audit is worse than shipping none.' };
@@ -1157,7 +1163,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
       domain, company: payload.company || company || null, country: payload.country || country || null,
       sector: payload.detected_sector || sector || null, positive: payload.positive_compliance || null, env: env || process.env,
     });
-  } catch (_e) { payload.registers = null; }
+  } catch (_e) { _warn('build.js:1166', _e); payload.registers = null; }
   // E-202 (audit-of-the-audits): LLM blind-send cross-verifier. Independent second opinion on sector,
   // families and every bound framework. Fail-closed on disagreement (merged into verify below); recorded
   // in the payload so the renderer and the send gate can see it. Runs BEFORE serialization.
@@ -1175,6 +1181,12 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     }
   }
   payload.llm_verify = _llmv;
+
+  // Recover the manifest buildPayload opened. If it is absent (an old payload, or buildPayload threw before it
+  // could open one) we start a fresh one: every required stage is then 'not_reached', the seal returns
+  // sendable:false, and the audit is correctly treated as a draft rather than silently passing.
+  const _manifest = payload._stage_manifest || _SM.newManifest();
+  delete payload._stage_manifest;
 
   // BREACH ADJUDICATION. Proved from the EVIDENCE, not from the fact that a function was called: the adjudicator
   // once ran, ruled on every candidate, and had its verdict silently dropped at the copy seam - the report still
@@ -1242,7 +1254,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // E-082 (blind-send): verify BEFORE the write. A red payload persists quarantined (verified=false, machine
   // reasons in verify_report) and is never outreach-eligible; the loop inspects reds and re-mints after fixes.
   let _verify; try { _verify = require('../../../lib/audit/verify-payload.js').verifyPayload(payload); }
-  catch (e) { _verify = { verified: false, reasons: [{ code: 'verifier_crash', detail: String(e).slice(0, 160) }] }; }
+  catch (e) { _warn('build.js:1257', e); _verify = { verified: false, reasons: [{ code: 'verifier_crash', detail: String(e).slice(0, 160) }] }; }
   // E-202 merge: any LLM cross-check flag quarantines (fail-closed); LLM unavailability does NOT block
   // (deterministic verifier remains the hard gate) but is visible in payload.llm_verify for the send gate.
   if (_llmv && _llmv.status === 'flag') {
@@ -1321,7 +1333,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
         try { _fs.unlinkSync(_tmp); } catch (_e) { _warn('build.js:1237', _e); }
         try { _fs.rmdirSync(_tmpDir); } catch (_e) { _warn('build.js:1238', _e); }
         _seam.shim = 'file';
-      } catch (_e) { _seam.shim = 'file_err'; }
+      } catch (_e) { _warn('build.js:1336', _e); _seam.shim = 'file_err'; }
     } else {
       ins = pg(_stmt);
       _seam.shim = (ins && String(ins).trim()) ? 'ok' : 'null';

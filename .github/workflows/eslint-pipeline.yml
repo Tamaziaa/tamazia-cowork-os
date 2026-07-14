@@ -1,0 +1,21 @@
+name: no-undef (audit pipeline)
+# A ReferenceError in the audit pipeline is a dead mint. The stage manifest was opened in buildPayload() and
+# referenced in build() - a different function - and every mint died with "_manifest is not defined" while 75 evals
+# stayed green, because no eval ever EXECUTES buildPayload(). This gate is the cheapest thing that catches it.
+on:
+  pull_request:
+    paths: ['src/**', 'eslint.config.mjs']
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  no-undef:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: '22' }
+      - run: npx --yes eslint@9
