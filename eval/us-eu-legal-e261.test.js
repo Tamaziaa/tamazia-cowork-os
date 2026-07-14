@@ -40,9 +40,29 @@ else {
     .frameworks.map((f) => (typeof f === 'object' ? f.framework_short : f));
 
   t('E-261: a US law firm attaches the ABA Model Rules', () => {
-    const fw = fwOf(['US'], 'law-firms', 'Attorneys at Law. 100 Main Street, Austin, TX 78701');
+    // ABA Rule 7.1 (false or misleading communication) is a PROHIBITION: it connects when the firm actually
+    // MAKES such a claim. A firm that makes none is not in breach of 7.1 — and must not be told it is.
+    const fw = fwOf(['US'], 'law-firms', 'Attorneys at Law. 100 Main Street, Austin, TX 78701. We are the best law firm in Texas and we guarantee a result.');
     A.ok(fw.includes('US_ABA_MODEL_RULES'), 'the ABA Model Rules ARE the US law-firm website regime. Got: ' + fw.join(','));
-    A.ok(fw.includes('US_ABA_SPECIALIST'));
+  });
+
+  // NOTE ON SCOPE. connect() returns the frameworks that BIND the firm, not the breaches we assert. ABA Rule 7.1
+  // genuinely binds every US law firm — it belongs in the obligation map. What must never happen is the BREACH
+  // firing on a firm that made no prohibited claim. Until v25.12 it did: the rule was an element_checklist whose
+  // elements were PROHIBITIONS ("No guarantee of outcome") evaluated as required disclosures, so a silent firm was
+  // BREACHED and a firm advertising "THE BEST LAW FIRM, GUARANTEED RESULTS" PASSED. That is now a rule_type=
+  // 'prohibit', and the polarity is enforced catalogue-wide by eval/rule-polarity.test.js.
+  t('E-261: ABA 7.4 (specialist) is CONDITIONAL — it binds only a firm that CLAIMS certification', () => {
+    // Rule 7.4: "shall not state or imply that a lawyer is certified as a specialist ... unless certified by an
+    // organization approved by an appropriate authority." It does not bind a firm that never makes the claim.
+    // The old rule additionally demanded a US STREET ADDRESS and a US ZIP CODE as "elements", which a UK firm
+    // can never satisfy — an automatic P1 on every non-US firm.
+    const claims = fwOf(['US'], 'law-firms', 'Attorneys at Law. Our board-certified specialist in family law. Austin, TX 78701.');
+    A.ok(claims.includes('US_ABA_SPECIALIST'),
+      'a firm claiming board certification MUST attach ABA 7.4. Got: ' + claims.join(','));
+    const silent = fwOf(['US'], 'law-firms', 'Attorneys at Law. 100 Main Street, Austin, TX 78701.');
+    A.ok(!silent.includes('US_ABA_SPECIALIST'),
+      'a firm that never claims specialist status was bound by ABA 7.4. Got: ' + silent.join(','));
   });
 
   t('E-261: an EU law firm attaches the Services Directive and the ECD', () => {

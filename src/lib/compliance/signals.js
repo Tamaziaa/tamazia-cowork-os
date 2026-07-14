@@ -106,24 +106,53 @@ function augmentFreezones(jurSet, corpusText = '') {
 // TYPED NEXUS DETECTION (Master Framework §7.1; GDPR Art 3 / EDPB Guidelines 3/2018). Generalises the free-zone
 // establishment-vs-serving test (_ESTAB_RX/_SERVE_RX) to all jurisdictions. Produces, per jurisdiction family, the
 // three typed relations with evidence. ADDITIVE: added to buildSignals return; no consumer yet (connect wires it in P2.2).
+// NEXUS_PROFILE — the regexes that decide WHICH COUNTRY'S LAWS BIND A FIRM.
+//
+// v25.12 — THE GHOST-JURISDICTION FIX. Every alternative below now NAMES the country it claims to prove.
+//
+// Before this, USA.estab contained the bare alternative /incorporated in/ — anchored to no country at all.
+// "Mills & Reeve LLP is ... incorporated in ENGLAND AND WALES" therefore proved establishment in the UNITED
+// STATES, and US_ABA_MODEL_RULES / US_ABA_SPECIALIST / US_ADA / US_ATTORNEY_ADVERTISING attached to a UK law
+// firm (live: mills-reeve/0IewxjkR — 4 of its 8 compliance findings were jurisdictionally void). 6 of 7 real
+// UK/EU/UAE firm footers were judged "established in the United States", every one on that phrase.
+// UK.estab had /our (uk )?office/ with the country OPTIONAL, so a bare "our office" established every website
+// on earth in the United Kingdom — Cooley, a US firm, picked up UK law that way. Bare corporate suffixes
+// (\bllc\b, \binc\b, \bltd\b) proved establishment from an ARTICLE ABOUT company forms.
+//
+// markets.js already states the contract in its own return statement:
+//     bound,   // NEW: legal nexus — the ONLY set that may attach frameworks
+// detectNexus() bypassed it. compliance.js now enforces it (the markets interlock).
+//
+// RULE (locked by eval/nexus-anchoring.test.js): an establishment alternative that does not name its own
+// country, state, city or registrar is not evidence — it is a coincidence with a legal regime attached.
+//
+// REMOVED (and never re-add): /\b(llc|inc|corp|pllc)\b[^.]{0,45}(delaware|new york|...)/ — a corporate suffix
+// sitting near a US state name is NOT establishment. Al Tamimi (Dubai) matched it on its own advisory copy,
+// "We advise clients on US LLC formation and Delaware incorporation." An ADVISORY firm writing about a regime
+// is not governed by it. A real US firm is caught by "incorporated in Delaware", "headquartered in the United
+// States", "our office in New York", or an EIN — all of which name the jurisdiction as the firm's OWN.
+//
+// SAFE BY CONSTRUCTION: strictness here can only affect FOREIGN attachment. A firm's REGISTERED country is
+// injected as establishment unconditionally (E-228 — registration IS establishment), so no firm can ever
+// lose its home jurisdiction by tightening these.
 const NEXUS_PROFILE = {
   UK:  { term:/\buk\b|united kingdom|britain|england|scotland|wales/i,
-         estab:/registered (in|at|with)[^.]{0,20}(england|wales|scotland|uk|companies house)|companies house (no|number|registration)|\bcompany (no|number)\b|our (uk )?office|based in the uk|headquartered in (the )?uk|\bltd\b|limited company/i,
+         estab:/(?:registered|incorporated|established)\s+(?:in|at|with)[^.]{0,25}(?:england|wales|scotland|northern ireland|united kingdom|\buk\b|companies house)|companies house (?:no|number|registration)|(?:our )?offices?\s+in[^.]{0,18}(?:london|manchester|birmingham|edinburgh|glasgow|leeds|bristol|cambridge|norwich|oxford|england|scotland|wales|the uk|united kingdom)|based in the uk|headquartered in (?:the )?uk|\b(?:ltd|limited|llp)\b[^.]{0,45}(?:england|wales|scotland|united kingdom|companies house)/i,
          currency:/£|\bgbp\b|pounds? sterling/i, cctld:/\.co\.uk|\.org\.uk|\.uk\b/i,
          serve:/(serve|serving|for)[^.]{0,20}(uk|united kingdom|britain) (clients|customers|market)|ship(ping)?[^.]{0,12}(uk|united kingdom)|uk[- ](wide|based) (clients|customers)|clients across the uk/i,
          phone:/\+44\b|\b0044\b/ },
   EU:  { term:/european union|\beea\b|\beurope\b|\bgdpr\b/i,
-         estab:/registered in (the )?(eu|europe|germany|france|spain|italy|netherlands|ireland)|eu (establishment|entity|office|subsidiary)|based in (germany|france|spain|italy|netherlands|ireland)/i,
+         estab:/(?:registered|incorporated|established)\s+in\s+(?:the\s+)?(?:eu|europe|germany|france|spain|italy|netherlands|ireland|belgium|austria|portugal|poland|sweden|denmark|finland|luxembourg)|eu (?:establishment|entity|office|subsidiary)|(?:our )?offices?\s+in[^.]{0,18}(?:berlin|munich|frankfurt|paris|madrid|rome|milan|amsterdam|dublin|brussels|vienna|lisbon|warsaw|stockholm|copenhagen|helsinki|luxembourg)|based in (?:germany|france|spain|italy|netherlands|ireland|belgium|austria|portugal|poland|sweden|denmark|finland|luxembourg)/i,
          currency:/€|\beur\b|euros?/i, cctld:/\.eu\b|\.de\b|\.fr\b|\.es\b|\.it\b|\.nl\b|\.ie\b/i,
          serve:/(serve|serving|for)[^.]{0,20}(eu|europe|european) (clients|customers|market)|ship(ping)?[^.]{0,12}(eu|europe)|european (clients|customers)/i,
          phone:/\+3[0-9]\b|\+4[0-8]\b/ },
   USA: { term:/united states|\bu\.?s\.?a?\b|america/i,
-         estab:/incorporated in|\bllc\b|\binc\.?\b|\bein\b|registered in (delaware|nevada|california|new york|texas)|headquartered in the (us|usa|united states)/i,
+         estab:/(?:incorporated|organi[sz]ed|formed|registered)\s+(?:in|under the laws of)[^.]{0,40}(?:delaware|nevada|california|new york|texas|florida|illinois|massachusetts|the united states)|headquartered in the (?:us|usa|united states)|(?:our )?offices?\s+in[^.]{0,18}(?:new york|california|delaware|texas|florida|illinois|massachusetts|washington dc|chicago|boston|palo alto|san francisco|los angeles|the us|the usa|the united states)|\bein\b[\s:#]*\d{2}-\d{7}/i,
          currency:/\bus\$|\busd\b/i, cctld:/\.us\b/i,
          serve:/(serve|serving|for)[^.]{0,20}(us|usa|united states|american) (clients|customers|market)|ship(ping)?[^.]{0,12}(us|usa|united states)|american (clients|customers)/i,
          phone:/\+1\b/ },
   AE:  { term:/united arab emirates|\buae\b|dubai|abu dhabi/i,
-         estab:/registered in[^.]{0,12}(uae|dubai|abu dhabi)|\btrn\b|trade licen[cs]e|free[- ]?zone licen[cs]e|based in (dubai|abu dhabi|the uae)/i,
+         estab:/(?:registered|incorporated|established|licen[cs]ed)\s+in[^.]{0,25}(?:uae|united arab emirates|dubai|abu dhabi|sharjah|difc|adgm)|(?:trade|commercial|free[- ]?zone) licen[cs]e[^.]{0,35}(?:uae|dubai|abu dhabi|sharjah|\bded\b|dmcc|jafza|difc|adgm)|(?:our )?offices?\s+in[^.]{0,18}(?:dubai|abu dhabi|sharjah|difc|adgm|the uae|united arab emirates)|\btrn\b[\s:#]*\d{15}|based in (?:dubai|abu dhabi|the uae|sharjah)/i,
          currency:/\baed\b|dirhams?/i, cctld:/\.ae\b/i,
          serve:/(serve|serving|for)[^.]{0,20}(uae|dubai|abu dhabi|emirates) (clients|customers|market)/i,
          phone:/\+971\b/ },
@@ -195,4 +224,4 @@ function buildSignals({ jurisdictions = [], sector, corpusText = '', employees, 
   return { jurSet, sector: sec, trig, employeeBand: employeeBand(employees), nexus: detectNexus(jurSet, corpusText) };
 }
 
-module.exports = { buildSignals, toCanonicalJurisdictions, augmentFreezones, normalizeSector, deriveTriggers, employeeBand, JUR_MAP };
+module.exports = { buildSignals, detectNexus, toCanonicalJurisdictions, augmentFreezones, normalizeSector, deriveTriggers, employeeBand, JUR_MAP, NEXUS_PROFILE };
