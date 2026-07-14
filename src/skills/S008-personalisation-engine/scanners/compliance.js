@@ -64,6 +64,12 @@ function loadEnforcement(jurisdictions) {
 // a law firm of. A swallowed error here means a check quietly did not run and the audit still claimed a clean bill.
 // The adjudicator threw "cc is not defined" inside one of these for two whole engine versions.
 const _SWARN = [];
+// SUB-STAGE LEDGER. cookie_evidence, ico_register and statute_rag all run INSIDE this scanner, so build.js
+// cannot see them and the stage manifest reported them 'not_reached' forever — while the PECR breach they
+// produce was sitting in the payload. A manifest that lies by omission is worse than no manifest.
+const _SUBSTAGE = {};
+function _stage(name, state, reason) { _SUBSTAGE[name] = { state, reason: reason || null }; }
+
 function _swarn(where, e) {
   const msg = String((e && e.message) || e || 'unknown').slice(0, 180);
   _SWARN.push({ where, error: msg });
@@ -879,7 +885,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.3-2026-07-quality-gates';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.4-2026-07-observed-breach';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
@@ -1255,7 +1261,9 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FAIL-OPEN: no browser, no claim. A missing observation is not evidence of compliance, and never of a breach.
   try {
     const { observe, cookieFindings } = require('../../../lib/evidence/cookie-evidence.js');
+    if (process.env.COOKIE_EVIDENCE === '0') _stage('cookie_evidence', 'skipped', 'COOKIE_EVIDENCE=0');
     if (process.env.COOKIE_EVIDENCE !== '0') {
+      _stage('cookie_evidence', 'ran');
       const _u = 'https://' + domain + '/';
       const _obs = await Promise.race([
         observe(_u, { timeoutMs: 15000 }),
@@ -1289,6 +1297,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   try {
     const { checkRegistration, registrationFinding } = require('../../../lib/evidence/ico-register.js');
     const _cc2 = String(country || '').toUpperCase();
+    _stage('ico_register', (!_cc2 || ['UK','GB','GBR'].includes(_cc2)) ? 'ran' : 'skipped', 'ICO register is UK-only');
     if (!_cc2 || _cc2 === 'UK' || _cc2 === 'GB' || _cc2 === 'GBR') {
       const _co = (firmProfile && (firmProfile.company_name || firmProfile.legal_name || firmProfile.name)) || String(domain).replace(/\.(co\.uk|com|org|net|uk|law)$/i, '').replace(/[-_]/g, ' ');
       const _reg = checkRegistration({ company: _co, domain });
@@ -1467,6 +1476,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     firm_profile: firmProfile, detected_sector: _secCanon, sub_sector: _subSector, sub_sector_meta: _subSectorMeta,
     rules_evaluated: rules.length, hits, misses,
     scan_warnings: _SWARN.slice(0, 40), scan_warning_count: _SWARN.length,   // a quietly-skipped check is now a FACT
+    substages: _SUBSTAGE,   // cookie_evidence / ico_register — build.js folds these into the stage manifest
     ...catalogueSize(),   // E31: catalogue_rules + catalogue_frameworks, measured from the live register
     resolver_dropped: _resolverDropped,
     p0_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P0').length,
@@ -1489,7 +1499,7 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.3-2026-07-quality-gates'), scan, ruleCheck, gatherCorpus, loadRules };
+module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.4-2026-07-observed-breach'), scan, ruleCheck, gatherCorpus, loadRules };
 
 // ---- blind-send helpers (blueprint E-041/E-044) ----
 function _evidenceGate(findings, pages) {

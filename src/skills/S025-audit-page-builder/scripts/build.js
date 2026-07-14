@@ -358,6 +358,17 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   if (scan && scan.markets) _SM.ran(_manifest, 'jurisdiction');
   else _SM.failed(_manifest, 'jurisdiction', new Error('no markets resolved: no law can be attached'));
   try { comp = await _M_compliance.scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); _SM.ran(_manifest, 'compliance_scan'); } catch (_e) { _SM.failed(_manifest, 'compliance_scan', _e); /* #48: never present a THROWN compliance scan as a clean bill of health — record the failure so the payload marks compliance unassessed rather than silently 'no breaches'. */ comp = { frameworks: [], findings: [], compliance_unassessed: true, compliance_error: String((_e && _e.message) || _e).slice(0, 160) }; }
+
+  // FOLD IN THE SCANNER'S SUB-STAGES. cookie_evidence and ico_register run INSIDE compliance.js, so build.js could
+  // not see them and the manifest reported them 'not_reached' FOREVER — while the PECR breach that cookie_evidence
+  // produces was sitting right there in the payload, in needs_review. The manifest was LYING BY OMISSION, which is
+  // worse than not having one: it made a stage that WAS running look dead, and it would have made a stage that
+  // genuinely DIED look identical. A contract that cannot tell those two apart is not a contract.
+  for (const [_k, _v] of Object.entries((comp && comp.substages) || {})) {
+    if (_v.state === 'ran') _SM.ran(_manifest, _k);
+    else if (_v.state === 'skipped') _SM.skipped(_manifest, _k, _v.reason);
+    else _SM.failed(_manifest, _k, new Error(_v.reason || 'failed'));
+  }
   // HQ RECONCILIATION (Phase-7): the LLM firm-profiler (now reliable via the Cloudflare-first router) determines the
   // registered LEGAL HQ from the corpus. resolveHomeCountry runs BEFORE the profile exists and a .com firm can fall to
   // a TLD/market-derived scalar country that contradicts the real HQ (cert: pkfhospitality is London-HQ but .com made
@@ -614,7 +625,11 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     try {
       const _gp = _M_geo_probe;
       const _q = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
-      if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: _firmName, domain, env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, competitor_consistency: _gpr.competitor_consistency ?? null, providers_used: _gpr.providers_used || null, from_cache: _gpr.from_cache || false, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
+      if (!_q) _SM.skipped(_manifest, 'geo_probe', 'no query could be formed for this firm');
+      if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: _firmName, domain, env, samples: 2 });
+        if (!_gpr || !_gpr.ok) _SM.failed(_manifest, 'geo_probe', new Error((_gpr && _gpr.error) || 'geoProbe returned not-ok'));
+        else _SM.ran(_manifest, 'geo_probe');
+        if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, competitor_consistency: _gpr.competitor_consistency ?? null, providers_used: _gpr.providers_used || null, from_cache: _gpr.from_cache || false, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
     } catch (_e) { _warn('build.js:602', _e); }
     })(),
     // P3.6 source-gap (free SERP authority sources)
@@ -1208,6 +1223,23 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // SEAL. `sendable:false` means a required stage did not run, and this is therefore a draft, not a compliance
   // report. The send gate reads this. It is the difference between an audit that is silent about its own gaps
   // and one that cannot reach a law firm while it has them.
+  // PSI and STATUTE_RAG, proved from the EVIDENCE. Neither is called from this function — psi is produced inside
+  // site-scan, statute-rag inside the breach adjudicator — so there is no call site here to wrap. Asking "was the
+  // function called" is the wrong question anyway: statute-rag.js was required by the adjudicator for MONTHS and
+  // never actually ran, and the code looked perfect. The only honest question is whether the OUTPUT is on the
+  // payload. If the grounding is not there, the stage did not happen, whatever the code says.
+  if (payload.scan && payload.scan.psi) _SM.ran(_manifest, 'psi');
+  else _SM.failed(_manifest, 'psi', new Error('no PageSpeed measurement on the payload (key missing, quota, or timeout)'));
+
+  {
+    const _adj = payload.adjudication || {};
+    const _grounded = !!(_adj.grounded || _adj.statute_grounded
+      || (Array.isArray(_adj.batches) && _adj.batches.some((b) => b && (b.grounded || b.statute_chunks))));
+    if (_grounded) _SM.ran(_manifest, 'statute_rag');
+    else if (_adj.ran !== true) _SM.skipped(_manifest, 'statute_rag', 'the adjudicator did not run, so nothing was grounded');
+    else _SM.failed(_manifest, 'statute_rag', new Error('the adjudicator ran but NOTHING was grounded against statute text — 908 chunks across 366 laws sat unused'));
+  }
+
   payload.stage_manifest = _SM.seal(_manifest);
   payload.sendable = payload.stage_manifest.sendable;
 

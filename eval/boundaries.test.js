@@ -91,5 +91,65 @@ t('sameHost: subdomains match, lookalikes do not', () => {
   A.strictEqual(U.sameHost('reed.co.uk', ''), false);
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// SECOND STRYKER PASS. The first pass took prose.js 47->73% and url-safe.js 37->48%. These kill the clusters that
+// still survived: the isNonCrawlable branches, every step of the sameHost normaliser, and the three ratio
+// thresholds in isProse that decide whether a line is a sentence or a menu.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+t('isNonCrawlable: EVERY branch, pinned', () => {
+  A.strictEqual(U.isNonCrawlable(''), true, 'empty href');
+  A.strictEqual(U.isNonCrawlable(null), true, 'null href');
+  A.strictEqual(U.isNonCrawlable('   '), true, 'whitespace-only href');
+  A.strictEqual(U.isNonCrawlable('#section'), true, 'a fragment is the same page');
+  for (const sch of ['mailto', 'tel', 'sms', 'callto', 'fax']) {
+    A.strictEqual(U.isNonCrawlable(sch + ':x'), true, sch + ': is not a page');
+    A.strictEqual(U.isNonCrawlable(sch.toUpperCase() + ':x'), true, sch + ': must be case-insensitive');
+  }
+  A.strictEqual(U.isNonCrawlable('javascript:alert(1)'), true, 'a dangerous scheme is never crawlable');
+  A.strictEqual(U.isNonCrawlable('/privacy'), false, 'a real path IS crawlable');
+  A.strictEqual(U.isNonCrawlable('https://x.com/a'), false, 'a real url IS crawlable');
+});
+
+t('sameHost normaliser: every step of the chain is load-bearing', () => {
+  // scheme strip
+  A.strictEqual(U.sameHost('https://reed.co.uk', 'reed.co.uk'), true, 'https:// must be stripped');
+  A.strictEqual(U.sameHost('http://reed.co.uk', 'reed.co.uk'), true, 'http:// must be stripped');
+  // path strip
+  A.strictEqual(U.sameHost('reed.co.uk/careers/jobs', 'reed.co.uk'), true, 'the path must be dropped');
+  // www strip
+  A.strictEqual(U.sameHost('www.reed.co.uk', 'reed.co.uk'), true, 'www. must be stripped');
+  A.strictEqual(U.sameHost('reed.co.uk', 'www.reed.co.uk'), true, 'www. must be stripped on BOTH sides');
+  // trailing-dot strip (a fully-qualified DNS name)
+  A.strictEqual(U.sameHost('reed.co.uk.', 'reed.co.uk'), true, 'a trailing dot is the same host');
+  // case
+  A.strictEqual(U.sameHost('REED.CO.UK', 'reed.co.uk'), true, 'host comparison is case-insensitive');
+  // and the whole point: none of that may let a lookalike through
+  A.strictEqual(U.sameHost('https://www.notreed.co.uk/x', 'reed.co.uk'), false);
+});
+
+t('isProse: the function-word RATIO threshold (0.15) is pinned on both sides', () => {
+  // 20 words, exactly 3 function words = 0.15 -> must PASS (the guard is `< 0.15`)
+  const at15 = 'the of to alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho';
+  A.strictEqual(isProse(at15), true, 'exactly 0.15 must still be prose');
+  // dilute it: same 3 function words, more content words -> ratio drops below 0.15 -> must FAIL
+  const below = at15 + ' sigma tau upsilon phi chi psi omega alpha beta gamma';
+  A.strictEqual(isProse(below), false, 'below 0.15 is too sparse to be a sentence');
+});
+
+t('isProse: the lowercase RATIO threshold (0.5) is pinned on both sides', () => {
+  // 8 words, 4 lowercase = exactly 0.5. Title-Case words are interleaved so this isolates the RATIO guard and does
+  // not trip the separate "3 consecutive Title-Case words" rule.
+  A.strictEqual(isProse('we Alpha use Beta the Gamma of Delta'), true, 'exactly 0.5 lowercase must pass');
+  // tip it below 0.5 -> a label list
+  A.strictEqual(isProse('we Alpha use Beta the Gamma Delta of Epsilon Zeta'), false, 'below 0.5 lowercase is a menu');
+});
+
+t('isProse: the function-word FLOOR (3) is pinned on both sides', () => {
+  A.strictEqual(isProse('the of to alpha beta gamma delta'), true, 'exactly 3 function words passes the floor');
+  A.strictEqual(isProse('the of alpha beta gamma delta epsilon'), false, 'only 2 function words is not a sentence');
+});
+
 console.log('\n' + (n - bad) + '/' + n + ' passed');
 process.exit(bad ? 1 : 0);
