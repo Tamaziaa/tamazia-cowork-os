@@ -523,21 +523,10 @@ function detectOperatingJurisdictions(corpus) {
 function _stripText(html) {
   return htmlToText(html);   // D-01: THIS builds the corpus every evidence_quote is cut from
 }
-const _PROSE_WORDS = /\b(the|a|an|of|to|your|our|we|you|is|are|was|were|will|may|can|must|with|for|that|this|and|or|but|if|when|how|all|any|please|do|not|no|on|in|at|by|as|it|they|their|these|those|because|so|than|then|from|have|has|had)\b/gi;
+// ONE DOOR. isProse used to live here AND in corpus-index.js, hand-synced. See src/lib/util/prose.js.
+const { isProse: _isProse } = require('../../../lib/util/prose.js');
 // Decide whether a candidate string is a genuine prose sentence vs nav/footer/boilerplate (Title-Case link runs).
-function _isProse(str) {
-  const words = str.split(/\s+/).filter(Boolean);
-  if (words.length < 6 || words.length > 60) return false;
-  if (/\b(menu|toggle|skip to|breadcrumb|navigation)\b/i.test(str)) return false;   // explicit nav markers
-  const fn = (str.match(_PROSE_WORDS) || []).length;
-  if (fn < 3) return false;                                   // real sentences carry several function words
-  const lower = words.filter(w => /^[a-z]/.test(w)).length;
-  if (lower / words.length < 0.5) return false;               // mostly Title-Case tokens = menu/labels
-  if (fn / words.length < 0.15) return false;                 // too sparse to be a sentence
-  // Reject link/label lists: a run of 3+ consecutive Title-Case words (e.g. "Our Expertise Industries Consumer Markets").
-  let run = 0; for (const w of words) { if (/^[A-Z][a-zA-Z]{1,}$/.test(w)) { run++; if (run >= 3) return false; } else run = 0; }
-  return true;
-}
+
 // #43/#44: rule matching must run against VISIBLE prose, not raw HTML. A disclosure keyword inside a <script>
 // or attribute is not a real, user-facing disclosure — matching raw markup both false-hits (miss inside script)
 // and false-passes (a 'present' disclosure that only lives in a cookie-banner script). Cache the stripped text
