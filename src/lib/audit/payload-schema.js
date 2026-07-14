@@ -28,17 +28,23 @@ const FORBIDDEN_NAMES = /^(sector regulator|unknown|n\/a|none|null|undefined|off
 // exactly it. A heading is a real word followed by furniture; the furniture is what gives it away.
 const PAGE_FURNITURE = /\b(office|offices|home|homepage|contact|contact us|about|about us|menu|navigation|search|login|careers|our team|locations?)\s*$/i;
 
-const Finding = z.object({
-  framework_short: z.string().min(1),
-  severity: z.string().optional().nullable(),
-  evidence_quote: z.string().optional().nullable(),
-  observed: z.boolean().optional(),
-  adjudicated: z.boolean().optional(),
-}).passthrough()
-  .refine(
-    (f) => f.observed === true || f.adjudicated === true || !f.evidence_quote,
-    { message: 'a text-derived finding carries an evidence_quote but NO adjudication — the report would tell the firm its breaches were reviewed when they were not' },
-  );
+// ── THE REAL POINTER SHAPE.
+// My first cut of this schema invented a `findings[]` array with `framework_short` and `adjudicated` fields. NONE OF
+// THAT EXISTS. The payload key is `pointers[]` and its shape is { fact, kind, bucket, state, severity, citation,
+// evidence, confidence, ... }. I wrote a validator from ASSUMPTION instead of from the data, so it validated a field
+// that is never present and would have silently passed everything forever — a gate that checks nothing, which is the
+// most dangerous kind. I read a live payload and wrote this against what is actually there.
+const Pointer = z.object({
+  kind: z.enum(['signal', 'absence', 'probe', 'observed']),
+  bucket: z.enum(['compliance', 'accessibility', 'security', 'technical_seo', 'tech', 'seo', 'content_depth', 'ai_visibility', 'tls_dns']),
+  state: z.enum(['CONFIRMED']),                       // only CONFIRMED may ship; anything else is a draft finding
+  severity: z.enum(['P0', 'P1', 'P2', 'P3']),
+  // AN UNEVIDENCED CLAIM IS THE ONE THING WE FINE OTHER FIRMS FOR (CAP 3.7). Every pointer on the page asserts
+  // something about this firm, so every pointer must carry the thing it is asserted FROM.
+  citation: z.string().min(1, 'a pointer with no citation is an assertion with nothing behind it'),
+  evidence: z.string().min(1, 'a pointer with no evidence is an unevidenced claim on a legal document'),
+  confidence: z.number().min(0).max(1).optional(),
+}).passthrough();
 
 const AuditPayload = z.object({
   // WHO. A name that is a page heading or a domain stem is not a firm.
@@ -63,11 +69,24 @@ const AuditPayload = z.object({
     section_ref: z.string().nullable(),
   }).passthrough()).optional(),
 
-  findings: z.array(Finding).optional(),
+  pointers: z.array(Pointer).optional(),
+
+  // THE ADJUDICATOR RAN. It once ran, ruled on every candidate, and had its verdict dropped at a copy seam while
+  // the report still told the firm its breaches had been reviewed. If any COMPLIANCE pointer is on this page, the
+  // adjudication block must say it ran.
+  adjudication: z.object({ ran: z.boolean() }).passthrough().optional(),
 
   // THE CONTRACT. A required stage that did not run makes this a draft.
   stage_manifest: z.object({ sendable: z.boolean() }).passthrough().optional(),
-}).passthrough();
+}).passthrough()
+  .refine(
+    (p) => {
+      const compliance = (p.pointers || []).filter((x) => x && x.bucket === 'compliance');
+      if (!compliance.length) return true;                     // nothing to adjudicate
+      return !!(p.adjudication && p.adjudication.ran === true);
+    },
+    { message: 'this audit carries COMPLIANCE findings but the adjudicator never ran — the report would tell the firm its breaches had been reviewed when they had not', path: ['adjudication'] },
+  );
 
 /**
  * Returns { ok, errors[] }. Never throws — a schema crash must not become a mint crash.
