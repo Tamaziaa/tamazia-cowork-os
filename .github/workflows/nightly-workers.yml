@@ -34,11 +34,31 @@ jobs:
       - name: Schema provision (idempotent)
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # THE ENGINE VERSION IS A PROPERTY OF THE CODE, NOT OF THE ENVIRONMENT.
+          # .env carries COMPLIANCE_ENGINE_VERSION, and the loop above exports it AFTER the job env is applied. So a
+          # stale value in the secret PINS a fresh checkout: v25 code built a payload stamped v24, the database gate
+          # correctly rejected the row as a stale worker, and the mint failed with "audit_pages INSERT failed - no
+          # row written". The stale-worker lock was defeated by the very thing it exists to detect.
+          # E-273 re-asserted MINT_CONCURRENCY and MINT_BUILD_TIMEOUT_MS from the workflow and MISSED THIS ONE. An
+          # env var that can rename the engine's own version is a footgun: it can make a fresh checkout look stale,
+          # and a stale checkout look fresh. Unset it. The constant in compliance.js is the single source of truth.
+          unset COMPLIANCE_ENGINE_VERSION
+          echo "[engine] effective ENGINE_VERSION=$(node -e "process.stdout.write(require('./src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION)")"
           node scripts/ensure-schema.js
           node scripts/cc2-provision.js
       - name: Reconcile + recycle (Neon <-> Mystrika <-> cal <-> audits, then recycle)
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # THE ENGINE VERSION IS A PROPERTY OF THE CODE, NOT OF THE ENVIRONMENT.
+          # .env carries COMPLIANCE_ENGINE_VERSION, and the loop above exports it AFTER the job env is applied. So a
+          # stale value in the secret PINS a fresh checkout: v25 code built a payload stamped v24, the database gate
+          # correctly rejected the row as a stale worker, and the mint failed with "audit_pages INSERT failed - no
+          # row written". The stale-worker lock was defeated by the very thing it exists to detect.
+          # E-273 re-asserted MINT_CONCURRENCY and MINT_BUILD_TIMEOUT_MS from the workflow and MISSED THIS ONE. An
+          # env var that can rename the engine's own version is a footgun: it can make a fresh checkout look stale,
+          # and a stale checkout look fresh. Unset it. The constant in compliance.js is the single source of truth.
+          unset COMPLIANCE_ENGINE_VERSION
+          echo "[engine] effective ENGINE_VERSION=$(node -e "process.stdout.write(require('./src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION)")"
           # One heartbeat spanning the bundle: recycle.js re-tiers leads back to lifecycle_stage='qualified', and
           # reconcile.js flips leads to 'booked' — both write the tier/lifecycle columns the engine cycle's seam
           # reads. Wrapping them keeps nightly-workers visible to the engine-cycle race guard (heartbeat.js
@@ -55,6 +75,16 @@ jobs:
       - name: Compute nightly metrics (per-source + per-pipeline deliverability/cost -> metrics table)
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # THE ENGINE VERSION IS A PROPERTY OF THE CODE, NOT OF THE ENVIRONMENT.
+          # .env carries COMPLIANCE_ENGINE_VERSION, and the loop above exports it AFTER the job env is applied. So a
+          # stale value in the secret PINS a fresh checkout: v25 code built a payload stamped v24, the database gate
+          # correctly rejected the row as a stale worker, and the mint failed with "audit_pages INSERT failed - no
+          # row written". The stale-worker lock was defeated by the very thing it exists to detect.
+          # E-273 re-asserted MINT_CONCURRENCY and MINT_BUILD_TIMEOUT_MS from the workflow and MISSED THIS ONE. An
+          # env var that can rename the engine's own version is a footgun: it can make a fresh checkout look stale,
+          # and a stale checkout look fresh. Unset it. The constant in compliance.js is the single source of truth.
+          unset COMPLIANCE_ENGINE_VERSION
+          echo "[engine] effective ENGINE_VERSION=$(node -e "process.stdout.write(require('./src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION)")"
           # P3-5: aggregate sends/bounce_events/inbound_emails/lead_sources/leads into the `metrics` table,
           # idempotent per metric_date. Read-mostly (only writes the metrics table, not lead tier columns) so it
           # is NOT a re-tier writer and gets its OWN heartbeat job name (not nightly-workers / not guarded).
@@ -63,6 +93,16 @@ jobs:
       - name: Health check (Z17-08 — wire the orphaned health-check.js)
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # THE ENGINE VERSION IS A PROPERTY OF THE CODE, NOT OF THE ENVIRONMENT.
+          # .env carries COMPLIANCE_ENGINE_VERSION, and the loop above exports it AFTER the job env is applied. So a
+          # stale value in the secret PINS a fresh checkout: v25 code built a payload stamped v24, the database gate
+          # correctly rejected the row as a stale worker, and the mint failed with "audit_pages INSERT failed - no
+          # row written". The stale-worker lock was defeated by the very thing it exists to detect.
+          # E-273 re-asserted MINT_CONCURRENCY and MINT_BUILD_TIMEOUT_MS from the workflow and MISSED THIS ONE. An
+          # env var that can rename the engine's own version is a footgun: it can make a fresh checkout look stale,
+          # and a stale checkout look fresh. Unset it. The constant in compliance.js is the single source of truth.
+          unset COMPLIANCE_ENGINE_VERSION
+          echo "[engine] effective ENGINE_VERSION=$(node -e "process.stdout.write(require('./src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION)")"
           # Z17-08: health-check.js was never attached to a workflow, so the health row went 51h stale.
           # Run it nightly, fail-open (|| true) so a probe hiccup never reds the workflow; it self-alerts
           # to Telegram/Slack on _overall=fail. Cheap, high-value observability (no writes beyond health row).

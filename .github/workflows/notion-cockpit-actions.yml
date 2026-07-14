@@ -60,9 +60,29 @@ jobs:
       - name: DB preflight (fail loud on dead Neon)
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # THE ENGINE VERSION IS A PROPERTY OF THE CODE, NOT OF THE ENVIRONMENT.
+          # .env carries COMPLIANCE_ENGINE_VERSION, and the loop above exports it AFTER the job env is applied. So a
+          # stale value in the secret PINS a fresh checkout: v25 code built a payload stamped v24, the database gate
+          # correctly rejected the row as a stale worker, and the mint failed with "audit_pages INSERT failed - no
+          # row written". The stale-worker lock was defeated by the very thing it exists to detect.
+          # E-273 re-asserted MINT_CONCURRENCY and MINT_BUILD_TIMEOUT_MS from the workflow and MISSED THIS ONE. An
+          # env var that can rename the engine's own version is a footgun: it can make a fresh checkout look stale,
+          # and a stale checkout look fresh. Unset it. The constant in compliance.js is the single source of truth.
+          unset COMPLIANCE_ENGINE_VERSION
+          echo "[engine] effective ENGINE_VERSION=$(node -e "process.stdout.write(require('./src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION)")"
           node scripts/db-preflight.js
 
       - name: Sync Notion Accept/Reject tags → Neon review_status
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # THE ENGINE VERSION IS A PROPERTY OF THE CODE, NOT OF THE ENVIRONMENT.
+          # .env carries COMPLIANCE_ENGINE_VERSION, and the loop above exports it AFTER the job env is applied. So a
+          # stale value in the secret PINS a fresh checkout: v25 code built a payload stamped v24, the database gate
+          # correctly rejected the row as a stale worker, and the mint failed with "audit_pages INSERT failed - no
+          # row written". The stale-worker lock was defeated by the very thing it exists to detect.
+          # E-273 re-asserted MINT_CONCURRENCY and MINT_BUILD_TIMEOUT_MS from the workflow and MISSED THIS ONE. An
+          # env var that can rename the engine's own version is a footgun: it can make a fresh checkout look stale,
+          # and a stale checkout look fresh. Unset it. The constant in compliance.js is the single source of truth.
+          unset COMPLIANCE_ENGINE_VERSION
+          echo "[engine] effective ENGINE_VERSION=$(node -e "process.stdout.write(require('./src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION)")"
           node scripts/notion-accept-reject.js
