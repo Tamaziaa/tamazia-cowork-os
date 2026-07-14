@@ -1,4 +1,5 @@
 'use strict';
+const { sameHost: _sameHost } = require('../util/url-safe.js');
 // P3.6 source-gap: the authoritative sources AI + Google read to answer your category. Uses the free SERP to find
 // which directory/authority domains rank for your buyer query (Wikipedia, industry directories, review sites,
 // trade press). Being absent or thin on the sources that own your category keeps you out of the answers.
@@ -12,7 +13,7 @@ async function sourceGap({ query, domain, env = process.env } = {}) {
   const dom = String(domain || '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*/, '').toLowerCase();
   const hosts = results.map(x => { try { return new URL(x.link || x.url || x.href).hostname.replace(/^www\./, ''); } catch (_e) { return ''; } }).filter(Boolean);
   const authoritySources = [...new Set(hosts.filter(h => AUTHORITY.test(h)))].slice(0, 5);
-  const youRank = hosts.some(h => h.includes(dom) || (dom && dom.includes(h)));
+  const youRank = hosts.some((h) => _sameHost(h, dom))   // a host is not a substring;
   let finding = null;
   if (authoritySources.length && !youRank) {
     finding = {

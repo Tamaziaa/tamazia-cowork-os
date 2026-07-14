@@ -52,4 +52,21 @@ function isHostPath(u, domain, prefix) {
   catch (_e) { return false; }
 }
 
-module.exports = { isDangerousScheme, isNonCrawlable, hostOf, isHost, isHostPath };
+
+/**
+ * Do two HOSTS refer to the same site? Registrable-domain comparison, www-insensitive.
+ *
+ * The GEO probe and the source-gap check both used `h.includes(dom) || dom.includes(h)`. Against reed.co.uk that
+ * returns TRUE for 'ed.co', for 'notreed.co.uk', and for 'reed.co.uk.evil.net' - three false positives out of five.
+ * Those two functions decide whether we tell a firm an AI engine CITES them and whether they RANK. A false positive
+ * there is a false claim in the report.
+ */
+function sameHost(a, b) {
+  const n = (x) => String(x || '').toLowerCase().replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '').replace(/\.$/, '');
+  const A = n(a), B = n(b);
+  if (!A || !B) return false;
+  return A === B || A.endsWith('.' + B) || B.endsWith('.' + A);
+}
+
+module.exports = {
+  sameHost, isDangerousScheme, isNonCrawlable, hostOf, isHost, isHostPath };

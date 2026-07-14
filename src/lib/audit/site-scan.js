@@ -5,6 +5,7 @@
 // findings, never an exception. Output pointers match the audit renderer's pointer shape.
 
 'use strict';
+const { isHost: _isHost } = require('../util/url-safe.js');   // ONE DOOR for host comparison
 const { htmlToText } = require('../util/html-text.js');
 
 let _http = null;
@@ -407,7 +408,15 @@ async function wikidataEntity(domain) {
     const ents = gd.entities || {};
     for (const qid of ids) {
       const p856 = ents[qid] && ents[qid].claims && ents[qid].claims.P856;
-      if (p856) for (const c of p856) { const url = String((((c.mainsnak || {}).datavalue || {}).value) || '').toLowerCase(); if (url.includes(dom)) return { checked: true, present: true, qid }; }
+      if (p856) for (const c of p856) {
+        const url = String((((c.mainsnak || {}).datavalue || {}).value) || '');
+        // CodeQL js/incomplete-hostname-regexp. This was `url.includes(dom)`, an UNANCHORED substring test on a
+        // URL. 'https://evil.com/?ref=reed.co.uk'.includes('reed.co.uk') is TRUE, so any Wikidata entity whose
+        // official-website claim merely MENTIONS the domain anywhere in the string would be bound to this firm.
+        // That entity then feeds firm identity and jurisdiction — i.e. the wrong company's name and the wrong
+        // country's law on a legal document. isHost() compares the parsed HOST, so only the real site matches.
+        if (_isHost(url, dom)) return { checked: true, present: true, qid };
+      }
     }
     // also check Wikipedia (complementary knowledge-graph signal)
     let wiki = false;

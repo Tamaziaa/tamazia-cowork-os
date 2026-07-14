@@ -1170,6 +1170,15 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // E-212 (v22.5): verdicts are CACHED keyed on everything that affects the answer (domain, engine version,
   // catalogue version, sector, exact binding set, prompt version). Re-mints and retries stop burning free-tier
   // quota; a catalogue or engine bump naturally invalidates. 'unavailable' verdicts are never cached.
+  // DECLARED BEFORE ITS FIRST USE. The llm_verify block below records into the manifest, so a `const` declared
+  // AFTER it is in the temporal dead zone: "Cannot access '_manifest' before initialization", which killed the
+  // mint a second time. eslint no-undef cannot see TDZ; no-use-before-define can, and now runs in CI.
+  // Recover the manifest buildPayload opened. If it is absent (an old payload, or buildPayload threw before it
+  // could open one) we start a fresh one: every required stage is then 'not_reached', the seal returns
+  // sendable:false, and the audit is correctly treated as a draft rather than silently passing.
+  const _manifest = payload._stage_manifest || _SM.newManifest();
+  delete payload._stage_manifest;
+
   let _llmv = null;
   const _lvKey = require('crypto').createHash('sha1').update([domain, String(payload.engine_version || ''), String(payload.framework_version || ''), String(payload.detected_sector || ''), Object.keys(payload.binding || {}).sort().join(','), 'pv1'].join('|')).digest('hex');
   try { const _c = pg(`SELECT verdict::text FROM llm_verdicts WHERE key='${_lvKey}' AND created_at > now() - interval '14 days' LIMIT 1`);
@@ -1182,11 +1191,6 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   }
   payload.llm_verify = _llmv;
 
-  // Recover the manifest buildPayload opened. If it is absent (an old payload, or buildPayload threw before it
-  // could open one) we start a fresh one: every required stage is then 'not_reached', the seal returns
-  // sendable:false, and the audit is correctly treated as a draft rather than silently passing.
-  const _manifest = payload._stage_manifest || _SM.newManifest();
-  delete payload._stage_manifest;
 
   // BREACH ADJUDICATION. Proved from the EVIDENCE, not from the fact that a function was called: the adjudicator
   // once ran, ruled on every candidate, and had its verdict silently dropped at the copy seam - the report still

@@ -1,4 +1,5 @@
 'use strict';
+const { sameHost: _sameHost } = require('../util/url-safe.js');
 // P3.1/3.2b/3.2c/3.2d/3.3/3.4/3.5 multi-sample GEO probe on the shared free-LLM fallback chain (Groq->NIM->Gemini),
 // so it never dies on one provider's rate limit. Asks the buyer query N times -> share-of-voice (how often YOU
 // appear), repeatability (how many of N runs named the firm), top-3 leaders. Adds a Gemini Google-grounded layer
@@ -75,7 +76,7 @@ async function geoProbe({ query, company, domain, env = process.env, samples = n
     if (g && g.sources && g.sources.length) {
       const dom = String(domain || '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*/, '').toLowerCase();
       const cited = g.sources.map(s => { try { return new URL(s.uri).hostname.replace(/^www\./, ''); } catch (_e) { return ''; } }).filter(Boolean);
-      grounded = { sources: g.sources.slice(0, 8), source_domains: cited.slice(0, 8), you_cited: dom ? cited.some(h => h.includes(dom) || dom.includes(h)) : null };
+      grounded = { sources: g.sources.slice(0, 8), source_domains: cited.slice(0, 8), you_cited: dom ? cited.some((h) => _sameHost(h, dom)) : null };   // a host is not a substring: 'ed.co' used to match 'reed.co.uk'
     }
   } catch (_e) {}
   if (!runs.length && !grounded) return { ok: false, reason: 'all_providers_unavailable' };
