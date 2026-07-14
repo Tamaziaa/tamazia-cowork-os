@@ -49,6 +49,9 @@ jobs:
       # E-240: Cloudflare Workers AI = 10,000 free LLM calls/DAY on a quota SEPARATE from Groq/Gemini.
       # The router auto-leads with it when both vars are present (E-239), so this alone lifts free LLM capacity ~200x.
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # CH_API_KEY: the Companies House key existed in TAMAZIA-REBUILD/.env but was never in CI, so the
+      # firm-identity resolver could never fill legal_name / company_number / registered_office.
+      CH_API_KEY: ${{ secrets.CH_API_KEY }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
