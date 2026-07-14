@@ -234,18 +234,47 @@ function _discoverLinks(html, base, accepted) {
   }
   return out;
 }
+// A WAF BLOCKS THE SITEMAP TOO — AND THE SITEMAP IS THE ONLY HONEST MAP OF A SITE.
+//
+// birketts.co.uk 403s /robots.txt AND /sitemap.xml to a plain fetch. So sitemap discovery failed on exactly the
+// sites that need it most, and we fell back to GUESSING paths (/legal, /privacy, /cookie-policy...). Guessing found
+// a handful. The real sitemap lists 189 pages, including /privacy-policy/, /fees/ and /data-protection-complaints-form/.
+//
+// The renderer cannot help here: a headless browser renders XML to an EMPTY DOM (verified: html='', text=''). The
+// free Jina reader CAN, because it returns the raw bytes as text (verified: 45,123 chars, 189 URLs).
+//
+// So the ladder for a sitemap is not the ladder for a page. Use the right tool for the content type:
+//     page  -> Playwright renderer (a DOM is exactly what we want)
+//     XML   -> Jina reader        (a DOM is exactly what we do NOT want)
+async function _fetchXml(url) {
+  try {
+    const r = await fetchWithRetry(url, { timeout: 8000, retries: 0 });
+    if (r && r.ok && r.body && /<(urlset|sitemapindex|loc)\b/i.test(r.body)) return r.body;
+  } catch (_e) { _swarn('compliance.js:_fetchXml:direct', _e); }
+  // Blocked or empty — go through the reader, which returns raw text rather than a rendered DOM.
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 12000);
+    const r = await fetch('https://r.jina.ai/' + url, {
+      headers: { 'x-respond-with': 'text', 'accept': 'text/plain' }, signal: ctl.signal,
+    });
+    clearTimeout(t);
+    if (r.ok) { const b = await r.text(); if (b && /https?:\/\//.test(b)) return b; }
+  } catch (_e) { _swarn('compliance.js:_fetchXml:reader', _e); }
+  return '';
+}
+
 async function _discoverSitemap(domain, accepted) {
   const urls = [];
   // robots.txt Sitemap: directives first (authoritative), then the common roots.
   const roots = [];
-  try { const rob = await fetchWithRetry('https://' + domain + '/robots.txt', { timeout: 6000, retries: 0 }); if (rob && rob.ok && rob.body) for (const sm of (rob.body.match(/sitemap:\s*(\S+)/gi) || [])) roots.push(sm.replace(/sitemap:\s*/i, '').trim()); } catch (_e) { _swarn('compliance.js:235', _e); }
+  try { const _rt = await _fetchXml('https://' + domain + '/robots.txt'); for (const m of String(_rt || '').matchAll(/(?:^|\n)\s*sitemap:\s*(\S+)/gi)) roots.push(m[1].trim()); } catch (_e) { _swarn('compliance.js:robots', _e); }
   roots.push('https://' + domain + '/sitemap.xml', 'https://' + domain + '/sitemap_index.xml', 'https://' + domain + '/sitemap-index.xml');
   // E-236 (v22.9): sitemap discovery was fully SEQUENTIAL — every root, then every child sitemap, one 8s fetch
   // after another. On a big firm with an index + 8 children that is 9 round-trips of pure waiting before the page
   // crawl even starts. Roots race in parallel (first one with URLs wins), and its children are fetched in parallel.
   // Identical URL set, identical ordering downstream; only the idling is gone.
   const rootResults = await Promise.all(roots.map(async (root) => {
-    try { const r = await fetchWithRetry(root, { timeout: 8000, retries: 0 }); return (r && r.ok && r.body) ? r.body : null; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
+    try { const b = await _fetchXml(root); return b || null; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
   }));
   for (const body of rootResults) {
     if (!body) continue;
@@ -254,7 +283,7 @@ async function _discoverSitemap(domain, accepted) {
     const pageUrls = locs.filter(u => !/\.xml/i.test(u));
     for (const u of pageUrls) if (_sameSite(u, accepted)) urls.push(u);
     const childBodies = await Promise.all(childSitemaps.map(async (cs) => {
-      try { const cr = await fetchWithRetry(cs, { timeout: 8000, retries: 0 }); return (cr && cr.ok && cr.body) ? cr.body : null; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
+      try { const b = await _fetchXml(cs); return b || null; } catch (_e) { _swarn('compliance.js:childSitemap', _e); return null; }
     }));
     for (const cb of childBodies) {
       if (!cb) continue;
@@ -902,7 +931,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.10-2026-07-two-corpora';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.11-2026-07-sitemap-reader';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
@@ -1550,7 +1579,7 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.10-2026-07-two-corpora'), scan, ruleCheck, gatherCorpus, loadRules };
+module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.11-2026-07-sitemap-reader'), scan, ruleCheck, gatherCorpus, loadRules };
 
 // ---- blind-send helpers (blueprint E-041/E-044) ----
 function _evidenceGate(findings, pages) {
