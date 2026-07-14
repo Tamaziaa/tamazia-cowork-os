@@ -418,6 +418,23 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 45000, concur
   // routes). Uses CRAWL_RENDER_URL (crawl4ai/Playwright microservice) when configured, else the free Jina reader.
   try {
     const shells = [];
+    // ── THE WAF RESCUE. This loop used to require `r.status === 200 || r.ok` — so a page that came back 403 was
+    // DROPPED ENTIRELY and never sent to the renderer. That is why birketts.co.uk yielded exactly ONE page: they
+    // 403 every sub-page to a plain fetch. We never read their /legal page, and then told a top-100 UK law firm it
+    // failed to state its SRA authorisation — a statement printed in its own footer.
+    //
+    // VERIFIED: the Playwright renderer reads those same URLs perfectly.
+    //     /legal-notices   direct 403  ->  renderer 200,  2,966 chars
+    //     /privacy-policy  direct 403  ->  renderer 200, 28,564 chars
+    //     /legal           direct 403  ->  renderer 200,  8,488 chars
+    //
+    // A WAF block is not evidence about the firm. It is evidence about our fetcher. So a blocked page now goes to
+    // the renderer exactly like a JS shell does — the two are the same problem wearing different status codes.
+    const _BLOCKED = new Set([401, 403, 405, 406, 409, 418, 429, 503]);
+    for (let i = 0; i < fetchList.length; i++) {
+      const r = results[i]; const u = fetchList[i];
+      if (r && _BLOCKED.has(Number(r.status))) { shells.push(u); continue; }   // WAF/bot-block -> render it
+    }
     for (let i = 0; i < fetchList.length; i++) { const r = results[i]; const u = fetchList[i]; if (r && (r.status === 200 || r.ok) && r.body && r.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, '').length < 500 && !r.challenge) shells.push(u); }
     const toRender = shells.slice(0, 30);                                   // cap the headless tail
     if (toRender.length) {
@@ -885,7 +902,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.8-2026-07-false-accusation-kill';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.9-2026-07-waf-rescue';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
@@ -1499,7 +1516,7 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.8-2026-07-false-accusation-kill'), scan, ruleCheck, gatherCorpus, loadRules };
+module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.9-2026-07-waf-rescue'), scan, ruleCheck, gatherCorpus, loadRules };
 
 // ---- blind-send helpers (blueprint E-041/E-044) ----
 function _evidenceGate(findings, pages) {
