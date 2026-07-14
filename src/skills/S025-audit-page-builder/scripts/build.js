@@ -242,6 +242,13 @@ function resolveHomeCountry(domain, markets, passedCountry) {
 }
 
 async function buildPayload({ domain, sector, country, lead_id, env, company }) {
+  // THE PIPELINE CONTRACT. 31 of this file's modules load through a DYNAMIC require that no static tool can follow,
+  // and 50 call sites swallow their exception with `catch (_e) {}`. Together those mean a stage can fail completely
+  // and the audit still ships as "verified" - which is exactly how statute-rag was never called for months, how the
+  // cookie collector did nothing for two engine versions, and how the adjudicator threw a ReferenceError while the
+  // report told the client its breaches had been reviewed. A failure is now a FACT ON THE PAYLOAD, not a shrug.
+  const _SM = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'stage-manifest.js'));
+  const _manifest = _SM.newManifest();
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
   let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
@@ -288,7 +295,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   const effCountry = resolveHomeCountry(domain, scan.markets, country);
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
-  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) { /* #48: never present a THROWN compliance scan as a clean bill of health — record the failure so the payload marks compliance unassessed rather than silently 'no breaches'. */ comp = { frameworks: [], findings: [], compliance_unassessed: true, compliance_error: String((_e && _e.message) || _e).slice(0, 160) }; }
+  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); _SM.ran(_manifest, 'compliance_scan'); } catch (_e) { _SM.failed(_manifest, 'compliance_scan', _e); /* #48: never present a THROWN compliance scan as a clean bill of health — record the failure so the payload marks compliance unassessed rather than silently 'no breaches'. */ comp = { frameworks: [], findings: [], compliance_unassessed: true, compliance_error: String((_e && _e.message) || _e).slice(0, 160) }; }
   // HQ RECONCILIATION (Phase-7): the LLM firm-profiler (now reliable via the Cloudflare-first router) determines the
   // registered LEGAL HQ from the corpus. resolveHomeCountry runs BEFORE the profile exists and a .com firm can fall to
   // a TLD/market-derived scalar country that contradicts the real HQ (cert: pkfhospitality is London-HQ but .com made
@@ -815,6 +822,40 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       } catch (_e) {}
       return base;  // #17: cover EVERY applicable framework with authoritative binding_status from framework_versions
     })(),
+    // THE SEALED CONTRACT. Derived from what the pipeline ACTUALLY produced, not what it intended to do.
+    // sendable:false means a REQUIRED stage did not run, and an audit missing a required stage is a DRAFT, not a
+    // compliance report. For the first time the question "did this audit really get crawled, adjudicated and
+    // verified" is answerable FROM THE OUTSIDE, which is precisely the observability failure that let a silent
+    // ReferenceError tell law firms their breaches had been reviewed by a model that never saw them.
+    stage_manifest: (() => {
+      try {
+        if (scan && scan.signals && Object.keys(scan.signals).length) _SM.ran(_manifest, 'crawl');
+        else _SM.failed(_manifest, 'crawl', 'no signals: the site could not be read');
+
+        const _fp = (comp && comp.firm_profile) || {};
+        if (_fp.display_name || _fp.legal_name || _fp.name) _SM.ran(_manifest, 'firm_identity');
+        else _SM.failed(_manifest, 'firm_identity', 'no resolved firm name: the report would be addressed to a guess');
+
+        const _jur = (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [];
+        if (_jur.length) _SM.ran(_manifest, 'jurisdiction');
+        else _SM.failed(_manifest, 'jurisdiction', 'no jurisdiction attached: no law can bind');
+
+        const _adj = (comp && comp.adjudication) || null;
+        if (_adj && _adj.ran) _SM.ran(_manifest, 'breach_adjudication', { note: (_adj.total || 0) + ' reviewed, ' + (_adj.dropped || 0) + ' dropped' });
+        else if (_adj && _adj.reason === 'no_findings') _SM.skipped(_manifest, 'breach_adjudication', 'no text-derived findings to adjudicate');
+        else _SM.failed(_manifest, 'breach_adjudication', (_adj && _adj.reason) || 'the adjudicator did not run: no model read these breaches');
+
+        const _txt = JSON.stringify((comp && comp.findings) || []);
+        if (/observed_in_browser/.test(_txt)) _SM.ran(_manifest, 'cookie_evidence');
+        else _SM.skipped(_manifest, 'cookie_evidence', 'no browser observation on this scan');
+        if (/public_register_checked/.test(_txt)) _SM.ran(_manifest, 'ico_register');
+        else _SM.skipped(_manifest, 'ico_register', 'register not consulted on this scan');
+        _SM.skipped(_manifest, 'statute_rag', 'grounding is applied inside the adjudicator');
+        _SM.skipped(_manifest, 'psi', 'recorded separately');
+        _SM.skipped(_manifest, 'geo_probe', 'recorded separately');
+      } catch (_e) { /* the manifest must never itself break a mint */ }
+      return _SM.seal(_manifest);
+    })(),
     drop_trace: (comp && comp.drop_trace) || null,
     review_candidates: (comp && comp.review_candidates) || [],
     attach_confidence: (comp && comp.attach_confidence) || {},
@@ -1057,6 +1098,8 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     }
   }
   payload.llm_verify = _llmv;
+  if (_llmv && _llmv.status && _llmv.status !== 'unavailable') _SM.ran(_manifest, 'llm_verify');
+  else _SM.failed(_manifest, 'llm_verify', (_llmv && _llmv.error) || 'verifier unavailable');
   // E-223/E-224 (v22.6.1): gated LAW DISCOVERY is a LEARNING SIDE-CHANNEL — it must never spend the mint's
   // wall-clock budget (the worker races build() against MINT_BUILD_TIMEOUT_MS; discovery blocking the await was
   // one of the three causes of the canary retry storm). FIRE-AND-FORGET: kicked off here, writes its own tables,

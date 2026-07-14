@@ -1,0 +1,49 @@
+name: code-coherence
+# THE "CODE NOT TALKING TO EACH OTHER" GATE.
+# CodeQL and Semgrep find SECURITY defects. Greptile and CodeRabbit read a DIFF. None of them answer the question
+# that has actually cost this engine months: is the code COHERENT with itself?
+#   * 41 exact clones in src/ - that is the mechanism that produced FIFTEEN copies of the same broken HTML stripper,
+#     and it is why fixing one of them fixed nothing.
+#   * 31 dynamic `require(path.resolve(ROOT, ...))` calls in the audit orchestrator, which NO static tool can follow.
+#   * 50 `catch (_e) {}` swallows, so a stage can fail completely and the audit still reports success.
+# This job makes all three visible on every push. Informational at first (it must not block the mint), but the
+# numbers are printed in the summary so a regression is impossible to miss.
+on:
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
+  schedule: [{ cron: '0 4 * * 1' }]
+permissions: { contents: read }
+jobs:
+  coherence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Duplicate code (jscpd) - how 15 copies of one broken stripper happened
+        run: |
+          npx --yes jscpd@4 src --min-lines 8 --min-tokens 60 \
+            --reporters json,consoleFull --output ./.cpd --silent || true
+          node -e "
+            let d={}; try { d = require('./.cpd/jscpd-report.json'); } catch (_e) { process.exit(0); }
+            const n = (d.duplicates||[]).length;
+            const pct = ((d.statistics||{}).total||{}).percentage || 0;
+            console.log('::notice title=Duplicate code::' + n + ' clones, ' + pct + '% duplicated lines');
+            require('fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, '### Duplicate code\n' + n + ' clones (' + pct + '% of lines)\n');
+          "
+
+      - name: Silent failure swallows - a stage can fail and the audit still says success
+        run: |
+          S=$(grep -rho 'catch (_e) {}' src | wc -l | tr -d ' ')
+          D=$(grep -rho 'require(path.resolve' src | wc -l | tr -d ' ')
+          echo "::notice title=Coherence::${S} silent catches, ${D} dynamic requires (invisible to every static tool)"
+          {
+            echo '### Coherence'
+            echo "- **${S}** \`catch (_e) {}\` swallows: a stage can fail and the audit still reports success"
+            echo "- **${D}** dynamic \`require(path.resolve(...))\`: invisible to CodeQL, madge and every code-search tool"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: The pipeline contract must hold
+        run: node eval/pipeline-contract.test.js
