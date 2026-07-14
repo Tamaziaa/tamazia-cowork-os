@@ -14,13 +14,38 @@
  */
 const A = require('assert');
 const { isNegated } = require('../src/skills/S008-personalisation-engine/scanners/corpus-index.js');
+// A SKIP IS A CONFIDENT ZERO (CodeRabbit, and it is the third time this lesson has been taught in one session).
+// In CI the database is ALWAYS present. If NEON_URL is missing THERE, this gate did not run — and a gate that did
+// not run is not a gate that passed. It FAILS. Locally, a developer without a DB gets a loud skip, not a silent one.
 const N = process.env.NEON_URL || process.env.DATABASE_URL;
-if (!N) { console.log('ok - skipped (no NEON_URL; a missing DB is NOT a calibrated catalogue)'); process.exit(0); }
+if (!N) {
+  if (process.env.CI) {
+    console.error('FAIL - NEON_URL is absent in CI. This gate did not run, so it did not pass. A missing DB is not a green build.');
+    process.exit(1);
+  }
+  console.log('ok - SKIPPED LOCALLY (no NEON_URL). This gate did NOT run. It is NOT evidence of a healthy catalogue.');
+  process.exit(0);
+}
 
 const q = async (sql) => {
+  // CodeRabbit (#341): a bare fetch() with no timeout and no status check can HANG or return an HTML error page,
+  // and the gate then dies with a parse error instead of a verdict. A gate that crashes is a gate that did not
+  // run. Timeout + explicit status handling, so a broken DB is reported AS a failure, never as noise.
   const u = new URL(N);
-  const res = await fetch(`https://${u.hostname}/sql`, { method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': N }, body: JSON.stringify({ query: sql }) });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), Number(process.env.NEON_TIMEOUT_MS || 20000));
+  let res;
+  try {
+    res = await fetch(`https://${u.hostname}/sql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': N },
+      body: JSON.stringify({ query: sql }),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    throw new Error('Neon request failed (' + (e.name === 'AbortError' ? 'timed out' : e.message) + '). The gate did NOT run.');
+  } finally { clearTimeout(timer); }
+  if (!res.ok) throw new Error('Neon returned HTTP ' + res.status + ' ' + res.statusText + '. The gate did NOT run.');
   const j = await res.json();
   if (j.message) throw new Error(j.message);
   return j.rows || [];

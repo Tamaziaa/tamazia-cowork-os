@@ -17,8 +17,17 @@
  * Skips when NEON_URL is absent (local dev), because a missing DB must not be reported as a clean catalogue.
  */
 const A = require('assert');
+// A SKIP IS A CONFIDENT ZERO. In CI the database is ALWAYS present; if NEON_URL is missing THERE, this gate did
+// not run, and a gate that did not run is not a gate that passed.
 const N = process.env.NEON_URL || process.env.DATABASE_URL;
-if (!N) { console.log('ok - skipped (no NEON_URL; a missing DB is NOT a clean catalogue)'); process.exit(0); }
+if (!N) {
+  if (process.env.CI) {
+    console.error('FAIL - NEON_URL is absent in CI. This gate did not run, so it did not pass.');
+    process.exit(1);
+  }
+  console.log('ok - SKIPPED LOCALLY (no NEON_URL). This gate did NOT run. It is NOT a clean catalogue.');
+  process.exit(0);
+}
 
 const q = async (sql) => {
   const u = new URL(N);

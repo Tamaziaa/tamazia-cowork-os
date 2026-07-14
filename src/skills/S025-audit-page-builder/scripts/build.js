@@ -1158,9 +1158,10 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // Lazy-require r2.js (pulls @aws-sdk) ONLY when R2 storage is actually used, so a neon-mode mint never depends
   // on the AWS SDK being installed.
   const mode = process.env.AUDIT_PAYLOAD_STORE || 'neon';
-  if (mode === 'both' || mode === 'r2') {
-    try { const { putAudit } = require('../../../lib/r2'); await putAudit(slug, hash, payload); } catch (e) { if (mode === 'r2') throw e; }
-  }
+  // R2 WRITE MOVED (CodeRabbit #340). It used to run HERE — before citation_gate, coverage, pointer dropping and
+  // the final `sendable` verdict were applied — so R2 stored a payload that had passed NO gate. The object a
+  // client could fetch and the object we judged were different documents. It now runs at the END, after every
+  // mutation. See the `putAudit` call below the write gates.
   // E-203 (audit-of-the-audits P-005): canonical country codes at the write seam. USA/US, UAE/AE and
   // GB/UK coexisting in audit_pages.country silently split every family-keyed computation downstream.
   // E-210 (v22.5): the alias map is now the ONE registry map, not an inline copy.
@@ -1267,7 +1268,13 @@ async function build({ lead_id, domain, sector, country, company, env }) {
       }
       for (const _vi of _v.violations.slice(0, 10)) _warn('citation-gate', new Error(_vi.label + ': ' + _vi.reason));
     }
-  } catch (_e) { _warn('citation-gate', _e); }
+  } catch (_e) {
+    // FAIL CLOSED (CodeRabbit #340). A mandatory gate that cannot RUN must never preserve an earlier
+    // "sendable" verdict. An unrun gate is not a passed gate. This is a legal document addressed to a law firm.
+    _warn('citation-gate', _e);
+    payload.citation_gate = { ok: false, error: String(_e && _e.message || _e), mode: 'failed_closed' };
+    payload.sendable = false;
+  }
 
   // ─── COVERAGE CONTRACT (wired v25.13 — REPORTING only, and here is why) ───────────────────────────────────
   // An audit built on a blocked crawl must SAY so. A firm whose WAF blocked us was getting the same confident
@@ -1284,7 +1291,13 @@ async function build({ lead_id, domain, sector, country, company, env }) {
       payload.sendable = false;
       _warn('coverage-contract', new Error('render_class=' + _cov.render_class + '; missing page-classes: ' + (_cov.missing || []).join(',')));
     }
-  } catch (_e) { _warn('coverage-contract', _e); }
+  } catch (_e) {
+    // FAIL CLOSED (CodeRabbit #340). Same rule: if we cannot measure coverage, we cannot claim the crawl was
+    // adequate, and an audit built on an unmeasured crawl is not one we may send.
+    _warn('coverage-contract', _e);
+    payload.coverage = { render_class: 'unknown', error: String(_e && _e.message || _e) };
+    payload.sendable = false;
+  }
 
   // ZOD AT THE WRITE SEAM. Everything above this line is a best effort. Below it, this is a LEGAL DOCUMENT
   // ADDRESSED TO A LAW FIRM. Each rule in payload-schema.js exists because the exact thing it forbids ALREADY
@@ -1299,6 +1312,14 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     payload.sendable = false;
     for (const _err of _schema.errors) _warn('payload-schema', new Error(_err));
     console.error('[payload-schema] ' + domain + ' UNSENDABLE:\n  - ' + _schema.errors.join('\n  - '));
+  }
+
+  // ─── R2 WRITE (moved here from before the gates — CodeRabbit #340) ────────────────────────────────────────
+  // This is the LAST mutation point. Everything above has run: the citation gate, the coverage contract, the
+  // pointer set, the stage manifest and the Zod write-seam schema. Only now is `payload` the document we are
+  // actually willing to stand behind, so only now may it be persisted anywhere a client can fetch it.
+  if (mode === 'both' || mode === 'r2') {
+    try { const { putAudit } = require('../../../lib/r2'); await putAudit(slug, hash, payload); } catch (e) { if (mode === 'r2') throw e; _warn('r2:putAudit', e); }
   }
   // E-223/E-224 (v22.6.1): gated LAW DISCOVERY is a LEARNING SIDE-CHANNEL — it must never spend the mint's
   // wall-clock budget (the worker races build() against MINT_BUILD_TIMEOUT_MS; discovery blocking the await was

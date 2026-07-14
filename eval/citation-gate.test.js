@@ -23,9 +23,21 @@ t('THE REGRESSION: one uncited rule must NOT delete its framework-mates', () => 
     'the fully-cited UK_PECR/R6.1 was dropped as collateral. survivors: ' + ids.join(','));
 });
 
+t('CROSS-FRAMEWORK COLLISION: rule_id is NOT globally unique (A16 and A6 each live in TWO frameworks)', () => {
+  // CodeRabbit (#340). MEASURED on the live catalogue: rule_id `A16` and `A6` each appear in two different
+  // frameworks. Keying on rule_id ALONE would let one uncited UK_GDPR/A16 delete a fully-cited EU_GDPR/A16 —
+  // the same collateral-damage bug this module was rewritten to kill, one level down.
+  const ukA16 = { bucket:'compliance', framework_short:'UK_GDPR', rule_id:'A16', severity:'P1', fine_high_gbp:17500000 };            // uncited
+  const euA16 = { bucket:'compliance', framework_short:'EU_GDPR', rule_id:'A16', severity:'P1', fine_high_gbp:17500000, citation_url:'https://gdpr-info.eu/art-16-gdpr/' }; // cited
+  A.notStrictEqual(findingId(ukA16), findingId(euA16), 'the SAME rule_id in TWO frameworks collided into one identity');
+  const { safe, dropped } = gateMint([ukA16, euA16]);
+  A.strictEqual(dropped, 1, 'expected only the UNCITED one dropped, got ' + dropped);
+  A.strictEqual(safe[0].framework_short, 'EU_GDPR', 'the cited EU_GDPR/A16 was dropped as collateral');
+});
+
 t('a finding identity is NEVER a framework (a framework has many findings)', () => {
   A.notStrictEqual(findingId(cited), findingId(uncited), 'two rules in the SAME framework share an identity');
-  A.ok(findingId(cited).startsWith('rule:'), 'rule_id is the natural key');
+  A.ok(/^fw:[^|]*\|rule:/.test(findingId(cited)), 'identity must be FRAMEWORK + RULE (rule_id alone collides)');
 });
 
 t('a finding with NO rule_id still gets a per-finding identity', () => {
