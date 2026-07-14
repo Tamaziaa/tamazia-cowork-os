@@ -810,6 +810,12 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   }
 
   return {
+    // THE MANIFEST TRAVELS ON THE PAYLOAD.
+    // It is OPENED here in buildPayload() but SEALED in build(), a different function. The first cut declared it
+    // as a local const in buildPayload and referenced it from build() -> ReferenceError '_manifest is not defined',
+    // which killed every mint. The contract that exists to stop a stage failing silently was itself the failing
+    // stage. A value used across two functions must be PASSED between them, not assumed to be in scope.
+    _stage_manifest: _manifest,
     schema_version: 'v2',
     domain,
     sector,
@@ -1175,6 +1181,12 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     }
   }
   payload.llm_verify = _llmv;
+
+  // Recover the manifest buildPayload opened. If it is absent (an old payload, or buildPayload threw before it
+  // could open one) we start a fresh one: every required stage is then 'not_reached', the seal returns
+  // sendable:false, and the audit is correctly treated as a draft rather than silently passing.
+  const _manifest = payload._stage_manifest || _SM.newManifest();
+  delete payload._stage_manifest;
 
   // BREACH ADJUDICATION. Proved from the EVIDENCE, not from the fact that a function was called: the adjudicator
   // once ran, ruled on every candidate, and had its verdict silently dropped at the copy seam - the report still
