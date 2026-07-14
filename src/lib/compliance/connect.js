@@ -41,6 +41,19 @@ const BASELINE_BY_FAMILY = {
         serves:      ['UAE_PDPL'] },   // PDPL Art.2 extraterritorial reach; sector law needs establishment
   SA: { established: ['SAUDI_PDPL'], serves: ['SAUDI_PDPL'] },
   QA: { established: ['QATAR_PDPPL'], serves: ['QATAR_PDPPL'] },
+  // v25.12 — THE STRANDED MENA REGIMES. The jurisdiction registry distinguishes BH/OM/KW/EG/JO/IL (they are no
+  // longer collapsed into AE), but BASELINE_BY_FAMILY had no entry for any of them. A national data-protection
+  // law carries an EMPTY sector_relevance because it binds every commercial website — and GATE B drops an
+  // empty-sector rule unless its framework is a family baseline. So BAHRAIN_PDPL, OMAN_PDPL, EGYPT_PDPL,
+  // JORDAN_PDPL and ISRAEL_PPL were in the catalogue, active, cited — and STRUCTURALLY UNABLE TO ATTACH.
+  // Same class as the 134 US state rules and the nine dead modules: law we own and cannot use.
+  // All five are GDPR-derived and reach processors outside the country who target residents, so they carry the
+  // same established/serves shape as SAUDI_PDPL and QATAR_PDPPL above.
+  BH: { established: ['BAHRAIN_PDPL'], serves: ['BAHRAIN_PDPL'] },
+  OM: { established: ['OMAN_PDPL'],    serves: ['OMAN_PDPL'] },
+  EG: { established: ['EGYPT_PDPL'],   serves: ['EGYPT_PDPL'] },
+  JO: { established: ['JORDAN_PDPL'],  serves: ['JORDAN_PDPL'] },
+  IL: { established: ['ISRAEL_PPL'],   serves: ['ISRAEL_PPL'] },
   GLOBAL: { established: ['GOOGLE_EEAT'], serves: ['GOOGLE_EEAT'] },   // non-statutory, stays global (E-023)
 };
 // Blueprint parenthetical gates preserved — consumed by the conditional/CAP_GATE paths, never silently dropped.
