@@ -55,6 +55,16 @@ jobs:
       - name: Schema + CC-2 provision (idempotent, additive-only)
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # THE ENGINE VERSION IS A PROPERTY OF THE CODE, NOT OF THE ENVIRONMENT.
+          # .env carries COMPLIANCE_ENGINE_VERSION, and the loop above exports it AFTER the job env is applied. So a
+          # stale value in the secret PINS a fresh checkout: v25 code built a payload stamped v24, the database gate
+          # correctly rejected the row as a stale worker, and the mint failed with "audit_pages INSERT failed - no
+          # row written". The stale-worker lock was defeated by the very thing it exists to detect.
+          # E-273 re-asserted MINT_CONCURRENCY and MINT_BUILD_TIMEOUT_MS from the workflow and MISSED THIS ONE. An
+          # env var that can rename the engine's own version is a footgun: it can make a fresh checkout look stale,
+          # and a stale checkout look fresh. Unset it. The constant in compliance.js is the single source of truth.
+          unset COMPLIANCE_ENGINE_VERSION
+          echo "[engine] effective ENGINE_VERSION=$(node -e "process.stdout.write(require('./src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION)")"
           node scripts/ensure-schema.js
           node scripts/v3/migrate-v3-schema.js || true   # guarantee requal_version + v3 cols before requalify (canonical-schema now also carries them; this is belt-and-suspenders)
           node scripts/cc2-provision.js
@@ -63,6 +73,16 @@ jobs:
           REQUALIFY: ${{ inputs.requalify }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # THE ENGINE VERSION IS A PROPERTY OF THE CODE, NOT OF THE ENVIRONMENT.
+          # .env carries COMPLIANCE_ENGINE_VERSION, and the loop above exports it AFTER the job env is applied. So a
+          # stale value in the secret PINS a fresh checkout: v25 code built a payload stamped v24, the database gate
+          # correctly rejected the row as a stale worker, and the mint failed with "audit_pages INSERT failed - no
+          # row written". The stale-worker lock was defeated by the very thing it exists to detect.
+          # E-273 re-asserted MINT_CONCURRENCY and MINT_BUILD_TIMEOUT_MS from the workflow and MISSED THIS ONE. An
+          # env var that can rename the engine's own version is a footgun: it can make a fresh checkout look stale,
+          # and a stale checkout look fresh. Unset it. The constant in compliance.js is the single source of truth.
+          unset COMPLIANCE_ENGINE_VERSION
+          echo "[engine] effective ENGINE_VERSION=$(node -e "process.stdout.write(require('./src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION)")"
           # Heartbeat the re-tier pass too (the advance step below is already wrapped). Keeps backlog-burst visible
           # to the engine-cycle race guard (heartbeat.js active-writer) during requalify, which rewrites the same
           # tier/lifecycle columns the cycle's qualify->mint seam touches.
@@ -77,6 +97,16 @@ jobs:
           MINT: ${{ inputs.mint }}
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # THE ENGINE VERSION IS A PROPERTY OF THE CODE, NOT OF THE ENVIRONMENT.
+          # .env carries COMPLIANCE_ENGINE_VERSION, and the loop above exports it AFTER the job env is applied. So a
+          # stale value in the secret PINS a fresh checkout: v25 code built a payload stamped v24, the database gate
+          # correctly rejected the row as a stale worker, and the mint failed with "audit_pages INSERT failed - no
+          # row written". The stale-worker lock was defeated by the very thing it exists to detect.
+          # E-273 re-asserted MINT_CONCURRENCY and MINT_BUILD_TIMEOUT_MS from the workflow and MISSED THIS ONE. An
+          # env var that can rename the engine's own version is a footgun: it can make a fresh checkout look stale,
+          # and a stale checkout look fresh. Unset it. The constant in compliance.js is the single source of truth.
+          unset COMPLIANCE_ENGINE_VERSION
+          echo "[engine] effective ENGINE_VERSION=$(node -e "process.stdout.write(require('./src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION)")"
           node scripts/heartbeat.js wrap backlog-burst -- bash -c '
             node scripts/enrich-and-queue-channels.js $ENRICH || true
             node scripts/run-deep-research-batch.js $RESEARCH || true
@@ -89,6 +119,16 @@ jobs:
       - name: Funnel summary
         run: |
           while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          # THE ENGINE VERSION IS A PROPERTY OF THE CODE, NOT OF THE ENVIRONMENT.
+          # .env carries COMPLIANCE_ENGINE_VERSION, and the loop above exports it AFTER the job env is applied. So a
+          # stale value in the secret PINS a fresh checkout: v25 code built a payload stamped v24, the database gate
+          # correctly rejected the row as a stale worker, and the mint failed with "audit_pages INSERT failed - no
+          # row written". The stale-worker lock was defeated by the very thing it exists to detect.
+          # E-273 re-asserted MINT_CONCURRENCY and MINT_BUILD_TIMEOUT_MS from the workflow and MISSED THIS ONE. An
+          # env var that can rename the engine's own version is a footgun: it can make a fresh checkout look stale,
+          # and a stale checkout look fresh. Unset it. The constant in compliance.js is the single source of truth.
+          unset COMPLIANCE_ENGINE_VERSION
+          echo "[engine] effective ENGINE_VERSION=$(node -e "process.stdout.write(require('./src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION)")"
           node -e '
             const q = async (sql) => {
               const host = process.env.NEON_URL.replace(/.*@([^/]+)\/.*/, "$1");
