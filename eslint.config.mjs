@@ -24,6 +24,11 @@ export default [
         TextDecoder: 'readonly', structuredClone: 'readonly', queueMicrotask: 'readonly',
       },
     },
-    rules: { 'no-undef': 'error' },
+    rules: {
+      'no-undef': 'error',
+      // TDZ: `const x` declared AFTER its first use throws "Cannot access 'x' before initialization"
+      // at RUNTIME. no-undef cannot see it. It killed the mint a second time.
+      'no-use-before-define': ['error', { functions: false, classes: true, variables: true }],
+    },
   },
 ];
