@@ -1,13 +1,93 @@
-# CodeRabbit — AI PR review. FREE (full Pro) on public repos. One-time install: https://github.com/apps/coderabbitai
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit reviews EVERY pull request on this repo, automatically, 24/7. This file teaches it what
+# "wrong" means HERE. A generic reviewer finds generic bugs; the bugs that have actually reached a law
+# firm from this codebase are all domain-specific, and they all rhyme.
+language: en-GB
+early_access: true
+
 reviews:
   profile: assertive
   request_changes_workflow: false
   high_level_summary: true
   review_status: true
   poem: false
+  collapse_walkthrough: false
   auto_review:
-    enabled: true
-    drafts: false
-language: en-GB
+    enabled: true          # 24/7 — every PR, no human trigger needed
+    drafts: true           # review drafts too: catching it before it is "ready" is the whole point
+    base_branches: ["main"]
+
+  # THE BUG CLASSES THAT HAVE ACTUALLY SHIPPED FROM THIS REPO TO A LAW FIRM.
+  # Every one was a "small" change that passed tests. Look for these first, before anything else.
+  path_instructions:
+    - path: "src/**/*.js"
+      instructions: |
+        This code generates a LEGAL DOCUMENT that is sent to law firms, accusing them of specific
+        statutory breaches and quoting specific fines. A wrong answer here is not a bug, it is a false
+        accusation with our name on it. Review with that stake in mind.
+
+        1. TWO DOORS. The single most expensive bug class here. The same fact implemented in two places,
+           fixed in one. It has happened with fwRegulator, firmName, isProse, the "671 frameworks" string,
+           and the PECR fine. EVERY TIME, THE STALE DOOR IS THE ONE THE CLIENT SEES. If a change fixes a
+           value, search for every other place that value is produced and say so explicitly.
+
+        2. THE CATALOGUE IS THE ONLY SOURCE of a fine, a regulator name, or a law name. A fine hardcoded
+           in a .js file is a defect even if the number is currently correct — it will go stale by Act of
+           Parliament and nobody will notice. Flag any numeric fine literal in source.
+
+        3. A HOST IS NOT A SUBSTRING. `url.includes(domain)` is TRUE for 'evil.com/?ref=reed.co.uk'.
+           `h.includes(dom) || dom.includes(h)` matches 'ed.co' against 'reed.co.uk'. Use isHost/sameHost
+           from src/lib/util/url-safe.js. Flag any host comparison that is not a parsed-host comparison.
+
+        4. ANCHOR EVERY REGEX. `/^UAE|DIFC|ADGM/` anchors ONLY the first branch — UK_DOH_ADVERTISING was
+           told its regulator was a Gulf authority. `/^(UAE|DIFC|ADGM)/` is what was meant. Check the
+           anchor binds the whole alternation.
+
+        5. NO SILENT FAILURE. Every catch must either record the failure (_warn/_swarn/_SM.failed) or
+           declare itself `FAIL-OPEN: <why the default IS the answer>`. A swallowed error means the audit
+           ships a clean bill of health for a check that never ran.
+
+        6. STRING LITERAL REQUIRES ONLY. A dynamic require is invisible to every static tool — that is how
+           statute-rag.js was required for months and never actually called by a single mint.
+
+        7. AN ABSENCE IS NOT AN OBSERVATION. A claim that something is MISSING needs proof we looked
+           (checked_urls / a verbatim quote). A claim that something HAPPENED (a tracker firing before
+           consent) is proved by the observation itself. Conflating them made every browser-observed breach
+           structurally unable to ship.
+
+    - path: "eval/**/*.js"
+      instructions: |
+        These are the gates that guard a legal document. A gate that encodes ONE SPELLING of a defect
+        produces a CONFIDENT ZERO, which is worse than no gate at all because it stops anyone looking.
+        This has happened twice here (a regex that missed `catch (_e) { return null; }`, and one that
+        missed `require(require('path')...)`).
+        - Prefer AST inspection over regex when checking code structure.
+        - A test that only reads SOURCE TEXT cannot see a ReferenceError. Two mint-killing bugs shipped
+          past 77 green evals for exactly this reason. Ask: does this test EXECUTE the code path?
+        - Every new gate must be calibrated against a KNOWN-BAD input. A zero you did not earn is a lie.
+
+    - path: ".github/workflows/**"
+      instructions: |
+        `.env` is sourced AFTER the job env block, so anything in the secret SILENTLY OVERRIDES the
+        workflow. That has bitten us three times (MINT_CONCURRENCY, MINT_BUILD_TIMEOUT_MS, and
+        COMPLIANCE_ENGINE_VERSION — the last one rejected every mint for days). Operational knobs must be
+        RE-ASSERTED from the workflow after the .env load. The engine version is a property of the CODE,
+        never of the environment.
+
+  tools:
+    semgrep: { enabled: true }
+    eslint:  { enabled: true }
+    actionlint: { enabled: true }
+    gitleaks: { enabled: true }
+    yamllint: { enabled: true }
+    markdownlint: { enabled: false }
+
 chat:
   auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: local
+  issues:
+    scope: local
