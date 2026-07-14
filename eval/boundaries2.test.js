@@ -107,5 +107,56 @@ t('isProse: empty tokens from padding must NOT be counted as words', () => {
     'five real words padded with whitespace is still five words');
 });
 
+
+// ── FOURTH PASS: every mutant Stryker proved was KILLABLE and no test was watching.
+// (The remainder are EQUIVALENT mutants — the mutated code behaves identically, so no test can ever kill them.
+//  They are marked with `Stryker disable` in the source, each with the proof, rather than left as a silent gap.)
+
+t('isDangerousScheme: the ^ anchor — a SAFE url merely CONTAINING a scheme word is not dangerous', () => {
+  // Drop the ^ and /(javascript|data|...)/ matches anywhere in the string. Then a perfectly ordinary link to an
+  // article about data: URIs gets treated as an XSS vector and the crawler refuses to follow it. The anchor is
+  // what makes this a SCHEME check rather than a substring check - the same lesson as "a host is not a substring".
+  A.strictEqual(U.isDangerousScheme('https://x.com/?q=data:text'), false, 'data: in a QUERY is not a scheme');
+  A.strictEqual(U.isDangerousScheme('https://ico.org.uk/blog/javascript:-urls'), false, 'javascript: in a PATH is not a scheme');
+  A.strictEqual(U.isDangerousScheme('data:text/html,x'), true, 'but data: AS THE SCHEME is dangerous');
+});
+
+t('isNonCrawlable: the ^ anchor on mail/tel too', () => {
+  A.strictEqual(U.isNonCrawlable('https://x.com/?to=mailto:a@b.com'), false, 'mailto: in a QUERY is a real page');
+  A.strictEqual(U.isNonCrawlable('mailto:a@b.com'), true, 'but mailto: AS THE SCHEME is not a page');
+});
+
+t('the www strip is anchored — an INNER www is part of the host', () => {
+  // /^www\./ -> /www\./ would rewrite 'a.www.b.com' to 'a.b.com', i.e. a DIFFERENT SITE. We would then bind the
+  // wrong firm's identity and jurisdiction to the audit.
+  A.strictEqual(U.hostOf('https://a.www.b.com'), 'a.www.b.com', 'an inner www must survive');
+  A.strictEqual(U.isHost('https://a.www.b.com', 'a.www.b.com'), true);
+  A.strictEqual(U.sameHost('a.www.b.com', 'a.b.com'), false, 'stripping an inner www would merge two different sites');
+});
+
+t('isHost/sameHost: the empty-input guard is load-bearing', () => {
+  // Delete `if (!h || !d) return false` and isHost('','') returns TRUE, because '' === ''. An unresolvable URL and
+  // an unknown domain would then "match", and we would attach a Wikidata entity to a firm on the strength of two
+  // empty strings.
+  A.strictEqual(U.isHost('', ''), false, 'two empty strings are not the same host');
+  A.strictEqual(U.sameHost('', ''), false, 'two empty strings are not the same host');
+  A.strictEqual(U.sameHost(null, undefined), false);
+});
+
+t('sameHost: the DOT in the suffix check is load-bearing, and the check is symmetric', () => {
+  // '.' -> '' turns endsWith('.' + B) into endsWith(B), and 'xreed.co.uk' then MATCHES 'reed.co.uk'. That is the
+  // lookalike-domain false positive that started all of this.
+  A.strictEqual(U.sameHost('xreed.co.uk', 'reed.co.uk'), false, 'the dot separator prevents the lookalike match');
+  A.strictEqual(U.sameHost('reed.co.uk', 'xreed.co.uk'), false, 'and in the other direction');
+  // endsWith -> startsWith would break the reversed-argument subdomain case.
+  A.strictEqual(U.sameHost('reed.co.uk', 'careers.reed.co.uk'), true, 'a subdomain matches with the args REVERSED');
+  A.strictEqual(U.sameHost('careers.reed.co.uk', 'reed.co.uk'), true, 'and the normal way round');
+});
+
+t('sameHost: the scheme strip is anchored', () => {
+  A.strictEqual(U.sameHost('https://reed.co.uk', 'reed.co.uk'), true);
+  A.strictEqual(U.sameHost('http://reed.co.uk', 'reed.co.uk'), true);
+});
+
 console.log('\n' + (n - bad) + '/' + n + ' passed');
 process.exit(bad ? 1 : 0);

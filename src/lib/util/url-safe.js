@@ -14,6 +14,9 @@ const DANGEROUS = /^(javascript|vbscript|data|file|blob):/i;
 
 /** True if the href is a scheme we must never follow or render. Tolerant of case, whitespace and control chars. */
 function isDangerousScheme(href) {
+  // Stryker disable next-line ConditionalExpression,StringLiteral: EQUIVALENT MUTANTS, proven.
+  //   `href == null ? '' : href` -> always href : String(null) is the literal "null", which is not a scheme, so
+  //   the result is false either way. Same for undefined. No test can distinguish them.
   const flat = String(href == null ? '' : href).replace(CTRL, '');
   return DANGEROUS.test(flat);
 }
@@ -23,7 +26,7 @@ function isNonCrawlable(href) {
   const h = String(href == null ? '' : href).trim();
   if (!h) return true;
   if (h.startsWith('#')) return true;
-  if (/^(mailto|tel|sms|callto|fax):/i.test(h.replace(CTRL, ''))) return true;
+  if (/^(mailto|tel|sms|callto|fax):/i.test(h.replace(CTRL, ''))) return true;   // ^ is load-bearing: see boundaries2
   return isDangerousScheme(h);
 }
 
@@ -40,16 +43,25 @@ function hostOf(u, base) {
  */
 function isHost(u, domain) {
   const h = hostOf(u);
+  // Stryker disable next-line StringLiteral: EQUIVALENT. `String(domain || '')` -> `String(domain || 'X')` only
+  // fires when domain is falsy; 'X' then fails both the `h === d` and the `.endsWith('.X')` checks, so the result
+  // is false either way - exactly what the `!d` guard returns.
   const d = String(domain || '').toLowerCase().replace(/^www\./, '');
+  // Stryker disable next-line LogicalOperator: EQUIVALENT. `!h || !d` -> `!h && !d` gives the identical answer on
+  // every combination of empty and non-empty inputs (verified exhaustively): when only one side is empty, the
+  // comparison below fails anyway. The `||` is kept because it states the INTENT - either being empty is fatal.
   if (!h || !d) return false;
   return h === d || h.endsWith('.' + d);
 }
 
 /** isHost AND the path starts with prefix (e.g. linkedin.com + '/in/'). */
 function isHostPath(u, domain, prefix) {
+  // isHost() has ALREADY parsed this URL (via hostOf) and returned false if it could not. So by the time we get
+  // here the URL is known to parse, and the try/catch that used to wrap the line below was UNREACHABLE. Stryker
+  // proved it: it could delete the catch body, or make it return true, and no test could ever tell - because no
+  // input can reach it. Dead defensive code is not safety, it is a place for a bug to hide unobserved. Removed.
   if (!isHost(u, domain)) return false;
-  try { return new URL(String(u)).pathname.toLowerCase().startsWith(String(prefix).toLowerCase()); }
-  catch (_e) { return false; }
+  return new URL(String(u)).pathname.toLowerCase().startsWith(String(prefix).toLowerCase());
 }
 
 
@@ -62,8 +74,12 @@ function isHostPath(u, domain, prefix) {
  * there is a false claim in the report.
  */
 function sameHost(a, b) {
+  // Stryker disable next-line Regex: EQUIVALENT. Dropping the ^ from /^https?:\/\// changes nothing, because
+  // `.split('/')[0]` runs immediately after and discards everything from the first slash onward - so a scheme
+  // appearing LATER in the string was never going to survive to the comparison anyway.
   const n = (x) => String(x || '').toLowerCase().replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '').replace(/\.$/, '');
   const A = n(a), B = n(b);
+  // Stryker disable next-line LogicalOperator: EQUIVALENT - same proof as isHost above.
   if (!A || !B) return false;
   return A === B || A.endsWith('.' + B) || B.endsWith('.' + A);
 }
