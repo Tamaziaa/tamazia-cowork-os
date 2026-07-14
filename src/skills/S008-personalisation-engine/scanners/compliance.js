@@ -52,6 +52,31 @@ function loadEnforcement(jurisdictions) {
   try { return JSON.parse(raw); } catch (_e) { return []; }
 }
 
+// E31 — THE THREE-NUMBER DOCTRINE. The rail was rendering "15 frameworks screened · 15 bind you", because the
+// renderer's `frameworksTotal` WAS the binding count. That erases the screening story, which is the entire
+// differentiator: we screen a whole register and tell you the few that actually attach. It also made the body copy
+// say "all 18 frameworks", contradicting the site's own claim, and undersold a 672-rule engine by a factor of forty.
+// Three numbers, measured not guessed, emitted here so the renderer can never conflate them again:
+//   catalogue_frameworks - every framework in the live register
+//   catalogue_rules      - every ACTIVE rule in the live register
+//   rules_evaluated      - the page-level checks actually executed on this firm's binding set
+let _catCache = null;
+function catalogueSize() {
+  if (_catCache) return _catCache;
+  try {
+    // pg() returns tab-delimited rows, exactly as loadRules() consumes them.
+    const raw = pg('SELECT count(*)::int, count(DISTINCT framework_short)::int FROM compliance_rules WHERE active');
+    const [rules, frameworks] = String(raw || '').trim().split('\t').map((n) => parseInt(n, 10));
+    _catCache = {
+      catalogue_rules: Number.isFinite(rules) ? rules : null,
+      catalogue_frameworks: Number.isFinite(frameworks) ? frameworks : null,
+    };
+  } catch (_e) {
+    _catCache = { catalogue_rules: null, catalogue_frameworks: null };   // fail-open: NEVER invent a count
+  }
+  return _catCache;
+}
+
 function loadRules({ frameworks }) {
   if (!frameworks.length) return [];
   const inList = frameworks.map(f => `'${f.replace(/'/g, "''")}'`).join(',');
@@ -1442,6 +1467,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     adjudication: _adjReport,
     firm_profile: firmProfile, detected_sector: _secCanon, sub_sector: _subSector, sub_sector_meta: _subSectorMeta,
     rules_evaluated: rules.length, hits, misses,
+    ...catalogueSize(),   // E31: catalogue_rules + catalogue_frameworks, measured from the live register
     resolver_dropped: _resolverDropped,
     p0_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P0').length,
     p1_misses: findings.filter(f => f.status === 'miss' && f.severity === 'P1').length,
