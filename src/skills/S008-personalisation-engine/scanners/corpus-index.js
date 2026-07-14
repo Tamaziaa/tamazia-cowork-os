@@ -86,7 +86,14 @@ function locateSegment(segments, offset) {
 // UK_BOTOX_FILLERS_U18 is a CRIMINAL OFFENCE. Accusing a compliant clinic of it because its policy page says the
 // word "under-18" is not an acceptable failure mode. So: if the SENTENCE carrying the match is negated, it is not
 // a claim. ONE DOOR — every prohibit rule inherits this; no rule re-implements it in its own regex.
-const NEGATION_RX = /\b(?:do not|don't|does not|doesn't|did not|never|cannot|can't|will not|won't|no longer|refuse[sd]?|declin|not (?:offer|available|suitable|permitted|provide)|must be (?:over|aged|18)|18\s*(?:years\s*)?(?:and|or)\s*(?:over|older|above)|over[-\s]?18s?\s*only|strictly\s*18|prohibit|unlawful|illegal|we\s+comply)\b/i;
+// CodeRabbit (#340), both correct and both fixed:
+//  (a) `prohibit|unlawful|illegal|we comply` were BLANKET negations — any sentence containing one was skipped
+//      before scanRuleGlobal could report a REAL breach. A clinic page reading "Botox from £199. Advertising
+//      prescription-only medicines is illegal." would have had its own violation swallowed. Removed: a
+//      negation must negate THE CLAIM, not merely mention the law.
+//  (b) `declin` was a DEAD BRANCH: \b(?:...|declin|...)\b requires a word boundary immediately after "declin",
+//      and "decline"/"declined"/"declining" all continue with a letter. It could never fire. Spelled out.
+const NEGATION_RX = /\b(?:do not|don't|does not|doesn't|did not|never|cannot|can't|will not|won't|no longer|refuse[sd]?|declin(?:e|es|ed|ing)|not (?:offer|available|suitable|permitted|provide)|must be (?:over|aged|18)|18\s*(?:years\s*)?(?:and|or)\s*(?:over|older|above)|over[-\s]?18s?\s*only|strictly\s*18)\b/i;
 function isNegated(sentence) { return NEGATION_RX.test(String(sentence || '')); }
 
 function scanRuleGlobal(re, index, { max = 500, proseOnly = false, skipTestimonial = false, skipNegated = false } = {}) {

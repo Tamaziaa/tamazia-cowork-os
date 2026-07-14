@@ -15,7 +15,14 @@ const path = require('path');
 const acorn = require('acorn');
 
 const ROOT = path.resolve(__dirname, '..');
-const ENTRY = 'src/skills/S025-audit-page-builder/scripts/build.js';
+// The mint has TWO entrypoints, and a gate that knows about only one will call a live module dead.
+// verify-audit-url.js is reachable from mint-worker.js (the post-write assertion), never from build.js —
+// my first version declared it unreachable and it is the opposite of unreachable: it is what stops us
+// sending a 404 to a prospect.
+const ENTRIES = [
+  'src/skills/S025-audit-page-builder/scripts/build.js',   // payload construction + the write gates
+  'scripts/mint-worker.js',                                // the queue worker + the post-write assertion
+];
 const WATCHED = ['src/lib/audit', 'src/lib/compliance', 'src/lib/evidence'];
 
 // Static require() literals — including the dynamic-looking ones INSIDE functions, which is how this codebase
@@ -60,14 +67,15 @@ function resolveReq(fromFile, spec) {
 }
 
 const reach = new Set();
-(function walk(f) {
+const walk = (f) => {
   if (reach.has(f)) return;
   reach.add(f);
   for (const spec of requiresOf(f)) {
     const r = resolveReq(f, spec);
     if (r) walk(r);
   }
-})(path.join(ROOT, ENTRY));
+};
+for (const e of ENTRIES) walk(path.join(ROOT, e));
 
 const watched = [];
 for (const d of WATCHED) {
@@ -82,27 +90,41 @@ for (const d of WATCHED) {
 }
 
 const dormantSrc = fs.readFileSync(path.join(ROOT, 'DORMANT.md'), 'utf8');
-const declaredDormant = (name) => dormantSrc.includes('`' + name + '`');
+
+// CodeRabbit (#340): declaredDormant() used to search ALL of DORMANT.md — including the "Wired in v25.13"
+// prose, which NAMES citation-gate, coverage-contract and verify-audit-url. So if any of those three ever became
+// unreachable again, their own documentation would have concealed the regression. Only a row of the DORMANT
+// TABLE is a declaration. Prose is not a promise.
+const DORMANT_TABLE = (() => {
+  const rows = [];
+  for (const line of dormantSrc.split('\n')) {
+    const m = /^\|\s*`([^`]+)`\s*\|/.exec(line.trim());       // | `audit/gap-finder.js` | 103 | ... |
+    if (m) rows.push(m[1].trim());
+  }
+  return new Set(rows);
+})();
+const declaredDormant = (relFromLib) => DORMANT_TABLE.has(relFromLib);
 
 let bad = 0;
 const t = (n, fn) => { try { fn(); console.log('ok ' + n); } catch (e) { bad++; console.error('FAIL ' + n + ': ' + e.message); } };
 
 t('the graph is REAL (calibration — a walker that reaches nothing proves nothing)', () => {
-  A.ok(reach.size > 40, 'only ' + reach.size + ' modules reachable from build.js; the walker is broken');
+  A.ok(reach.size > 40, 'only ' + reach.size + ' modules reachable from the mint entrypoints; the walker is broken');
   const must = ['compliance.js', 'connect.js', 'signals.js', 'site-scan.js', 'finding-trust.js'];
   for (const m of must) {
     A.ok([...reach].some((f) => f.endsWith('/' + m)), m + ' is NOT in the graph — the walker is lying');
   }
 });
 
-t('every audit-path module is REACHABLE from build.js, or DECLARED dormant in DORMANT.md', () => {
+t('every audit-path module is REACHABLE from a mint entrypoint, or DECLARED dormant in DORMANT.md', () => {
   const undeclared = [];
   for (const f of watched) {
     if (reach.has(f)) continue;
     const rel = path.relative(ROOT, f);
     const short = rel.replace(/^src\/lib\//, '');            // e.g. audit/gap-finder.js
-    const bare = path.basename(f);                            // e.g. gap-finder.js
-    if (declaredDormant(short) || declaredDormant(bare)) continue;
+    // EXACT table path only. No basename fallback: `jurisdiction.js` must never be excused by a row for
+    // `subjurisdiction.js`, and a prose mention must never excuse anything at all.
+    if (declaredDormant(short)) continue;
     const lines = fs.readFileSync(f, 'utf8').split('\n').length;
     undeclared.push(rel + ' (' + lines + ' lines)');
   }
@@ -116,15 +138,26 @@ t('DORMANT.md does not shelter a module that is ACTUALLY wired (a stale excuse i
   const stale = [];
   for (const f of watched) {
     if (!reach.has(f)) continue;
-    const bare = path.basename(f);
-    // only flag if the DORMANT *table* lists it (the "Wired in" section legitimately names them)
-    // anchor on a path boundary: 'subjurisdiction.js' must NOT match a search for 'jurisdiction.js'
-    const tableRow = new RegExp('^\\|\\s*`(?:[^`]*/)?' + bare.replace('.', '\\.') + '`', 'm');
-    if (tableRow.test(dormantSrc)) stale.push(bare);
+    const short = path.relative(ROOT, f).replace(/^src\/lib\//, '');
+    if (declaredDormant(short)) stale.push(short);
   }
   A.deepStrictEqual(stale, [], 'DORMANT.md still excuses these, but they ARE wired: ' + stale.join(', '));
 });
 
+// ─── CodeRabbit (#340), and it is the most important comment on the PR ────────────────────────────────────
+// "A require() edge does not prove the stage executes. A module that is imported but whose export is never
+//  called is marked reachable. This gate therefore cannot detect the stated statute-rag.js failure class."
+//
+// Correct, and it is the difference between a gate and a comfort blanket. statute-rag was REQUIRED for months
+// and never CALLED; a require-graph walk would have called it reachable the whole time.
+//
+// So REACHABILITY IS NECESSARY, NOT SUFFICIENT. The proof of EXECUTION is a payload the engine actually
+// produced, and it lives in eval/gates-executed.test.js, which reads a REAL minted row from audit_pages and
+// asserts the wired gates are on it.
+//
+// My first attempt asserted this against eval/mint-smoke.test.js — which calls buildPayload(). The gates live
+// in build(). The assertion could NEVER have passed, and it "passed" by SKIPPING. A skipped assertion is a
+// confident zero, which is the thing this whole codebase keeps being burned by. Deleted, not patched.
 console.log('\n  reachable: ' + reach.size + ' modules · watched: ' + watched.length);
 if (bad) { console.error('\n' + bad + ' failing'); process.exit(1); }
 console.log('reachability: all green');

@@ -282,7 +282,10 @@ async function mintOne(row) {
       if (_vau && typeof _vau.verifyAuditUrl === 'function') {
         const _url = r.signed_url || ((process.env.PUBLIC_BASE_URL || 'https://tamazia.co.uk') + '/audit/' + r.slug + '/' + r.hash);
         let _res = null;
-        try { _res = _vau.verifyAuditUrl(_url, { live: true, timeoutSec: 15 }); } catch (e) { _sentry(e, { stage: 'verify-audit-url:run' }); }
+        // CodeRabbit (#340): verifyAuditUrl is ASYNC. Without await, _res is a PROMISE, `_res.ok` is undefined,
+        // and this entire guard NEVER RUNS — a broken audit page would still be marked done. The exact class of
+        // silent no-op gate this whole cleanup exists to kill, and I shipped one. Awaited.
+        try { _res = await _vau.verifyAuditUrl(_url, { live: true, timeoutSec: 15 }); } catch (e) { _sentry(e, { stage: 'verify-audit-url:run' }); }
         if (_res && _res.ok === false && _res.status && String(_res.status) !== '0') {
           throw new Error('POST-WRITE ASSERTION FAILED (live URL): ' + _url + ' returned HTTP ' + _res.status
             + ' (' + (_res.reason || 'not ok') + '). The row exists but the PAGE DOES NOT LOAD. A prospect clicking'

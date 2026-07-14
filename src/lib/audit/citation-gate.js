@@ -21,11 +21,15 @@ function _isUrl(u) { try { const x = new URL(String(u)); return x.protocol === '
 // THE ONE DOOR for a finding's identity. NEVER a framework — a framework has MANY findings.
 // rule_id is the natural key. When a finding carries none, fall back to a composite still unique PER FINDING
 // (framework + severity + fact text), never shared with the framework's other findings.
+// CodeRabbit (#340): rule_id is NOT globally unique. MEASURED against the live catalogue: `A16` and `A6` each
+// appear in TWO different frameworks. Keying on rule_id alone would let one uncited UK_GDPR/A16 delete a fully
+// cited EU_GDPR/A16 — the very collateral-damage bug this module was rewritten to kill, one level down.
+// The identity is therefore FRAMEWORK + RULE, and falls back to a per-finding composite when there is no rule_id.
 function findingId(f) {
   if (!f) return '';
-  const rid = String(f.rule_id || f.code || '').trim();
-  if (rid) return 'rule:' + rid;
   const fw = String(f.framework_short || f.citation || '').trim();
+  const rid = String(f.rule_id || f.code || '').trim();
+  if (rid) return 'fw:' + fw + '|rule:' + rid;
   const fact = String(f.fact || f.desc || f.description || '').replace(/\s+/g, ' ').trim().slice(0, 100);
   return 'fw:' + fw + '|sev:' + String(f.severity || '') + '|fact:' + fact;
 }
