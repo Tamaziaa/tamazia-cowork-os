@@ -21,6 +21,10 @@ const _BENIGN_NET = /UND_ERR_SOCKET|ECONNRESET|ETIMEDOUT|EPIPE|ECONNREFUSED|ENOT
 function _isBenignNet(e) { const s = String((e && (e.code || e.message)) || e || ''); return _BENIGN_NET.test(s); }
 process.on('unhandledRejection', (e) => { if (_isBenignNet(e)) { console.warn('  (ignored benign net rejection: ' + String((e && e.message) || e).slice(0, 80) + ')'); return; } console.error('FATAL unhandledRejection:', e); process.exit(1); });
 process.on('uncaughtException', (e) => { if (_isBenignNet(e)) { console.warn('  (ignored benign net exception: ' + String((e && e.message) || e).slice(0, 80) + ')'); return; } console.error('FATAL uncaughtException:', e); process.exit(1); });
+// The audit table name, resolved EXACTLY as build.js and remint-audits.js resolve it. A third spelling of
+// the same fact is a two-doors bug waiting to happen — and this one decides whether we can SEE the audit
+// we just claimed to have written.
+const AUDIT_TABLE = (() => { const t = process.env.AUDIT_TABLE || 'audit_pages'; return /^[a-z_][a-z0-9_]*$/i.test(t) ? t : 'audit_pages'; })();
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING || process.env.NEON_DATABASE_URL;
 
 // FAIL LOUD, NOT SIDEWAYS. NEON was read straight into execFileSync(psql, [NEON, ...]) with no guard. When the
@@ -243,6 +247,26 @@ async function mintOne(row) {
       new Promise((_, rej) => { _to = setTimeout(() => rej(new Error('mint build timeout after ' + effectiveTimeout + 'ms')), effectiveTimeout); }),
     ]);
     clearTimeout(_to);
+    // ── THE POST-WRITE ASSERTION. ────────────────────────────────────────────────────────────────────────────
+    // The queue reported 1,034 audits 'done'. audit_pages held SEVENTEEN ROWS. 1,004 "done" audits had NO PAGE,
+    // and 412 lead records ended up carrying an audit_url that returns HTTP 404. Nothing was ever sent — the send
+    // gate is the only reason that is not already a commercial incident.
+    //
+    // The cause is this line. It marked the row 'done' on the strength of the builder RETURNING a slug, without
+    // ever asking the one question that matters: DOES THE PAGE EXIST?
+    //
+    // A build that returns an object is not an audit. An audit is a row in audit_pages that a law firm can open.
+    // So we ask the database, and we ask it about the SPECIFIC slug and hash we are about to write onto a lead.
+    // If it is not there, the mint FAILED — whatever the builder said — and it goes back for a retry instead of
+    // poisoning a lead with a link to nothing.
+    {
+      const _chk = (pg(`SELECT 1 FROM ${AUDIT_TABLE} WHERE slug='${q(r.slug)}' AND hash='${q(r.hash)}' LIMIT 1;`) || '').trim();
+      if (!_chk) {
+        throw new Error('POST-WRITE ASSERTION FAILED: the builder returned ' + r.slug + '/' + r.hash
+          + ' but no such row exists in ' + AUDIT_TABLE + '. The audit does not exist, so the queue will NOT say '
+          + 'done and no lead will be given a link to a 404. This is exactly how 1,004 phantom audits were created.');
+      }
+    }
     pg(`UPDATE minting_queue SET status='done', slug='${q(r.slug)}', hash='${q(r.hash)}', minted_at=now(), error=NULL WHERE id=${row.id};`);
     // Bind the URL to the lead — set ONCE and never overwrite. A lead that already has an audit_url may
     // already be in an active campaign; a new hash would 404 in the recipient's inbox. Re-mints only ever
