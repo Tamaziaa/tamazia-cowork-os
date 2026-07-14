@@ -14,8 +14,18 @@
  */
 const A = require('assert');
 const { isNegated } = require('../src/skills/S008-personalisation-engine/scanners/corpus-index.js');
+// A SKIP IS A CONFIDENT ZERO (CodeRabbit, and it is the third time this lesson has been taught in one session).
+// In CI the database is ALWAYS present. If NEON_URL is missing THERE, this gate did not run — and a gate that did
+// not run is not a gate that passed. It FAILS. Locally, a developer without a DB gets a loud skip, not a silent one.
 const N = process.env.NEON_URL || process.env.DATABASE_URL;
-if (!N) { console.log('ok - skipped (no NEON_URL; a missing DB is NOT a calibrated catalogue)'); process.exit(0); }
+if (!N) {
+  if (process.env.CI) {
+    console.error('FAIL - NEON_URL is absent in CI. This gate did not run, so it did not pass. A missing DB is not a green build.');
+    process.exit(1);
+  }
+  console.log('ok - SKIPPED LOCALLY (no NEON_URL). This gate did NOT run. It is NOT evidence of a healthy catalogue.');
+  process.exit(0);
+}
 
 const q = async (sql) => {
   const u = new URL(N);
