@@ -85,7 +85,33 @@ function extractSignals({ body, headers }) {
   const h1Count = (lc.match(/<h1[\s>]/g) || []).length;
   // #17 keyword spine: a bounded plain-text corpus of the homepage so the category-noun classifier reads the
   // firm's ACTUAL body copy (what it sells), not just the <title>. Additive — nothing read signals.corpus before.
-  const _corpus = htmlToText(b).slice(0, 4000);   // D-01
+  // ── THE #1 BUG IN THIS ENGINE. ────────────────────────────────────────────────────────────────────────────────
+  // This line used to be `.slice(0, 4000)`. Four thousand characters is roughly the first 600 words of a page: the
+  // hero and the opening paragraph. EVERY footer disclosure lives AFTER that:
+  //
+  //     the SRA authorisation statement, the company number, the registered office, the VAT number,
+  //     the privacy-policy link, the complaints procedure - i.e. exactly the facts our ABSENCE rules look for.
+  //
+  // So the scanner could not see them, concluded they were missing, and we told law firms they were in breach of
+  // the SRA Code, the Legal Services Act and Companies Act s.82 - facts that were sitting in their own footer.
+  // MEASURED on russell-cooke.co.uk: 'SRA' appears at character 11,080. We cut at 4,000. Three of eight footer
+  // facts are PRESENT ON THE PAGE and INVISIBLE to the scanner. Roughly a third of our absence findings on that
+  // firm were false accusations, made in writing, by a compliance firm.
+  //
+  // The cap is now 200k characters - large enough for any real page (a law-firm homepage is 9k-15k of text), and
+  // still a cap, because an unbounded corpus is a memory and LLM-cost risk on a hostile page.
+  //
+  // SECOND-ORDER EFFECT, MEASURED, NOT ASSUMED: reading the tail makes PRESENCE-triggered rules newly fire
+  // ('specialist', 'review'). Those are TEXT-DERIVED findings, so the LLM breach adjudicator must rule on each one
+  // before it can ship - that gate already exists and runs on every mint. The change therefore removes false
+  // ACCUSATIONS and routes the new candidates through the guard that was built for exactly them.
+  const _CORPUS_MAX = Number(process.env.CORPUS_MAX_CHARS || 200000);
+  const _full = htmlToText(b);
+  const _corpus = _full.slice(0, _CORPUS_MAX);   // D-01
+  // AND THE INTERLOCK: if we DID have to truncate, an "it is missing" claim is no longer safe, because the thing
+  // may be in the part we did not read. The finding-trust classifier reads this and demotes such an absence to
+  // NEEDS_REVIEW rather than shipping it as a CONFIRMED breach. Silence is free. A false accusation is not.
+  const _corpus_truncated = _full.length > _CORPUS_MAX;
   // RC-1 (E01/E20): the firm's REAL name lives in schema.org JSON-LD / og:site_name — both of which are stripped
   // out of `corpus` by htmlToText. Extract the identity candidates from the RAW html once, here, so build.js can
   // resolve a company name instead of falling back to the domain stem ("Kingsleynapley") or a page heading
@@ -94,6 +120,8 @@ function extractSignals({ body, headers }) {
   try { _identity = require('./firm-identity.js').extractIdentityCandidates(b); } catch (_e) { _identity = null; }
   return {
     corpus: _corpus,
+    corpus_truncated: _corpus_truncated,   // an absence claim is not safe on a corpus we had to cut
+    corpus_chars: _full.length,
     identity: _identity,
     title: titleMatch ? titleMatch[1].trim() : '',
     title_len: titleMatch ? titleMatch[1].trim().length : 0,

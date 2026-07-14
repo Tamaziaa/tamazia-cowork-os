@@ -36,6 +36,11 @@ function _isBrowserObserved(f) {
   return false;
 }
 
+// How many pages must we actually have READ before we are entitled to say a disclosure is MISSING? Three is the
+// floor: a homepage alone is a glance, not a search. Most firms put the legal disclosures on /legal, /privacy or
+// in a footer that only renders on inner pages. Tunable, but never zero.
+const MIN_PAGES_FOR_ABSENCE = Number(process.env.MIN_PAGES_FOR_ABSENCE || 3);
+
 function _kindOf(f) {
   const rt = String(f.rule_type || '').toLowerCase();
   const bucket = String(f.bucket || '').toLowerCase();
@@ -81,6 +86,26 @@ function classifyFinding(f, ctx = {}) {
     // (checked_urls). Corpus-adequacy ALONE is not proof ("fired because the rule exists"). Unevidenced
     // → NEEDS_REVIEW (held back from the report, not shown). (D23/D33/F9)
     if (ctx.via_archive) { signals.push('rule_trigger', 'archive_snapshot'); state = 'NEEDS_REVIEW'; confidence = 0.5; }  // #54/#64: a 'missing disclosure' read from a Wayback snapshot may be fixed live now — never a CONFIRMED current breach.
+    // TRUNCATION INTERLOCK. If the corpus was CUT, then "it is missing" is not a claim we are entitled to make: the
+    // thing may be sitting in the part we did not read. This is not hypothetical - the corpus was capped at 4,000
+    // characters, every footer disclosure lives past that, and we told law firms they had omitted their SRA
+    // authorisation and their registered office when both were in their own footer. Silence is free; a false
+    // accusation against a law firm is not.
+    else if (ctx.corpus_truncated) { signals.push('rule_trigger', 'corpus_truncated'); state = 'NEEDS_REVIEW'; confidence = 0.5; }
+    // COVERAGE INTERLOCK. The other half of the same idea, and the one that actually bit us.
+    //
+    // birketts.co.uk returns 403 to every sub-page. We got ONE page. Their /legal page — where "authorised and
+    // regulated by the Solicitors Regulation Authority" lives — we never read. And we shipped a P0 accusation that
+    // a top-100 UK law firm fails to state its authorisation.
+    //
+    // A claim that something is MISSING is only as good as the search. If we read one page of a firm's site, we
+    // have not searched; we have glanced. `pages_fetched` is the honest measure of that. Below the floor, an
+    // absence is held back — the audit still ships, and it still carries every BROWSER-OBSERVED breach, because
+    // those do not depend on how much of the site we could read.
+    else if (Number(ctx.pages_fetched || 0) > 0 && Number(ctx.pages_fetched) < MIN_PAGES_FOR_ABSENCE) {
+      signals.push('rule_trigger', 'insufficient_coverage');
+      state = 'NEEDS_REVIEW'; confidence = 0.5;
+    }
     else if (corpusAdequate && (_hasQuote(f) || _inspected(f))) { signals.push('rule_trigger', 'corpus_coverage', _inspected(f) ? 'pages_inspected' : 'verbatim_quote'); state = 'CONFIRMED'; confidence = _inspected(f) ? 0.86 : 0.9; }
     else { signals.push('rule_trigger'); state = 'NEEDS_REVIEW'; confidence = 0.5; }
   } else if (kind === 'observed') {
