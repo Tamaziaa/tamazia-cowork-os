@@ -51,10 +51,27 @@ async function gateLLM(opts) {
   if (!run || typeof rubric !== 'function') {
     return { ok: false, out: null, score: 0, attempts: 0, provider: null, deficiencies: ['gate_unavailable'], history };
   }
+  // THE ESCALATION LADDER. Attempts 1-2 use the router's ordinary chain (Cloudflare and Groq 8B first: free, fast,
+  // 500K tokens a day). Attempt 3 is the HARD CASE, so it escalates to a STRONGER model - but "stronger" is not the
+  // same as "scarcer", and this list had them confused.
+  //
+  // The old ladder put QWEN and GEMINI first. Gemini's free tier is roughly 1,000 REQUESTS A DAY. So every hard case
+  // in the engine - and with a rubric threshold of 7, a great many cases are hard - spent the scarcest quota in the
+  // whole stack, exhausted it, and then the gate failed. A failed gate means no llm_verify on the payload, and the
+  // database (correctly) throws the audit away as a stub. That is how "we have plenty of LLM keys" ends in a lost
+  // audit.
+  //
+  // The correct ladder escalates CAPABILITY while spending the CHEAPEST sufficient quota first:
+  //   1. Groq 70B  - 100K tokens/day free, genuinely strong at structured JSON, and fast.
+  //   2. Cloudflare 70B - free neuron budget, independent of Groq's quota, so an exhausted Groq does not block us.
+  //   3. Gemini    - ~1,000 requests/day. Precious. It is the reserve, not the opening move.
+  //   4. Qwen      - last, and only if a key exists.
   const _defaultPremium = [
-    ...(process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: process.env.QWEN_MODEL || 'qwen-plus' }] : []),
-    { provider: 'gemini', model: 'gemini-2.5-flash-lite' },
     { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+    ...(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID
+      ? [{ provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' }] : []),
+    { provider: 'gemini', model: 'gemini-2.5-flash-lite' },
+    ...(process.env.DASHSCOPE_API_KEY ? [{ provider: 'qwen', model: process.env.QWEN_MODEL || 'qwen-plus' }] : []),
   ];
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     // Wall-clock budget (E-224): the gate must never blow the mint's per-build cap. Out of time -> drop cleanly.

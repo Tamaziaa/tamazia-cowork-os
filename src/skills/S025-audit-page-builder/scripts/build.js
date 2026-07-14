@@ -242,6 +242,7 @@ function resolveHomeCountry(domain, markets, passedCountry) {
 }
 
 async function buildPayload({ domain, sector, country, lead_id, env, company }) {
+  try { require(path.resolve(ROOT, 'src', 'lib', 'llm', 'router.js')).llmPreflight(); } catch (_e) {}   // a missing LLM key must SHOUT, not shrug
   const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
   let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
