@@ -1,0 +1,34 @@
+name: CodeScene PR Refactoring Agent
+
+# CodeScene's ANALYSIS (code health, hotspots, change coupling over git history) arrives from codescene.io via
+# the GitHub PR integration. THIS workflow is the optional second half: the agent that can APPLY a fix when a
+# reviewer asks for one. It is opt-in by design — it only runs when someone comments `/cs-agent` on a PR.
+#
+# It is the ONLY tool on the estate that reads the GIT HISTORY. CodeQL and Semgrep see the code as it is now;
+# CodeScene sees which files keep getting re-fixed. That is how you find the 23-cache-commits / 20-fine-commits
+# pattern — a defect that keeps coming back through a different door.
+#
+# REQUIRED SECRET (Aman must create it, I cannot):
+#   CODESCENE_ACCESS_TOKEN  ->  https://codescene.io/users/me/pat
+# The AI provider is already present: GEMINI_API_KEY (a Google AI Studio key) satisfies `google_api_key`.
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  refactor:
+    if: github.event.issue.pull_request != null && contains(github.event.comment.body, '/cs-agent')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: codescene-oss/pr-refactoring-agent@v1
+        with:
+          pr_number: ${{ github.event.issue.number }}
+          command: ${{ github.event.comment.body }}
+          model: 'google/gemini-2.5-pro'
+          codescene_token: ${{ secrets.CODESCENE_ACCESS_TOKEN }}
+          google_api_key: ${{ secrets.GEMINI_API_KEY }}
