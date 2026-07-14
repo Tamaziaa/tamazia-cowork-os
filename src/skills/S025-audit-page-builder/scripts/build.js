@@ -26,6 +26,58 @@ process.on('unhandledRejection', (e) => { if (_isBenignNet(e)) { try { console.e
 const { scanSite } = require(require('path').resolve(__dirname, '..', '..', '..', '..', 'src', 'lib', 'audit', 'site-scan.js'));
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+
+// THE WARNING SINK. There were 34 `catch (_e) { _warn('build.js:30', _e); }` swallows in this file alone. Each one is a place where a stage
+// of a LEGAL DOCUMENT can fail and the audit still reports success. That is not resilience, it is a lie with a
+// try/catch around it, and it is the single mechanism behind every long-lived bug in this engine:
+//   * the cookie collector returned null for two versions (require('playwright') threw, swallowed);
+//   * the breach adjudicator threw "cc is not defined" for two versions (swallowed) while the report told law firms
+//     their breaches had been reviewed;
+//   * statute-rag was never called for months (invisible).
+// A swallowed error is now a RECORDED FACT, carried on the payload as `warnings[]`, and counted. We still do not
+// crash the mint on a non-critical stage - but we no longer pretend it succeeded.
+const _WARN = [];
+function _warn(where, e) {
+  const msg = String((e && e.message) || e || 'unknown').slice(0, 180);
+  _WARN.push({ where, error: msg, at: new Date().toISOString() });
+  console.error('[warn] ' + where + ': ' + msg);
+}
+
+// STATIC REQUIRES. These were 34 calls to require(path.resolve(ROOT, ...)) - a DYNAMIC require that NO static
+// analysis tool can follow. Not CodeQL. Not madge. Not a semantic code-search tool. It made the dependency graph of
+// the audit pipeline INVISIBLE, which is precisely how statute-rag.js was built, required, and never called by a
+// mint for MONTHS without anyone being able to tell. Every path below was a compile-time constant pretending to be
+// a runtime decision. Now the graph is legible, and a tool can answer "what calls this" for the first time.
+const _M_ai_readiness = require('../../../lib/audit/ai-readiness.js');
+const _M_authority_gap = require('../../../lib/audit/authority-gap.js');
+const _M_bing_volume = require('../../../lib/audit/bing-volume.js');
+const _M_cc_index = require('../../../lib/audit/cc-index.js');
+const _M_competitor_overlap = require('../../../lib/audit/competitor-overlap.js');
+const _M_content_gap = require('../../../lib/audit/content-gap.js');
+const _M_crawl_escalation = require('../../../lib/audit/crawl-escalation.js');
+const _M_design_system = require('../../../lib/audit/design-system.js');
+const _M_enforcement_map = require('../../../lib/audit/enforcement-map.js');
+const _M_finding_trust = require('../../../lib/audit/finding-trust.js');
+const _M_firm_identity = require('../../../lib/audit/firm-identity.js');
+const _M_fix_writer = require('../../../lib/audit/fix-writer.js');
+const _M_geo_probe = require('../../../lib/audit/geo-probe.js');
+const _M_geo_visuals = require('../../../lib/audit/geo-visuals.js');
+const _M_glossary = require('../../../lib/audit/glossary.js');
+const _M_hallucination = require('../../../lib/audit/hallucination.js');
+const _M_hf_ml = require('../../../lib/audit/hf-ml.js');
+const _M_local_pack = require('../../../lib/audit/local-pack.js');
+const _M_screenshot = require('../../../lib/audit/screenshot.js');
+const _M_seo_deep = require('../../../lib/audit/seo-deep.js');
+const _M_source_gap = require('../../../lib/audit/source-gap.js');
+const _M_jurisdiction_router = require('../../../lib/compliance/jurisdiction-router.js');
+const _M_resolver = require('../../../lib/compliance/resolver.js');
+const _M_signals = require('../../../lib/compliance/signals.js');
+const _M_gate = require('../../../lib/llm/gate.js');
+const _M_router = require('../../../lib/llm/router.js');
+const _M_markets = require('../../../lib/sourcing/markets.js');
+const _M_rank_insight = require('../../../lib/touch0/rank-insight.js');
+const _M_compliance = require('../../S008-personalisation-engine/scanners/compliance.js');
+
 function pgPath() { return path.resolve(ROOT, 'scripts', 'psql'); }
 function pg(sql) {
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
@@ -242,8 +294,8 @@ function resolveHomeCountry(domain, markets, passedCountry) {
 }
 
 async function buildPayload({ domain, sector, country, lead_id, env, company }) {
-  try { require(path.resolve(ROOT, 'src', 'lib', 'llm', 'router.js')).llmPreflight(); } catch (_e) {}   // a missing LLM key must SHOUT, not shrug
-  const router = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'jurisdiction-router.js'));
+  try { _M_router.llmPreflight(); } catch (_e) { _warn('build.js:297', _e); }   // a missing LLM key must SHOUT, not shrug
+  const router = _M_jurisdiction_router;
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
   let scan = { pointers: [], counts: { total: 0, p0: 0, p1: 0, p2: 0 }, signals: {}, reachable: false, markets: { operating_countries: [], regions: [], serves_eu: false } };
   // 120s hard cap on scanSite (Phase 5.3): PSI (now ~58s max per the 28s/strategy raise) + remaining probes (wikidata,
@@ -257,7 +309,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     ]);
     clearTimeout(_scanTo);
   } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
-  try { scan = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'crawl-escalation.js')).maybeEscalateCrawl(scan, { domain, env: env || process.env }); } catch (_e) {} // Apify crawl fallback (default-OFF, self-contained)
+  try { scan = await _M_crawl_escalation.maybeEscalateCrawl(scan, { domain, env: env || process.env }); } catch (_e) { _warn('build.js:312', _e); } // Apify crawl fallback (default-OFF, self-contained)
   // C-jur: resolve the REAL home jurisdiction from TLD + detected strong-markets when country is blank, instead of
   // blind-defaulting to 'UK'. effCountry feeds every jurisdiction-bearing call below so a US/AE firm never inherits
   // the UK framework stack. '' (unknown) means only GOOGLE_EEAT + genuinely-detected markets attach.
@@ -269,17 +321,17 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   // domain. Fail-open: on any error we land back on the cleaned stem, never on a fabricated name.
   let firm_identity = null;
   try {
-    firm_identity = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'firm-identity.js'))
+    firm_identity = await _M_firm_identity
       .resolveFirmIdentity({ domain, signals: scan.signals || {}, corpus: (scan.signals && scan.signals.corpus) || '', env: env || process.env });
   } catch (_e) { firm_identity = null; }
   const _firmName = (firm_identity && firm_identity.display_name)
-    || (() => { try { return require(path.resolve(ROOT, 'src', 'lib', 'audit', 'firm-identity.js')).cleanDomainStem(domain); } catch (_e) { return null; } })()
+    || (() => { try { return _M_firm_identity.cleanDomainStem(domain); } catch (_e) { return null; } })()
     || (domain || '').replace(/^www\./, '').split('.')[0];
   // RC-2 Tier-A: a CONFIRMED Companies House record is an official register entry — the dispositive proof of a UK
   // legal seat. Fold it into the jurisdiction evidence matrix (additive; it can only add a register-proven nexus).
   if (firm_identity && firm_identity.company_number) {
     try {
-      scan.markets = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).attachRegisterEvidence(scan.markets, {
+      scan.markets = _M_markets.attachRegisterEvidence(scan.markets, {
         country: 'United Kingdom', register: 'Companies House', name: firm_identity.legal_name,
         number: firm_identity.company_number,
         url: 'https://find-and-update.company-information.service.gov.uk/company/' + encodeURIComponent(firm_identity.company_number),
@@ -289,7 +341,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   const effCountry = resolveHomeCountry(domain, scan.markets, country);
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
-  try { comp = await require(path.resolve(ROOT, 'src', 'skills', 'S008-personalisation-engine', 'scanners', 'compliance.js')).scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) { /* #48: never present a THROWN compliance scan as a clean bill of health — record the failure so the payload marks compliance unassessed rather than silently 'no breaches'. */ comp = { frameworks: [], findings: [], compliance_unassessed: true, compliance_error: String((_e && _e.message) || _e).slice(0, 160) }; }
+  try { comp = await _M_compliance.scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) { /* #48: never present a THROWN compliance scan as a clean bill of health — record the failure so the payload marks compliance unassessed rather than silently 'no breaches'. */ comp = { frameworks: [], findings: [], compliance_unassessed: true, compliance_error: String((_e && _e.message) || _e).slice(0, 160) }; }
   // HQ RECONCILIATION (Phase-7): the LLM firm-profiler (now reliable via the Cloudflare-first router) determines the
   // registered LEGAL HQ from the corpus. resolveHomeCountry runs BEFORE the profile exists and a .com firm can fall to
   // a TLD/market-derived scalar country that contradicts the real HQ (cert: pkfhospitality is London-HQ but .com made
@@ -309,8 +361,8 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   // client even if an upstream gate regressed. The engine overlay already enforces this — this drops nothing in the
   // normal path. Index is cached module-side, so the cost at 2-3k/day is negligible.
   try {
-    const { overlayDrop } = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'resolver.js'));
-    const { toCanonicalJurisdictions } = require(path.resolve(ROOT, 'src', 'lib', 'compliance', 'signals.js'));
+    const { overlayDrop } = _M_resolver;
+    const { toCanonicalJurisdictions } = _M_signals;
     const idx = _mintGateIndex();
     if (idx && idx.size && Array.isArray(comp.findings) && comp.findings.length) {
       const jurSet = new Set((comp.canonical_jurisdictions && comp.canonical_jurisdictions.length) ? comp.canonical_jurisdictions : [...toCanonicalJurisdictions(comp.jurisdictions || [])]);
@@ -332,7 +384,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       });
       if (comp.findings.length !== before) console.error(`[mint-gate] dropped ${before - comp.findings.length} non-compliant finding(s) for ${domain} (fail-closed safety-net; authoritative overlay did not run)`);
     }
-  } catch (_e) {}
+  } catch (_e) { _warn('build.js:387', _e); }
   // Propagate the LLM firm-profiler's detected sector (corrects a mis-tagged row — e.g. a gym tagged
   // "hospitality") to EVERY downstream engine (keywords, competitors, content-gap, local-pack) and the
   // payload label, so the whole audit speaks the firm's REAL sector, not the row's stale guess. (F-profile)
@@ -352,14 +404,14 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       const city = (scan.markets && scan.markets.primary_city) || '';
       // No city gate: buildKeywordMap handles no-city/global sites internally (category-level queries), so the
       // ranking ladder populates for ecommerce/global too. (P6.4 caught this gate silently zeroing the keyword map.)
-      const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
+      const ri = _M_rank_insight;
       keyword_map = await ri.buildKeywordMap({ domain, company: _firmName, sector, city, html: [scan.signals && scan.signals.title, scan.signals && scan.signals.meta_description].filter(Boolean).join(' '), corpus: (scan.signals && scan.signals.corpus) || '', country: country || 'UK', env, max: 7, jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [], firmProfile: (comp && comp.firm_profile) || null });
-    } catch (_e) {}
+    } catch (_e) { _warn('build.js:409', _e); }
     })(),
     // REAL AI-citation probe (cog): who owns the answer surface for the firm's category, and is the firm cited?
     (async () => {
     try {
-      const ri = require(path.resolve(ROOT, 'src', 'lib', 'touch0', 'rank-insight.js'));
+      const ri = _M_rank_insight;
       const _city = (scan.markets && scan.markets.primary_city) || '';
       const _wd = (scan.signals && scan.signals.wikidata) || scan.wikidata || null;
       ai_citation = await ri.aiCitationProbe({ domain, company: _firmName, sector, city: _city, html: (scan.signals && scan.signals.title) || '', corpus: (scan.signals && scan.signals.corpus) || '', country: country || 'UK', wikidata: _wd, jurisdictions: (comp && (comp.detected_jurisdictions || comp.jurisdictions)) || [], firmProfile: (comp && comp.firm_profile) || null });
@@ -387,24 +439,24 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
             recommendation: '', citation: 'GEO', framework_short: 'GEO', citation_url: '', evidence: 'live ' + ai_citation.llm.provider + ' answer probe' });
         }
       }
-    } catch (_e) {}
+    } catch (_e) { _warn('build.js:442', _e); }
     })(),
     // P3.7 + P3.10 AI / entity-readiness (robots AI-crawler access + llms.txt + entity schema + Wikidata) — deterministic, GBP0, no quota.
     (async () => {
     try {
-      const _air = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'ai-readiness.js'));
+      const _air = _M_ai_readiness;
       const _airRes = await _air.aiReadiness({ domain, company: _firmName, env });
       if (_airRes && _airRes.ok) { _aiReadyFindings = _airRes.findings || []; payload_ai_readiness = { score: _airRes.score, blocked_ai_bots: _airRes.blocked_ai_bots, has_llms_txt: _airRes.has_llms_txt, has_org_schema: _airRes.has_org_schema, has_same_as: _airRes.has_same_as, in_wikidata: _airRes.in_wikidata, schema_types: _airRes.schema_types || [], has_localbusiness: !!_airRes.has_localbusiness, has_service: !!_airRes.has_service, has_faq: !!_airRes.has_faq }; }
-    } catch (_e) {}
+    } catch (_e) { _warn('build.js:450', _e); }
     })(),
     // P2.15 local-pack / GBP readiness (OSM presence + LocalBusiness schema + NAP) — gated on city + local sector.
     (async () => {
     try {
-      const _lp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'local-pack.js'));
+      const _lp = _M_local_pack;
       const _lpCity = (scan.markets && scan.markets.primary_city) || '';
       const _lpRes = await _lp.localPackReadiness({ domain, company: _firmName, sector, city: _lpCity, env });
       if (_lpRes && _lpRes.finding) _localFindings = [_lpRes.finding];
-    } catch (_e) {}
+    } catch (_e) { _warn('build.js:459', _e); }
     })(),
   ]);
   const frameworks = (comp.frameworks && comp.frameworks.length)
@@ -522,12 +574,12 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     // location/intent noise that would breach the zero-false-positive bar on the client render). For Tamazia's team.
     (async () => {
     try {
-      const _cg = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'content-gap.js'));
+      const _cg = _M_content_gap;
       const _sn = (keyword_map && keyword_map.service_noun) || (scan.signals && scan.signals.service_noun) || sector;
       const _cgCity = (scan.markets && scan.markets.primary_city) || '';
       const _cgr = await _cg.contentGap({ domain, serviceNoun: _sn, city: _cgCity, sector, env });
       if (_cgr && _cgr.pages) payload_content_gap = { pages: _cgr.pages, gaps: _cgr.gaps || [] };
-    } catch (_e) {}
+    } catch (_e) { _warn('build.js:582', _e); }
     })(),
     // ── §5 REAL organic-competitor set (free SERP-overlap ∪ LLM peers, isAggregator-filtered, optional HF-relevance) ──
     // ONE canonical peer set: domains that co-rank with the firm across its buyer queries, unioned with the peer
@@ -535,30 +587,30 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     // keyword leaders, and AI-visibility — replacing single-keyword guesses. Fail-open to the keyword leaders.
     (async () => {
     try {
-      const _co = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'competitor-overlap.js'));
+      const _co = _M_competitor_overlap;
       const _llmPeers = ((ai_citation && ai_citation.competitors) || []).map(c => (c && (c.domain || c.name))).filter(Boolean);
       const _firmText = (scan.signals && (scan.signals.corpus || scan.signals.title)) || '';
       _organicComps = await _co.organicCompetitors({ keyword_map, domain, llmPeers: _llmPeers, firmText: _firmText, country: country || 'UK', sector, env, want: 9 }) || [];
-    } catch (_e) {}
+    } catch (_e) { _warn('build.js:594', _e); }
     })(),
     // P3.1/3.3/3.4/3.5 multi-sample GEO probe (repeatability + share-of-voice + entrenched leaders). Rate-limit-graceful.
     (async () => {
     try {
-      const _gp = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-probe.js'));
+      const _gp = _M_geo_probe;
       const _q = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
       if (_q) { const _gpr = await _gp.geoProbe({ query: _q, company: _firmName, domain, env, samples: 2 }); if (_gpr && _gpr.ok) { payload_geo_probe = { samples: _gpr.samples, share_of_voice: _gpr.share_of_voice, repeatability: _gpr.repeatability, competitor_consistency: _gpr.competitor_consistency ?? null, providers_used: _gpr.providers_used || null, from_cache: _gpr.from_cache || false, top_competitors: _gpr.top_competitors, grounded: _gpr.grounded || null }; if (_gpr.finding) _geoFindings.push(_gpr.finding); } }
-    } catch (_e) {}
+    } catch (_e) { _warn('build.js:602', _e); }
     })(),
     // P3.6 source-gap (free SERP authority sources)
     (async () => {
     try {
       const _sgQ = (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '');
-      if (_sgQ) { const _sgr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'source-gap.js')).sourceGap({ query: _sgQ, domain, env }); if (_sgr && _sgr.finding) _geoFindings.push(_sgr.finding); }
-    } catch (_e) {}
+      if (_sgQ) { const _sgr = await _M_source_gap.sourceGap({ query: _sgQ, domain, env }); if (_sgr && _sgr.finding) _geoFindings.push(_sgr.finding); }
+    } catch (_e) { _warn('build.js:609', _e); }
     })(),
     // P2.11/P2.12 SEO depth: the live you-vs-competitor keyword finding (free-serp powered). (sync — wrapped for the tier)
     (async () => {
-    try { _seoFindings = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'seo-deep.js')).seoDeepFindings({ keyword_map }); } catch (_e) {}
+    try { _seoFindings = _M_seo_deep.seoDeepFindings({ keyword_map }); } catch (_e) { _warn('build.js:613', _e); }
     })(),
   ]);
 
@@ -569,30 +621,30 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     // P2.17 backlink/authority gap (OpenPageRank) — over the REAL overlap set (falls back to keyword leaders).
     (async () => {
     try {
-      const _ag = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'authority-gap.js'));
+      const _ag = _M_authority_gap;
       const _leaders = ((keyword_map && keyword_map.keywords) || []).map(k => k.leader).filter(Boolean);
       const _comps = (_organicComps.length ? _organicComps : _leaders);
       const _agRes = await _ag.authorityGap({ domain, competitors: _comps, env });
       if (_agRes && _agRes.ok && _agRes.you) { if (_agRes.finding) _authFindings = [_agRes.finding]; payload_authority = { you: _agRes.you, top: _agRes.top, ranked: _agRes.ranked, last_updated: _agRes.last_updated, peer_source: _organicComps.length ? 'SERP-overlap + LLM peers (OpenPageRank-derived DR)' : 'keyword leaders (OpenPageRank-derived DR)' }; }
-    } catch (_e) {}
+    } catch (_e) { _warn('build.js:629', _e); }
     })(),
     // ── §3 + §4 keyword volume (Bing GetKeywordStats) + intent (HF zero-shot), attached to the keyword_map ──────
     // Both fail-open: no BING_WEBMASTER_KEY → volume omitted (as today); no HF_TOKEN / out of credit → intent omitted.
     (async () => {
     try {
-      const _bv = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'bing-volume.js'));
-      const _hf = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'hf-ml.js'));
+      const _bv = _M_bing_volume;
+      const _hf = _M_hf_ml;
       const _kws = (keyword_map && keyword_map.keywords) || [];
       if (_bv.enabled(env)) await Promise.all(_kws.slice(0, 8).map(async k => { if (k.volume == null) { const v = await _bv.keywordVolume(k.keyword, country || 'UK', env); if (v != null) k.volume = v; } }));
       if (_hf.enabled(env)) { const _labels = ['commercial', 'transactional', 'informational', 'navigational']; await Promise.all(_kws.slice(0, 8).map(async k => { const z = await _hf.zeroShot(k.keyword, _labels, { env }); if (z && z.labels && z.labels.length) k.intent = z.labels[0]; })); }
-    } catch (_e) {}
+    } catch (_e) { _warn('build.js:640', _e); }
     })(),
   ]);
   // ── §2 Common Crawl footprint (firm + top-3 competitors): real indexed-page depth + on-site topics, keyless ──
   // Step B (serial): needs payload_authority.ranked from Step A. CC's inner 3-competitor loop is parallelized.
   // Fail-open: CC's public CDX front-end is periodically overloaded (504s) → returns null and the engine continues.
   try {
-    const _cc = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'cc-index.js'));
+    const _cc = _M_cc_index;
     const _meFoot = await _cc.ccFootprint({ domain });
     if (_meFoot && _meFoot.indexed_pages != null) {
       payload_authority = payload_authority || {};
@@ -602,19 +654,19 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
         const f = await _cc.ccFootprint({ domain: r.domain }); if (f && f.indexed_pages != null) r.cc_indexed_pages = f.indexed_pages;
       }));
     }
-  } catch (_e) {}
+  } catch (_e) { _warn('build.js:657', _e); }
   // P3.9 hallucination + sentiment (free-LLM chain)
   // Step C (serial): MUST stay after geoProbe — it augments the payload_geo_probe geoProbe set (ai_knows / ai_sentiment),
   // so running it concurrently would race and drop those fields.
   try {
-    const _hr = await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'hallucination.js')).hallucinationCheck({ company: _firmName, domain, env });
+    const _hr = await _M_hallucination.hallucinationCheck({ company: _firmName, domain, env });
     if (_hr && _hr.ok) { payload_geo_probe = payload_geo_probe || {}; payload_geo_probe.ai_knows = _hr.ai_knows; payload_geo_probe.ai_sentiment = _hr.sentiment; if (_hr.finding) _geoFindings.push(_hr.finding); }
-  } catch (_e) {}
+  } catch (_e) { _warn('build.js:664', _e); }
   // P3.V1-3 GEO visuals + P3.8 screenshots, built from the live GEO data
   // Step D (serial): reads payload_ai_readiness (Tier 1) + payload_geo_probe (now fully populated by geoProbe + hallucination).
   try {
-    const _v = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'geo-visuals.js'));
-    const _sc = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'screenshot.js'));
+    const _v = _M_geo_visuals;
+    const _sc = _M_screenshot;
     const air = payload_ai_readiness || {}; const gp = payload_geo_probe || {};
     const youCited = !!(gp.grounded && gp.grounded.you_cited);
     const engines = ['ChatGPT', 'Gemini', 'Perplexity', 'Claude', 'Copilot', 'Grok', 'Meta AI', 'Google AI'].map(nm => ({ name: nm, cited: youCited }));
@@ -629,7 +681,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     const nodes = [].concat((gp.top_competitors || []).map(c => ({ label: c.name, type: 'competitor' })), ((gp.grounded && gp.grounded.source_domains) || []).map(d => ({ label: d, type: 'source' })));
     payload_geo_visuals = { ai_engine_grid: _v.aiEngineGrid(engines), ai_radar: _v.aiRadar(radarAxes), entity_web_map: _v.entityWebMap({ you: _firmName, nodes }) };
     payload_screenshots = _sc.screenshotUrls({ domain, query: (ai_citation && ai_citation.query) || ((keyword_map && keyword_map.keywords && keyword_map.keywords[0] && keyword_map.keywords[0].keyword) || '') });
-  } catch (_e) {}
+  } catch (_e) { _warn('build.js:684', _e); }
   // Ground the jurisdiction statement in the regions the engine ACTUALLY attached binding frameworks for (not raw
   // served-markets), so a firm that merely serves a region but is not regulated there does not get an overclaiming
   // statement. Map each attached framework's jurisdiction -> region.
@@ -642,8 +694,8 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       const R = (j) => { j = String(j || '').toUpperCase(); if (j === 'UK' || j === 'GB') return 'UK'; if (j === 'US' || j === 'USA') return 'US'; if (j === 'EU' || ['DE','FR','NL','IE','IT','ES','BE','SE','PL','AT','DK','FI','PT'].includes(j)) return 'EU'; if (['AE','SA','QA','BH','OM','KW','EG','JO'].includes(j) || j.indexOf('MENA') === 0) return 'Middle East'; return null; };
       _boundRegions = Array.from(new Set(jr.split('\n').map((x) => R(x.trim())).filter(Boolean)));
     }
-  } catch (_e) {}
-  try { jurisdiction_statement = require(path.resolve(ROOT, 'src', 'lib', 'sourcing', 'markets.js')).jurisdictionStatement({ markets: scan.markets, registeredCountry: displayCountry, company: _firmName, boundRegions: _boundRegions }); } catch (_e) {}
+  } catch (_e) { _warn('build.js:697', _e); }
+  try { jurisdiction_statement = _M_markets.jurisdictionStatement({ markets: scan.markets, registeredCountry: displayCountry, company: _firmName, boundRegions: _boundRegions }); } catch (_e) { _warn('build.js:698', _e); }
   let findings = [...compPointers, ...(scan.pointers || []), ...aiCiteFindings, ..._seoFindings, ..._authFindings, ..._localFindings, ..._aiReadyFindings, ..._geoFindings].sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3));
   // ── REACHABILITY RECONCILIATION (anti-fabrication red line) ──────────────────────────────────
   // Two independent corpus paths can disagree: site-scan's direct fetch + PSI may fail (timeout / bot-block)
@@ -661,11 +713,11 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   if (!_assessable) findings = [];
   // P1.2-P1.5 finding-trust: tag kind+signals+state, lock quotes on presence findings, evidence-lock fines; only CONFIRMED renders.
   // P2.9: guarantee 100% of compliance findings carry a real enforcement regime (catalogue rules already do; this backfills code-generated ones).
-  try { const _enf = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'enforcement-map.js')); for (const _f of findings) { if (_f && _f.bucket === 'compliance' && !_f.enforcement_example) _f.enforcement_example = _enf.enforcementFor(_f.framework_short || _f.citation); } } catch (_e) {}
-  const _ft = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'finding-trust.js'));
+  try { const _enf = _M_enforcement_map; for (const _f of findings) { if (_f && _f.bucket === 'compliance' && !_f.enforcement_example) _f.enforcement_example = _enf.enforcementFor(_f.framework_short || _f.citation); } } catch (_e) { _warn('build.js:716', _e); }
+  const _ft = _M_finding_trust;
   const _corpusAdequate = _assessable && !(comp && comp.challenge);
   let _classified = _ft.classifyAll(findings, { corpus_adequate: _corpusAdequate, render_class: scan.render_class, jurisdictions: (comp && comp.jurisdictions) || [], sector, via_archive: !!(comp && comp.via_archive)});
-  try { _classified = await verifyTopFindings(_classified, env || process.env); } catch (_e) {}
+  try { _classified = await verifyTopFindings(_classified, env || process.env); } catch (_e) { _warn('build.js:720', _e); }
   // FINDING-INTEGRITY GATE (legal-QA P0 fabricated-finding, 14 hits): never render a legal finding that is
   // unmapped or textless. A compliance-bucket finding with no framework_short, or any finding whose title/fact
   // is blank, is unverifiable noise (renders as an empty bullet or a fine with no law) — drop it fail-closed.
@@ -683,9 +735,9 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   const _needsReview = _ft.needsReview(_classified);
   // UNIQUE Tamazia-fix language — rewrite each confirmed finding's fix so no two repeat (founder: never
   // repeat lines). Transform-only, fail-open per item. Runs on the confirmed set before quota/render. (F-uniquefix)
-  try { await require(path.resolve(ROOT, 'src', 'lib', 'audit', 'fix-writer.js')).uniqueFixes(_confirmed, { company: (comp && comp.firm_profile && comp.firm_profile.hq_country ? domain : domain), env: env || process.env }); } catch (_e) {}
+  try { await _M_fix_writer.uniqueFixes(_confirmed, { company: (comp && comp.firm_profile && comp.firm_profile.hq_country ? domain : domain), env: env || process.env }); } catch (_e) { _warn('build.js:738', _e); }
   // P1.8 BINGO voice: attach the 'Right now / Tamazia' lines to every confirmed finding so the v15 render speaks one voice.
-  try { const _ds = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'design-system.js')); for (const f of _confirmed) f.bingo = _ds.bingoLine(f); } catch (_e) {}
+  try { const _ds = _M_design_system; for (const f of _confirmed) f.bingo = _ds.bingoLine(f); } catch (_e) { _warn('build.js:740', _e); }
   const threeFindings = _confirmed.slice(0, 3);
   // E-211 (v22.5, P-009): the executive summary NEVER ships empty again. Path 1: LLM synthesis through the
   // shared router (groq -> NIM -> gemini -> Qwen paid fallover, retries + backoff + concurrency gate) instead of
@@ -705,7 +757,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       // exactly two sentences 3 · length 2 · no fine-theatrics phrasing 2; two attempts, then the deterministic
       // composer below takes over (so V13 never quarantines a healthy mint).
       const _prompt = 'You are writing a 2-sentence executive summary for the leadership of ' + domain + ', based ONLY on this website audit. Findings:\n' + _top + '\nHighest single statutory penalty ceiling among the applicable frameworks (a per-framework maximum, NOT a sum and NOT an incurred amount): GBP ' + _expo + '.\nSentence 1: the single most serious regulatory or commercial risk and why it matters. Sentence 2: the headline opportunity if fixed. British English, precise, confident, no fabrication, no facts beyond those listed, no preamble.\nReturn STRICT JSON only: {"summary":"<the two sentences>"}';
-      const { gateLLM } = require(path.resolve(ROOT, 'src', 'lib', 'llm', 'gate.js'));
+      const { gateLLM } = _M_gate;
       const _g = await gateLLM({
         role: 'synthesise', prompt: _prompt, threshold: 7, max_attempts: 2, max_tokens: 200, temperature: 0.3, deadline_ms: 45000, scan_id: domain + ':exec',
         rubric: (out) => {
@@ -722,7 +774,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       _execGate = { score: _g.score, attempts: _g.attempts, provider: _g.provider };
       if (_g.ok) exec_summary = String(_g.out.summary).slice(0, 600);
     }
-  } catch (_e) {}
+  } catch (_e) { _warn('build.js:777', _e); }
   if (!exec_summary) {
     try {
       const _fwN = (frameworks || []).length;
@@ -813,7 +865,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
           const rows = pg("SELECT framework_short, coalesce(binding_status,'') FROM framework_versions WHERE framework_short IN (" + inList + ")").trim();
           for (const line of rows.split('\n').filter(Boolean)) { const [fw, bs] = line.split('\t'); if (fw && bs && !base[fw]) base[fw] = bs; }
         }
-      } catch (_e) {}
+      } catch (_e) { _warn('build.js:868', _e); }
       return base;  // #17: cover EVERY applicable framework with authoritative binding_status from framework_versions
     })(),
     // FRAMEWORK_META — THE SINGLE SOURCE OF TRUTH FOR WHAT A LAW IS CALLED AND WHO ENFORCES IT.
@@ -854,9 +906,17 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
             section_ref: section || null,
           };
         }
-      } catch (_e) { /* fail-open: the renderer keeps its existing fallbacks, it just cannot be CORRECTED from here */ }
+      } catch (_e) {
+        // fail-open: the renderer keeps its fallbacks. But a failure here means the audit ships
+        // WITHOUT the catalogue truth, so it must be visible, not swallowed.
+        _warn('build.js:framework_meta', _e);
+      }
       return out;
     })(),
+    // Every swallowed error, on the payload. The question "did anything quietly fail while building this legal
+    // document" is now answerable from the outside, which it never was.
+    warnings: _WARN.slice(0, 60),
+    warning_count: _WARN.length,
     drop_trace: (comp && comp.drop_trace) || null,
     review_candidates: (comp && comp.review_candidates) || [],
     attach_confidence: (comp && comp.attach_confidence) || {},
@@ -929,7 +989,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     render_mode: (comp && comp.render_mode) || null,
     compliance_error: (comp && comp.compliance_error) || null,
     exec_summary,
-    news_map: (() => { const nm = {}; const want = new Set((frameworks||[]).map(f=>String(f))); try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) { const fw = ln.slice(0, i); if (!want.size || want.has(fw)) nm[fw] = ln.slice(i + 1); } } } catch (_e) {} return nm; })(),
+    news_map: (() => { const nm = {}; const want = new Set((frameworks||[]).map(f=>String(f))); try { const nr = pg("SELECT framework_short, news FROM enforcement_news"); if (nr) for (const ln of nr.trim().split('\n')) { const i = ln.indexOf('\t'); if (i > 0) { const fw = ln.slice(0, i); if (!want.size || want.has(fw)) nm[fw] = ln.slice(i + 1); } } } catch (_e) { _warn('build.js:943', _e); } return nm; })(),
     // Curated regulatory-intelligence per framework (obligations the regulator assesses + focus + a verified recent
     // enforcement action + recent guidance). Returned as one JSON blob keyed by framework_short; the render attaches
     // it to each framework card (breached or screened). Whole table (~35 rows) so screened + baseline laws are covered.
@@ -945,7 +1005,7 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
     screenshots: payload_screenshots,
     content_gap: payload_content_gap,
     jurisdiction_statement,
-    glossary: (() => { try { const _g = require(path.resolve(ROOT, 'src', 'lib', 'audit', 'glossary.js')); const _txt = (_confirmed || []).map(f => (f.fact || '') + ' ' + (f.citation || '') + ' ' + (f.layman_explanation || '')).join(' '); return { terms: _g.GLOSSARY, used: _g.termsUsed(_txt) }; } catch (_e) { return null; } })(),
+    glossary: (() => { try { const _g = _M_glossary; const _txt = (_confirmed || []).map(f => (f.fact || '') + ' ' + (f.citation || '') + ' ' + (f.layman_explanation || '')).join(' '); return { terms: _g.GLOSSARY, used: _g.termsUsed(_txt) }; } catch (_e) { return null; } })(),
   };
 }
 
@@ -1067,7 +1127,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // E-203 (audit-of-the-audits P-005): canonical country codes at the write seam. USA/US, UAE/AE and
   // GB/UK coexisting in audit_pages.country silently split every family-keyed computation downstream.
   // E-210 (v22.5): the alias map is now the ONE registry map, not an inline copy.
-  { let _fc = (x) => x; try { _fc = require('../../../lib/compliance/registry/jurisdiction.js').famCanon; } catch (_e) {}
+  { let _fc = (x) => x; try { _fc = require('../../../lib/compliance/registry/jurisdiction.js').famCanon; } catch (_e) { _warn('build.js:1081', _e); }
     const _cc = String(payload.country || country || '').toUpperCase();
     const _canon = _fc(_cc) || _cc;
     if (payload.country) payload.country = _canon; country = country ? _canon : country; }
@@ -1091,11 +1151,11 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   let _llmv = null;
   const _lvKey = require('crypto').createHash('sha1').update([domain, String(payload.engine_version || ''), String(payload.framework_version || ''), String(payload.detected_sector || ''), Object.keys(payload.binding || {}).sort().join(','), 'pv1'].join('|')).digest('hex');
   try { const _c = pg(`SELECT verdict::text FROM llm_verdicts WHERE key='${_lvKey}' AND created_at > now() - interval '14 days' LIMIT 1`);
-    if (_c && String(_c).trim()) { _llmv = JSON.parse(String(_c).trim()); _llmv.cached = true; } } catch (_e) {}
+    if (_c && String(_c).trim()) { _llmv = JSON.parse(String(_c).trim()); _llmv.cached = true; } } catch (_e) { _warn('build.js:1105', _e); }
   if (!_llmv) {
     try { _llmv = await require('../../../lib/audit/llm-verify.js').llmVerifyPayload(payload); } catch (_e) { _llmv = { status: 'unavailable', flags: [], error: String(_e).slice(0, 120) }; }
     if (_llmv && _llmv.status !== 'unavailable') {
-      try { pg(`INSERT INTO llm_verdicts (key, domain, verdict, created_at) VALUES ('${_lvKey}', '${domain.replace(/'/g, "''")}', '${JSON.stringify(_llmv).replace(/'/g, "''")}'::jsonb, now()) ON CONFLICT (key) DO UPDATE SET verdict=EXCLUDED.verdict, created_at=now()`); } catch (_e) {}
+      try { pg(`INSERT INTO llm_verdicts (key, domain, verdict, created_at) VALUES ('${_lvKey}', '${domain.replace(/'/g, "''")}', '${JSON.stringify(_llmv).replace(/'/g, "''")}'::jsonb, now()) ON CONFLICT (key) DO UPDATE SET verdict=EXCLUDED.verdict, created_at=now()`); } catch (_e) { _warn('build.js:1109', _e); }
     }
   }
   payload.llm_verify = _llmv;
@@ -1112,7 +1172,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
     };
     payload.llm_gate = Object.assign({}, payload.llm_gate, { law_discovery: 'detached' });
     Promise.resolve().then(() => discoverLaws(_ldArgs)).catch(() => {});
-  } catch (_e) {}
+  } catch (_e) { _warn('build.js:1126', _e); }
   // E-205 (audit-of-the-audits P-007): out-of-ICP hard gate. media/general audits attach the weakest
   // catalogue cells and have zero commercial value; they persist but can never verify or ship.
   const _ICP_BLOCK = new Set(['media', 'general']);
@@ -1163,7 +1223,7 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // newest mint is the only publicly current one; superseded rows keep their data for cohort analysis.
   // E-227: exclude the current idem_key so a worker RETRY does not supersede the very row it idempotently
   // re-writes (which would leave the domain with zero live rows after the ON CONFLICT no-op adopts it).
-  try { pg(`UPDATE ${AUDIT_TABLE} SET status='superseded', archived_at=now() WHERE domain='${domain.replace(/'/g, "''")}' AND status='live' AND (idem_key IS NULL OR idem_key <> '${idemKey}')`); } catch (_e) {}
+  try { pg(`UPDATE ${AUDIT_TABLE} SET status='superseded', archived_at=now() WHERE domain='${domain.replace(/'/g, "''")}' AND status='live' AND (idem_key IS NULL OR idem_key <> '${idemKey}')`); } catch (_e) { _warn('build.js:1177', _e); }
   // E-220 (v22.5.1): RESILIENT WRITE SEAM. Root cause of the 11 Jul canary storm: the INSERT committed
   // server-side while the shim raised client-side, both read-backs on the same shim missed, build threw after a
   // REAL write, the worker retried and minted 4 duplicate rows per domain before marking the queue row failed.
@@ -1222,9 +1282,9 @@ async function build({ lead_id, domain, sector, country, company, env }) {
         const _tmpDir = _fs.mkdtempSync(path.join(_os.tmpdir(), 'tamazia-'));
         const _tmp = path.join(_tmpDir, 'mint-' + hash + '.sql');
         _fs.writeFileSync(_tmp, _stmt);
-        try { execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL || process.env.NEON_CONNECTION_STRING, '-tA', '-f', _tmp], { encoding: 'utf8' }); } catch (_e) {}
-        try { _fs.unlinkSync(_tmp); } catch (_e) {}
-        try { _fs.rmdirSync(_tmpDir); } catch (_e) {}
+        try { execFileSync(path.join(ROOT, 'scripts', 'psql'), [process.env.NEON_URL || process.env.NEON_CONNECTION_STRING, '-tA', '-f', _tmp], { encoding: 'utf8' }); } catch (_e) { _warn('build.js:1236', _e); }
+        try { _fs.unlinkSync(_tmp); } catch (_e) { _warn('build.js:1237', _e); }
+        try { _fs.rmdirSync(_tmpDir); } catch (_e) { _warn('build.js:1238', _e); }
         _seam.shim = 'file';
       } catch (_e) { _seam.shim = 'file_err'; }
     } else {
