@@ -1,2 +1,0 @@
-Best regards,
-{{alias_first_name}}
