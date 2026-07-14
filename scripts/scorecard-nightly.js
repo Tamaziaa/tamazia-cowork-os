@@ -14,6 +14,20 @@ const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 (() => { try { const t = fs.readFileSync(path.join(ROOT, '.env'), 'utf8'); for (const l of t.split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, ''); } } catch (_e) {} })();
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
+
+// FAIL LOUD, NOT SIDEWAYS. NEON was read straight into execFileSync(psql, [NEON, ...]) with no guard. When the
+// variable is missing, psql receives NO connection string and falls back to a LOCAL UNIX SOCKET that does not exist
+// on a CI runner, so the failure surfaces as:
+//     psql: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed
+// That names the wrong thing entirely. Nobody reading it would guess "the NEON_URL secret is not set on this job",
+// and every downstream query then fails for a reason that has nothing to do with the real cause. A missing
+// credential must say its own name.
+if (!NEON) {
+  throw new Error('NEON_URL is not set (checked NEON_URL, NEON_CONNECTION_STRING, NEON_DATABASE_URL). '
+    + 'Without it psql falls back to a local socket and every query fails with a misleading '
+    + '"connection to server on socket /var/run/postgresql" error. Set the secret on this job.');
+}
+
 const PSQL = path.join(ROOT, 'scripts', 'psql');
 function pg(sql) { if (!NEON) return ''; try { return execFileSync(PSQL, [NEON, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).toString().trim(); } catch (_e) { return ''; } }
 const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;

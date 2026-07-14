@@ -22,6 +22,20 @@ function _isBenignNet(e) { const s = String((e && (e.code || e.message)) || e ||
 process.on('unhandledRejection', (e) => { if (_isBenignNet(e)) { console.warn('  (ignored benign net rejection: ' + String((e && e.message) || e).slice(0, 80) + ')'); return; } console.error('FATAL unhandledRejection:', e); process.exit(1); });
 process.on('uncaughtException', (e) => { if (_isBenignNet(e)) { console.warn('  (ignored benign net exception: ' + String((e && e.message) || e).slice(0, 80) + ')'); return; } console.error('FATAL uncaughtException:', e); process.exit(1); });
 const NEON = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING || process.env.NEON_DATABASE_URL;
+
+// FAIL LOUD, NOT SIDEWAYS. NEON was read straight into execFileSync(psql, [NEON, ...]) with no guard. When the
+// variable is missing, psql receives NO connection string and falls back to a LOCAL UNIX SOCKET that does not exist
+// on a CI runner, so the failure surfaces as:
+//     psql: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed
+// That names the wrong thing entirely. Nobody reading it would guess "the NEON_URL secret is not set on this job",
+// and every downstream query then fails for a reason that has nothing to do with the real cause. A missing
+// credential must say its own name.
+if (!NEON) {
+  throw new Error('NEON_URL is not set (checked NEON_URL, NEON_CONNECTION_STRING, NEON_DATABASE_URL). '
+    + 'Without it psql falls back to a local socket and every query fails with a misleading '
+    + '"connection to server on socket /var/run/postgresql" error. Set the secret on this job.');
+}
+
 const PSQL = path.join(__dirname, 'psql');
 function pg(sql) { return execFileSync(PSQL, [NEON, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }); }
 function q(s) { return String(s == null ? '' : s).replace(/'/g, "''"); }
