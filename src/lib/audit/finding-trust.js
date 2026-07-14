@@ -81,6 +81,12 @@ function classifyFinding(f, ctx = {}) {
     // (checked_urls). Corpus-adequacy ALONE is not proof ("fired because the rule exists"). Unevidenced
     // → NEEDS_REVIEW (held back from the report, not shown). (D23/D33/F9)
     if (ctx.via_archive) { signals.push('rule_trigger', 'archive_snapshot'); state = 'NEEDS_REVIEW'; confidence = 0.5; }  // #54/#64: a 'missing disclosure' read from a Wayback snapshot may be fixed live now — never a CONFIRMED current breach.
+    // TRUNCATION INTERLOCK. If the corpus was CUT, then "it is missing" is not a claim we are entitled to make: the
+    // thing may be sitting in the part we did not read. This is not hypothetical - the corpus was capped at 4,000
+    // characters, every footer disclosure lives past that, and we told law firms they had omitted their SRA
+    // authorisation and their registered office when both were in their own footer. Silence is free; a false
+    // accusation against a law firm is not.
+    else if (ctx.corpus_truncated) { signals.push('rule_trigger', 'corpus_truncated'); state = 'NEEDS_REVIEW'; confidence = 0.5; }
     else if (corpusAdequate && (_hasQuote(f) || _inspected(f))) { signals.push('rule_trigger', 'corpus_coverage', _inspected(f) ? 'pages_inspected' : 'verbatim_quote'); state = 'CONFIRMED'; confidence = _inspected(f) ? 0.86 : 0.9; }
     else { signals.push('rule_trigger'); state = 'NEEDS_REVIEW'; confidence = 0.5; }
   } else if (kind === 'observed') {
