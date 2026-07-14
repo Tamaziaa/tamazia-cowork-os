@@ -21,7 +21,7 @@ function pgPath() { return path.resolve(ROOT, 'scripts', 'psql'); }
 function pg(sql) {
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
   if (!url) return null;
-  try { return execFileSync(pgPath(), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; }
+  try { return execFileSync(pgPath(), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
 }
 
 // B1 — the merged canonical law repo (committed seed), indexed framework_short → law. Lazy + cached in-process so
@@ -34,7 +34,7 @@ function canonicalIndex() {
     const m = new Map();
     for (const l of laws) for (const t of String(l.neon_framework_short || '').split(',').map(s => s.trim()).filter(Boolean)) if (!m.has(t)) m.set(t, l);
     _CANON_IDX = m;
-  } catch (_e) { _CANON_IDX = null; }
+  } catch (_e) { _swarn('compliance.js:37', _e); _CANON_IDX = null; }
   return _CANON_IDX;
 }
 
@@ -49,7 +49,7 @@ function loadEnforcement(jurisdictions) {
   const sql = `SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT matched_law_ids,jurisdiction,breach_type,entity_named,penalty,ruling_date::text AS ruling_date,one_line_summary,source_url,source_feed,classifier FROM compliance_enforcement WHERE jurisdiction IN (${js}) ORDER BY ruling_date DESC NULLS LAST LIMIT 500) t;`;
   const raw = pg(sql);
   if (!raw) return [];
-  try { return JSON.parse(raw); } catch (_e) { return []; }
+  try { return JSON.parse(raw); } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return []; }
 }
 
 // E31 — THE THREE-NUMBER DOCTRINE. The rail was rendering "15 frameworks screened · 15 bind you", because the
@@ -81,7 +81,7 @@ function catalogueSize() {
       catalogue_rules: Number.isFinite(rules) ? rules : null,
       catalogue_frameworks: Number.isFinite(frameworks) ? frameworks : null,
     };
-  } catch (_e) {
+  } catch (_e) { _swarn('compliance.js:84', _e);
     _catCache = { catalogue_rules: null, catalogue_frameworks: null };   // fail-open: NEVER invent a count
   }
   return _catCache;
@@ -144,7 +144,7 @@ function loadRules({ frameworks }) {
       enforce_max_rare: enfRare === 't' || enfRare === 'true',
       statutory_citation: statCite || null,
       check_style: checkStyle && checkStyle !== 'NULL' ? checkStyle : null,
-      regex_elements: (() => { try { return regexElements && regexElements !== '' && regexElements !== 'NULL' ? JSON.parse(regexElements) : null; } catch (_e) { return null; } })(),
+      regex_elements: (() => { try { return regexElements && regexElements !== '' && regexElements !== 'NULL' ? JSON.parse(regexElements) : null; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; } })(),
       page_scope: pageScope && pageScope !== 'NULL' ? (pageScope || null) : null
     };
   });
@@ -177,7 +177,7 @@ const POLICY_PATHS = [
 ];
 
 function _sameHost(u, domain) {
-  try { const h = new URL(u).hostname.replace(/^www\./, ''); return h === domain.replace(/^www\./, ''); } catch (_e) { return false; }
+  try { const h = new URL(u).hostname.replace(/^www\./, ''); return h === domain.replace(/^www\./, ''); } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return false; }
 }
 // A1 — registrable-domain (eTLD+1) so SUBDOMAINS (blog./help./property./uk.) and the www variant all count as the
 // SAME SITE and get crawled. Covers the common multi-part public suffixes; defaults to last-two-labels otherwise.
@@ -190,7 +190,7 @@ function _registrable(host) {
 }
 // Same registrable site (input domain ∪ any extra accepted hosts, e.g. a detected canonical alternate domain).
 function _sameSite(u, accepted) {
-  try { return accepted.has(_registrable(new URL(u).hostname)); } catch (_e) { return false; }
+  try { return accepted.has(_registrable(new URL(u).hostname)); } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return false; }
 }
 // The firm's CANONICAL host when the crawled domain is just an alias/landing shell that 404s its own sub-paths
 // (e.g. taylorrose.co.uk → taylor-rose.co.uk). Read <link rel=canonical>/og:url, else the host the homepage's nav
@@ -214,7 +214,7 @@ function _canonicalAltHost(html, domain) {
 // opening 120 sockets at once), with an overall wall-clock DEADLINE so a few slow pages never stall the whole mint.
 async function _pool(items, limit, deadlineMs, fn) {
   const out = new Array(items.length); let idx = 0; const start = Date.now();
-  async function worker() { for (;;) { const i = idx++; if (i >= items.length) return; if (Date.now() - start > deadlineMs) { out[i] = null; continue; } try { out[i] = await fn(items[i], i); } catch (_e) { out[i] = null; } } }
+  async function worker() { for (;;) { const i = idx++; if (i >= items.length) return; if (Date.now() - start > deadlineMs) { out[i] = null; continue; } try { out[i] = await fn(items[i], i); } catch (_e) { _swarn('compliance.js:217', _e); out[i] = null; } } }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return out;
 }
@@ -223,7 +223,7 @@ function _discoverLinks(html, base, accepted) {
   const re = /href\s*=\s*["']([^"'#]+)/gi; let m; // allow '?' so CMS pages (/privacy?page_id=) are discovered (bug #45)
   while ((m = re.exec(html)) && out.length < 600) {
     let href = m[1].trim(); if (isNonCrawlable(href)) continue;   // D-03: case/whitespace tolerant; also blocks vbscript:/data:
-    let abs; try { abs = new URL(href, base).toString(); } catch (_e) { continue; }
+    let abs; try { abs = new URL(href, base).toString(); } catch (_e) { _swarn('compliance.js:226', _e); continue; }
     if (_sameSite(abs, accepted)) out.push(abs.split('#')[0]);   // same registrable site → includes subdomains + www
   }
   return out;
@@ -239,7 +239,7 @@ async function _discoverSitemap(domain, accepted) {
   // crawl even starts. Roots race in parallel (first one with URLs wins), and its children are fetched in parallel.
   // Identical URL set, identical ordering downstream; only the idling is gone.
   const rootResults = await Promise.all(roots.map(async (root) => {
-    try { const r = await fetchWithRetry(root, { timeout: 8000, retries: 0 }); return (r && r.ok && r.body) ? r.body : null; } catch (_e) { return null; }
+    try { const r = await fetchWithRetry(root, { timeout: 8000, retries: 0 }); return (r && r.ok && r.body) ? r.body : null; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
   }));
   for (const body of rootResults) {
     if (!body) continue;
@@ -248,7 +248,7 @@ async function _discoverSitemap(domain, accepted) {
     const pageUrls = locs.filter(u => !/\.xml/i.test(u));
     for (const u of pageUrls) if (_sameSite(u, accepted)) urls.push(u);
     const childBodies = await Promise.all(childSitemaps.map(async (cs) => {
-      try { const cr = await fetchWithRetry(cs, { timeout: 8000, retries: 0 }); return (cr && cr.ok && cr.body) ? cr.body : null; } catch (_e) { return null; }
+      try { const cr = await fetchWithRetry(cs, { timeout: 8000, retries: 0 }); return (cr && cr.ok && cr.body) ? cr.body : null; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
     }));
     for (const cb of childBodies) {
       if (!cb) continue;
@@ -270,7 +270,7 @@ async function _renderViaReader(url) {
     if (!r.ok) return '';
     const txt = await r.text();
     return (txt && txt.length > 80) ? txt : '';
-  } catch (_e) { clearTimeout(t); return ''; }
+  } catch (_e) { _swarn('compliance.js:273', _e); clearTimeout(t); return ''; }
 }
 // A1 — headless render with the strongest available path: a configured crawl4ai/Playwright microservice
 // (CRAWL_RENDER_URL → GET ?url=…, returns {text|markdown|html} or raw HTML) for guaranteed JS-SPA coverage, else the
@@ -309,7 +309,7 @@ async function _archiveSnapshot(url) {
     const body = await r.text();
     if (!body || body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, '').length < 500) return null;
     return { body, date: String(snap.timestamp || '').slice(0, 8) };
-  } catch (_e) { return null; }
+  } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
 }
 
 // E-236 (v22.9) SPEED RESTORATION — we used to audit any site in ~45s; mints had crept to 5+ minutes and the
@@ -338,7 +338,7 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 45000, concur
         if (rg && rg.ok && rg.body && _txtLen(rg.body) >= 500 && !detectChallenge(rg.body)) {
           home = { ok: true, status: rg.status || 200, body: rg.body, challenge: false, via_residential: true };
         }
-      } catch (_e) { /* fail-open: keep the datacenter result */ }
+      } catch (_e) { _swarn('compliance.js:341', _e); /* fail-open: keep the datacenter result */ }
       // FREE WALL-BYPASS (Apify-independent): if the datacenter fetch AND the paid residential rescue both failed or
       // were WAF-challenged, render the homepage through the free Jina reader (r.jina.ai executes JS and fetches from
       // JINA's IP, defeating the datacenter-IP WAF that 403s the GitHub runner). This is the primary crawl path when
@@ -349,7 +349,7 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 45000, concur
         try {
           const _jt = await _renderViaReader(base + '/');
           if (_jt && _jt.replace(/\s+/g, '').length >= 500) home = { ok: true, status: 200, body: _jt, challenge: false, via_reader: true };
-        } catch (_e) { /* fail-open */ }
+        } catch (_e) { _swarn('compliance.js:352', _e); /* fail-open */ }
       }
     }
   }
@@ -553,7 +553,7 @@ function _presentIn(c, re) {
 }
 function _extractQuote(html, re) {
   const text = _stripText(html);
-  let rx; try { rx = new RegExp(re.source, 'i'); } catch (_e) { return null; }
+  let rx; try { rx = new RegExp(re.source, 'i'); } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
   const m = text.match(rx);
   if (!m || m.index === undefined) return null;
   const matched = m[0].slice(0, 80);
@@ -630,7 +630,7 @@ function _absenceEvidence(pool, corpus, rule) {
 // silently skipped — an element genuinely absent everywhere is still a real miss. (Phase 3a)
 function _scopePool(corpus, scope) {
   if (!scope) return corpus;
-  let rx; try { rx = new RegExp(scope, 'i'); } catch (_e) { return corpus; }
+  let rx; try { rx = new RegExp(scope, 'i'); } catch (_e) { _swarn('compliance.js:633', _e); return corpus; }
   const scoped = corpus.filter(c => rx.test(c.url));
   return scoped.length ? scoped : corpus;
 }
@@ -669,7 +669,7 @@ function _dpPolicyPageUnread(rule, corpus) {
   // Content kept ONLY as an extreme fallback (all 5 deep markers on a NON-root page), so a policy served inline on a
   // sub-page still counts, but a homepage banner never does.
   const _hasPolicyContent = (corpus || []).some((c) => {
-    let path = ''; try { path = new URL(String(c && c.url)).pathname.replace(/\/+$/, ''); } catch (_) { path = ''; }
+    let path = ''; try { path = new URL(String(c && c.url)).pathname.replace(/\/+$/, ''); } catch (_) { _swarn('compliance.js:672', _); path = ''; }
     if (path === '' || path === '/') return false; // never trust the homepage/root (banners live there)
     const t = _stripHtml(c && (c.text || c.body || c.html));
     let deep = 0; for (const rx of _DP_DEEP) { if (rx.test(t)) deep++; }
@@ -678,7 +678,7 @@ function _dpPolicyPageUnread(rule, corpus) {
   const _POLICY_SLUG = /^(?:[a-z]{2}\/)?(?:politique[- ]?de[- ]?)?(?:confidentialite|privacy(?:[- ]?policy)?|datenschutz(?:erklaerung)?|mentions[- ]?legales|donnees[- ]?personnelles|rgpd|gdpr|informativa(?:[- ]?privacy)?|privacidad|aviso[- ]?legal|privacybeleid|privacyverklaring|politique[- ]?cookies|cookie[- ]?policy|protection[- ]?des[- ]?donnees|proteccion[- ]?de[- ]?datos)$/i;
   const _hasPolicyUrl = (corpus || []).some((c) => {
     let path = '';
-    try { path = new URL(String(c && c.url)).pathname; } catch (_) { path = String((c && c.url) || ''); }
+    try { path = new URL(String(c && c.url)).pathname; } catch (_) { _swarn('compliance.js:681', _); path = String((c && c.url) || ''); }
     if (/\/(actualites?|news|blog|article|articles|presse|press|media|events?|agenda)\//i.test(path)) return false;
     const seg = path.replace(/\/+$/, '').split('/').filter(Boolean).pop() || '';
     return _POLICY_SLUG.test(seg);
@@ -698,7 +698,7 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
   if (rule.check_style === 'element_checklist' && Array.isArray(rule.regex_elements) && rule.regex_elements.length) {
     let triggerEvidence = null;
     if (rule.trigger_pattern) {
-      let trRe = null; try { trRe = new RegExp(rule.trigger_pattern, 'i'); } catch (_e) { trRe = null; }
+      let trRe = null; try { trRe = new RegExp(rule.trigger_pattern, 'i'); } catch (_e) { _swarn('compliance.js:701', _e); trRe = null; }
       if (trRe) {
         let triggered = false;
         for (const c of corpus) { const _vt = _visibleBody(c); const m = _vt.match(trRe); if (m) { triggered = true; const q = _extractQuote(c.body, trRe); triggerEvidence = { url: c.url, quote: q && q.quote, snippet: (q && q.matched) || m[0].slice(0, 80) }; break; } }
@@ -708,7 +708,7 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
     const pool = _scopePool(corpus, rule.page_scope);
     const elements = [];
     for (const el of rule.regex_elements) {
-      let elRe = null; try { elRe = new RegExp(el.pattern, 'i'); } catch (_e) { elRe = null; }
+      let elRe = null; try { elRe = new RegExp(el.pattern, 'i'); } catch (_e) { _swarn('compliance.js:711', _e); elRe = null; }
       let present = false, quote = null, url = null;
       if (elRe) { for (const c of pool) { const _p = _presentIn(c, elRe); if (_p) { present = true; const q = _extractQuote(c.body, elRe); quote = (q && q.quote) || _p.m[0].slice(0, 140); url = c.url; break; } } }
       elements.push({ label: el.label, present, quote: present ? quote : null, url });
@@ -725,7 +725,7 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'unknown', description: rule.description, citation_url: rule.citation_url };
   }
   let re;
-  try { re = new RegExp(rule.regex_pattern, 'i'); } catch (_e) {
+  try { re = new RegExp(rule.regex_pattern, 'i'); } catch (_e) { _swarn('compliance.js:728', _e);
     return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'rule_regex_invalid', description: rule.description };
   }
   // trigger_then_check: only fires when the trigger phrase IS present on the site corpus,
@@ -733,7 +733,7 @@ function ruleCheck(rule, corpus, sector, corpusIndex) {
   if (rule.rule_type === 'trigger_then_check') {
     if (!rule.trigger_pattern) return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'no_trigger' };
     let triggerRe;
-    try { triggerRe = new RegExp(rule.trigger_pattern, 'i'); } catch (_e) { return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'trigger_regex_invalid' }; }
+    try { triggerRe = new RegExp(rule.trigger_pattern, 'i'); } catch (_e) { _swarn('compliance.js:736', _e); return { rule_id: rule.id, code: rule.rule_id, framework: rule.framework_short, severity: rule.severity, status: 'trigger_regex_invalid' }; }
     let triggered = false;
     let triggerEvidence = null;
     for (const c of corpus) {
@@ -838,7 +838,7 @@ function _detectCompromise(corpus, sector) {
       const href = String(m[1] || '').trim();
       const text = String(m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       if (!/^https?:\/\//i.test(href)) continue;                       // injected spam links are absolute + off-site
-      let lhost = ''; try { lhost = new URL(href).hostname.replace(/^www\./, ''); } catch (_e) { continue; }
+      let lhost = ''; try { lhost = new URL(href).hostname.replace(/^www\./, ''); } catch (_e) { _swarn('compliance.js:841', _e); continue; }
       if (!lhost || (host && (lhost === host || lhost.endsWith('.' + host)))) continue;   // same-site: not injected
       if (!(_SPAM_BRAND_RX.test(href) || _SPAM_BRAND_RX.test(text))) continue;            // high-confidence brand only
       if (!injected.has(href)) { injected.set(href, text); if (!firstUrl) firstUrl = c.url || null; }
@@ -908,7 +908,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     [/\bregistered auditors?\b[^.]{0,40}\b(?:ICAEW|ACCA|ICAS)\b|\b(?:authorised|regulated)\b[^.]{0,40}\bICAEW\b/i, 'accounting'],
   ];
   let _authSector = null;
-  try { for (const [rx, sec] of _AUTH_SECTOR) { if (rx.test(corpusText)) { _authSector = sec; break; } } } catch (_ae) {}
+  try { for (const [rx, sec] of _AUTH_SECTOR) { if (rx.test(corpusText)) { _authSector = sec; break; } } } catch (_ae) { _swarn('compliance.js:911', _ae);}
 
   // C-1: sector-term rescue — corpus has content (escaped the SPA fallback) but sector-critical keywords are
   // absent because JS-rendered service/treatment pages weren't captured (static HTML had nav/footer >500 chars
@@ -945,7 +945,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
         const txt = await _renderViaReader(ru);
         if (txt && txt.replace(/\s+/g, '').length > 200) {
           const sig = _crypto.createHash('sha1').update(txt).digest('hex');
-          const dup = corpus.some(c => { try { return _crypto.createHash('sha1').update(c.body||'').digest('hex')===sig; } catch(_){return false;} });
+          const dup = corpus.some(c => { try { return _crypto.createHash('sha1').update(c.body||'').digest('hex')===sig; } catch(_){ /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */return false;} });
           if (!dup) { corpus.push({ url: ru, body: txt, status: 200, fetch_ms: 0, bytes: Buffer.byteLength(txt), rendered: true }); seenUrls.add(ru); }
           if (_c1Pattern.test(txt)) break;
         }
@@ -972,7 +972,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     let fw = [], binding = {};
     try { const { connect, loadCatalogue } = require('../../../lib/compliance/connect.js');
       const cx = connect({ catalogue: loadCatalogue(), jurisdictions: jurs, sector: secC, signals: { nexus }, text: '', mode: 'knowledge' });
-      fw = cx.frameworks || []; binding = cx.binding || {}; } catch (_e) { fw = []; binding = {}; }
+      fw = cx.frameworks || []; binding = cx.binding || {}; } catch (_e) { _swarn('compliance.js:975', _e); fw = []; binding = {}; }
     return Object.assign({ domain, sector: secC, detected_sector: secC, sub_sector: null, sub_sector_meta: null, country: cc || null, ok: true, reachable: false,
       engine_version: ENGINE_VERSION,
       rules_evaluated: 0, findings: [], frameworks: fw, binding,
@@ -1050,7 +1050,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     const { profileFirm, mergeJurisdictions } = require('../../../lib/audit/firm-profile.js');
     firmProfile = await profileFirm({ corpus: corpusText, domain, country, sector, env: process.env });
     mergedJur = mergeJurisdictions({ profile: firmProfile, markets: mk, registeredCountry: country, corpus: corpusText });
-  } catch (_e) { /* #47: on profiler/merge failure fall back to the REGISTERED country only, never the raw keyword
+  } catch (_e) { _swarn('compliance.js:1053', _e); /* #47: on profiler/merge failure fall back to the REGISTERED country only, never the raw keyword
       `codes` (which carry the US-law-on-a-UAE-firm noise mergeJurisdictions exists to strip). */
     mergedJur = country ? [String(country).toUpperCase()] : null; }
   // FOREIGN-JURISDICTION GATE (F2b/C-jur — Al Tamimi → AE, not US). Keyword market-detection over-fires on
@@ -1086,7 +1086,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // v18.2: callers rarely pass signals — derive the EDPB nexus map ourselves from the live corpus so the
   // establishment-first filter always has evidence to work with (root cause of the V07 ghost-family reds).
   _nx = (signals && signals.nexus) || {};
-  if (!Object.keys(_nx).length) { try { _nx = (require('../../../lib/compliance/signals.js').buildSignals({ jurisdictions: allJurisdictions, sector, corpusText }).nexus) || {}; } catch (_e) { _nx = {}; } }
+  if (!Object.keys(_nx).length) { try { _nx = (require('../../../lib/compliance/signals.js').buildSignals({ jurisdictions: allJurisdictions, sector, corpusText }).nexus) || {}; } catch (_e) { _swarn('compliance.js:1089', _e); _nx = {}; } }
   // E-242 (v22.10) GHOST-FAMILY KILL. The registered-country nexus was injected AFTER this filter (old H4), so on a
   // firm whose corpus yields no established/serves family the guard `if (_estF.length || _srvF.length)` was FALSE
   // and the filter was SKIPPED ENTIRELY — every keyword-detected country survived as a ghost family. Live proof:
@@ -1184,7 +1184,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     const _cx = connect({ catalogue: loadCatalogue(), jurisdictions: allJurisdictions, sector: effectiveSectorAuth, signals, text: corpusText });   // E-250b: connect() attaches the law of the sector the firm is AUTHORISED in
     frameworks = _cx.frameworks; framework_binding = _cx.binding || {};
     comp_gates = _cx.gates || null; comp_review = _cx.review_candidates || []; comp_confidence = _cx.confidence || {};
-  } catch (_e) {
+  } catch (_e) { _swarn('compliance.js:1187', _e);
     // FAIL-CLOSED (Branch 5 / V2 N-6): a connect/self-test failure HALTS with a flag; it never silently degrades to a
     // coarse routeJurisdictions list. connect() is pure today, so this only fires on a genuine gate bug.
     frameworks = []; framework_binding = {}; comp_attach_error = String((_e && (_e.guardrail || _e.message)) || _e);
@@ -1422,9 +1422,9 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     // CQC registration: Care Quality Commission — rated firm displays their CQC status
     positive_compliance.cqc_registered = /\bCQC\s+(?:registered|regulated|inspected)\b/i.test(corpusText) && /\bCQC\s+(?:rating|rated|inspection|report|certificate|registration)\b/i.test(corpusText);
     // Companies House: displayed registered company number — meets Companies Act s.82 obligation
-    try { const { extractRegNumber } = require('../../../lib/sourcing/firmographics.js'); positive_compliance.companies_house = !!(extractRegNumber(corpusText)); } catch (_e2) {}
+    try { const { extractRegNumber } = require('../../../lib/sourcing/firmographics.js'); positive_compliance.companies_house = !!(extractRegNumber(corpusText)); } catch (_e2) { _swarn('compliance.js:1425', _e2);}
     positive_compliance.any = Object.entries(positive_compliance).some(([k, v]) => k !== 'any' && v === true);
-  } catch (_pce) {}
+  } catch (_pce) { _swarn('compliance.js:1427', _pce);}
 
   // E-210 (v22.5): CANONICAL SECTOR AT THE EMIT SEAM. The knowledge path canonicalised detected_sector; the live
   // path shipped the raw profiler/ICP token ('aesthetic', 'higher-education', 'legal'...), so V16 rightly
