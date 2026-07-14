@@ -22,6 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
+      # SENTRY. A dead-lettered mint means an audit a law firm was going to receive DOES NOT EXIST. That is the one
+      # thing here worth waking someone for. DSN-gated: if the secret is unset this is a no-op, never a second
+      # failure mode stacked on top of the first.
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

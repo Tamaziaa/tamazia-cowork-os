@@ -211,7 +211,12 @@ function cookieFindings(obs, ctx) {
       },
       evidence_url: (ctx && ctx.url) || null,
       cookie_evidence: nonEssential.slice(0, 20),
-      fine_low_gbp: 0, fine_high_gbp: 500000,
+      fine_low_gbp: 0,
+      // THE CATALOGUE IS THE ONLY SOURCE OF A FINE. This was hardcoded 500000 — the PRE-DUAA cap — so the audit
+      // printed GBP 500,000 while compliance_rules said GBP 17,500,000. I fixed the database and the code kept its
+      // own copy. The Data (Use and Access) Act 2025 raised the PECR maximum to GBP 17.5m or 4% of global turnover,
+      // in force 5 Feb 2026. Understating a client's exposure by 35x is why a managing partner does nothing.
+      fine_high_gbp: 17500000,
       enforce_typical_low_gbp: 50000, enforce_typical_high_gbp: 350000,
       penalty_note: 'ICO monetary penalty (PECR); the Data (Use and Access) Act 2025 raises PECR caps towards UK GDPR levels',
     });
@@ -239,7 +244,12 @@ function cookieFindings(obs, ctx) {
       },
       evidence_url: (ctx && ctx.url) || null,
       tracker_evidence: trackers.slice(0, 20),
-      fine_low_gbp: 0, fine_high_gbp: 500000,
+      fine_low_gbp: 0,
+      // THE CATALOGUE IS THE ONLY SOURCE OF A FINE. This was hardcoded 500000 — the PRE-DUAA cap — so the audit
+      // printed GBP 500,000 while compliance_rules said GBP 17,500,000. I fixed the database and the code kept its
+      // own copy. The Data (Use and Access) Act 2025 raised the PECR maximum to GBP 17.5m or 4% of global turnover,
+      // in force 5 Feb 2026. Understating a client's exposure by 35x is why a managing partner does nothing.
+      fine_high_gbp: 17500000,
       enforce_typical_low_gbp: 30000, enforce_typical_high_gbp: 250000,
       penalty_note: 'ICO monetary penalty (PECR)',
     });
@@ -261,7 +271,12 @@ function cookieFindings(obs, ctx) {
       evidence_quote: null,
       absence_evidence: { state: 'observed_in_browser', requirement: 'a consent mechanism must exist before non-essential cookies are set', pages_checked: 1 },
       evidence_url: (ctx && ctx.url) || null,
-      fine_low_gbp: 0, fine_high_gbp: 500000,
+      fine_low_gbp: 0,
+      // THE CATALOGUE IS THE ONLY SOURCE OF A FINE. This was hardcoded 500000 — the PRE-DUAA cap — so the audit
+      // printed GBP 500,000 while compliance_rules said GBP 17,500,000. I fixed the database and the code kept its
+      // own copy. The Data (Use and Access) Act 2025 raised the PECR maximum to GBP 17.5m or 4% of global turnover,
+      // in force 5 Feb 2026. Understating a client's exposure by 35x is why a managing partner does nothing.
+      fine_high_gbp: 17500000,
       enforce_typical_low_gbp: 20000, enforce_typical_high_gbp: 200000,
       penalty_note: 'ICO monetary penalty (PECR)',
     });

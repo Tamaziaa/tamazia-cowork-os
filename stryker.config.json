@@ -8,7 +8,7 @@
   ],
   "testRunner": "command",
   "commandRunner": {
-    "command": "node eval/properties.test.js && node eval/boundaries.test.js && node eval/one-door.test.js && node eval/host-anchoring.test.js"
+    "command": "node eval/properties.test.js && node eval/boundaries.test.js && node eval/boundaries2.test.js && node eval/one-door.test.js && node eval/host-anchoring.test.js"
   },
   "coverageAnalysis": "off",
   "mutate": [
@@ -16,9 +16,9 @@
     "src/lib/util/prose.js"
   ],
   "thresholds": {
-    "high": 85,
-    "low": 70,
-    "break": 70
+    "high": 90,
+    "low": 85,
+    "break": 85
   },
   "timeoutMS": 20000,
   "concurrency": 2

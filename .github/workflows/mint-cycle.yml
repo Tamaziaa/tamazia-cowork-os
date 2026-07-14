@@ -17,6 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
+      # SENTRY. A dead-lettered mint means an audit a law firm was going to receive DOES NOT EXIST. That is the one
+      # thing here worth waking someone for. DSN-gated: if the secret is unset this is a no-op, never a second
+      # failure mode stacked on top of the first.
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       # E-240: Cloudflare Workers AI = 10,000 free LLM calls/DAY, quota SEPARATE from Groq/Gemini.
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       # CH_API_KEY: the Companies House key existed in TAMAZIA-REBUILD/.env but was never in CI, so the
