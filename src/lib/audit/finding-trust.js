@@ -22,12 +22,44 @@ function _fwJur(code) {
   if (c.startsWith('IN_') || /DPDPA/.test(c)) return 'IN';
   return 'GLOBAL';
 }
+
+// A fact we WATCHED HAPPEN in a real browser, not one we inferred from a document. The cookie/tracker collector
+// drives a headless browser, records the network requests fired BEFORE any consent, and stamps the finding
+// observed_in_browser. The breach adjudicator independently rules it an observed_fact. Either stamp is proof the
+// claim came from an observation, so it must be judged as an observation and not as a missing document.
+function _isBrowserObserved(f) {
+  if (!f) return false;
+  const ae = f.absence_evidence;
+  if (ae && String(ae.state || '').toLowerCase() === 'observed_in_browser') return true;
+  if (String(f.adjudication || '').toLowerCase() === 'observed_fact') return true;
+  if (f.observed === true) return true;
+  return false;
+}
+
 function _kindOf(f) {
   const rt = String(f.rule_type || '').toLowerCase();
   const bucket = String(f.bucket || '').toLowerCase();
   const cite = (String(f.citation || '') + ' ' + String(f.fact || '')).toLowerCase();
   if (bucket === 'ai_visibility' || /\bgeo\b/.test(String(f.framework_short || '').toLowerCase())) return 'probe';
   if (PRESENCE_RULE_TYPES.has(rt)) return 'presence';
+  // ── THE ZERO-COMPLIANCE-FINDINGS BUG ────────────────────────────────────────────────────────────────────────
+  // This line used to be reached by EVERY compliance finding, which forced them all down the 'absence' path.
+  // An absence confirms only on a verbatim quote or checked_urls, because "a required disclosure is missing" is a
+  // claim about something we could NOT find, and that needs proof we actually looked.
+  //
+  // But a BROWSER OBSERVATION is not an absence. "Third-party tracking requests fire on page load, before any
+  // consent is given" is not something missing — it is something we WATCHED HAPPEN. It carries the strongest
+  // evidence we ever produce: the network requests themselves. It has no checked_urls and no verbatim quote,
+  // because those are artefacts of reading a document, and this did not come from a document.
+  //
+  // So it could NEVER confirm. Every browser-observed compliance breach was structurally incapable of shipping,
+  // and the live audit went out with 16 binding frameworks and ZERO compliance findings while the PECR
+  // pre-consent tracking breach — up to GBP 17.5m under the Data (Use and Access) Act 2025 — sat in needs_review.
+  // We were sending law firms an SEO report and calling it a compliance audit.
+  //
+  // The engine already KNEW: the finding carries absence_evidence.state === 'observed_in_browser' and
+  // adjudication === 'observed_fact'. It had been adjudicated. Nobody asked it.
+  if (_isBrowserObserved(f)) return 'observed';
   if (bucket === 'compliance' || bucket === 'public_records') return 'absence';
   if (/thin (page )?content|spelling|grammar/.test(cite)) return 'observed';
   return 'signal';
@@ -52,7 +84,12 @@ function classifyFinding(f, ctx = {}) {
     else if (corpusAdequate && (_hasQuote(f) || _inspected(f))) { signals.push('rule_trigger', 'corpus_coverage', _inspected(f) ? 'pages_inspected' : 'verbatim_quote'); state = 'CONFIRMED'; confidence = _inspected(f) ? 0.86 : 0.9; }
     else { signals.push('rule_trigger'); state = 'NEEDS_REVIEW'; confidence = 0.5; }
   } else if (kind === 'observed') {
-    if (f.evidence && renderOk) { signals.push('observed_evidence', 'render_ok'); state = 'CONFIRMED'; confidence = 0.85; }
+    // ARCHIVE GUARD. An observation is only worth anything if we observed it ON THE LIVE SITE. When the crawl fell
+    // back to a Wayback snapshot, no browser watched anything — the trackers we would report may have been removed
+    // months ago. Confirming a "live pre-consent tracker" from an archived page would be accusing a firm of a
+    // breach it may have already fixed. The absence path has always had this guard; the observed path did not.
+    if (ctx.via_archive) { signals.push('observed_evidence', 'archive_snapshot'); state = 'NEEDS_REVIEW'; confidence = 0.5; }
+    else if (f.evidence && renderOk) { signals.push('observed_evidence', 'render_ok'); state = 'CONFIRMED'; confidence = 0.85; }
     else { signals.push('observed_evidence'); state = 'NEEDS_REVIEW'; confidence = 0.5; }
   } else if (kind === 'probe') {
     signals.push('live_probe'); state = 'CONFIRMED'; confidence = 0.85;

@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "_comment": "MUTATION TESTING. Stryker deliberately breaks the code (flips a >= to a >, a && to an ||, deletes a branch) and then runs the tests. If the tests still pass, that mutant SURVIVED \u2014 and a surviving mutant is a line of code no test actually protects. We shipped two mint-killing bugs past 77 green evals; coverage said we were fine. Coverage measures which lines RAN. Mutation score measures which lines are actually GUARDED. Scoped to the modules whose wrong answer becomes a false claim on a legal document.",
+  "_comment": "MUTATION TESTING. Stryker deliberately breaks the code (flips a >= to a >, a && to an ||, deletes a branch) and then runs the tests. If the tests still pass, that mutant SURVIVED \u2014 and a surviving mutant is a line of code no test actually protects. We shipped two mint-killing bugs past 77 green evals; coverage said we were fine. Coverage measures which lines RAN. Mutation score measures which lines are actually GUARDED. Scoped to the modules whose wrong answer becomes a false claim on a legal document. THRESHOLD RAISED TO 70 after the second pass: prose.js 47->89%, url-safe.js 37->67%, total 41->76%. The score may not regress below 70 again.",
   "packageManager": "npm",
   "reporters": [
     "clear-text",
@@ -16,9 +16,9 @@
     "src/lib/util/prose.js"
   ],
   "thresholds": {
-    "high": 80,
-    "low": 60,
-    "break": 50
+    "high": 85,
+    "low": 70,
+    "break": 70
   },
   "timeoutMS": 20000,
   "concurrency": 2

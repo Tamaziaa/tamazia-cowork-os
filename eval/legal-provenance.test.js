@@ -54,6 +54,16 @@ const q = async (sql) => {
     A.strictEqual(r.length, 0, 'cites a repealed instrument: ' + r.map((x) => x.rule_id).join(', '));
   });
 
+  await t('PECR carries the POST-DUAA cap, not the repealed GBP 500k', async () => {
+    // The Data (Use and Access) Act 2025 raised the PECR maximum from GBP 500,000 to GBP 17.5m or 4% of global
+    // turnover, IN FORCE 5 February 2026. Verified live against legislation.gov.uk and four independent legal
+    // commentaries. We shipped the repealed figure for months: a 35x UNDERSTATEMENT of the client's real exposure
+    // on the single most common breach we find. Understating exposure is not a safe error - it is the reason a
+    // managing partner does nothing.
+    const r = await q("select count(*)::int n from compliance_rules where active and framework_short in ('UK_PECR','UK_ICO_COOKIES') and fine_high_gbp = 500000");
+    A.strictEqual(r[0].n, 0, r[0].n + ' PECR/cookie rules still carry the REPEALED GBP 500,000 cap. The DUAA 2025 cap is GBP 17,500,000.');
+  });
+
   console.log(bad ? '\nFAILED' : '\nall provenance checks passed');
   process.exit(bad ? 1 : 0);
 })();
