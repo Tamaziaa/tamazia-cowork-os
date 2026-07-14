@@ -931,7 +931,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.11-2026-07-sitemap-reader';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.12-2026-07-nexus-polarity';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
@@ -1187,6 +1187,45 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
     if (_regF && !(_nx[_k] && (_nx[_k].established_in || _nx[_k].serves_customers_in))) {
       _nx[_k] = { established_in: 'registered_country:' + _regF, source: 'company_registration' };
     } }
+  // ─── MARKETS INTERLOCK (v25.12) — THE GHOST-JURISDICTION KILL ───────────────────────────────────────────
+  // detectMarkets() is the TIERED EVIDENCE engine: register entries (tier A, dispositive), corroborated
+  // office/postcode/phone/hreflang signals (tier B), bare mentions (tier C, never binding). Its own return
+  // statement declares the contract:  `bound,  // legal nexus — the ONLY set that may attach frameworks`.
+  // detectNexus() (signals.js) is a KEYWORD SCAN over page text. It is weaker by construction.
+  //
+  // Until now the ghost-family filter below trusted the KEYWORD SCAN and the evidence engine was never asked.
+  // LIVE PROOF (mills-reeve/0IewxjkR, v25.11):
+  //     detectMarkets  ->  US: { tier:'C', bound:false }   one nav-menu mention, "M&R Global | USA and Canada"
+  //     detectNexus    ->  USA: { established_in:true }    it matched /incorporated in/ inside
+  //                                                        "incorporated in ENGLAND AND WALES"
+  // Result: US_ABA_MODEL_RULES, US_ABA_SPECIALIST, US_ADA and US_ATTORNEY_ADVERTISING attached to a UK law
+  // firm — 4 of its 8 compliance findings. We were one send-gate away from accusing a top-100 UK firm of
+  // American professional misconduct.
+  //
+  // So: when the two engines disagree about a FOREIGN country, the EVIDENCE engine wins. A family that
+  // detectMarkets did not mark `bound` may not claim `established_in`, whatever the keywords say.
+  // The HOME family is EXEMPT — registration IS establishment (E-228) and markets may never have read the footer.
+  // FAIL-CLOSED: if detectMarkets threw, `bound` is empty and every FOREIGN family is demoted. That is the
+  // correct direction — an unproven nexus must never attach a foreign legal regime to a client.
+  {
+    const { famCanon: _fcI } = require('../../../lib/compliance/registry/jurisdiction.js');
+    const _NXKI = { UK: 'UK', EU: 'EU', US: 'USA', AE: 'AE', SA: 'SA', QA: 'QA' };
+    const _key = (code) => { const f = _fcI(String(code || '').toUpperCase()); return _NXKI[f] || f; };
+    const _boundKeys = new Set();
+    if (country) _boundKeys.add(_key(country));                       // home jurisdiction: always
+    for (const name of (mk && Array.isArray(mk.bound) ? mk.bound : [])) {
+      const code = _N2C[name]; if (code) _boundKeys.add(_key(code));  // tier-A/B corroborated markets only
+    }
+    if (mk && mk.serves_eu) _boundKeys.add('EU');
+    for (const k of Object.keys(_nx)) {
+      if (_boundKeys.has(k) || !(_nx[k] && _nx[k].established_in)) continue;
+      _nx[k] = Object.assign({}, _nx[k], {
+        established_in: false,
+        demoted_by: 'markets_interlock',
+        demoted_reason: 'detectMarkets found no binding nexus for this country (absent from `bound`); a keyword match in page text is not establishment',
+      });
+    }
+  }
   _estF = Object.entries(_nx).filter(([f, v]) => v && v.established_in).map(([f]) => _NXC[f] || f);
   _srvF = Object.entries(_nx).filter(([f, v]) => v && !v.established_in && v.serves_customers_in).map(([f]) => _NXC[f] || f);
   if (_estF.length || _srvF.length) {
@@ -1579,7 +1618,7 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.11-2026-07-sitemap-reader'), scan, ruleCheck, gatherCorpus, loadRules };
+module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.12-2026-07-nexus-polarity'), scan, ruleCheck, gatherCorpus, loadRules };
 
 // ---- blind-send helpers (blueprint E-041/E-044) ----
 function _evidenceGate(findings, pages) {
