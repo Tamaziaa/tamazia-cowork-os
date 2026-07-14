@@ -351,4 +351,35 @@ if (require.main === module) {
   })().catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { run, ledger, ROUTE_BY_ROLE };
+
+// PREFLIGHT — A MISSING KEY MUST SHOUT, NOT SHRUG.
+// GROQ_API_KEY and GEMINI_API_KEY were valid and working the whole time, and simply were not in the mint's
+// environment. The router asked, got nothing, fell silently down the chain, and landed on the most rate-limited
+// provider in the stack. Nothing anywhere said "you are running the audit engine on your reserve tank". That is the
+// same class of failure as the Companies House key, the cookie collector and the adjudicator: it degraded silently
+// and reported success. Every silent degradation in this engine has cost weeks. This one gets a klaxon.
+function llmPreflight() {
+  const have = {
+    cloudflare: !!(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID),
+    groq: !!process.env.GROQ_API_KEY,
+    gemini: !!process.env.GEMINI_API_KEY,
+    nim: !!process.env.NIM_API_KEY,
+    qwen: !!process.env.DASHSCOPE_API_KEY,
+  };
+  const missing = Object.entries(have).filter(([, v]) => !v).map(([k]) => k);
+  const present = Object.entries(have).filter(([, v]) => v).map(([k]) => k);
+  if (!present.length) {
+    console.error('[llm] *** NO LLM PROVIDER IS CONFIGURED *** every gated decision will fail, and an audit without '
+      + 'llm_verify is rejected by the database. Set GROQ_API_KEY at minimum.');
+  } else if (missing.length) {
+    console.error('[llm] preflight: available = ' + present.join(', ') + ' | MISSING = ' + missing.join(', ')
+      + '. The chain will fall through the missing ones on EVERY call, which wastes attempts and pushes load onto '
+      + 'the scarcest provider. These keys are free: set them.');
+  } else {
+    console.error('[llm] preflight: all providers configured (' + present.join(', ') + ')');
+  }
+  return { have, missing, present };
+}
+
+module.exports = {
+  llmPreflight, run, ledger, ROUTE_BY_ROLE };

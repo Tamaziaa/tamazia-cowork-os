@@ -52,6 +52,13 @@ jobs:
       # CH_API_KEY: the Companies House key existed in TAMAZIA-REBUILD/.env but was never in CI, so the
       # firm-identity resolver could never fill legal_name / company_number / registered_office.
       CH_API_KEY: ${{ secrets.CH_API_KEY }}
+      # THE LLM KEYS WORK. THEY JUST NEVER REACHED THE MINT.
+      # GROQ (500K tokens/day) and GEMINI both answer HTTP 200 on the current keys, but neither was a
+      # GitHub secret, so the router got no key, fell through the whole chain, and landed on the most
+      # rate-limited provider in the stack. That is the entire "we have many API keys and it still fails".
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
