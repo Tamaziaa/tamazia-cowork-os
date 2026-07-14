@@ -1,8 +1,19 @@
 name: Lint workflows (actionlint)
-# Preventive gate: type-checks every workflow on PRs that touch .github/workflows.
-# Catches the exact class of bug that bit us (malformed YAML, bad expressions, wrong inputs)
-# BEFORE merge. Informational for now (continue-on-error) because 2 legacy env-rebuild one-shots
-# still need cleanup; flip continue-on-error off once those are fixed to make it a hard gate.
+# HARD GATE. Type-checks every workflow on PRs that touch .github/workflows, and catches the exact class of bug
+# that bit us: malformed YAML, bad expressions, wrong inputs.
+#
+# This was `continue-on-error: true` with the note "informational for now because 2 legacy env-rebuild one-shots
+# still need cleanup; flip continue-on-error off once those are fixed". Those two were rebuild-env-b64.yml and
+# update-env-secret.yml: both embedded a python heredoc whose body sat at COLUMN 0 inside a YAML `run: |` block,
+# so YAML ended the block at the first body line. Both were INVALID YAML - GitHub could never run either of them,
+# and actionlint could never see past the parse error to lint anything else. They are fixed, so the gate is real.
+#
+# shellcheck severity is held at `warning`. That is a deliberate policy, not a way to hide failures:
+#   * error + warning  = real defects. SC2163 ("this does not export _l") was a warning; it was fixed properly
+#                        in all 33 workflows, not suppressed.
+#   * info + style     = 33 remaining notes, almost all SC2086 on INTENTIONAL word-splitting. `FLAG="--source serp"`
+#                        must split into two arguments; quoting it would BREAK the workflow. There, the "fix" is
+#                        the bug. We do not take a change that breaks production to silence a style note.
 on:
   pull_request:
     paths: [".github/workflows/**"]
@@ -17,10 +28,11 @@ jobs:
   actionlint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Run actionlint
+        env:
+          SHELLCHECK_OPTS: -S warning
         run: |
           bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           ./actionlint -color
