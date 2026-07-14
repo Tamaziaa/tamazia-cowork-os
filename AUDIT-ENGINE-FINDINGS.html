@@ -45,22 +45,39 @@ details>div{padding:0 14px 12px}
 </style></head><body>
 <div class="nav"><div class="navin">
 <a href="#top">Top</a><a href="#gate">The gate</a><a href="#act">§0 ACT</a><a href="#s1">§1 CodeQL</a><a href="#s2">§2 Semgrep OSS</a>
-<a href="#s3">§3 Semgrep full-tree</a><a href="#s4">§4 CodeRabbit</a><a href="#s5">§5 Greptile</a><a href="#s6">§6 CodeScene</a>
+<a href="#s3">§3 Semgrep full-tree</a><a href="#s4">§4 CodeRabbit</a><a href="#s5">§5 Greptile</a><a href="#s6">§6 CodeScene</a><a href="#s6-2">6.2 hotspots</a><a href="#s6-3">6.3 cross-repo coupling</a><a href="#s6-5">6.5 66 declining</a><a href="#s6-6">6.6 PR gate</a>
 <a href="#s7">§7 madge</a><a href="#s8">§8 one-door</a><a href="#s9">§9 jscpd</a><a href="#s10">§10 dep-cruiser</a>
 <a href="#s11">§11 ESLint</a><a href="#s12">§12 Domain gates</a><a href="#s13">§13 The 515 dismissals</a>
 </div></div>
 <div class="wrap" id="top">
 <h1>Audit Engine — Full-Estate Findings</h1>
 <p class="sub">Every tool. Every repo. Every finding, numbered and sub-numbered. Nothing filtered, nothing capped.<br>
-<span class="mut">Generated 2026-07-14T16:14:39.492Z · <code>Tamaziaa/tamazia-cowork-os</code> (341 PRs) + <code>Tamaziaa/tamazia-website</code> (184 PRs)</span></p>
+<span class="mut">Generated 2026-07-14T17:01:42.768Z · <code>Tamaziaa/tamazia-cowork-os</code> (341 PRs) + <code>Tamaziaa/tamazia-website</code> (184 PRs)</span></p>
 <div class="grid">
-<div class="kpi"><div class="n">1242</div><div class="l">raw findings</div></div>
+<div class="kpi"><div class="n">1386</div><div class="l">raw findings</div></div>
 <div class="kpi"><div class="n">879</div><div class="l">code-scanning alerts</div></div>
 <div class="kpi"><div class="n" style="color:var(--p0)">58</div><div class="l">alerts OPEN</div></div>
 <div class="kpi"><div class="n" style="color:var(--warn)">515</div><div class="l">alerts DISMISSED</div></div>
-<div class="kpi"><div class="n">256</div><div class="l">distinct defects</div></div>
+<div class="kpi"><div class="n">144</div><div class="l">CodeScene findings</div></div>
+<div class="kpi"><div class="n">256</div><div class="l">distinct code defects</div></div>
 <div class="kpi"><div class="n" style="color:var(--p0)">6</div><div class="l">ACT (&ge;2 tools)</div></div>
 </div>
+<h3>Every tool, and what it contributed</h3>
+<table><tr><th>Tool</th><th>What only IT can see</th><th>Findings</th><th>Section</th></tr>
+<tr><td><b>CodeQL</b></td><td>semantic dataflow &amp; taint</td><td>425</td><td>§1</td></tr>
+<tr><td><b>Semgrep OSS</b> (uploaded)</td><td>pattern + security rulesets</td><td>454</td><td>§2</td></tr>
+<tr><td><b>Semgrep</b> (fresh full tree)</td><td>defects that STILL exist on main</td><td>83</td><td>§3</td></tr>
+<tr><td><b>CodeRabbit</b></td><td>cross-file INTENT — caught 2 bugs I shipped</td><td>139</td><td>§4</td></tr>
+<tr><td>Greptile</td><td>credit-blocked. 3 vs CodeRabbit's 139. <b>Do not pay.</b></td><td>3</td><td>§5</td></tr>
+<tr style="background:#12283a40"><td><b>CodeScene</b></td><td><b>THE GIT LOG</b> — hotspots, trend, change coupling, economics</td><td><b>144</b></td><td><b>§6</b></td></tr>
+<tr><td><b>madge</b></td><td>a module unreachable from the mint = DEAD LAW</td><td>0</td><td>§7</td></tr>
+<tr style="background:#3a141826"><td><b>one-door</b></td><td><b>SEMANTIC duplication. jscpd structurally CANNOT see this.</b></td><td>36</td><td>§8</td></tr>
+<tr><td><b>jscpd</b></td><td>textual clones (unfiltered)</td><td>86</td><td>§9</td></tr>
+<tr><td><b>dependency-cruiser</b></td><td>orphans + circulars</td><td>14</td><td>§10</td></tr>
+<tr><td><b>ESLint</b></td><td>no-undef — caught 3 MINT-KILLING bugs 77 green evals missed</td><td>2</td><td>§11</td></tr>
+<tr style="background:#0f2e1c40"><td><b>Domain gates</b></td><td><b>19 broken catalogue regexes, 3 P0 and DEAD. No marketplace tool would find these.</b></td><td>5</td><td>§12</td></tr>
+</table>
+
 <div class="lead" id="gate"><b>THE GATE.</b> <b>ACT</b> = two or more <i>independent</i> tools agree. That is a fact; fix it.
 <b>REVIEW</b> = one tool only. That is a <i>lead</i>, not a fact, and it is never auto-fixed.<br><br>
 Greptile found <b>3</b> findings where CodeRabbit found <b>139</b> on the same estate. A lone finding from a weak tool is noise —
@@ -1315,12 +1332,808 @@ Every one is listed in §13 with a verdict. <b>To their credit: all 515 carry a 
 <tr><td class="id">GR-0002</td><td><span class="tag">tamazia-cowork-os</span></td><td><a href="https://github.com/Tamaziaa/tamazia-cowork-os/pull/314#discussion_r3574077345" style="color:#7fc2ff">#314</a></td><td><code>.github/workflows/env-rebuild-v5.yml:28</code></td><td>&lt;a href=&quot;#&quot;&gt;&lt;img alt=&quot;P1&quot; src=&quot;https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=9&quot; align=&quot;top&quot;&gt;&lt;/a&gt; **Require rotated secret** If `CAL_WEBHOOK_SECRET` is not</td></tr>
 <tr><td class="id">GR-0003</td><td><span class="tag">tamazia-website</span></td><td><a href="https://github.com/Tamaziaa/tamazia-website/pull/172#discussion_r3574336041" style="color:#7fc2ff">#172</a></td><td><code>website/functions/audit/_adapter.js:88</code></td><td>&lt;a href=&quot;#&quot;&gt;&lt;img alt=&quot;P1&quot; src=&quot;https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=9&quot; align=&quot;top&quot;&gt;&lt;/a&gt; **Guard passed names too** `sharesTokenWithDomain` only g</td></tr>
 </table>
-<h2 id="s6">§6 — CodeScene</h2>
-<p class="sub">Installed and connected. The <b>only</b> tool on this estate that reads the <b>git log</b>.</p>
-<div class="lead">CodeQL and Semgrep see the code <i>as it is now</i>. <b>CodeScene sees which files keep getting re-fixed</b> — code health over time, hotspots, change coupling.
-That is how you find a defect that keeps coming back through a different door: <b>23 commits on "cache", 20 on "fine"</b>. A high commit count on one theme is not productivity — it is a fix that did not hold.<br><br>
-<b>Status:</b> <code>CODESCENE_ACCESS_TOKEN</code> is now installed as an encrypted secret on both repos. The PR refactoring-agent workflow is wired (<code>.github/workflows/codescene-refactor.yml</code>, triggered by commenting <code>/cs-agent</code> on any PR). Its analysis will post as a check on PR <b>#343</b> — the full-tree review — which is the entire codebase in one diff.
-<br><br><b>Findings will be numbered <code>CS-0001…</code> and appended here on its first run.</b></div>
+<h2 id="s6">§6 — CodeScene <span class="mut" style="font-size:15px">(the only tool that reads your GIT LOG)</span></h2>
+<p class="sub">Project 82581 · job 6934386 · analysed 2026-07-14T21:53+05:30 · 69,328 LoC · 738 files · PR integration <b>Active</b></p>
+
+<div class="lead"><b>Every other tool here answers "is this line of code wrong?"</b> CodeQL, Semgrep, CodeRabbit and ESLint read the code <i>as it is right now</i>.<br><br>
+<b>CodeScene answers a different question: "where is this codebase rotting, and how fast?"</b> It reads the <b>git log</b>. That gives four things nothing else can:
+<b>hotspots</b> (low health × high change frequency), <b>trend</b> (getting better or worse), <b>change coupling</b> (hidden dependencies — i.e. THE TWO-DOORS CLASS, detected from history), and <b>economics</b> (what the debt actually costs you).<br><br>
+<b>And what it does NOT do, honestly:</b> it will not find a broken regex, a dead P0 rule, a jurisdiction attached to the wrong country, or an inverted compliance polarity. It has no idea what your engine <i>means</i>. The domain gates in §12 found those. <b>Both lanes are required.</b></div>
+<h3 id="s6-1">6.1 — System health: the gap between these two numbers IS the story</h3>
+<div class="grid">
+<div class="kpi"><div class="n" style="color:var(--p1)">7.2</div><div class="l">Average Code Health<br>(Problematic)</div></div>
+<div class="kpi"><div class="n" style="color:var(--p0)">3.7</div><div class="l">HOTSPOT Code Health<br>(Unhealthy)</div></div>
+<div class="kpi"><div class="n" style="color:var(--p0)">66</div><div class="l">files DECLINING</div></div>
+<div class="kpi"><div class="n" style="color:var(--ok)">2</div><div class="l">files improving</div></div>
+<div class="kpi"><div class="n" style="color:var(--warn)">26</div><div class="l">climbing hotspot rank<br>AND declining</div></div>
+<div class="kpi"><div class="n" style="color:var(--warn)">7</div><div class="l">predicted to decline</div></div>
+</div>
+<div class="lead"><b>The code you change most is nearly twice as rotten as the code you don't.</b> Average health 7.2; hotspot health <b>3.7</b>. That is the worst possible shape for a codebase — and it is derived from your commit log, not an opinion.<br><br>
+<b>The economics:</b> hotspots are <b>1.5% of your files</b> and absorb <b>24% of your development effort</b>. One and a half percent of the code is eating a quarter of your time.<br><br>
+<b>Composition:</b> Red 20.3% · Yellow 40.7% · Green 39%.
+<b>Architecture:</b> 2 components — <b>0 improving, 2 declining</b>.
+<b>66 files declining against 2 improving.</b> That is a direction, not a snapshot.</div>
+<h3 id="s6-2">6.2 — HOTSPOTS: low health × high change frequency</h3>
+<p class="sub">The intersection is where bugs come from. A bad file nobody touches is not a problem; a bad file everyone touches every week is.</p>
+<table><tr><th>#</th><th>File</th><th>Repo</th><th>LoC</th><th>Commits</th><th>2025</th><th>NOW</th><th>Δ</th><th>Code smells</th></tr>
+<tr><td class="id">CS-H-01</td>
+<td><code>functions/audit/_adapter.js</code></td><td><span class="tag">website</span></td><td>1995</td>
+<td><b>60</b></td><td class="mut">2.23</td>
+<td><span class="sev P0">1.3</span></td>
+<td style="color:var(--p0)">&darr; 0.93</td>
+<td class="mut" style="font-size:12px">Modularity Issue · Bumpy Road · Deep Nested Complexity · Overall Code Complexity</td></tr>
+<tr><td class="id">CS-H-02</td>
+<td><code>src/skills/S025-audit-page-builder/scripts/build.js</code></td><td><span class="tag">engine</span></td><td>1046</td>
+<td><b>106</b></td><td class="mut">2.49</td>
+<td><span class="sev P0">1.76</span></td>
+<td style="color:var(--p0)">&darr; 0.73</td>
+<td class="mut" style="font-size:12px">Bumpy Road · Overall Code Complexity · Complex Method · Complex Conditional</td></tr>
+<tr><td class="id">CS-H-03</td>
+<td><code>src/skills/S008-personalisation-engine/scanners/compliance.js</code></td><td><span class="tag">engine</span></td><td>1134</td>
+<td><b>112</b></td><td class="mut">3.03</td>
+<td><span class="sev P0">2.08</span></td>
+<td style="color:var(--p0)">&darr; 0.95</td>
+<td class="mut" style="font-size:12px">Bumpy Road · Deep Nested Complexity · Overall Code Complexity · Complex Method</td></tr>
+<tr><td class="id">CS-H-04</td>
+<td><code>cloudflare/audit-worker-v14.js</code></td><td><span class="tag">engine</span></td><td>1552</td>
+<td><b>39</b></td><td class="mut">2.72</td>
+<td><span class="sev P0">2.72</span></td>
+<td style="color:var(--mut)">—</td>
+<td class="mut" style="font-size:12px">Modularity Issue · Bumpy Road · Overall Code Complexity · Complex Method</td></tr>
+<tr><td class="id">CS-H-05</td>
+<td><code>src/lib/audit/site-scan.js</code></td><td><span class="tag">engine</span></td><td>527</td>
+<td><b>33</b></td><td class="mut">3.53</td>
+<td><span class="sev P1">3.23</span></td>
+<td style="color:var(--p0)">&darr; 0.3</td>
+<td class="mut" style="font-size:12px">Bumpy Road · Deep Nested Complexity · Overall Code Complexity · Complex Method</td></tr>
+<tr><td class="id">CS-H-06</td>
+<td><code>public/audit/audit-app.js</code></td><td><span class="tag">website</span></td><td>1296</td>
+<td><b>53</b></td><td class="mut">5.12</td>
+<td><span class="sev P1">3.39</span></td>
+<td style="color:var(--p0)">&darr; 1.73</td>
+<td class="mut" style="font-size:12px">Bumpy Road · Many Conditionals · Complex Method · Complex Conditional</td></tr>
+<tr><td class="id">CS-H-07</td>
+<td><code>src/lib/compliance/connect.js</code></td><td><span class="tag">engine</span></td><td>206</td>
+<td><b>36</b></td><td class="mut">7.44</td>
+<td><span class="sev P1">4.62</span></td>
+<td style="color:var(--p0)">&darr; 2.82</td>
+<td class="mut" style="font-size:12px">Bumpy Road · Deep Nested Complexity · Many Conditionals · Complex Method</td></tr>
+<tr><td class="id">CS-H-08</td>
+<td><code>src/lib/audit/firm-profile.js</code></td><td><span class="tag">engine</span></td><td>237</td>
+<td><b>26</b></td><td class="mut">8.52</td>
+<td><span class="sev P2">5.24</span></td>
+<td style="color:var(--p0)">&darr; 3.28</td>
+<td class="mut" style="font-size:12px">Bumpy Road · Many Conditionals · Complex Method · Complex Conditional</td></tr>
+<tr><td class="id">CS-H-09</td>
+<td><code>scripts/push-to-mystrika.js</code></td><td><span class="tag">engine</span></td><td>270</td>
+<td><b>22</b></td><td class="mut">10</td>
+<td><span class="sev P3">9.69</span></td>
+<td style="color:var(--p0)">&darr; 0.31</td>
+<td class="mut" style="font-size:12px">Complex Method · Code Health Degradations</td></tr>
+<tr><td class="id">CS-H-10</td>
+<td><code>patch-dist.js</code></td><td><span class="tag">website</span></td><td>1409</td>
+<td><b>23</b></td><td class="mut">9.84</td>
+<td><span class="sev P3">9.84</span></td>
+<td style="color:var(--mut)">—</td>
+<td class="mut" style="font-size:12px">Bumpy Road · Low Overall Code Complexity</td></tr>
+<tr><td class="id">CS-H-11</td>
+<td><code>src/content/hero.ts</code></td><td><span class="tag">website</span></td><td>85</td>
+<td><b>33</b></td><td class="mut">10</td>
+<td><span class="sev P3">10</span></td>
+<td style="color:var(--mut)">—</td>
+<td class="mut" style="font-size:12px">Low Overall Code Complexity</td></tr>
+</table>
+<div class="lead"><b>Read the top three rows again.</b> <code>_adapter.js</code> (60 commits), <code>build.js</code> (<b>106</b>), <code>compliance.js</code> (<b>112</b>) are simultaneously the <b>most-changed</b> files in the estate <b>and the least healthy</b> — <b>1.30 to 2.08 out of 10</b> — <b>and all three are getting worse.</b><br><br>
+<b>Those are the exact three files where every P0 in this session lived:</b> the <b>ghost jurisdiction</b> (<code>compliance.js</code>), the <b>R2-write-before-the-gates</b> bug (<code>build.js</code>), the <b>renderer</b> (<code>_adapter.js</code> / <code>audit-app.js</code>).<br><br>
+I found those by hand, one at a time, over hours. <b>CodeScene pointed at the same three files in one pass, from the commit history alone, without parsing a single line of logic.</b></div>
+<h3 id="s6-3">6.3 — CROSS-REPOSITORY CHANGE COUPLING &nbsp;<span class="sev P0">THE BIGGEST FINDING</span></h3>
+<div class="lead"><b>The engine and the renderer live in two separate repositories — and they are 61% coupled.</b><br><br>
+Change coupling means: <i>these files keep getting changed in the same commit, even though nothing in the code says they are related.</i> It is a <b>hidden-dependency detector</b>.<br><br>
+Change <code>build.js</code> in the engine, and <b>61% of the time you must also change <code>_adapter.js</code> in the website.</b> That means <b>the payload contract is duplicated across two repos with no shared schema</b> — which is precisely the class that printed <b>"Sector regulator"</b> to clients on 51% of the catalogue, and the class behind the <b>£17.5M fine that was fixed in the database and never reached the client.</b></div>
+<table><tr><th>#</th><th>Engine file</th><th>Website file</th><th>Coupling</th><th>Revisions</th></tr>
+<tr><td class="id">CS-X-01</td>
+<td><code>build.js</code></td>
+<td><code>_adapter.js</code></td>
+<td><span class="sev P0">61%</span></td>
+<td>20</td></tr>
+<tr><td class="id">CS-X-02</td>
+<td><code>firm-profile.js</code></td>
+<td><code>_adapter.js</code></td>
+<td><span class="sev P0">60%</span></td>
+<td>12</td></tr>
+<tr><td class="id">CS-X-03</td>
+<td><code>compliance.js</code></td>
+<td><code>_adapter.js</code></td>
+<td><span class="sev P0">60%</span></td>
+<td>17</td></tr>
+<tr><td class="id">CS-X-04</td>
+<td><code>llm/router.js</code></td>
+<td><code>_adapter.js</code></td>
+<td><span class="sev P0">50%</span></td>
+<td>10</td></tr>
+<tr><td class="id">CS-X-05</td>
+<td><code>connect.js</code></td>
+<td><code>_adapter.js</code></td>
+<td><span class="sev P0">50%</span></td>
+<td>14</td></tr>
+<tr><td class="id">CS-X-06</td>
+<td><code>llm/router.js</code></td>
+<td><code>audit-app.js</code></td>
+<td><span class="sev P1">45%</span></td>
+<td>11</td></tr>
+<tr><td class="id">CS-X-07</td>
+<td><code>build.js</code></td>
+<td><code>audit-app.js</code></td>
+<td><span class="sev P1">43%</span></td>
+<td>21</td></tr>
+<tr><td class="id">CS-X-08</td>
+<td><code>firm-profile.js</code></td>
+<td><code>audit-app.js</code></td>
+<td><span class="sev P1">40%</span></td>
+<td>13</td></tr>
+<tr><td class="id">CS-X-09</td>
+<td><code>compliance.js</code></td>
+<td><code>audit-app.js</code></td>
+<td><span class="sev P1">40%</span></td>
+<td>18</td></tr>
+<tr><td class="id">CS-X-10</td>
+<td><code>site-scan.js</code></td>
+<td><code>_adapter.js</code></td>
+<td><span class="sev P1">35%</span></td>
+<td>14</td></tr>
+</table>
+<h3 id="s6-4">6.4 — WITHIN-REPO CHANGE COUPLING (all 54)</h3>
+<p class="sub">Two rows matter more than the rest, and they are highlighted.</p>
+<table><tr><th>#</th><th>File A</th><th>File B</th><th>Coupling</th><th>Rev</th><th>Verdict</th></tr>
+<tr><td class="id">CS-C-01</td>
+<td><code>website/admin-v2-src/boot.jsx</code></td><td><code>website/public/admin/cockpit-v2/app.js</code></td>
+<td><span class="sev P1">93%</span></td><td>8</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-02</td>
+<td><code>website/functions/api/briefings.js</code></td><td><code>website/functions/api/contact.js</code></td>
+<td><span class="sev P1">84%</span></td><td>13</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-03</td>
+<td><code>website/admin-v2-src/app.jsx</code></td><td><code>website/admin-v2-src/boot.jsx</code></td>
+<td><span class="sev P1">83%</span></td><td>6</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-04</td>
+<td><code>website/functions/api/erase.js</code></td><td><code>website/functions/api/portability.js</code></td>
+<td><span class="sev P1">83%</span></td><td>6</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-05</td>
+<td><code>website/public/admin/cockpit-v2/app.js</code></td><td><code>website/scripts/build-cockpit.mjs</code></td>
+<td><span class="sev P1">76%</span></td><td>7</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-06</td>
+<td><code>website/admin-v2-src/app.jsx</code></td><td><code>website/public/admin/cockpit-v2/app.js</code></td>
+<td><span class="sev P1">76%</span></td><td>7</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-07</td>
+<td><code>website/admin-v2-src/tab-audits.jsx</code></td><td><code>website/public/admin/cockpit-v2/app.js</code></td>
+<td><span class="sev P1">76%</span></td><td>7</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-08</td>
+<td><code>website/functions/api/stripe/checkout.js</code></td><td><code>website/functions/audit/_commerce.js</code></td>
+<td><span class="sev P1">66%</span></td><td>8</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-09</td>
+<td><code>website/functions/audit/[[path]].js</code></td><td><code>website/functions/audit/_commerce.js</code></td>
+<td><span class="sev P1">55%</span></td><td>9</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-10</td>
+<td><code>website/functions/audit/_adapter.js</code></td><td><code>website/public/audit/audit-app.js</code></td>
+<td><span class="sev P1">49%</span></td><td>57</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-11</td>
+<td><code>website/functions/api/stripe/checkout.js</code></td><td><code>website/public/audit/audit-charts.js</code></td>
+<td><span class="sev P1">43%</span></td><td>12</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-12</td>
+<td><code>website/functions/audit/_shell.js</code></td><td><code>website/public/audit/audit-app.js</code></td>
+<td><span class="sev P1">42%</span></td><td>35</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-13</td>
+<td><code>website/src/content/faq.ts</code></td><td><code>website/src/content/pricing.ts</code></td>
+<td><span class="sev P3">41%</span></td><td>17</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-14</td>
+<td><code>engine/scripts/enrich-worker.js</code></td><td><code>engine/src/lib/enrich/lead-quality.js</code></td>
+<td><span class="sev P1">40%</span></td><td>13</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-15</td>
+<td><code>website/src/content/caseStudies.ts</code></td><td><code>website/src/content/pricing.ts</code></td>
+<td><span class="sev P3">40%</span></td><td>15</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-16</td>
+<td><code>website/src/content/hero.ts</code></td><td><code>website/src/content/whyUs.ts</code></td>
+<td><span class="sev P3">40%</span></td><td>27</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-17</td>
+<td><code>website/public/audit/audit-app.js</code></td><td><code>website/public/audit/audit-charts.js</code></td>
+<td><span class="sev P1">40%</span></td><td>35</td>
+<td class="mut">hidden dependency</td></tr>
+<tr><td class="id">CS-C-18</td>
+<td><code>website/functions/audit/_commerce.js</code></td><td><code>website/public/audit/audit-charts.js</code></td>
+<td><span class="sev P2">38%</span></td><td>13</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-19</td>
+<td><code>website/functions/audit/[[path]].js</code></td><td><code>website/functions/audit/_shell.js</code></td>
+<td><span class="sev P2">38%</span></td><td>13</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-20</td>
+<td><code>website/src/content/pricing.ts</code></td><td><code>website/src/content/whyUs.ts</code></td>
+<td><span class="sev P3">38%</span></td><td>21</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-21</td>
+<td><code>engine/scripts/qualify-and-queue.js</code></td><td><code>engine/src/lib/enrich/lead-quality.js</code></td>
+<td><span class="sev P2">37%</span></td><td>14</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-22</td>
+<td><code>website/src/content/faq.ts</code></td><td><code>website/src/content/sectors.ts</code></td>
+<td><span class="sev P3">37%</span></td><td>14</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-23</td>
+<td><code>engine/src/lib/enrich/lead-quality.js</code></td><td><code>engine/src/lib/sourcing/enrich.js</code></td>
+<td><span class="sev P2">37%</span></td><td>19</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-24</td>
+<td><code>website/src/content/contact.ts</code></td><td><code>website/src/content/pricing.ts</code></td>
+<td><span class="sev P3">36%</span></td><td>17</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-25</td>
+<td><code>engine/scripts/push-to-mystrika.js</code></td><td><code>engine/src/lib/enrich/lead-quality.js</code></td>
+<td><span class="sev P2">35%</span></td><td>20</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-26</td>
+<td><code>website/functions/api/health.js</code></td><td><code>website/patch-dist.js</code></td>
+<td><span class="sev P2">34%</span></td><td>15</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-27</td>
+<td><code>website/src/content/howWeWork.ts</code></td><td><code>website/src/content/pricing.ts</code></td>
+<td><span class="sev P3">34%</span></td><td>15</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-28</td>
+<td><code>engine/src/lib/enrich/lead-quality.js</code></td><td><code>engine/src/lib/sourcing/icp.js</code></td>
+<td><span class="sev P2">34%</span></td><td>15</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-29</td>
+<td><code>website/src/content/pricing.ts</code></td><td><code>website/src/content/sectors.ts</code></td>
+<td><span class="sev P3">34%</span></td><td>18</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-30</td>
+<td><code>website/src/content/sectors.ts</code></td><td><code>website/src/content/whyUs.ts</code></td>
+<td><span class="sev P3">34%</span></td><td>18</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-31</td>
+<td><code>engine/src/skills/S064-touch-cadence/scripts/render.js</code></td><td><code>engine/src/skills/S065-touch-scheduler/scripts/send-due.js</code></td>
+<td><span class="sev P2">32%</span></td><td>16</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-32</td>
+<td><code>website/src/content/footer.ts</code></td><td><code>website/src/content/hero.ts</code></td>
+<td><span class="sev P3">32%</span></td><td>25</td>
+<td class="mut">content — expected</td></tr>
+<tr style="background:#3a141826"><td class="id">CS-C-33</td>
+<td><code>engine/scanners/compliance.js</code></td><td><code>engine/S025/scripts/build.js</code></td>
+<td><span class="sev P0">32%</span></td><td>108</td>
+<td class="mut">THE TWO WORST FILES IN THE ENGINE</td></tr>
+<tr><td class="id">CS-C-34</td>
+<td><code>website/functions/audit/_adapter.js</code></td><td><code>website/public/audit/audit-charts.js</code></td>
+<td><span class="sev P2">31%</span></td><td>39</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-35</td>
+<td><code>website/astro.config.mjs</code></td><td><code>website/patch-dist.js</code></td>
+<td><span class="sev P2">30%</span></td><td>17</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-36</td>
+<td><code>website/src/content/contact.ts</code></td><td><code>website/src/content/whyUs.ts</code></td>
+<td><span class="sev P3">30%</span></td><td>17</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-37</td>
+<td><code>engine/src/lib/audit/extra-scanners.js</code></td><td><code>engine/src/lib/audit/site-scan.js</code></td>
+<td><span class="sev P2">30%</span></td><td>20</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-38</td>
+<td><code>website/functions/api/audit.js</code></td><td><code>website/patch-dist.js</code></td>
+<td><span class="sev P2">30%</span></td><td>20</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-39</td>
+<td><code>website/src/content/faq.ts</code></td><td><code>website/src/content/hero.ts</code></td>
+<td><span class="sev P3">30%</span></td><td>23</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-40</td>
+<td><code>website/src/content/hero.ts</code></td><td><code>website/src/content/pricing.ts</code></td>
+<td><span class="sev P3">29%</span></td><td>27</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-41</td>
+<td><code>website/functions/audit/_commerce.js</code></td><td><code>website/public/audit/audit-app.js</code></td>
+<td><span class="sev P2">29%</span></td><td>31</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-42</td>
+<td><code>website/functions/api/cal-webhook.js</code></td><td><code>website/patch-dist.js</code></td>
+<td><span class="sev P2">27%</span></td><td>18</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-43</td>
+<td><code>website/src/content/footer.ts</code></td><td><code>website/src/content/pricing.ts</code></td>
+<td><span class="sev P3">26%</span></td><td>19</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-44</td>
+<td><code>website/src/content/contact.ts</code></td><td><code>website/src/content/hero.ts</code></td>
+<td><span class="sev P3">26%</span></td><td>23</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-45</td>
+<td><code>website/functions/audit/_adapter.js</code></td><td><code>website/functions/audit/_commerce.js</code></td>
+<td><span class="sev P2">26%</span></td><td>35</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-46</td>
+<td><code>website/src/content/hero.ts</code></td><td><code>website/src/content/sectors.ts</code></td>
+<td><span class="sev P3">25%</span></td><td>24</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-47</td>
+<td><code>engine/scripts/push-to-mystrika.js</code></td><td><code>engine/S065/scripts/send-due.js</code></td>
+<td><span class="sev P2">24%</span></td><td>21</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-48</td>
+<td><code>website/src/content/hero.ts</code></td><td><code>website/src/content/howWeWork.ts</code></td>
+<td><span class="sev P3">24%</span></td><td>21</td>
+<td class="mut">content — expected</td></tr>
+<tr><td class="id">CS-C-49</td>
+<td><code>engine/scripts/push-to-mystrika.js</code></td><td><code>engine/src/lib/sourcing/enrich.js</code></td>
+<td><span class="sev P2">24%</span></td><td>21</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-50</td>
+<td><code>website/patch-dist.js</code></td><td><code>website/src/content/whyUs.ts</code></td>
+<td><span class="sev P2">22%</span></td><td>22</td>
+<td class="mut">watch</td></tr>
+<tr style="background:#3a141826"><td class="id">CS-C-51</td>
+<td><code>engine/src/lib/compliance/connect.js</code></td><td><code>engine/src/lib/compliance/signals.js</code></td>
+<td><span class="sev P0">21%</span></td><td>24</td>
+<td class="mut">THE GHOST-JURISDICTION PAIR</td></tr>
+<tr><td class="id">CS-C-52</td>
+<td><code>website/patch-dist.js</code></td><td><code>website/src/content/hero.ts</code></td>
+<td><span class="sev P2">21%</span></td><td>28</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-53</td>
+<td><code>website/functions/api/audit.js</code></td><td><code>website/src/content/hero.ts</code></td>
+<td><span class="sev P2">20%</span></td><td>25</td>
+<td class="mut">watch</td></tr>
+<tr><td class="id">CS-C-54</td>
+<td><code>website/functions/api/stripe/checkout.js</code></td><td><code>website/public/audit/audit-app.js</code></td>
+<td><span class="sev P2">20%</span></td><td>30</td>
+<td class="mut">watch</td></tr>
+</table>
+<div class="lead"><b>CS-C-51: <code>connect.js</code> &harr; <code>signals.js</code> — 21%, 24 revisions.</b><br>
+That is the <b>exact pair of the ghost-jurisdiction P0</b> — the keyword scanner and the attachment engine, the two doors that disagreed about whether a UK law firm was established in the United States.
+<b>CodeScene saw the fingerprint of that bug in the commit history without ever reading the regex.</b> It saw two files that keep changing together because they encode the same fact twice — which is the definition of the two-doors class.<br><br>
+<b>CS-C-33: <code>compliance.js</code> &harr; <code>build.js</code> — 32% over 108 revisions.</b> The two worst-health files in the engine change together a third of the time.</div>
+<h3 id="s6-5">6.5 — ALL 66 DECLINING FILES, EVERY ONE</h3>
+<p class="sub">Sorted by current health, worst first. <b>Δ</b> is health lost since 2025.</p>
+<table><tr><th>#</th><th>File</th><th>Repo</th><th>LoC</th><th>Commits</th><th>2025</th><th>NOW</th><th>Δ lost</th><th>Code smells</th></tr>
+<tr><td class="id">CS-D-01</td>
+<td><code>functions/audit/_adapter.js</code></td>
+<td><span class="tag">website</span></td><td>1995</td><td>60</td>
+<td class="mut">2.23</td><td><span class="sev P0">1.3</span></td>
+<td style="color:var(--p0)">&darr; 0.93</td>
+<td class="mut" style="font-size:12px">Modularity Issue; Bumpy Road; Deep Nested Complexity; Overall Code Complexity</td></tr>
+<tr><td class="id">CS-D-02</td>
+<td><code>src/skills/S025-audit-page-builder/scripts/build.js</code></td>
+<td><span class="tag">engine</span></td><td>1046</td><td>106</td>
+<td class="mut">2.49</td><td><span class="sev P0">1.76</span></td>
+<td style="color:var(--p0)">&darr; 0.73</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Overall Code Complexity; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-03</td>
+<td><code>src/skills/S008-personalisation-engine/scanners/compliance.js</code></td>
+<td><span class="tag">engine</span></td><td>1134</td><td>112</td>
+<td class="mut">3.03</td><td><span class="sev P0">2.08</span></td>
+<td style="color:var(--p0)">&darr; 0.95</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Deep Nested Complexity; Overall Code Complexity; Complex Method</td></tr>
+<tr><td class="id">CS-D-04</td>
+<td><code>src/lib/audit/site-scan.js</code></td>
+<td><span class="tag">engine</span></td><td>527</td><td>33</td>
+<td class="mut">3.53</td><td><span class="sev P1">3.23</span></td>
+<td style="color:var(--p0)">&darr; 0.3</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Deep Nested Complexity; Overall Code Complexity; Complex Method</td></tr>
+<tr><td class="id">CS-D-05</td>
+<td><code>public/audit/audit-app.js</code></td>
+<td><span class="tag">website</span></td><td>1296</td><td>53</td>
+<td class="mut">5.12</td><td><span class="sev P1">3.39</span></td>
+<td style="color:var(--p0)">&darr; 1.73</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-06</td>
+<td><code>dist/audit/audit-app.js</code></td>
+<td><span class="tag">website</span></td><td>1296</td><td>2</td>
+<td class="mut">5.12</td><td><span class="sev P1">3.39</span></td>
+<td style="color:var(--p0)">&darr; 1.73</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-07</td>
+<td><code>src/lib/enrich/lead-quality.js</code></td>
+<td><span class="tag">engine</span></td><td>336</td><td>19</td>
+<td class="mut">4.16</td><td><span class="sev P1">3.46</span></td>
+<td style="color:var(--p0)">&darr; 0.7</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Overall Code Complexity; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-08</td>
+<td><code>public/admin/cockpit-v2/app.js</code></td>
+<td><span class="tag">website</span></td><td>5</td><td>8</td>
+<td class="mut">4.58</td><td><span class="sev P1">4.05</span></td>
+<td style="color:var(--p0)">&darr; 0.53</td>
+<td class="mut" style="font-size:12px">Overall Code Complexity; Complex Method; Excess Function Arguments; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-09</td>
+<td><code>dist/admin/cockpit-v2/app.js</code></td>
+<td><span class="tag">website</span></td><td>5</td><td>1</td>
+<td class="mut">4.58</td><td><span class="sev P1">4.05</span></td>
+<td style="color:var(--p0)">&darr; 0.53</td>
+<td class="mut" style="font-size:12px">Overall Code Complexity; Complex Method; Excess Function Arguments; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-10</td>
+<td><code>src/lib/compliance/connect.js</code></td>
+<td><span class="tag">engine</span></td><td>206</td><td>36</td>
+<td class="mut">7.44</td><td><span class="sev P1">4.62</span></td>
+<td style="color:var(--p0)">&darr; 2.82</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Deep Nested Complexity; Many Conditionals; Complex Method</td></tr>
+<tr><td class="id">CS-D-11</td>
+<td><code>src/.../sources/adapters.js</code></td>
+<td><span class="tag">engine</span></td><td>207</td><td>9</td>
+<td class="mut">4.97</td><td><span class="sev P1">4.76</span></td>
+<td style="color:var(--p0)">&darr; 0.21</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Deep Nested Complexity; Many Conditionals; Complex Method</td></tr>
+<tr><td class="id">CS-D-12</td>
+<td><code>mcp/tamazia-ops/server.py</code></td>
+<td><span class="tag">engine</span></td><td>1997</td><td>9</td>
+<td class="mut">8.12</td><td><span class="sev P1">4.8</span></td>
+<td style="color:var(--p0)">&darr; 3.32</td>
+<td class="mut" style="font-size:12px">Potentially Low Cohesion; File Size Issue; Bumpy Road; Deep Nested Complexity</td></tr>
+<tr><td class="id">CS-D-13</td>
+<td><code>src/lib/sourcing/markets.js</code></td>
+<td><span class="tag">engine</span></td><td>303</td><td>9</td>
+<td class="mut">7.57</td><td><span class="sev P1">4.9</span></td>
+<td style="color:var(--p0)">&darr; 2.67</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Deep Nested Complexity; Many Conditionals; Complex Method</td></tr>
+<tr><td class="id">CS-D-14</td>
+<td><code>functions/api/cal-webhook.js</code></td>
+<td><span class="tag">website</span></td><td>276</td><td>13</td>
+<td class="mut">6.35</td><td><span class="sev P2">5.12</span></td>
+<td style="color:var(--p0)">&darr; 1.23</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-15</td>
+<td><code>src/lib/audit/firm-profile.js</code></td>
+<td><span class="tag">engine</span></td><td>237</td><td>26</td>
+<td class="mut">8.52</td><td><span class="sev P2">5.24</span></td>
+<td style="color:var(--p0)">&darr; 3.28</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-16</td>
+<td><code>scripts/source-leads.js</code></td>
+<td><span class="tag">engine</span></td><td>250</td><td>14</td>
+<td class="mut">7.32</td><td><span class="sev P2">5.3</span></td>
+<td style="color:var(--p0)">&darr; 2.02</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Complex Method; Complex Conditional; Large Method</td></tr>
+<tr><td class="id">CS-D-17</td>
+<td><code>src/lib/sourcing/resolve-name.js</code></td>
+<td><span class="tag">engine</span></td><td>303</td><td>3</td>
+<td class="mut">5.87</td><td><span class="sev P2">5.62</span></td>
+<td style="color:var(--p0)">&darr; 0.25</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-18</td>
+<td><code>src/lib/llm/router.js</code></td>
+<td><span class="tag">engine</span></td><td>294</td><td>10</td>
+<td class="mut">7.22</td><td><span class="sev P2">6.14</span></td>
+<td style="color:var(--p0)">&darr; 1.08</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complex Conditional; High Degree of Code Duplication</td></tr>
+<tr><td class="id">CS-D-19</td>
+<td><code>src/lib/audit/finding-trust.js</code> <span class="tag" style="background:#2c1a3a;color:#c98cff">edited this session</span></td>
+<td><span class="tag">engine</span></td><td>80</td><td>6</td>
+<td class="mut">6.9</td><td><span class="sev P2">6.49</span></td>
+<td style="color:var(--p0)">&darr; 0.41</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-20</td>
+<td><code>src/lib/audit/extra-scanners.js</code></td>
+<td><span class="tag">engine</span></td><td>159</td><td>7</td>
+<td class="mut">7</td><td><span class="sev P2">6.55</span></td>
+<td style="color:var(--p0)">&darr; 0.45</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-21</td>
+<td><code>scripts/source-registers.js</code></td>
+<td><span class="tag">engine</span></td><td>162</td><td>2</td>
+<td class="mut">7.32</td><td><span class="sev P2">6.56</span></td>
+<td style="color:var(--p0)">&darr; 0.76</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Complex Method; Complex Conditional; Large Method</td></tr>
+<tr><td class="id">CS-D-22</td>
+<td><code>src/lib/compliance/resolver.js</code></td>
+<td><span class="tag">engine</span></td><td>104</td><td>6</td>
+<td class="mut">7.2</td><td><span class="sev P2">6.88</span></td>
+<td style="color:var(--p0)">&darr; 0.32</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complex Conditional; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-23</td>
+<td><code>src/.../scripts/run.js</code></td>
+<td><span class="tag">engine</span></td><td>311</td><td>5</td>
+<td class="mut">8.02</td><td><span class="sev P2">6.94</span></td>
+<td style="color:var(--p0)">&darr; 1.08</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-24</td>
+<td><code>src/lib/compliance/jurisdiction-router.js</code></td>
+<td><span class="tag">engine</span></td><td>201</td><td>15</td>
+<td class="mut">8.02</td><td><span class="sev P2">7</span></td>
+<td style="color:var(--p0)">&darr; 1.02</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-25</td>
+<td><code>functions/api/contact.js</code></td>
+<td><span class="tag">website</span></td><td>231</td><td>15</td>
+<td class="mut">8.98</td><td><span class="sev P2">7.41</span></td>
+<td style="color:var(--p0)">&darr; 1.57</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complex Conditional; Large Method</td></tr>
+<tr><td class="id">CS-D-26</td>
+<td><code>src/lib/sourcing/icp.js</code></td>
+<td><span class="tag">engine</span></td><td>137</td><td>11</td>
+<td class="mut">7.77</td><td><span class="sev P2">7.5</span></td>
+<td style="color:var(--p0)">&darr; 0.27</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-27</td>
+<td><code>src/.../scripts/send-due.js</code></td>
+<td><span class="tag">engine</span></td><td>190</td><td>20</td>
+<td class="mut">8.08</td><td><span class="sev P2">7.66</span></td>
+<td style="color:var(--p0)">&darr; 0.42</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-28</td>
+<td><code>admin-v2-src/app.jsx</code></td>
+<td><span class="tag">website</span></td><td>349</td><td>5</td>
+<td class="mut">7.91</td><td><span class="sev P2">7.78</span></td>
+<td style="color:var(--p0)">&darr; 0.13</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complex Conditional; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-29</td>
+<td><code>src/lib/scraping/google-sponsored.js</code></td>
+<td><span class="tag">engine</span></td><td>129</td><td>4</td>
+<td class="mut">10</td><td><span class="sev P2">7.83</span></td>
+<td style="color:var(--p0)">&darr; 2.17</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-30</td>
+<td><code>src/lib/sourcing/bulk-sourcer.js</code></td>
+<td><span class="tag">engine</span></td><td>127</td><td>4</td>
+<td class="mut">8.41</td><td><span class="sev P2">7.92</span></td>
+<td style="color:var(--p0)">&darr; 0.49</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Deep Nested Complexity; Many Conditionals; Complex Method</td></tr>
+<tr><td class="id">CS-D-31</td>
+<td><code>functions/_lib/notify.js</code></td>
+<td><span class="tag">website</span></td><td>125</td><td>4</td>
+<td class="mut">9.03</td><td><span class="sev P2">7.96</span></td>
+<td style="color:var(--p0)">&darr; 1.07</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complex Conditional; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-32</td>
+<td><code>src/lib/sourcing/companies-house.js</code></td>
+<td><span class="tag">engine</span></td><td>164</td><td>4</td>
+<td class="mut">8.42</td><td><span class="sev P2">7.96</span></td>
+<td style="color:var(--p0)">&darr; 0.46</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-33</td>
+<td><code>src/lib/sourcing/firmographics.js</code></td>
+<td><span class="tag">engine</span></td><td>92</td><td>5</td>
+<td class="mut">8.14</td><td><span class="sev P3">8.01</span></td>
+<td style="color:var(--p0)">&darr; 0.13</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-34</td>
+<td><code>src/lib/compliance/signals.js</code> <span class="tag" style="background:#2c1a3a;color:#c98cff">edited this session</span></td>
+<td><span class="tag">engine</span></td><td>159</td><td>11</td>
+<td class="mut">10</td><td><span class="sev P3">8.07</span></td>
+<td style="color:var(--p0)">&darr; 1.93</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complex Conditional; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-35</td>
+<td><code>functions/_lib/neon-sync.js</code></td>
+<td><span class="tag">website</span></td><td>78</td><td>5</td>
+<td class="mut">9.47</td><td><span class="sev P3">8.07</span></td>
+<td style="color:var(--p0)">&darr; 1.4</td>
+<td class="mut" style="font-size:12px">Complex Method; Complex Conditional; Excess Function Arguments; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-36</td>
+<td><code>src/lib/audit/llm.js</code></td>
+<td><span class="tag">engine</span></td><td>81</td><td>6</td>
+<td class="mut">8.71</td><td><span class="sev P3">8.09</span></td>
+<td style="color:var(--p0)">&darr; 0.62</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Complex Method; Excess Function Arguments; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-37</td>
+<td><code>scripts/mint-worker.js</code> <span class="tag" style="background:#2c1a3a;color:#c98cff">edited this session</span></td>
+<td><span class="tag">engine</span></td><td>233</td><td>17</td>
+<td class="mut">9.66</td><td><span class="sev P3">8.09</span></td>
+<td style="color:var(--p0)">&darr; 1.57</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complex Conditional; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-38</td>
+<td><code>src/lib/scraping/serp-engine.js</code></td>
+<td><span class="tag">engine</span></td><td>196</td><td>8</td>
+<td class="mut">8.53</td><td><span class="sev P3">8.11</span></td>
+<td style="color:var(--p0)">&darr; 0.42</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-39</td>
+<td><code>src/.../scripts/render.js</code></td>
+<td><span class="tag">engine</span></td><td>201</td><td>13</td>
+<td class="mut">8.34</td><td><span class="sev P3">8.23</span></td>
+<td style="color:var(--p0)">&darr; 0.11</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complexity Trend Growth; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-40</td>
+<td><code>src/.../scanners/corpus-index.js</code> <span class="tag" style="background:#2c1a3a;color:#c98cff">edited this session</span></td>
+<td><span class="tag">engine</span></td><td>67</td><td>8</td>
+<td class="mut">8.82</td><td><span class="sev P3">8.28</span></td>
+<td style="color:var(--p0)">&darr; 0.54</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complex Conditional; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-41</td>
+<td><code>scripts/ensure-schema.js</code></td>
+<td><span class="tag">engine</span></td><td>76</td><td>4</td>
+<td class="mut">8.48</td><td><span class="sev P3">8.32</span></td>
+<td style="color:var(--p0)">&darr; 0.16</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Complex Method; Complex Conditional; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-42</td>
+<td><code>public/audit/audit-charts.js</code></td>
+<td><span class="tag">website</span></td><td>307</td><td>17</td>
+<td class="mut">8.68</td><td><span class="sev P3">8.32</span></td>
+<td style="color:var(--p0)">&darr; 0.36</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complex Conditional; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-43</td>
+<td><code>dist/audit/audit-charts.js</code></td>
+<td><span class="tag">website</span></td><td>307</td><td>2</td>
+<td class="mut">8.68</td><td><span class="sev P3">8.32</span></td>
+<td style="color:var(--p0)">&darr; 0.36</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Complex Conditional; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-44</td>
+<td><code>functions/api/stripe/webhook.js</code></td>
+<td><span class="tag">website</span></td><td>115</td><td>5</td>
+<td class="mut">8.58</td><td><span class="sev P3">8.37</span></td>
+<td style="color:var(--p0)">&darr; 0.21</td>
+<td class="mut" style="font-size:12px">Complex Method; Large Method; Excess Function Arguments; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-45</td>
+<td><code>functions/api/briefings.js</code></td>
+<td><span class="tag">website</span></td><td>174</td><td>11</td>
+<td class="mut">8.95</td><td><span class="sev P3">8.42</span></td>
+<td style="color:var(--p0)">&darr; 0.53</td>
+<td class="mut" style="font-size:12px">Complex Method; Complex Conditional; Large Method; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-46</td>
+<td><code>scripts/enrich-worker.js</code></td>
+<td><span class="tag">engine</span></td><td>132</td><td>7</td>
+<td class="mut">9.55</td><td><span class="sev P3">8.43</span></td>
+<td style="color:var(--p0)">&darr; 1.12</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Complex Method; Complex Conditional; Large Method</td></tr>
+<tr><td class="id">CS-D-47</td>
+<td><code>scripts/verify-audits.js</code></td>
+<td><span class="tag">engine</span></td><td>74</td><td>3</td>
+<td class="mut">9.24</td><td><span class="sev P3">8.59</span></td>
+<td style="color:var(--p0)">&darr; 0.65</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Deep Nested Complexity; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-48</td>
+<td><code>src/lib/sourcing/charity-commission.js</code></td>
+<td><span class="tag">engine</span></td><td>89</td><td>2</td>
+<td class="mut">9.39</td><td><span class="sev P3">8.66</span></td>
+<td style="color:var(--p0)">&darr; 0.73</td>
+<td class="mut" style="font-size:12px">Complex Method; Complexity Trend Growth; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-49</td>
+<td><code>src/.../scripts/ingest.js</code></td>
+<td><span class="tag">engine</span></td><td>92</td><td>2</td>
+<td class="mut">9.24</td><td><span class="sev P3">8.68</span></td>
+<td style="color:var(--p0)">&darr; 0.56</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Many Conditionals; Complex Method; Complex Conditional</td></tr>
+<tr><td class="id">CS-D-50</td>
+<td><code>functions/api/erase.js</code></td>
+<td><span class="tag">website</span></td><td>180</td><td>6</td>
+<td class="mut">8.91</td><td><span class="sev P3">8.69</span></td>
+<td style="color:var(--p0)">&darr; 0.22</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Complex Method; Large Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-51</td>
+<td><code>functions/.../audits/mint.js</code></td>
+<td><span class="tag">website</span></td><td>103</td><td>4</td>
+<td class="mut">9.53</td><td><span class="sev P3">8.71</span></td>
+<td style="color:var(--p0)">&darr; 0.82</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Complex Method; Large Method; Complexity Trend Growth</td></tr>
+<tr><td class="id">CS-D-52</td>
+<td><code>scripts/refresh-enforcement-news.js</code></td>
+<td><span class="tag">engine</span></td><td>89</td><td>3</td>
+<td class="mut">9.07</td><td><span class="sev P3">8.82</span></td>
+<td style="color:var(--p0)">&darr; 0.25</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-53</td>
+<td><code>scripts/health-check.js</code></td>
+<td><span class="tag">engine</span></td><td>103</td><td>4</td>
+<td class="mut">9.03</td><td><span class="sev P3">8.97</span></td>
+<td style="color:var(--p0)">&darr; 0.06</td>
+<td class="mut" style="font-size:12px">Complex Method; Excess Function Arguments; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-54</td>
+<td><code>src/lib/send-pacing.js</code></td>
+<td><span class="tag">engine</span></td><td>48</td><td>4</td>
+<td class="mut">9.69</td><td><span class="sev P3">9.1</span></td>
+<td style="color:var(--p0)">&darr; 0.59</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-55</td>
+<td><code>src/lib/compose-extensions.js</code></td>
+<td><span class="tag">engine</span></td><td>134</td><td>2</td>
+<td class="mut">9.39</td><td><span class="sev P3">9.1</span></td>
+<td style="color:var(--p0)">&darr; 0.29</td>
+<td class="mut" style="font-size:12px">Many Conditionals; Complex Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-56</td>
+<td><code>functions/api/admin/audits.js</code></td>
+<td><span class="tag">website</span></td><td>50</td><td>5</td>
+<td class="mut">9.23</td><td><span class="sev P3">9.13</span></td>
+<td style="color:var(--p0)">&darr; 0.1</td>
+<td class="mut" style="font-size:12px">Complex Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-57</td>
+<td><code>functions/api/admin/now.js</code></td>
+<td><span class="tag">website</span></td><td>51</td><td>5</td>
+<td class="mut">9.26</td><td><span class="sev P3">9.16</span></td>
+<td style="color:var(--p0)">&darr; 0.1</td>
+<td class="mut" style="font-size:12px">Complex Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-58</td>
+<td><code>src/lib/sourcing/conversion.js</code></td>
+<td><span class="tag">engine</span></td><td>28</td><td>3</td>
+<td class="mut">9.39</td><td><span class="sev P3">9.22</span></td>
+<td style="color:var(--p0)">&darr; 0.17</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Complex Method; Code Health Degradations; Code Health Improvements</td></tr>
+<tr><td class="id">CS-D-59</td>
+<td><code>src/lib/audit/verify-audit-url.js</code></td>
+<td><span class="tag">engine</span></td><td>25</td><td>2</td>
+<td class="mut">9.61</td><td><span class="sev P3">9.39</span></td>
+<td style="color:var(--p0)">&darr; 0.22</td>
+<td class="mut" style="font-size:12px">Complex Method; Complex Conditional; Code Health Degradations; Code Health Improvements</td></tr>
+<tr><td class="id">CS-D-60</td>
+<td><code>functions/api/portability.js</code></td>
+<td><span class="tag">website</span></td><td>85</td><td>6</td>
+<td class="mut">9.64</td><td><span class="sev P3">9.39</span></td>
+<td style="color:var(--p0)">&darr; 0.25</td>
+<td class="mut" style="font-size:12px">Complex Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-61</td>
+<td><code>scripts/check-stuck-jobs.js</code></td>
+<td><span class="tag">engine</span></td><td>64</td><td>6</td>
+<td class="mut">9.69</td><td><span class="sev P3">9.46</span></td>
+<td style="color:var(--p0)">&darr; 0.23</td>
+<td class="mut" style="font-size:12px">Bumpy Road; Complex Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-62</td>
+<td><code>functions/api/dsar.js</code></td>
+<td><span class="tag">website</span></td><td>115</td><td>6</td>
+<td class="mut">9.69</td><td><span class="sev P3">9.47</span></td>
+<td style="color:var(--p0)">&darr; 0.22</td>
+<td class="mut" style="font-size:12px">Complex Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-63</td>
+<td><code>scripts/gen-state.js</code></td>
+<td><span class="tag">engine</span></td><td>63</td><td>6</td>
+<td class="mut">10</td><td><span class="sev P3">9.66</span></td>
+<td style="color:var(--p0)">&darr; 0.34</td>
+<td class="mut" style="font-size:12px">Complex Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-64</td>
+<td><code>src/lib/enrich/verify-status.js</code></td>
+<td><span class="tag">engine</span></td><td>25</td><td>2</td>
+<td class="mut">10</td><td><span class="sev P3">9.66</span></td>
+<td style="color:var(--p0)">&darr; 0.34</td>
+<td class="mut" style="font-size:12px">Complex Method; Complexity Trend Growth; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-65</td>
+<td><code>functions/audit/[[path]].js</code></td>
+<td><span class="tag">website</span></td><td>107</td><td>9</td>
+<td class="mut">10</td><td><span class="sev P3">9.69</span></td>
+<td style="color:var(--p0)">&darr; 0.31</td>
+<td class="mut" style="font-size:12px">Complex Method; Code Health Degradations</td></tr>
+<tr><td class="id">CS-D-66</td>
+<td><code>scripts/push-to-mystrika.js</code></td>
+<td><span class="tag">engine</span></td><td>270</td><td>22</td>
+<td class="mut">10</td><td><span class="sev P3">9.69</span></td>
+<td style="color:var(--p0)">&darr; 0.31</td>
+<td class="mut" style="font-size:12px">Complex Method; Code Health Degradations</td></tr>
+</table>
+<div class="lead"><b>An honest note.</b> <code>signals.js</code> fell <b>10 &rarr; 8.07</b> and <code>mint-worker.js</code> <b>9.66 &rarr; 8.09</b> — both are files <b>I edited this session</b>. My fixes were correct, and they made the code less healthy. That is worth saying out loud rather than hiding: <b>a correct fix and a healthy fix are not the same thing</b>, and CodeScene is now measuring the difference.</div>
+<h3 id="s6-6">6.6 — THE PR GATE: its first act was to fail ME</h3>
+<div class="lead">The moment PR integration went live, <code>CodeScene Code Health Review (main)</code> ran on <b>PR #342</b> — my own sweep tooling — and <b>FAILED the quality gate</b>. It is right, and I will fix it. <b>I am not going to hold your engine to a standard my own code does not meet.</b></div>
+<table><tr><th>Gate</th><th>Result</th></tr>
+<tr><td>New code is healthy — 3 new files with code health below 10.00</td><td><span class="v RISK-ACCEPTED">FAILED</span></td></tr>
+<tr><td>Enforce critical code health rules — 2 files with Bumpy Road Ahead, Deep Nested Complexity</td><td><span class="v RISK-ACCEPTED">FAILED</span></td></tr>
+<tr><td>Enforce advisory code health rules — 3 files with Complex Method, Complex Conditional, Overall Code Complexity, Excess Number of Function Arguments</td><td><span class="v RISK-ACCEPTED">FAILED</span></td></tr>
+<tr><td>1 other gate(s)</td><td><span class="v SOUND">passed</span></td></tr></table>
+<table><tr><th>#</th><th>File</th><th>Code Health</th><th>Rules violated</th></tr>
+<tr><td class="id">CS-PR-01</td><td><code>tools/sweep/normalise.js</code></td>
+<td><span class="sev P1">7.61</span></td><td>4</td></tr>
+<tr><td class="id">CS-PR-02</td><td><code>tools/sweep/collect-local.js</code></td>
+<td><span class="sev P2">8.1</span></td><td>4</td></tr>
+<tr><td class="id">CS-PR-03</td><td><code>tools/sweep/report.js</code></td>
+<td><span class="sev P2">9.1</span></td><td>3</td></tr>
+</table>
+<h3 id="s6-7">6.7 — Configuration, as set (end to end)</h3>
+<table><tr><th>Setting</th><th>Value</th><th>Why</th></tr>
+<tr><td>Quality gates profile</td><td><b>Clean Code Collective (Minimal Safety Net + Quality Guardians)</b></td><td>5 gates, every one able to fire today</td></tr>
+<tr><td>Gates ENABLED</td><td><span class="tag">Prevent Hotspot Decline</span> <span class="tag">New Code is Healthy</span> <span class="tag">Enforce Critical Code Health Rules</span> <span class="tag">Enforce Advisory Code Health Rules</span> <span class="tag">Tag Reviewer for Critical Code</span></td><td>—</td></tr>
+<tr><td>Gates left OFF</td><td><span class="tag">Enforce Refactoring Goals</span> <span class="tag">Enforce Supervise Goals</span></td><td><b>They enforce refactoring goals that do not exist yet. A gate that cannot fire is theatre.</b></td></tr>
+<tr><td>Exclude source branches</td><td><code>^(main|full-tree-base|empty-base)$</code></td><td>PR #343's source branch <i>is</i> <code>main</code> — without this it would report all 428 files as "new code"</td></tr>
+<tr><td>Only PRs targeting default branch</td><td>YES</td><td>belt-and-braces on the same risk</td></tr>
+<tr><td>Comment on ALL PRs</td><td>YES</td><td>default is failures-only; we want every finding</td></tr>
+<tr><td>Post findings as</td><td>Create a review in the Pull Request</td><td><b>inline review comments — which the harvester in §4 pulls straight into this ledger</b></td></tr>
+<tr><td>GitHub App</td><td>CodeScene Delta Analysis — installed, scoped to 2 repos, read code / write checks+PRs only</td><td>least privilege: <b>it cannot write code</b></td></tr>
+<tr><td>Repo refs</td><td>both pinned to main</td><td>so the <code>full-tree-base</code> deletion commit does <b>not</b> pollute the history analysis</td></tr>
+</table>
 <h2 id="s7">§7 — madge · reachability <span class="mut" style="font-size:15px">(0)</span></h2><p class="sub"><b>78 modules</b> reachable from the two mint entrypoints. A module unreachable from the mint is <b>dead law</b>: <code>statute-rag.js</code> was required for months and never called; <b>13 modules / 691 lines</b> were in that state. All are now wired, merged, or declared in <code>DORMANT.md</code> with a written reason — which is why this section is empty. <b>An empty section here is the gate working.</b></p>
 <p class="mut">No findings.</p>
 <h2 id="s8">§8 — one-door · SEMANTIC duplication <span class="mut" style="font-size:15px">(36 across 7 facts)</span></h2>
