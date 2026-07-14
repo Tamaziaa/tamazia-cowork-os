@@ -1420,10 +1420,17 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   }
   if (insId == null) {
     // E-264: never again throw "no row written" with no cause. If neither branch fired, say EXACTLY what came back.
-    const _cause = _writeErr ? ('SQL: ' + _writeErr.slice(0, 160))
+    const _cause = _writeErr ? ('SQL: ' + _writeErr.slice(0, 600))
       : _transport ? ('TRANSPORT: ' + _transport + ' — the write never reached Neon')
         : ('UNEXPLAINED: the INSERT returned ' + JSON.stringify(_httpIns).slice(0, 160) + ' and idem_key ' + idemKey + ' could not be adopted');
-    throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written [${_cause}] [llm_verify=${!!(neonPayload && neonPayload.llm_verify)}, payload ${Math.round(JSON.stringify(neonPayload).length / 1024)}KB]; refusing to return a dead audit link`);
+    throw new Error(`audit_pages INSERT failed for ${domain} (${slug}/${hash}) — no row written`
+      + `\n  cause      : ${_cause}`
+      + `\n  idem_key   : ${idemKey}`
+      + `\n  engine     : ${neonPayload && neonPayload.engine_version}`
+      + `\n  llm_verify : ${!!(neonPayload && neonPayload.llm_verify)}`
+      + `\n  payload    : ${Math.round(JSON.stringify(neonPayload).length / 1024)}KB`
+      + `\n  http       : ${JSON.stringify(_httpIns).slice(0, 300)}`
+      + `\nrefusing to return a dead audit link`);   // THE FAILURE CARRIES ITS OWN DIAGNOSIS to minting_queue.error
   }
   const signedFinal = (finalSlug === slug && finalHash === hash) ? signed : signUrl({ slug: finalSlug, hash: finalHash, lead_id, expSeconds });
 

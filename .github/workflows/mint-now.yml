@@ -17,6 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
+      # SENTRY. A dead-lettered mint means an audit a law firm was going to receive DOES NOT EXIST. That is the one
+      # thing here worth waking someone for. DSN-gated: if the secret is unset this is a no-op, never a second
+      # failure mode stacked on top of the first.
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       # Per-build cap: PSI fix (PR #138) bounds scanSite at 90s; compliance + formatters add ~60s.
       # 3 min is a safe ceiling. Previous 5-min cap let a single slow site hold up the batch.

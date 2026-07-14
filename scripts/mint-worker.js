@@ -38,6 +38,47 @@ if (!NEON) {
 
 const PSQL = path.join(__dirname, 'psql');
 function pg(sql) { return execFileSync(PSQL, [NEON, '-tA', '-c', sql], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }); }
+
+// ── SENTRY (optional, DSN-gated) ───────────────────────────────────────────────────────────────────────────────
+// A dead-lettered mint means an audit a law firm was going to receive DOES NOT EXIST. That is worth an alert.
+// Deliberately dependency-free: a plain HTTPS POST to the Sentry store endpoint. Adding the SDK to a worker whose
+// whole job is to not fall over would be adding a way for it to fall over. If SENTRY_DSN is unset this is a no-op,
+// and it can never throw — a monitoring failure must never become a mint failure.
+function _sentry(title, detail, tags) {
+  const dsn = process.env.SENTRY_DSN;
+  if (!dsn) return;
+  try {
+    const m = /^https:\/\/([^@]+)@([^/]+)\/(.+)$/.exec(dsn.trim());
+    if (!m) return;
+    const [, key, host, projectId] = m;
+    const body = JSON.stringify({
+      event_id: require('crypto').randomBytes(16).toString('hex'),
+      timestamp: new Date().toISOString(),
+      platform: 'node',
+      level: 'error',
+      logger: 'mint-worker',
+      server_name: String(process.env.GITHUB_RUN_ID || 'local'),
+      message: { formatted: title },
+      extra: { detail: String(detail).slice(0, 4000) },
+      tags: Object.assign({ component: 'mint' }, tags || {}),
+    });
+    const req = require('https').request({
+      method: 'POST',
+      host,
+      path: '/api/' + projectId + '/store/',
+      timeout: 4000,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'X-Sentry-Auth': 'Sentry sentry_version=7, sentry_client=tamazia-mint/1.0, sentry_key=' + key,
+      },
+    }, (res) => { res.resume(); });
+    req.on('error', () => {});      // FAIL-OPEN: monitoring must never take the mint down with it.
+    req.on('timeout', () => req.destroy());
+    req.write(body); req.end();
+  } catch (_e) { /* FAIL-OPEN: see above. */ }
+}
+
 function q(s) { return String(s == null ? '' : s).replace(/'/g, "''"); }
 
 const CONC = Math.max(1, parseInt(process.env.MINT_CONCURRENCY || '10', 10));
@@ -216,10 +257,32 @@ async function mintOne(row) {
     }
     console.log('  OK ' + row.domain + ' -> ' + r.slug + '/' + r.hash + ' (fw:' + (r.applicable_frameworks || []).length + ' pts:' + (r.pointers || []).length + ')');
   } catch (e) {
-    const msg = String((e && e.message) || e).slice(0, 160);
+    // A FAILURE MUST EXPLAIN ITSELF. This used to store String(e.message).slice(0, 160) — and the write-seam's real
+    // diagnostic (the SQL cause, the idem_key, the HTTP response) went to stderr and DIED with the job. So the queue
+    // said only "INSERT failed — no row written", which named nothing. I chased that one message across four
+    // sessions, guessing, because the system would not tell me what it knew.
+    //
+    // Worse: the truncation HID WHICH CODE WAS RUNNING. A stale worker and a genuine SQL error produced the exact
+    // same string. So the error now carries the engine version and the commit SHA the worker was actually built
+    // from. One run answers "is this a real bug or a stale checkout" instead of five.
+    const full = String((e && e.stack) || (e && e.message) || e);
+    const ver = (() => { try { return require('../src/skills/S008-personalisation-engine/scanners/compliance.js').ENGINE_VERSION; } catch (_v) { return 'unknown'; } })();
+    const sha = String(process.env.GITHUB_SHA || process.env.CF_PAGES_COMMIT_SHA || 'local').slice(0, 8);
+    const msg = [
+      full.split('\n')[0],
+      '[engine=' + ver + ' sha=' + sha + ' attempt=' + ((+row.retries || 0) + 1) + '/' + MAXR + ']',
+      full.includes('\n') ? '\n' + full.split('\n').slice(1, 6).join('\n') : '',
+    ].join(' ').slice(0, 4000);   // the column is TEXT. There is no reason to throw the answer away.
+
     const dead = (pg(`UPDATE minting_queue SET status=(CASE WHEN retries+1 >= ${MAXR} THEN 'failed' ELSE 'pending' END), retries=retries+1, error='${q(msg)}' WHERE id=${row.id} RETURNING status;`) || '').trim();
-    if (dead === 'failed') console.error('  DEAD-LETTER mint failed (' + MAXR + ' tries): ' + row.domain + ' — ' + msg);
-    else console.log('  FAIL ' + row.domain + ' ' + msg);
+
+    // SENTRY. Gated on the DSN, so this is a no-op until one is set — never a second failure mode on top of the
+    // first. A dead-lettered mint is the only thing here worth waking someone for: it means an audit a law firm was
+    // going to receive does not exist.
+    if (dead === 'failed') _sentry('mint dead-letter: ' + row.domain, msg, { domain: row.domain, engine: ver, sha });
+
+    if (dead === 'failed') console.error('  DEAD-LETTER mint failed (' + MAXR + ' tries): ' + row.domain + ' — ' + msg.slice(0, 300));
+    else console.log('  FAIL ' + row.domain + ' ' + msg.slice(0, 300));
   }
 }
 
