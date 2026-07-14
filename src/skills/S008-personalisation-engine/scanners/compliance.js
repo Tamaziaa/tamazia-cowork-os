@@ -234,18 +234,47 @@ function _discoverLinks(html, base, accepted) {
   }
   return out;
 }
+// A WAF BLOCKS THE SITEMAP TOO — AND THE SITEMAP IS THE ONLY HONEST MAP OF A SITE.
+//
+// birketts.co.uk 403s /robots.txt AND /sitemap.xml to a plain fetch. So sitemap discovery failed on exactly the
+// sites that need it most, and we fell back to GUESSING paths (/legal, /privacy, /cookie-policy...). Guessing found
+// a handful. The real sitemap lists 189 pages, including /privacy-policy/, /fees/ and /data-protection-complaints-form/.
+//
+// The renderer cannot help here: a headless browser renders XML to an EMPTY DOM (verified: html='', text=''). The
+// free Jina reader CAN, because it returns the raw bytes as text (verified: 45,123 chars, 189 URLs).
+//
+// So the ladder for a sitemap is not the ladder for a page. Use the right tool for the content type:
+//     page  -> Playwright renderer (a DOM is exactly what we want)
+//     XML   -> Jina reader        (a DOM is exactly what we do NOT want)
+async function _fetchXml(url) {
+  try {
+    const r = await fetchWithRetry(url, { timeout: 8000, retries: 0 });
+    if (r && r.ok && r.body && /<(urlset|sitemapindex|loc)\b/i.test(r.body)) return r.body;
+  } catch (_e) { _swarn('compliance.js:_fetchXml:direct', _e); }
+  // Blocked or empty — go through the reader, which returns raw text rather than a rendered DOM.
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 12000);
+    const r = await fetch('https://r.jina.ai/' + url, {
+      headers: { 'x-respond-with': 'text', 'accept': 'text/plain' }, signal: ctl.signal,
+    });
+    clearTimeout(t);
+    if (r.ok) { const b = await r.text(); if (b && /https?:\/\//.test(b)) return b; }
+  } catch (_e) { _swarn('compliance.js:_fetchXml:reader', _e); }
+  return '';
+}
+
 async function _discoverSitemap(domain, accepted) {
   const urls = [];
   // robots.txt Sitemap: directives first (authoritative), then the common roots.
   const roots = [];
-  try { const rob = await fetchWithRetry('https://' + domain + '/robots.txt', { timeout: 6000, retries: 0 }); if (rob && rob.ok && rob.body) for (const sm of (rob.body.match(/sitemap:\s*(\S+)/gi) || [])) roots.push(sm.replace(/sitemap:\s*/i, '').trim()); } catch (_e) { _swarn('compliance.js:235', _e); }
+  try { const _rt = await _fetchXml('https://' + domain + '/robots.txt'); for (const m of String(_rt || '').matchAll(/(?:^|\n)\s*sitemap:\s*(\S+)/gi)) roots.push(m[1].trim()); } catch (_e) { _swarn('compliance.js:robots', _e); }
   roots.push('https://' + domain + '/sitemap.xml', 'https://' + domain + '/sitemap_index.xml', 'https://' + domain + '/sitemap-index.xml');
   // E-236 (v22.9): sitemap discovery was fully SEQUENTIAL — every root, then every child sitemap, one 8s fetch
   // after another. On a big firm with an index + 8 children that is 9 round-trips of pure waiting before the page
   // crawl even starts. Roots race in parallel (first one with URLs wins), and its children are fetched in parallel.
   // Identical URL set, identical ordering downstream; only the idling is gone.
   const rootResults = await Promise.all(roots.map(async (root) => {
-    try { const r = await fetchWithRetry(root, { timeout: 8000, retries: 0 }); return (r && r.ok && r.body) ? r.body : null; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
+    try { const b = await _fetchXml(root); return b || null; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
   }));
   for (const body of rootResults) {
     if (!body) continue;
@@ -254,7 +283,7 @@ async function _discoverSitemap(domain, accepted) {
     const pageUrls = locs.filter(u => !/\.xml/i.test(u));
     for (const u of pageUrls) if (_sameSite(u, accepted)) urls.push(u);
     const childBodies = await Promise.all(childSitemaps.map(async (cs) => {
-      try { const cr = await fetchWithRetry(cs, { timeout: 8000, retries: 0 }); return (cr && cr.ok && cr.body) ? cr.body : null; } catch (_e) { /* FAIL-OPEN: a parse/probe guard — the default IS the answer, no failure is being hidden. */ return null; }
+      try { const b = await _fetchXml(cs); return b || null; } catch (_e) { _swarn('compliance.js:childSitemap', _e); return null; }
     }));
     for (const cb of childBodies) {
       if (!cb) continue;
@@ -418,6 +447,23 @@ async function gatherCorpus({ domain, maxPages = 120, deadlineMs = 45000, concur
   // routes). Uses CRAWL_RENDER_URL (crawl4ai/Playwright microservice) when configured, else the free Jina reader.
   try {
     const shells = [];
+    // ── THE WAF RESCUE. This loop used to require `r.status === 200 || r.ok` — so a page that came back 403 was
+    // DROPPED ENTIRELY and never sent to the renderer. That is why birketts.co.uk yielded exactly ONE page: they
+    // 403 every sub-page to a plain fetch. We never read their /legal page, and then told a top-100 UK law firm it
+    // failed to state its SRA authorisation — a statement printed in its own footer.
+    //
+    // VERIFIED: the Playwright renderer reads those same URLs perfectly.
+    //     /legal-notices   direct 403  ->  renderer 200,  2,966 chars
+    //     /privacy-policy  direct 403  ->  renderer 200, 28,564 chars
+    //     /legal           direct 403  ->  renderer 200,  8,488 chars
+    //
+    // A WAF block is not evidence about the firm. It is evidence about our fetcher. So a blocked page now goes to
+    // the renderer exactly like a JS shell does — the two are the same problem wearing different status codes.
+    const _BLOCKED = new Set([401, 403, 405, 406, 409, 418, 429, 503]);
+    for (let i = 0; i < fetchList.length; i++) {
+      const r = results[i]; const u = fetchList[i];
+      if (r && _BLOCKED.has(Number(r.status))) { shells.push(u); continue; }   // WAF/bot-block -> render it
+    }
     for (let i = 0; i < fetchList.length; i++) { const r = results[i]; const u = fetchList[i]; if (r && (r.status === 200 || r.ok) && r.body && r.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, '').length < 500 && !r.challenge) shells.push(u); }
     const toRender = shells.slice(0, 30);                                   // cap the headless tail
     if (toRender.length) {
@@ -885,13 +931,47 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.8-2026-07-false-accusation-kill';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.11-2026-07-sitemap-reader';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
   const _cg = await gatherCorpus({ domain });
   const corpus = _cg.corpus || [];
-  let corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+  // ── TWO CORPORA, BECAUSE TWO CONSUMERS NEED DIFFERENT THINGS. ────────────────────────────────────────────────
+  //
+  // MEASURED, on russell-cooke.co.uk (120 pages):
+  //     raw HTML   293,387 chars per page   ->  30,462,480 total
+  //     visible text 16,356 chars per page  ->   1,962,720 total
+  //     94% OF WHAT WE WERE SCANNING WAS MARKUP, NOT WORDS.
+  //
+  // `corpusText` was `corpus.map(c => c.body).join(' ').slice(0, 600000)` — the first 600k of RAW HTML, in whatever
+  // order the pages came back. That is TWO PAGES of a big firm's site. Everything it feeds — sector detection,
+  // jurisdiction/markets, the firm profile, the nexus — was reading two pages of <script> tags and calling it a site.
+  //
+  // A CORRECTION I OWE THIS FILE: I first believed this also starved the COMPLIANCE RULES. It does not. The rules
+  // iterate `_scopePool(corpus)` page by page through `_presentIn()`, which reads each page's VISIBLE body — so
+  // they have always seen all 120 pages. Fixing the wrong thing confidently is how a bug survives a fix.
+  //
+  // detectMarkets() needs RAW HTML (hreflang, <meta>, lang attributes). Sector/profile/nexus need WORDS. Giving one
+  // string to both is why neither got what it needed. So: two variables, each capped for what it actually does.
+  //   corpusHtml : raw, 600k  — enough tags for hreflang/meta, and the same 249ms sweep as before.
+  //   corpusText : words, 2M  — the FULL text of all 120 pages (1.96M measured). 847ms for a 671-rule sweep, versus
+  //                             12.2 SECONDS if we had simply raised the raw-HTML cap to 30M. Measured, not guessed.
+  //
+  // And the pages are ordered so the ones that can actually contain a disclosure come first: a blog post about GDPR
+  // is not evidence that the firm has a privacy policy.
+  const _DISCLOSURE_RX = /\/(legal|privacy|cookie|terms|impressum|mentions|about|contact|complaint|transparen|price|pricing|fees|regulat|disclaimer|policy|policies|notice)/i;
+  const _rank = (u) => {
+    const p = String(u || '');
+    if (/^https?:\/\/[^/]+\/?$/.test(p)) return 0;      // the homepage carries the footer
+    if (_DISCLOSURE_RX.test(p)) return 1;                 // legal / privacy / terms / pricing
+    return 2;
+  };
+  const _ordered = corpus.slice().sort((a, b) => _rank(a.url) - _rank(b.url));
+  const _HTML_MAX = Number(process.env.CORPUS_HTML_MAX || 600000);
+  const _TEXT_MAX = Number(process.env.CORPUS_TEXT_MAX || 2000000);
+  const corpusHtml = _ordered.map(c => c.body || '').join(' ').slice(0, _HTML_MAX);   // tags survive: hreflang, meta
+  let corpusText = _ordered.map(c => htmlToText(c.body || '')).join(' ').slice(0, _TEXT_MAX);   // words, all 120 pages
   // E-250b (v23.0) — THE AUTHORISATION OVERRIDE MUST RUN *BEFORE* ANYTHING CONSUMES THE SECTOR.
   // E-250 shipped this block AFTER the rules had already been selected and run (normSector at the findings loop,
   // and connect() before it). So it corrected the LABEL on the payload and changed NOTHING about which laws were
@@ -956,7 +1036,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
           if (_c1Pattern.test(txt)) break;
         }
       }
-      corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+      corpusText = _ordered.map(c => htmlToText(c.body || '')).join(' ').slice(0, _TEXT_MAX);   // SAME shape as above — two corpora that disagree is a two-doors bug in waiting
     } catch (_e) { _swarn('compliance.js:965', _e); }
   }
   // CREDIBILITY GUARD: an empty/unreadable corpus (site blocked our crawler, JS-only, or down) cannot support
@@ -1037,7 +1117,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const privacyUnreadable = _policyPages.length > 0 && _maxAnchors < 4;
   // ROBUST jurisdiction detection over the FULL multi-page corpus (confidence-scored, 10+ parameters):
   // offices, addresses, postcodes, phone codes, currencies, hreflang, regulators, served-market language, cities, TLD.
-  let mk = {}; try { mk = require('../../../lib/sourcing/markets.js').detectMarkets({ html: corpusText, domain }); } catch (_e) { _swarn('compliance.js:1045', _e); }
+  let mk = {}; try { mk = require('../../../lib/sourcing/markets.js').detectMarkets({ html: corpusHtml, domain }); } catch (_e) { _swarn('compliance.js:1045', _e); }
   const codes = new Set(); if (country) codes.add(String(country).toUpperCase());   // registered country = PRIMARY jurisdiction (always present)
   // OPERATING markets attach only with STRONG evidence (a real office/regulator/TLD/hreflang) — never a
   // stray mention/phone/currency/city. Stops a UAE firm picking up US law from a "+1"/"$"/"America"
@@ -1499,7 +1579,7 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.8-2026-07-false-accusation-kill'), scan, ruleCheck, gatherCorpus, loadRules };
+module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.11-2026-07-sitemap-reader'), scan, ruleCheck, gatherCorpus, loadRules };
 
 // ---- blind-send helpers (blueprint E-041/E-044) ----
 function _evidenceGate(findings, pages) {

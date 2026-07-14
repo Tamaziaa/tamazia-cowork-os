@@ -17,6 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
+      # THE CRAWL FALLBACK LADDER. birketts.co.uk returns 403 to a plain fetch, so we read ONE page, never saw
+      # their /legal page, and told a top-100 UK law firm it failed to state its SRA authorisation — a statement
+      # printed in its own footer. The Playwright renderer on Hetzner reads that page perfectly (verified: 300KB,
+      # "SRA Registration No: 441849"). compliance.js has ALWAYS read CRAWL_RENDER_URL. Nobody ever gave it one.
+      CRAWL_RENDER_URL: ${{ secrets.CRAWL_RENDER_URL }}
       # SENTRY. A dead-lettered mint means an audit a law firm was going to receive DOES NOT EXIST. That is the one
       # thing here worth waking someone for. DSN-gated: if the secret is unset this is a no-op, never a second
       # failure mode stacked on top of the first.
