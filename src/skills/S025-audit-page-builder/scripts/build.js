@@ -23,7 +23,7 @@ const _BENIGN_NET = /UND_ERR_SOCKET|ECONNRESET|ERR_HTTP2|other side closed|termi
 const _isBenignNet = (e) => { try { return _BENIGN_NET.test(String((e && (e.code || e.message)) || '')); } catch (_) { return false; } };
 process.on('uncaughtException', (e) => { if (_isBenignNet(e)) { try { console.error('[mint] swallowed benign network error:', (e && (e.code || e.message))); } catch (_) {} return; } throw e; });
 process.on('unhandledRejection', (e) => { if (_isBenignNet(e)) { try { console.error('[mint] swallowed benign rejection:', (e && (e.code || e.message))); } catch (_) {} return; } throw e; });
-const { scanSite } = require(require('path').resolve(__dirname, '..', '..', '..', '..', 'src', 'lib', 'audit', 'site-scan.js'));
+const { scanSite } = require('../../../lib/audit/site-scan.js');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 
@@ -75,6 +75,7 @@ const _M_signals = require('../../../lib/compliance/signals.js');
 const _M_gate = require('../../../lib/llm/gate.js');
 const _M_router = require('../../../lib/llm/router.js');
 const _M_markets = require('../../../lib/sourcing/markets.js');
+const _SM = require('../../../lib/audit/stage-manifest.js');   // THE PIPELINE CONTRACT (see below)
 const _M_rank_insight = require('../../../lib/touch0/rank-insight.js');
 const _M_compliance = require('../../S008-personalisation-engine/scanners/compliance.js');
 
@@ -294,6 +295,11 @@ function resolveHomeCountry(domain, markets, passedCountry) {
 }
 
 async function buildPayload({ domain, sector, country, lead_id, env, company }) {
+  // THE PIPELINE CONTRACT. A stage that did not run may not ship as a compliance report. This is how statute-rag
+  // went uncalled for months, how the cookie collector did nothing for two engine versions, and how the breach
+  // adjudicator threw while the report told the client its breaches had been reviewed. A failure is now a FACT ON
+  // THE PAYLOAD: a required stage that did not run makes the audit sendable:false, so it cannot reach a law firm.
+  const _manifest = _SM.newManifest();
   try { _M_router.llmPreflight(); } catch (_e) { _warn('build.js:297', _e); }   // a missing LLM key must SHOUT, not shrug
   const router = _M_jurisdiction_router;
   // Scan first so we know the OPERATING markets, then route frameworks across all of them (multi-jurisdiction).
@@ -308,7 +314,12 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       new Promise((_, rej) => { _scanTo = setTimeout(() => rej(new Error('scanSite hard timeout')), 150000); }),
     ]);
     clearTimeout(_scanTo);
-  } catch (_e) { /* fail-open: audit still mints with frameworks only */ }
+    _SM.ran(_manifest, 'crawl');
+  } catch (_e) {
+    // Fail-open keeps the mint alive, but a crawl that did not happen means there is NO corpus to evidence a
+    // finding against. That must be a fact on the payload, not a shrug: the contract marks the audit unsendable.
+    _SM.failed(_manifest, 'crawl', _e); _warn('build.js:crawl', _e);
+  }
   try { scan = await _M_crawl_escalation.maybeEscalateCrawl(scan, { domain, env: env || process.env }); } catch (_e) { _warn('build.js:312', _e); } // Apify crawl fallback (default-OFF, self-contained)
   // C-jur: resolve the REAL home jurisdiction from TLD + detected strong-markets when country is blank, instead of
   // blind-defaulting to 'UK'. effCountry feeds every jurisdiction-bearing call below so a US/AE firm never inherits
@@ -323,7 +334,8 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   try {
     firm_identity = await _M_firm_identity
       .resolveFirmIdentity({ domain, signals: scan.signals || {}, corpus: (scan.signals && scan.signals.corpus) || '', env: env || process.env });
-  } catch (_e) { firm_identity = null; }
+    _SM.ran(_manifest, 'firm_identity');
+  } catch (_e) { _SM.failed(_manifest, 'firm_identity', _e); firm_identity = null; }
   const _firmName = (firm_identity && firm_identity.display_name)
     || (() => { try { return _M_firm_identity.cleanDomainStem(domain); } catch (_e) { return null; } })()
     || (domain || '').replace(/^www\./, '').split('.')[0];
@@ -341,7 +353,11 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
   const effCountry = resolveHomeCountry(domain, scan.markets, country);
   // FULL-CATALOGUE compliance: connection layer (jurisdiction+sector+trigger gated) + multi-page evidence-tied evaluation.
   let comp = { frameworks: [], findings: [] };
-  try { comp = await _M_compliance.scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); } catch (_e) { /* #48: never present a THROWN compliance scan as a clean bill of health — record the failure so the payload marks compliance unassessed rather than silently 'no breaches'. */ comp = { frameworks: [], findings: [], compliance_unassessed: true, compliance_error: String((_e && _e.message) || _e).slice(0, 160) }; }
+  // Jurisdiction is settled by this point: detectMarkets ran inside site-scan and the Companies House register
+  // evidence (Tier-A) has been folded in above. A firm with no resolved market has no law attached to it.
+  if (scan && scan.markets) _SM.ran(_manifest, 'jurisdiction');
+  else _SM.failed(_manifest, 'jurisdiction', new Error('no markets resolved: no law can be attached'));
+  try { comp = await _M_compliance.scan({ domain, sector, country: effCountry, signals: scan.signals, cache_max_age: Number(process.env.COMPLIANCE_CACHE_MAX_AGE || 86400) }); _SM.ran(_manifest, 'compliance_scan'); } catch (_e) { _SM.failed(_manifest, 'compliance_scan', _e); /* #48: never present a THROWN compliance scan as a clean bill of health — record the failure so the payload marks compliance unassessed rather than silently 'no breaches'. */ comp = { frameworks: [], findings: [], compliance_unassessed: true, compliance_error: String((_e && _e.message) || _e).slice(0, 160) }; }
   // HQ RECONCILIATION (Phase-7): the LLM firm-profiler (now reliable via the Cloudflare-first router) determines the
   // registered LEGAL HQ from the corpus. resolveHomeCountry runs BEFORE the profile exists and a .com firm can fall to
   // a TLD/market-derived scalar country that contradicts the real HQ (cert: pkfhospitality is London-HQ but .com made
@@ -1151,14 +1167,33 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   let _llmv = null;
   const _lvKey = require('crypto').createHash('sha1').update([domain, String(payload.engine_version || ''), String(payload.framework_version || ''), String(payload.detected_sector || ''), Object.keys(payload.binding || {}).sort().join(','), 'pv1'].join('|')).digest('hex');
   try { const _c = pg(`SELECT verdict::text FROM llm_verdicts WHERE key='${_lvKey}' AND created_at > now() - interval '14 days' LIMIT 1`);
-    if (_c && String(_c).trim()) { _llmv = JSON.parse(String(_c).trim()); _llmv.cached = true; } } catch (_e) { _warn('build.js:1105', _e); }
+    if (_c && String(_c).trim()) { _llmv = JSON.parse(String(_c).trim()); _llmv.cached = true; _SM.ran(_manifest, 'llm_verify', { note: 'cached verdict' }); } } catch (_e) { _warn('build.js:1105', _e); }
   if (!_llmv) {
-    try { _llmv = await require('../../../lib/audit/llm-verify.js').llmVerifyPayload(payload); } catch (_e) { _llmv = { status: 'unavailable', flags: [], error: String(_e).slice(0, 120) }; }
+    try { _llmv = await require('../../../lib/audit/llm-verify.js').llmVerifyPayload(payload); _SM.ran(_manifest, 'llm_verify'); } catch (_e) { _SM.failed(_manifest, 'llm_verify', _e); _llmv = { status: 'unavailable', flags: [], error: String(_e).slice(0, 120) }; }
     if (_llmv && _llmv.status !== 'unavailable') {
       try { pg(`INSERT INTO llm_verdicts (key, domain, verdict, created_at) VALUES ('${_lvKey}', '${domain.replace(/'/g, "''")}', '${JSON.stringify(_llmv).replace(/'/g, "''")}'::jsonb, now()) ON CONFLICT (key) DO UPDATE SET verdict=EXCLUDED.verdict, created_at=now()`); } catch (_e) { _warn('build.js:1109', _e); }
     }
   }
   payload.llm_verify = _llmv;
+
+  // BREACH ADJUDICATION. Proved from the EVIDENCE, not from the fact that a function was called: the adjudicator
+  // once ran, ruled on every candidate, and had its verdict silently dropped at the copy seam - the report still
+  // told law firms their breaches had been reviewed. So the stage counts as run only if the findings that need
+  // adjudication actually CARRY a verdict. Browser- and register-observed facts bypass the LLM by design.
+  {
+    const _fs = (payload.findings || []);
+    const _need = _fs.filter((f) => f && f.observed !== true);
+    const _ruled = _need.filter((f) => f.adjudicated === true);
+    if (!_need.length) _SM.skipped(_manifest, 'breach_adjudication', 'no text-derived findings to adjudicate');
+    else if (_ruled.length === _need.length) _SM.ran(_manifest, 'breach_adjudication', { note: _ruled.length + ' findings ruled on' });
+    else _SM.failed(_manifest, 'breach_adjudication', new Error(_ruled.length + ' of ' + _need.length + ' text-derived findings carry no adjudication'));
+  }
+
+  // SEAL. `sendable:false` means a required stage did not run, and this is therefore a draft, not a compliance
+  // report. The send gate reads this. It is the difference between an audit that is silent about its own gaps
+  // and one that cannot reach a law firm while it has them.
+  payload.stage_manifest = _SM.seal(_manifest);
+  payload.sendable = payload.stage_manifest.sendable;
   // E-223/E-224 (v22.6.1): gated LAW DISCOVERY is a LEARNING SIDE-CHANNEL — it must never spend the mint's
   // wall-clock budget (the worker races build() against MINT_BUILD_TIMEOUT_MS; discovery blocking the await was
   // one of the three causes of the canary retry storm). FIRE-AND-FORGET: kicked off here, writes its own tables,

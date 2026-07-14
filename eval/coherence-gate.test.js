@@ -24,7 +24,11 @@ const scan = fs.readFileSync(path.join(ROOT, 'src/skills/S008-personalisation-en
 const code = (s) => s.split('\n').filter((l) => !/^\s*(\/\/|\*)/.test(l)).join('\n');
 
 t('THE GRAPH IS VISIBLE: no dynamic require survives in the audit orchestrator', () => {
-  const hits = (code(build).match(/require\(path\.resolve/g) || []).length;
+  // The first version of this gate matched only /require\(path\.resolve/ - ONE SPELLING of the defect. It therefore
+  // passed while `require(require('path').resolve(...))` sat in the file, still invisible to every static tool.
+  // A gate that encodes one spelling of a bug is a gate that will be walked around. The real invariant is: the
+  // argument to require() must be a STRING LITERAL, so the dependency graph can be read without executing anything.
+  const hits = (code(build).match(/require\(\s*(?!['"`])/g) || []).length;
   A.strictEqual(hits, 0,
     hits + ' dynamic requires remain. No static tool can follow them, so nobody can answer "what calls this" - '
     + 'which is how statute-rag.js went uncalled for months.');
