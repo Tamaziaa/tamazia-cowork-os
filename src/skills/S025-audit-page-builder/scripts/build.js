@@ -815,6 +815,47 @@ async function buildPayload({ domain, sector, country, lead_id, env, company }) 
       } catch (_e) {}
       return base;  // #17: cover EVERY applicable framework with authoritative binding_status from framework_versions
     })(),
+    // FRAMEWORK_META — THE SINGLE SOURCE OF TRUTH FOR WHAT A LAW IS CALLED AND WHO ENFORCES IT.
+    //
+    // The renderer used to hold its OWN hand-maintained maps: FW_NAME, FW_NAME_CAT, FW_REGULATOR, _BINDING_LABEL.
+    // Those maps drift from the catalogue, silently, and every drift is a false statement on a legal document:
+    //   * 151 of 294 frameworks were missing from FW_REGULATOR, so the report printed the literal words
+    //     "Sector regulator" in the column headed Regulator on more than HALF the catalogue (E08).
+    //   * _BINDING_LABEL had no entry for `statutory_code`, so the SRA rulebooks fell through to a fallback that
+    //     GUESSED "Statute" - calling a regulator's rulebook an Act of Parliament (E09).
+    //   * Twelve laws promoted in E-254 were never given display names and rendered as title-cased codes (E07).
+    // In every case the CATALOGUE WAS RIGHT and the renderer was guessing. A parallel map is a second source of
+    // truth, and a second source of truth is a bug with a delay on it.
+    //
+    // So the engine now SHIPS the truth with the audit. The renderer reads this and never guesses. Adding a law to
+    // the catalogue fixes the render everywhere, forever, with no code change. A framework we cannot name is
+    // emitted as null and the renderer omits it, because silence is free and a fabricated regulator is not.
+    framework_meta: (() => {
+      const out = {};
+      try {
+        const codes = (frameworks || []).map((x) => (x && (x.framework_short || x.code)) || x).filter(Boolean);
+        if (!codes.length) return out;
+        const inList = codes.map((c) => "'" + String(c).replace(/'/g, "''") + "'").join(',');
+        const rows = pg(
+          "SELECT r.framework_short, "
+          + "coalesce(l.name,''), coalesce(l.regulator,''), coalesce(fv.binding_status,''), coalesce(l.section_ref,'') "
+          + "FROM (SELECT DISTINCT framework_short FROM compliance_rules WHERE framework_short IN (" + inList + ")) r "
+          + "LEFT JOIN compliance_laws l ON l.neon_framework_short = r.framework_short "
+          + "LEFT JOIN framework_versions fv ON fv.framework_short = r.framework_short"
+        );
+        for (const line of String(rows || '').split('\n').filter(Boolean)) {
+          const [fw, name, regulator, binding, section] = line.split('\t');
+          if (!fw) continue;
+          out[fw] = {
+            name: name || null,              // the instrument's EXACT legal title, or null. Never a guess.
+            regulator: regulator || null,    // the real enforcing authority, or null. NEVER "Sector regulator".
+            binding_type: binding || null,   // statute | statutory_instrument | statutory_code | regulator_code | ...
+            section_ref: section || null,
+          };
+        }
+      } catch (_e) { /* fail-open: the renderer keeps its existing fallbacks, it just cannot be CORRECTED from here */ }
+      return out;
+    })(),
     drop_trace: (comp && comp.drop_trace) || null,
     review_candidates: (comp && comp.review_candidates) || [],
     attach_confidence: (comp && comp.attach_confidence) || {},
