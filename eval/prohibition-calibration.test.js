@@ -28,9 +28,24 @@ if (!N) {
 }
 
 const q = async (sql) => {
+  // CodeRabbit (#341): a bare fetch() with no timeout and no status check can HANG or return an HTML error page,
+  // and the gate then dies with a parse error instead of a verdict. A gate that crashes is a gate that did not
+  // run. Timeout + explicit status handling, so a broken DB is reported AS a failure, never as noise.
   const u = new URL(N);
-  const res = await fetch(`https://${u.hostname}/sql`, { method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': N }, body: JSON.stringify({ query: sql }) });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), Number(process.env.NEON_TIMEOUT_MS || 20000));
+  let res;
+  try {
+    res = await fetch(`https://${u.hostname}/sql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': N },
+      body: JSON.stringify({ query: sql }),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    throw new Error('Neon request failed (' + (e.name === 'AbortError' ? 'timed out' : e.message) + '). The gate did NOT run.');
+  } finally { clearTimeout(timer); }
+  if (!res.ok) throw new Error('Neon returned HTTP ' + res.status + ' ' + res.statusText + '. The gate did NOT run.');
   const j = await res.json();
   if (j.message) throw new Error(j.message);
   return j.rows || [];
