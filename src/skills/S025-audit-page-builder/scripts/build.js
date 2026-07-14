@@ -1210,6 +1210,21 @@ async function build({ lead_id, domain, sector, country, company, env }) {
   // and one that cannot reach a law firm while it has them.
   payload.stage_manifest = _SM.seal(_manifest);
   payload.sendable = payload.stage_manifest.sendable;
+
+  // ZOD AT THE WRITE SEAM. Everything above this line is a best effort. Below it, this is a LEGAL DOCUMENT
+  // ADDRESSED TO A LAW FIRM. Each rule in payload-schema.js exists because the exact thing it forbids ALREADY
+  // SHIPPED: "Bristol Office" as a firm name, "Sector regulator" as the enforcing authority, a stale engine
+  // version, findings whose breaches the report claimed had been reviewed when they had not.
+  // A schema failure does NOT throw — a validation crash must never become a mint crash. It marks the audit
+  // unsendable and records exactly what is wrong, so the row is a DRAFT and never a compliance report.
+  const _schema = require('../../../lib/audit/payload-schema.js').validatePayload(payload);
+  payload.schema_ok = _schema.ok;
+  payload.schema_errors = _schema.errors;
+  if (!_schema.ok) {
+    payload.sendable = false;
+    for (const _err of _schema.errors) _warn('payload-schema', new Error(_err));
+    console.error('[payload-schema] ' + domain + ' UNSENDABLE:\n  - ' + _schema.errors.join('\n  - '));
+  }
   // E-223/E-224 (v22.6.1): gated LAW DISCOVERY is a LEARNING SIDE-CHANNEL — it must never spend the mint's
   // wall-clock budget (the worker races build() against MINT_BUILD_TIMEOUT_MS; discovery blocking the await was
   // one of the three causes of the canary retry storm). FIRE-AND-FORGET: kicked off here, writes its own tables,

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":dependencyDashboard"],
+  "_comment": "Dependabot opens ONE PR PER DEPENDENCY. The website repo has 30+ open, and real reviews drown in them: a security fix and a patch bump look identical in the list, so both get ignored. Renovate BATCHES them, so the queue is short enough to actually read. Security updates stay separate and immediate - those are the ones that must never be batched away.",
+  "timezone": "Europe/London",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "description": "Batch all non-major updates into ONE weekly PR. This is the whole point.",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch"
+    },
+    {
+      "description": "Majors stay separate. Astro 4 -> 7 is not a rubber-stamp.",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "The tools that guard the legal document are never auto-bumped without a human.",
+      "matchPackageNames": ["fast-check", "zod", "@stryker-mutator/core", "eslint", "acorn"],
+      "dependencyDashboardApproval": true
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "description": "A security fix is NOT batched. It gets its own PR, immediately, at any hour.",
+    "enabled": true,
+    "labels": ["security"],
+    "schedule": ["at any time"],
+    "prPriority": 10
+  },
+  "lockFileMaintenance": { "enabled": true, "schedule": ["before 6am on the first day of the month"] }
+}

@@ -27,3 +27,7 @@ node_modules
 # golden-set raw payloads (shadow oracle) + identity map — never commit
 eval/golden/.raw/
 eval/golden/_identities.local.json
+
+# Stryker sandbox + mutation report (regenerated every run)
+.stryker-tmp/
+reports/

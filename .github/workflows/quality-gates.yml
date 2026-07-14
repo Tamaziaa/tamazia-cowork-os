@@ -1,0 +1,38 @@
+name: quality gates (property + mutation + schema)
+# THE LAYERS THAT WERE MISSING.
+#
+# 77 evals were green while TWO mint-killing bugs shipped, because the suite asserted on source TEXT and never
+# EXECUTED the code. Coverage said the modules were exercised. Stryker said 41% of their logic was unguarded.
+#
+#   properties  — fast-check generates hundreds of inputs and SHRINKS failures. It reproduces the sameHost bug that
+#                 shipped ("ed.co" matched "reed.co.uk") in under 500 runs.
+#   boundaries  — every threshold Stryker proved nobody was watching, pinned on BOTH sides.
+#   mint-smoke  — ACTUALLY CALLS buildPayload(). A network failure is fine; a ReferenceError or TDZ is not.
+#   mutation    — the score cannot fall below the break threshold. A test that survives a mutant is theatre.
+on:
+  pull_request:
+    paths: ['src/**', 'eval/**', 'stryker.config.json']
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: '22' }
+      - run: npm ci || npm install
+      - name: property-based (fast-check)
+        run: node eval/properties.test.js
+      - name: boundaries (the thresholds Stryker exposed)
+        run: node eval/boundaries.test.js
+      - name: payload schema (zod at the write seam)
+        run: node eval/payload-schema.test.js
+      - name: mint smoke — ACTUALLY run buildPayload
+        run: node eval/mint-smoke.test.js
+      - name: mutation score must not regress
+        run: npx stryker run
