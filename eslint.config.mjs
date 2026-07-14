@@ -8,6 +8,7 @@
 // The contract that exists to stop a stage failing silently was itself the stage that failed. no-undef is the
 // cheapest possible check that would have caught it, and it now runs on the files that build the legal document.
 export default [
+  { ignores: ['.stryker-tmp/**', 'reports/**', 'node_modules/**'] },
   {
     files: ['src/skills/S025-audit-page-builder/scripts/build.js',
             'src/skills/S008-personalisation-engine/scanners/*.js',

@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "MUTATION TESTING. Stryker deliberately breaks the code (flips a >= to a >, a && to an ||, deletes a branch) and then runs the tests. If the tests still pass, that mutant SURVIVED \u2014 and a surviving mutant is a line of code no test actually protects. We shipped two mint-killing bugs past 77 green evals; coverage said we were fine. Coverage measures which lines RAN. Mutation score measures which lines are actually GUARDED. Scoped to the modules whose wrong answer becomes a false claim on a legal document.",
+  "packageManager": "npm",
+  "reporters": [
+    "clear-text",
+    "json"
+  ],
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "node eval/properties.test.js && node eval/boundaries.test.js && node eval/one-door.test.js && node eval/host-anchoring.test.js"
+  },
+  "coverageAnalysis": "off",
+  "mutate": [
+    "src/lib/util/url-safe.js",
+    "src/lib/util/prose.js"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": 50
+  },
+  "timeoutMS": 20000,
+  "concurrency": 2
+}
