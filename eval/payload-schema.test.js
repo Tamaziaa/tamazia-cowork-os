@@ -20,10 +20,18 @@ t('a payload with NO llm_verify is REJECTED (the law was never cross-verified)',
   const p = { ...base }; delete p.llm_verify;
   A.strictEqual(validatePayload(p).ok, false);
 });
-t('a text-derived finding with an evidence quote but NO adjudication is REJECTED', () =>
-  A.strictEqual(validatePayload({ ...base, findings: [{ framework_short: 'UK_PECR', evidence_quote: 'we set cookies before consent' }] }).ok, false));
-t('a browser-OBSERVED finding bypasses adjudication by design', () =>
-  A.strictEqual(validatePayload({ ...base, findings: [{ framework_short: 'UK_PECR', evidence_quote: 'x', observed: true }] }).ok, true));
+t('a COMPLIANCE pointer with the adjudicator NOT run is REJECTED', () =>
+  A.strictEqual(validatePayload({ ...base,
+    pointers: [{ kind: 'signal', bucket: 'compliance', state: 'CONFIRMED', severity: 'P0', citation: 'PECR', evidence: 'trackers fire pre-consent' }],
+    adjudication: { ran: false } }).ok, false,
+  'the report would tell the firm its breaches had been reviewed when they had not'));
+t('a pointer with NO evidence is REJECTED (an unevidenced claim is what we fine other firms for)', () =>
+  A.strictEqual(validatePayload({ ...base,
+    pointers: [{ kind: 'signal', bucket: 'technical_seo', state: 'CONFIRMED', severity: 'P1', citation: 'LCP', evidence: '' }] }).ok, false));
+t('the REAL live payload shape passes', () =>
+  A.strictEqual(validatePayload({ ...base,
+    pointers: [{ kind: 'signal', bucket: 'technical_seo', state: 'CONFIRMED', severity: 'P1', citation: 'Largest Contentful Paint', evidence: 'Google PageSpeed (mobile) 6.2s', confidence: 0.95 }],
+    adjudication: { ran: true } }).ok, true));
 t('validatePayload NEVER throws — a schema crash must not become a mint crash', () => {
   for (const v of [null, undefined, 0, '', [], { a: 1 }]) A.strictEqual(typeof validatePayload(v).ok, 'boolean');
 });
