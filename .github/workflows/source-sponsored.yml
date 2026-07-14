@@ -46,7 +46,7 @@ jobs:
           SECTORS: ${{ github.event.inputs.sectors || 'all' }}
           MAX: ${{ github.event.inputs.max || '200' }}
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           export SOURCE_T1_TARGET="$T1_TARGET"
           SECTORS_IN="$SECTORS"
           if [ "$SECTORS_IN" = "all" ]; then SECTOR_FLAG="--all"; else SECTOR_FLAG="--sector $SECTORS_IN"; fi

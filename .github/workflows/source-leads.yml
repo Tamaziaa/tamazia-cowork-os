@@ -40,7 +40,7 @@ jobs:
           SOURCE_IN: ${{ github.event.inputs.source }}
           MAX: ${{ github.event.inputs.max }}
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           SRC="$SOURCE_IN"
           if [ "$SRC" = "all" ]; then FLAG="--all"; else FLAG="--source $SRC"; fi
           # A4/IG2: heartbeat-wrap so this on-demand source run is visible in engine_runs

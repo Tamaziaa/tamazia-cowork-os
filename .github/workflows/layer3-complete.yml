@@ -72,7 +72,7 @@ jobs:
           FORCE_IN: ${{ github.event.inputs.force || '0' }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # Cron events always apply (times already staggered clear of heavy writers + race-guard as belt+braces).
           # Dispatch with apply=0 for a forced dry run; dispatch with apply=1 (the default) for a real run.
           MAX="$MAX_IN"

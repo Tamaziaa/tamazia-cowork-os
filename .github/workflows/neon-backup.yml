@@ -40,7 +40,7 @@ jobs:
           /usr/lib/postgresql/17/bin/pg_dump --version
       - name: Ensure backup_runs table exists (additive, idempotent — guaranteed off-shim via libpq v17)
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ensure-schema.js || true
           if [ -n "$NEON_URL" ]; then
             /usr/lib/postgresql/17/bin/psql "$NEON_URL" -c "CREATE TABLE IF NOT EXISTS backup_runs (id bigserial PRIMARY KEY, kind text, status text, detail text, bytes bigint, ran_at timestamptz DEFAULT now());" || true
@@ -48,7 +48,7 @@ jobs:
       - name: Run backup
         run: |
           export PATH="/usr/lib/postgresql/17/bin:$PATH"
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/neon-backup.js
       - name: Alert on failure
         if: failure()

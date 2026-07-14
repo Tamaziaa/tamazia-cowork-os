@@ -34,7 +34,7 @@ jobs:
           CAMPAIGN: ${{ github.event.inputs.campaign }}
           MAX: ${{ github.event.inputs.max || '200' }}
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           if [ "$ACTION" = "push" ]; then node scripts/push-to-mystrika.js --campaign "$CAMPAIGN" --max "$MAX";
           else
             # Scheduled run = (1) reply-sync, THEN (2) the CAPACITY-AWARE DRAIN. The drain keeps every sector

@@ -40,5 +40,5 @@ jobs:
         env:
           AHREFS_MAX: ${{ github.event.inputs.max || '200' }}
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/ahrefs-enrich.js --max "$AHREFS_MAX" || true

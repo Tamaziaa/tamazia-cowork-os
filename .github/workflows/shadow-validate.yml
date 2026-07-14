@@ -35,7 +35,7 @@ jobs:
         env:
           HASHES_IN: ${{ inputs.hashes }}
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           H="$HASHES_IN"; [ -z "$H" ] && H="$DEFAULT_HASHES"
           Q=$(echo "$H" | sed "s/[^,]*/'&'/g")
           ./scripts/psql "$NEON_URL" -c "INSERT INTO audit_pages_shadow SELECT * FROM audit_pages WHERE hash IN ($Q) ON CONFLICT DO NOTHING;"
@@ -43,7 +43,7 @@ jobs:
         env:
           HASHES_IN: ${{ inputs.hashes }}
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           export REMINT_HASHES="$HASHES_IN"; [ -z "$REMINT_HASHES" ] && export REMINT_HASHES="$DEFAULT_HASHES"
           echo "shadow-minting: $REMINT_HASHES"
           node scripts/heartbeat.js wrap shadow-validate -- node scripts/remint-audits.js || node scripts/remint-audits.js

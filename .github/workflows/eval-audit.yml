@@ -28,7 +28,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 12
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/heartbeat.js wrap eval-audit -- node scripts/eval-audit.mjs
 
       # E-216 (v22.5, S-194): the weekly audit-of-the-audits, standing. Pure SQL aggregates over Neon (verified mix,
@@ -38,5 +38,5 @@ jobs:
         continue-on-error: true
         timeout-minutes: 8
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           node scripts/audit-of-the-audits.js && cat reports/audit-of-audits/*.md | tail -120 || true

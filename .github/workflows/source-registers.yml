@@ -63,7 +63,7 @@ jobs:
           SOURCES: ${{ github.event.inputs.sources || 'companies-house,cqc,fca,charity-commission' }}
           MAX: ${{ github.event.inputs.max || '300' }}
         run: |
-          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "$_l" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
+          while IFS= read -r _l; do case "$_l" in '#'*|'') ;; *=*) export "${_l?}" 2>/dev/null || true ;; esac; done < .env 2>/dev/null || true
           # Pin heartbeat + T1 target AFTER .env export (which may carry the old 20-min default)
           export HEARTBEAT_WRAP_TIMEOUT_MS="2100000"
           export SOURCE_T1_TARGET="$T1_TARGET"
