@@ -902,13 +902,47 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   // FOUNDER RULE, RECORDED: "dont keep any cache for any audit no cache to be kept delete that rule."
   // Every scan is now a fresh, live read of the site. No TTL, no key, no replay, nothing to bump, nothing to go stale.
   // `cache_max_age` is accepted and IGNORED so no caller breaks.
-  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.9-2026-07-waf-rescue';
+  const ENGINE_VERSION = process.env.COMPLIANCE_ENGINE_VERSION || 'v25.10-2026-07-two-corpora';
 
   // Phase 7.4 · gather corpus FIRST, then detect operating jurisdictions from page content,
   // then expand framework routing to include every detected jurisdiction.
   const _cg = await gatherCorpus({ domain });
   const corpus = _cg.corpus || [];
-  let corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+  // ── TWO CORPORA, BECAUSE TWO CONSUMERS NEED DIFFERENT THINGS. ────────────────────────────────────────────────
+  //
+  // MEASURED, on russell-cooke.co.uk (120 pages):
+  //     raw HTML   293,387 chars per page   ->  30,462,480 total
+  //     visible text 16,356 chars per page  ->   1,962,720 total
+  //     94% OF WHAT WE WERE SCANNING WAS MARKUP, NOT WORDS.
+  //
+  // `corpusText` was `corpus.map(c => c.body).join(' ').slice(0, 600000)` — the first 600k of RAW HTML, in whatever
+  // order the pages came back. That is TWO PAGES of a big firm's site. Everything it feeds — sector detection,
+  // jurisdiction/markets, the firm profile, the nexus — was reading two pages of <script> tags and calling it a site.
+  //
+  // A CORRECTION I OWE THIS FILE: I first believed this also starved the COMPLIANCE RULES. It does not. The rules
+  // iterate `_scopePool(corpus)` page by page through `_presentIn()`, which reads each page's VISIBLE body — so
+  // they have always seen all 120 pages. Fixing the wrong thing confidently is how a bug survives a fix.
+  //
+  // detectMarkets() needs RAW HTML (hreflang, <meta>, lang attributes). Sector/profile/nexus need WORDS. Giving one
+  // string to both is why neither got what it needed. So: two variables, each capped for what it actually does.
+  //   corpusHtml : raw, 600k  — enough tags for hreflang/meta, and the same 249ms sweep as before.
+  //   corpusText : words, 2M  — the FULL text of all 120 pages (1.96M measured). 847ms for a 671-rule sweep, versus
+  //                             12.2 SECONDS if we had simply raised the raw-HTML cap to 30M. Measured, not guessed.
+  //
+  // And the pages are ordered so the ones that can actually contain a disclosure come first: a blog post about GDPR
+  // is not evidence that the firm has a privacy policy.
+  const _DISCLOSURE_RX = /\/(legal|privacy|cookie|terms|impressum|mentions|about|contact|complaint|transparen|price|pricing|fees|regulat|disclaimer|policy|policies|notice)/i;
+  const _rank = (u) => {
+    const p = String(u || '');
+    if (/^https?:\/\/[^/]+\/?$/.test(p)) return 0;      // the homepage carries the footer
+    if (_DISCLOSURE_RX.test(p)) return 1;                 // legal / privacy / terms / pricing
+    return 2;
+  };
+  const _ordered = corpus.slice().sort((a, b) => _rank(a.url) - _rank(b.url));
+  const _HTML_MAX = Number(process.env.CORPUS_HTML_MAX || 600000);
+  const _TEXT_MAX = Number(process.env.CORPUS_TEXT_MAX || 2000000);
+  const corpusHtml = _ordered.map(c => c.body || '').join(' ').slice(0, _HTML_MAX);   // tags survive: hreflang, meta
+  let corpusText = _ordered.map(c => htmlToText(c.body || '')).join(' ').slice(0, _TEXT_MAX);   // words, all 120 pages
   // E-250b (v23.0) — THE AUTHORISATION OVERRIDE MUST RUN *BEFORE* ANYTHING CONSUMES THE SECTOR.
   // E-250 shipped this block AFTER the rules had already been selected and run (normSector at the findings loop,
   // and connect() before it). So it corrected the LABEL on the payload and changed NOTHING about which laws were
@@ -973,7 +1007,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
           if (_c1Pattern.test(txt)) break;
         }
       }
-      corpusText = corpus.map(c => c.body || '').join(' ').slice(0, 600000);
+      corpusText = _ordered.map(c => htmlToText(c.body || '')).join(' ').slice(0, _TEXT_MAX);   // SAME shape as above — two corpora that disagree is a two-doors bug in waiting
     } catch (_e) { _swarn('compliance.js:965', _e); }
   }
   // CREDIBILITY GUARD: an empty/unreadable corpus (site blocked our crawler, JS-only, or down) cannot support
@@ -1054,7 +1088,7 @@ async function scan({ domain, sector, country, cache_max_age = 86400, signals = 
   const privacyUnreadable = _policyPages.length > 0 && _maxAnchors < 4;
   // ROBUST jurisdiction detection over the FULL multi-page corpus (confidence-scored, 10+ parameters):
   // offices, addresses, postcodes, phone codes, currencies, hreflang, regulators, served-market language, cities, TLD.
-  let mk = {}; try { mk = require('../../../lib/sourcing/markets.js').detectMarkets({ html: corpusText, domain }); } catch (_e) { _swarn('compliance.js:1045', _e); }
+  let mk = {}; try { mk = require('../../../lib/sourcing/markets.js').detectMarkets({ html: corpusHtml, domain }); } catch (_e) { _swarn('compliance.js:1045', _e); }
   const codes = new Set(); if (country) codes.add(String(country).toUpperCase());   // registered country = PRIMARY jurisdiction (always present)
   // OPERATING markets attach only with STRONG evidence (a real office/regulator/TLD/hreflang) — never a
   // stray mention/phone/currency/city. Stops a UAE firm picking up US law from a "+1"/"$"/"America"
@@ -1516,7 +1550,7 @@ if (require.main === module) {
     .then(r => console.log(JSON.stringify(r, null, 2)))
     .catch(e => { console.error(e); process.exit(1); });
 }
-module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.9-2026-07-waf-rescue'), scan, ruleCheck, gatherCorpus, loadRules };
+module.exports = { ENGINE_VERSION: (process.env.COMPLIANCE_ENGINE_VERSION || 'v25.10-2026-07-two-corpora'), scan, ruleCheck, gatherCorpus, loadRules };
 
 // ---- blind-send helpers (blueprint E-041/E-044) ----
 function _evidenceGate(findings, pages) {
