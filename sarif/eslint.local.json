@@ -1,0 +1,22 @@
+[
+  {
+    "tool": "eslint",
+    "ruleId": "parse-error",
+    "file": "src/skills/S051-ssl-cert-monitor/scripts/check.js",
+    "startLine": 48,
+    "endLine": 48,
+    "level": "warning",
+    "message": "Unused eslint-disable directive (no problems were reported from 'no-unneeded-ternary').",
+    "snippet": ""
+  },
+  {
+    "tool": "eslint",
+    "ruleId": "parse-error",
+    "file": "tools/sweep/collect-eslint.js",
+    "startLine": 21,
+    "endLine": 21,
+    "level": "error",
+    "message": "Failed to parse JSON from 'produced nothing parseable': Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+    "snippet": ""
+  }
+]

@@ -79,7 +79,8 @@ function clones() {
   const d = JSON.parse(fs.readFileSync('/tmp/jscpd/jscpd-report.json', 'utf8'));
   for (const c of (d.duplicates || [])) {
     if (c.firstFile.name === c.secondFile.name) continue;
-    if (c.lines < 20) continue;                       // below 20 lines it is boilerplate, not a defect
+    // NO MINIMUM. I filtered clones below 20 lines and called it 'boilerplate'. That was me deciding what
+    // you were allowed to see. Every clone is reported; YOU decide what is noise.
     add({ tool: 'jscpd', ruleId: 'clone', file: c.firstFile.name.replace(ROOT + '/', ''), startLine: c.firstFile.start,
       endLine: c.firstFile.end, level: 'warning',
       message: c.lines + '-line clone shared with ' + c.secondFile.name.split('/').pop(), snippet: (c.fragment || '').slice(0, 120) });
