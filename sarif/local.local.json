@@ -1,0 +1,1312 @@
+[
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/W14-cron.js",
+    "startLine": 15,
+    "endLine": 22,
+    "level": "warning",
+    "message": "8-line clone shared with alias-rotator.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/W14-cron.js",
+    "startLine": 15,
+    "endLine": 21,
+    "level": "warning",
+    "message": "7-line clone shared with law-discovery.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/W14-cron.js",
+    "startLine": 15,
+    "endLine": 24,
+    "level": "warning",
+    "message": "10-line clone shared with relay-router.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/W14-cron.js",
+    "startLine": 15,
+    "endLine": 22,
+    "level": "warning",
+    "message": "8-line clone shared with bulk-sourcer.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/W14-cron.js",
+    "startLine": 15,
+    "endLine": 24,
+    "level": "warning",
+    "message": "10-line clone shared with ingest.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/W14-cron.js",
+    "startLine": 15,
+    "endLine": 24,
+    "level": "warning",
+    "message": "10-line clone shared with run.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/W14-cron.js",
+    "startLine": 15,
+    "endLine": 24,
+    "level": "warning",
+    "message": "10-line clone shared with research.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/W14-cron.js",
+    "startLine": 17,
+    "endLine": 24,
+    "level": "warning",
+    "message": "8-line clone shared with render.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/W14-cron.js",
+    "startLine": 25,
+    "endLine": 30,
+    "level": "warning",
+    "message": "6-line clone shared with run.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/bucket-d-integrator.ts",
+    "startLine": 5,
+    "endLine": 15,
+    "level": "warning",
+    "message": "11-line clone shared with cross-platform-scorer.ts",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/google-ads-transparency.ts",
+    "startLine": 22,
+    "endLine": 28,
+    "level": "warning",
+    "message": "7-line clone shared with linkedin.ts",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/google-ads-transparency.ts",
+    "startLine": 22,
+    "endLine": 28,
+    "level": "warning",
+    "message": "7-line clone shared with meta.ts",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/linkedin.ts",
+    "startLine": 30,
+    "endLine": 36,
+    "level": "warning",
+    "message": "7-line clone shared with meta.ts",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/meta-ad-library.js",
+    "startLine": 75,
+    "endLine": 84,
+    "level": "warning",
+    "message": "10-line clone shared with bulk-sourcer.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/meta-ad-library.js",
+    "startLine": 75,
+    "endLine": 83,
+    "level": "warning",
+    "message": "9-line clone shared with registers.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/meta-ad-library.js",
+    "startLine": 75,
+    "endLine": 90,
+    "level": "warning",
+    "message": "16-line clone shared with run.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/meta-ad-library.js",
+    "startLine": 79,
+    "endLine": 84,
+    "level": "warning",
+    "message": "6-line clone shared with charity-commission.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/reddit.ts",
+    "startLine": 9,
+    "endLine": 14,
+    "level": "warning",
+    "message": "6-line clone shared with snapchat.ts",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/reddit.ts",
+    "startLine": 14,
+    "endLine": 19,
+    "level": "warning",
+    "message": "6-line clone shared with snapchat.ts",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/reddit.ts",
+    "startLine": 19,
+    "endLine": 25,
+    "level": "warning",
+    "message": "7-line clone shared with snapchat.ts",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "ad-intel/tiktok.ts",
+    "startLine": 55,
+    "endLine": 62,
+    "level": "warning",
+    "message": "8-line clone shared with x-ads.ts",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "alias-rotator.js",
+    "startLine": 14,
+    "endLine": 20,
+    "level": "warning",
+    "message": "7-line clone shared with governor.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "alias-rotator.js",
+    "startLine": 16,
+    "endLine": 27,
+    "level": "warning",
+    "message": "12-line clone shared with draft.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "audit/authority-gap.js",
+    "startLine": 10,
+    "endLine": 18,
+    "level": "warning",
+    "message": "9-line clone shared with local-pack.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "audit/authority-gap.js",
+    "startLine": 11,
+    "endLine": 18,
+    "level": "warning",
+    "message": "8-line clone shared with bing-volume.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "audit/authority-gap.js",
+    "startLine": 11,
+    "endLine": 18,
+    "level": "warning",
+    "message": "8-line clone shared with cc-index.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "compliance/engine-bridge.js",
+    "startLine": 10,
+    "endLine": 15,
+    "level": "warning",
+    "message": "6-line clone shared with statute-rag.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "compliance/jurisdiction-router.js",
+    "startLine": 5,
+    "endLine": 11,
+    "level": "warning",
+    "message": "7-line clone shared with jurisdiction.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "compliance/register-grounding.js",
+    "startLine": 23,
+    "endLine": 28,
+    "level": "warning",
+    "message": "6-line clone shared with feed-registry.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "feeds/feed-registry.js",
+    "startLine": 1,
+    "endLine": 9,
+    "level": "warning",
+    "message": "9-line clone shared with free-serp.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "feeds/feed-registry.js",
+    "startLine": 1,
+    "endLine": 9,
+    "level": "warning",
+    "message": "9-line clone shared with linkedin-finder.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "imap-poll-worker.js",
+    "startLine": 19,
+    "endLine": 27,
+    "level": "warning",
+    "message": "9-line clone shared with template-resolver.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "imap-poll-worker.js",
+    "startLine": 20,
+    "endLine": 25,
+    "level": "warning",
+    "message": "6-line clone shared with pipeline-gap-fills.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "imap-poll-worker.js",
+    "startLine": 22,
+    "endLine": 27,
+    "level": "warning",
+    "message": "6-line clone shared with router.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "imap-poll-worker.js",
+    "startLine": 22,
+    "endLine": 27,
+    "level": "warning",
+    "message": "6-line clone shared with check.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "intel/feeds/eurlex-cellar.js",
+    "startLine": 16,
+    "endLine": 36,
+    "level": "warning",
+    "message": "21-line clone shared with legislation-gov-uk.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "intel/feeds/eurlex-cellar.js",
+    "startLine": 78,
+    "endLine": 90,
+    "level": "warning",
+    "message": "13-line clone shared with legislation-gov-uk.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "llm-factcheck.js",
+    "startLine": 1,
+    "endLine": 23,
+    "level": "warning",
+    "message": "23-line clone shared with llm-rescue.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "llm-factcheck.js",
+    "startLine": 27,
+    "endLine": 33,
+    "level": "warning",
+    "message": "7-line clone shared with llm-rescue.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "scraping/google-sponsored.js",
+    "startLine": 18,
+    "endLine": 28,
+    "level": "warning",
+    "message": "11-line clone shared with query-calendar.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "scraping/google-sponsored.js",
+    "startLine": 21,
+    "endLine": 28,
+    "level": "warning",
+    "message": "8-line clone shared with serp-engine.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "scraping/google-sponsored.js",
+    "startLine": 57,
+    "endLine": 73,
+    "level": "warning",
+    "message": "17-line clone shared with serp-client.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "send-guards.js",
+    "startLine": 5,
+    "endLine": 10,
+    "level": "warning",
+    "message": "6-line clone shared with variant-selector.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "send-pacing.js",
+    "startLine": 6,
+    "endLine": 11,
+    "level": "warning",
+    "message": "6-line clone shared with enrich.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "sourcing/bulk-sourcer.js",
+    "startLine": 56,
+    "endLine": 67,
+    "level": "warning",
+    "message": "12-line clone shared with run.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "sourcing/companies-house.js",
+    "startLine": 42,
+    "endLine": 48,
+    "level": "warning",
+    "message": "7-line clone shared with linkedin-finder.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "sourcing/cqc-register.js",
+    "startLine": 5,
+    "endLine": 10,
+    "level": "warning",
+    "message": "6-line clone shared with fca-register.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "sourcing/firmographics.js",
+    "startLine": 5,
+    "endLine": 14,
+    "level": "warning",
+    "message": "10-line clone shared with social-find.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "sourcing/linkedin-finder.js",
+    "startLine": 1,
+    "endLine": 9,
+    "level": "warning",
+    "message": "9-line clone shared with research.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "sourcing/opencorporates.js",
+    "startLine": 12,
+    "endLine": 17,
+    "level": "warning",
+    "message": "6-line clone shared with sec-edgar.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "sourcing/sources/registers.js",
+    "startLine": 105,
+    "endLine": 111,
+    "level": "warning",
+    "message": "7-line clone shared with run.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "sourcing/sources/registers.js",
+    "startLine": 115,
+    "endLine": 123,
+    "level": "warning",
+    "message": "9-line clone shared with run.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S006-linkedin-drafter-v2/scripts/draft.js",
+    "startLine": 6,
+    "endLine": 12,
+    "level": "warning",
+    "message": "7-line clone shared with version.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S006-linkedin-drafter-v2/scripts/draft.js",
+    "startLine": 6,
+    "endLine": 11,
+    "level": "warning",
+    "message": "6-line clone shared with build-dashboard.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S006-linkedin-drafter-v2/scripts/draft.js",
+    "startLine": 6,
+    "endLine": 31,
+    "level": "warning",
+    "message": "26-line clone shared with run.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S006-linkedin-drafter-v2/scripts/draft.js",
+    "startLine": 6,
+    "endLine": 16,
+    "level": "warning",
+    "message": "11-line clone shared with seed.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S006-linkedin-drafter-v2/scripts/draft.js",
+    "startLine": 6,
+    "endLine": 16,
+    "level": "warning",
+    "message": "11-line clone shared with draft.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S006-linkedin-drafter-v2/scripts/draft.js",
+    "startLine": 24,
+    "endLine": 29,
+    "level": "warning",
+    "message": "6-line clone shared with build.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/lib/http.js",
+    "startLine": 2,
+    "endLine": 14,
+    "level": "warning",
+    "message": "13-line clone shared with pre-w2-cron.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/lib/http.js",
+    "startLine": 2,
+    "endLine": 22,
+    "level": "warning",
+    "message": "21-line clone shared with run.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/lib/http.js",
+    "startLine": 2,
+    "endLine": 14,
+    "level": "warning",
+    "message": "13-line clone shared with monitor.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/lib/http.js",
+    "startLine": 2,
+    "endLine": 14,
+    "level": "warning",
+    "message": "13-line clone shared with track.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/lib/http.js",
+    "startLine": 2,
+    "endLine": 14,
+    "level": "warning",
+    "message": "13-line clone shared with run.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/lib/http.js",
+    "startLine": 2,
+    "endLine": 14,
+    "level": "warning",
+    "message": "13-line clone shared with handle.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/lib/http.js",
+    "startLine": 2,
+    "endLine": 14,
+    "level": "warning",
+    "message": "13-line clone shared with check.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/lib/http.js",
+    "startLine": 3,
+    "endLine": 10,
+    "level": "warning",
+    "message": "8-line clone shared with compliance.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/lib/http.js",
+    "startLine": 3,
+    "endLine": 14,
+    "level": "warning",
+    "message": "12-line clone shared with engage.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/accessibility.js",
+    "startLine": 6,
+    "endLine": 14,
+    "level": "warning",
+    "message": "9-line clone shared with content-depth.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/accessibility.js",
+    "startLine": 6,
+    "endLine": 14,
+    "level": "warning",
+    "message": "9-line clone shared with security-headers.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/accessibility.js",
+    "startLine": 6,
+    "endLine": 14,
+    "level": "warning",
+    "message": "9-line clone shared with technical-seo.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/accessibility.js",
+    "startLine": 8,
+    "endLine": 13,
+    "level": "warning",
+    "message": "6-line clone shared with ad-intel.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/accessibility.js",
+    "startLine": 8,
+    "endLine": 14,
+    "level": "warning",
+    "message": "7-line clone shared with tls-dns.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/accessibility.js",
+    "startLine": 14,
+    "endLine": 20,
+    "level": "warning",
+    "message": "7-line clone shared with content-depth.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/accessibility.js",
+    "startLine": 14,
+    "endLine": 19,
+    "level": "warning",
+    "message": "6-line clone shared with seo.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/accessibility.js",
+    "startLine": 108,
+    "endLine": 116,
+    "level": "warning",
+    "message": "9-line clone shared with content-depth.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/accessibility.js",
+    "startLine": 108,
+    "endLine": 116,
+    "level": "warning",
+    "message": "9-line clone shared with seo.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/accessibility.js",
+    "startLine": 109,
+    "endLine": 116,
+    "level": "warning",
+    "message": "8-line clone shared with tls-dns.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/ad-intel.js",
+    "startLine": 14,
+    "endLine": 19,
+    "level": "warning",
+    "message": "6-line clone shared with public-records.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/security-headers.js",
+    "startLine": 18,
+    "endLine": 23,
+    "level": "warning",
+    "message": "6-line clone shared with seo.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/security-headers.js",
+    "startLine": 81,
+    "endLine": 87,
+    "level": "warning",
+    "message": "7-line clone shared with tls-dns.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scanners/security-headers.js",
+    "startLine": 81,
+    "endLine": 87,
+    "level": "warning",
+    "message": "7-line clone shared with website.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S008-personalisation-engine/scripts/run.js",
+    "startLine": 11,
+    "endLine": 18,
+    "level": "warning",
+    "message": "8-line clone shared with 10-layer.test.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S028-sourcing-orchestrator/scripts/build-dashboard.js",
+    "startLine": 5,
+    "endLine": 13,
+    "level": "warning",
+    "message": "9-line clone shared with build.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S028-sourcing-orchestrator/scripts/run.js",
+    "startLine": 7,
+    "endLine": 23,
+    "level": "warning",
+    "message": "17-line clone shared with run.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S036-regulator-watch/scripts/ingest.js",
+    "startLine": 12,
+    "endLine": 22,
+    "level": "warning",
+    "message": "11-line clone shared with enrich.js",
+    "snippet": ""
+  },
+  {
+    "tool": "jscpd",
+    "ruleId": "clone",
+    "file": "S064-touch-cadence/scripts/render.js",
+    "startLine": 27,
+    "endLine": 32,
+    "level": "warning",
+    "message": "6-line clone shared with send-due.js",
+    "snippet": ""
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:fine",
+    "file": "src/lib/audit/cookie-policy-diff.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"FINE AMOUNT (the figure a client is quoted)\" has 3 producers (cookie-policy-diff.js, cookie-evidence.js, ico-register.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "FINE AMOUNT (the figure a client is quoted) @ 3 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:fine",
+    "file": "src/lib/evidence/cookie-evidence.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"FINE AMOUNT (the figure a client is quoted)\" has 3 producers (cookie-policy-diff.js, cookie-evidence.js, ico-register.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "FINE AMOUNT (the figure a client is quoted) @ 3 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:fine",
+    "file": "src/lib/evidence/ico-register.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"FINE AMOUNT (the figure a client is quoted)\" has 3 producers (cookie-policy-diff.js, cookie-evidence.js, ico-register.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "FINE AMOUNT (the figure a client is quoted) @ 3 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:regulator",
+    "file": "src/lib/audit/payload-schema.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"REGULATOR NAME\" has 5 producers (payload-schema.js, verify-payload.js, framework-intel.js, icp.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "REGULATOR NAME @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:regulator",
+    "file": "src/lib/audit/verify-payload.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"REGULATOR NAME\" has 5 producers (payload-schema.js, verify-payload.js, framework-intel.js, icp.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "REGULATOR NAME @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:regulator",
+    "file": "src/lib/compliance/registry/framework-intel.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"REGULATOR NAME\" has 5 producers (payload-schema.js, verify-payload.js, framework-intel.js, icp.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "REGULATOR NAME @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:regulator",
+    "file": "src/lib/sourcing/icp.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"REGULATOR NAME\" has 5 producers (payload-schema.js, verify-payload.js, framework-intel.js, icp.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "REGULATOR NAME @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:regulator",
+    "file": "src/skills/S025-audit-page-builder/scripts/build.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"REGULATOR NAME\" has 5 producers (payload-schema.js, verify-payload.js, framework-intel.js, icp.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "REGULATOR NAME @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:jurisdiction",
+    "file": "src/lib/audit/llm-verify.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"JURISDICTION NEXUS (established_in)\" has 5 producers (llm-verify.js, register-grounding.js, nexus.js, signals.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "JURISDICTION NEXUS (established_in) @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:jurisdiction",
+    "file": "src/lib/compliance/register-grounding.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"JURISDICTION NEXUS (established_in)\" has 5 producers (llm-verify.js, register-grounding.js, nexus.js, signals.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "JURISDICTION NEXUS (established_in) @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:jurisdiction",
+    "file": "src/lib/compliance/registry/nexus.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"JURISDICTION NEXUS (established_in)\" has 5 producers (llm-verify.js, register-grounding.js, nexus.js, signals.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "JURISDICTION NEXUS (established_in) @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:jurisdiction",
+    "file": "src/lib/compliance/signals.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"JURISDICTION NEXUS (established_in)\" has 5 producers (llm-verify.js, register-grounding.js, nexus.js, signals.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "JURISDICTION NEXUS (established_in) @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:jurisdiction",
+    "file": "src/skills/S008-personalisation-engine/scanners/compliance.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"JURISDICTION NEXUS (established_in)\" has 5 producers (llm-verify.js, register-grounding.js, nexus.js, signals.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "JURISDICTION NEXUS (established_in) @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:jurisdiction",
+    "file": "src/lib/audit/firm-profile.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"JURISDICTION -> FAMILY map\" has 5 producers (firm-profile.js, jurisdiction-router.js, jurisdiction.js, compliance.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "JURISDICTION -> FAMILY map @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:jurisdiction",
+    "file": "src/lib/compliance/jurisdiction-router.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"JURISDICTION -> FAMILY map\" has 5 producers (firm-profile.js, jurisdiction-router.js, jurisdiction.js, compliance.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "JURISDICTION -> FAMILY map @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:jurisdiction",
+    "file": "src/lib/compliance/registry/jurisdiction.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"JURISDICTION -> FAMILY map\" has 5 producers (firm-profile.js, jurisdiction-router.js, jurisdiction.js, compliance.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "JURISDICTION -> FAMILY map @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:jurisdiction",
+    "file": "src/skills/S008-personalisation-engine/scanners/compliance.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"JURISDICTION -> FAMILY map\" has 5 producers (firm-profile.js, jurisdiction-router.js, jurisdiction.js, compliance.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "JURISDICTION -> FAMILY map @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:jurisdiction",
+    "file": "src/skills/S025-audit-page-builder/scripts/build.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"JURISDICTION -> FAMILY map\" has 5 producers (firm-profile.js, jurisdiction-router.js, jurisdiction.js, compliance.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "JURISDICTION -> FAMILY map @ 5 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:sector",
+    "file": "src/lib/compliance/connect.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"SECTOR normalisation\" has 6 producers (connect.js, jurisdiction-router.js, resolver.js, signals.js, rank-insight.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "SECTOR normalisation @ 6 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:sector",
+    "file": "src/lib/compliance/jurisdiction-router.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"SECTOR normalisation\" has 6 producers (connect.js, jurisdiction-router.js, resolver.js, signals.js, rank-insight.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "SECTOR normalisation @ 6 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:sector",
+    "file": "src/lib/compliance/resolver.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"SECTOR normalisation\" has 6 producers (connect.js, jurisdiction-router.js, resolver.js, signals.js, rank-insight.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "SECTOR normalisation @ 6 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:sector",
+    "file": "src/lib/compliance/signals.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"SECTOR normalisation\" has 6 producers (connect.js, jurisdiction-router.js, resolver.js, signals.js, rank-insight.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "SECTOR normalisation @ 6 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:sector",
+    "file": "src/lib/touch0/rank-insight.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"SECTOR normalisation\" has 6 producers (connect.js, jurisdiction-router.js, resolver.js, signals.js, rank-insight.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "SECTOR normalisation @ 6 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:sector",
+    "file": "src/skills/S008-personalisation-engine/scanners/compliance.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"SECTOR normalisation\" has 6 producers (connect.js, jurisdiction-router.js, resolver.js, signals.js, rank-insight.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "SECTOR normalisation @ 6 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:host",
+    "file": "src/lib/audit/competitor-overlap.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"HOST anchoring\" has 8 producers (competitor-overlap.js, firm-profile.js, preflight.js, serp-engine.js, resolve-name.js, rank-insight.js, url-safe.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "HOST anchoring @ 8 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:host",
+    "file": "src/lib/audit/firm-profile.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"HOST anchoring\" has 8 producers (competitor-overlap.js, firm-profile.js, preflight.js, serp-engine.js, resolve-name.js, rank-insight.js, url-safe.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "HOST anchoring @ 8 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:host",
+    "file": "src/lib/audit/preflight.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"HOST anchoring\" has 8 producers (competitor-overlap.js, firm-profile.js, preflight.js, serp-engine.js, resolve-name.js, rank-insight.js, url-safe.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "HOST anchoring @ 8 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:host",
+    "file": "src/lib/scraping/serp-engine.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"HOST anchoring\" has 8 producers (competitor-overlap.js, firm-profile.js, preflight.js, serp-engine.js, resolve-name.js, rank-insight.js, url-safe.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "HOST anchoring @ 8 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:host",
+    "file": "src/lib/sourcing/resolve-name.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"HOST anchoring\" has 8 producers (competitor-overlap.js, firm-profile.js, preflight.js, serp-engine.js, resolve-name.js, rank-insight.js, url-safe.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "HOST anchoring @ 8 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:host",
+    "file": "src/lib/touch0/rank-insight.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"HOST anchoring\" has 8 producers (competitor-overlap.js, firm-profile.js, preflight.js, serp-engine.js, resolve-name.js, rank-insight.js, url-safe.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "HOST anchoring @ 8 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:host",
+    "file": "src/lib/util/url-safe.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"HOST anchoring\" has 8 producers (competitor-overlap.js, firm-profile.js, preflight.js, serp-engine.js, resolve-name.js, rank-insight.js, url-safe.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "HOST anchoring @ 8 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:host",
+    "file": "src/skills/S008-personalisation-engine/scanners/compliance.js",
+    "startLine": 0,
+    "level": "error",
+    "message": "TWO DOORS: \"HOST anchoring\" has 8 producers (competitor-overlap.js, firm-profile.js, preflight.js, serp-engine.js, resolve-name.js, rank-insight.js, url-safe.js, compliance.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "HOST anchoring @ 8 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:element-checklist",
+    "file": "src/skills/S008-personalisation-engine/scanners/compliance.js",
+    "startLine": 0,
+    "level": "warning",
+    "message": "TWO DOORS: \"ELEMENT-CHECKLIST evaluation\" has 2 producers (compliance.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "ELEMENT-CHECKLIST evaluation @ 2 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:element-checklist",
+    "file": "src/skills/S025-audit-page-builder/scripts/build.js",
+    "startLine": 0,
+    "level": "warning",
+    "message": "TWO DOORS: \"ELEMENT-CHECKLIST evaluation\" has 2 producers (compliance.js, build.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "ELEMENT-CHECKLIST evaluation @ 2 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:law",
+    "file": "src/lib/evidence/cookie-evidence.js",
+    "startLine": 0,
+    "level": "warning",
+    "message": "TWO DOORS: \"LAW / STATUTE TITLE\" has 2 producers (cookie-evidence.js, ico-register.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "LAW / STATUTE TITLE @ 2 producers"
+  },
+  {
+    "tool": "one-door",
+    "ruleId": "multiple-producers:law",
+    "file": "src/lib/evidence/ico-register.js",
+    "startLine": 0,
+    "level": "warning",
+    "message": "TWO DOORS: \"LAW / STATUTE TITLE\" has 2 producers (cookie-evidence.js, ico-register.js). The stale door is the one the client sees. This class has already shipped a P0 three times: the ghost jurisdiction, the \"Sector regulator\" label, and the GBP 17.5M fine that never reached the client.",
+    "snippet": "LAW / STATUTE TITLE @ 2 producers"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "circular",
+    "file": "node_modules/zod/v4/classic/schemas.cjs",
+    "startLine": 0,
+    "level": "warning",
+    "message": "circular dependency via node_modules/zod/v4/classic/iso.cjs",
+    "snippet": "node_modules/zod/v4/classic/schemas.cjs"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "circular",
+    "file": "node_modules/zod/v4/classic/iso.cjs",
+    "startLine": 0,
+    "level": "warning",
+    "message": "circular dependency via node_modules/zod/v4/classic/schemas.cjs",
+    "snippet": "node_modules/zod/v4/classic/iso.cjs"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "orphan",
+    "file": "src/lib/calendar/timezone-router.js",
+    "startLine": 0,
+    "level": "note",
+    "message": "orphan module: nothing depends on it and it depends on nothing",
+    "snippet": "src/lib/calendar/timezone-router.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "orphan",
+    "file": "src/lib/compliance/applicability.js",
+    "startLine": 0,
+    "level": "note",
+    "message": "orphan module: nothing depends on it and it depends on nothing",
+    "snippet": "src/lib/compliance/applicability.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "orphan",
+    "file": "src/lib/compliance/registry/obligations.js",
+    "startLine": 0,
+    "level": "note",
+    "message": "orphan module: nothing depends on it and it depends on nothing",
+    "snippet": "src/lib/compliance/registry/obligations.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "orphan",
+    "file": "src/lib/compliance/registry/subjurisdiction.js",
+    "startLine": 0,
+    "level": "note",
+    "message": "orphan module: nothing depends on it and it depends on nothing",
+    "snippet": "src/lib/compliance/registry/subjurisdiction.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "orphan",
+    "file": "src/lib/mystrika/client.js",
+    "startLine": 0,
+    "level": "note",
+    "message": "orphan module: nothing depends on it and it depends on nothing",
+    "snippet": "src/lib/mystrika/client.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "circular",
+    "file": "node_modules/@aws-crypto/crc32/build/main/index.js",
+    "startLine": 0,
+    "level": "warning",
+    "message": "circular dependency via node_modules/@aws-crypto/crc32/build/main/aws_crc32.js",
+    "snippet": "node_modules/@aws-crypto/crc32/build/main/index.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "circular",
+    "file": "node_modules/@aws-crypto/crc32/build/main/aws_crc32.js",
+    "startLine": 0,
+    "level": "warning",
+    "message": "circular dependency via node_modules/@aws-crypto/crc32/build/main/index.js",
+    "snippet": "node_modules/@aws-crypto/crc32/build/main/aws_crc32.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "circular",
+    "file": "node_modules/@aws-crypto/crc32c/build/main/index.js",
+    "startLine": 0,
+    "level": "warning",
+    "message": "circular dependency via node_modules/@aws-crypto/crc32c/build/main/aws_crc32c.js",
+    "snippet": "node_modules/@aws-crypto/crc32c/build/main/index.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "circular",
+    "file": "node_modules/@aws-crypto/crc32c/build/main/aws_crc32c.js",
+    "startLine": 0,
+    "level": "warning",
+    "message": "circular dependency via node_modules/@aws-crypto/crc32c/build/main/index.js",
+    "snippet": "node_modules/@aws-crypto/crc32c/build/main/aws_crc32c.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "orphan",
+    "file": "src/lib/sourcing/conversion.js",
+    "startLine": 0,
+    "level": "note",
+    "message": "orphan module: nothing depends on it and it depends on nothing",
+    "snippet": "src/lib/sourcing/conversion.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "orphan",
+    "file": "src/lib/sourcing/safe-insert.js",
+    "startLine": 0,
+    "level": "note",
+    "message": "orphan module: nothing depends on it and it depends on nothing",
+    "snippet": "src/lib/sourcing/safe-insert.js"
+  },
+  {
+    "tool": "dependency-cruiser",
+    "ruleId": "orphan",
+    "file": "src/skills/S052-gdpr-request-handler/scripts/handle.js",
+    "startLine": 0,
+    "level": "note",
+    "message": "orphan module: nothing depends on it and it depends on nothing",
+    "snippet": "src/skills/S052-gdpr-request-handler/scripts/handle.js"
+  }
+]

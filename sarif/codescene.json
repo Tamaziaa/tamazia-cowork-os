@@ -1,0 +1,1283 @@
+{
+ "project": 82581,
+ "job": 6934386,
+ "analysis_date": "2026-07-14T21:53+05:30",
+ "loc": 69328,
+ "files": 738,
+ "repos": [
+  "tamazia-cowork-os",
+  "tamazia-website"
+ ],
+ "pr_integration": "Active",
+ "system": {
+  "average_code_health": 7.2,
+  "average_verdict": "Problematic",
+  "hotspot_code_health": 3.7,
+  "hotspot_verdict": "Unhealthy",
+  "red_pct": 20.3,
+  "yellow_pct": 40.7,
+  "green_pct": 39.0,
+  "hotspot_files_pct": 1.5,
+  "dev_effort_in_hotspots_pct": 24,
+  "files_declining": 66,
+  "files_predicted_to_decline": 7,
+  "files_climbing_and_declining": 26,
+  "files_improving": 2,
+  "arch_components": 2,
+  "arch_improving": 0,
+  "arch_declining": 2,
+  "files_to_refactor": 3,
+  "components_to_refactor": 1,
+  "files_impacted": 14,
+  "coupling_by_commits": 44,
+  "coupling_across_commits": 42,
+  "coupling_between_repos": 8
+ },
+ "hotspots": [
+  {
+   "f": "functions/audit/_adapter.js",
+   "r": "website",
+   "loc": 1995,
+   "c": 60,
+   "y2025": 2.23,
+   "now": 1.3,
+   "m": [
+    "Modularity Issue",
+    "Bumpy Road",
+    "Deep Nested Complexity",
+    "Overall Code Complexity"
+   ]
+  },
+  {
+   "f": "src/skills/S025-audit-page-builder/scripts/build.js",
+   "r": "engine",
+   "loc": 1046,
+   "c": 106,
+   "y2025": 2.49,
+   "now": 1.76,
+   "m": [
+    "Bumpy Road",
+    "Overall Code Complexity",
+    "Complex Method",
+    "Complex Conditional"
+   ]
+  },
+  {
+   "f": "src/skills/S008-personalisation-engine/scanners/compliance.js",
+   "r": "engine",
+   "loc": 1134,
+   "c": 112,
+   "y2025": 3.03,
+   "now": 2.08,
+   "m": [
+    "Bumpy Road",
+    "Deep Nested Complexity",
+    "Overall Code Complexity",
+    "Complex Method"
+   ]
+  },
+  {
+   "f": "cloudflare/audit-worker-v14.js",
+   "r": "engine",
+   "loc": 1552,
+   "c": 39,
+   "y2025": 2.72,
+   "now": 2.72,
+   "m": [
+    "Modularity Issue",
+    "Bumpy Road",
+    "Overall Code Complexity",
+    "Complex Method"
+   ]
+  },
+  {
+   "f": "src/lib/audit/site-scan.js",
+   "r": "engine",
+   "loc": 527,
+   "c": 33,
+   "y2025": 3.53,
+   "now": 3.23,
+   "m": [
+    "Bumpy Road",
+    "Deep Nested Complexity",
+    "Overall Code Complexity",
+    "Complex Method"
+   ]
+  },
+  {
+   "f": "public/audit/audit-app.js",
+   "r": "website",
+   "loc": 1296,
+   "c": 53,
+   "y2025": 5.12,
+   "now": 3.39,
+   "m": [
+    "Bumpy Road",
+    "Many Conditionals",
+    "Complex Method",
+    "Complex Conditional"
+   ]
+  },
+  {
+   "f": "src/lib/compliance/connect.js",
+   "r": "engine",
+   "loc": 206,
+   "c": 36,
+   "y2025": 7.44,
+   "now": 4.62,
+   "m": [
+    "Bumpy Road",
+    "Deep Nested Complexity",
+    "Many Conditionals",
+    "Complex Method"
+   ]
+  },
+  {
+   "f": "src/lib/audit/firm-profile.js",
+   "r": "engine",
+   "loc": 237,
+   "c": 26,
+   "y2025": 8.52,
+   "now": 5.24,
+   "m": [
+    "Bumpy Road",
+    "Many Conditionals",
+    "Complex Method",
+    "Complex Conditional"
+   ]
+  },
+  {
+   "f": "scripts/push-to-mystrika.js",
+   "r": "engine",
+   "loc": 270,
+   "c": 22,
+   "y2025": 10,
+   "now": 9.69,
+   "m": [
+    "Complex Method",
+    "Code Health Degradations"
+   ]
+  },
+  {
+   "f": "patch-dist.js",
+   "r": "website",
+   "loc": 1409,
+   "c": 23,
+   "y2025": 9.84,
+   "now": 9.84,
+   "m": [
+    "Bumpy Road",
+    "Low Overall Code Complexity"
+   ]
+  },
+  {
+   "f": "src/content/hero.ts",
+   "r": "website",
+   "loc": 85,
+   "c": 33,
+   "y2025": 10,
+   "now": 10,
+   "m": [
+    "Low Overall Code Complexity"
+   ]
+  }
+ ],
+ "coupling_cross_repo": [
+  {
+   "a": "engine: build.js",
+   "b": "website: _adapter.js",
+   "pct": 61,
+   "rev": 20
+  },
+  {
+   "a": "engine: firm-profile.js",
+   "b": "website: _adapter.js",
+   "pct": 60,
+   "rev": 12
+  },
+  {
+   "a": "engine: compliance.js",
+   "b": "website: _adapter.js",
+   "pct": 60,
+   "rev": 17
+  },
+  {
+   "a": "engine: llm/router.js",
+   "b": "website: _adapter.js",
+   "pct": 50,
+   "rev": 10
+  },
+  {
+   "a": "engine: connect.js",
+   "b": "website: _adapter.js",
+   "pct": 50,
+   "rev": 14
+  },
+  {
+   "a": "engine: llm/router.js",
+   "b": "website: audit-app.js",
+   "pct": 45,
+   "rev": 11
+  },
+  {
+   "a": "engine: build.js",
+   "b": "website: audit-app.js",
+   "pct": 43,
+   "rev": 21
+  },
+  {
+   "a": "engine: firm-profile.js",
+   "b": "website: audit-app.js",
+   "pct": 40,
+   "rev": 13
+  },
+  {
+   "a": "engine: compliance.js",
+   "b": "website: audit-app.js",
+   "pct": 40,
+   "rev": 18
+  },
+  {
+   "a": "engine: site-scan.js",
+   "b": "website: _adapter.js",
+   "pct": 35,
+   "rev": 14
+  }
+ ],
+ "coupling_within": [
+  {
+   "a": "website/admin-v2-src/boot.jsx",
+   "b": "website/public/admin/cockpit-v2/app.js",
+   "pct": 93,
+   "rev": 8
+  },
+  {
+   "a": "website/functions/api/briefings.js",
+   "b": "website/functions/api/contact.js",
+   "pct": 84,
+   "rev": 13
+  },
+  {
+   "a": "website/admin-v2-src/app.jsx",
+   "b": "website/admin-v2-src/boot.jsx",
+   "pct": 83,
+   "rev": 6
+  },
+  {
+   "a": "website/functions/api/erase.js",
+   "b": "website/functions/api/portability.js",
+   "pct": 83,
+   "rev": 6
+  },
+  {
+   "a": "website/public/admin/cockpit-v2/app.js",
+   "b": "website/scripts/build-cockpit.mjs",
+   "pct": 76,
+   "rev": 7
+  },
+  {
+   "a": "website/admin-v2-src/app.jsx",
+   "b": "website/public/admin/cockpit-v2/app.js",
+   "pct": 76,
+   "rev": 7
+  },
+  {
+   "a": "website/admin-v2-src/tab-audits.jsx",
+   "b": "website/public/admin/cockpit-v2/app.js",
+   "pct": 76,
+   "rev": 7
+  },
+  {
+   "a": "website/functions/api/stripe/checkout.js",
+   "b": "website/functions/audit/_commerce.js",
+   "pct": 66,
+   "rev": 8
+  },
+  {
+   "a": "website/functions/audit/[[path]].js",
+   "b": "website/functions/audit/_commerce.js",
+   "pct": 55,
+   "rev": 9
+  },
+  {
+   "a": "website/functions/audit/_adapter.js",
+   "b": "website/public/audit/audit-app.js",
+   "pct": 49,
+   "rev": 57
+  },
+  {
+   "a": "website/functions/api/stripe/checkout.js",
+   "b": "website/public/audit/audit-charts.js",
+   "pct": 43,
+   "rev": 12
+  },
+  {
+   "a": "website/functions/audit/_shell.js",
+   "b": "website/public/audit/audit-app.js",
+   "pct": 42,
+   "rev": 35
+  },
+  {
+   "a": "website/src/content/faq.ts",
+   "b": "website/src/content/pricing.ts",
+   "pct": 41,
+   "rev": 17
+  },
+  {
+   "a": "engine/scripts/enrich-worker.js",
+   "b": "engine/src/lib/enrich/lead-quality.js",
+   "pct": 40,
+   "rev": 13
+  },
+  {
+   "a": "website/src/content/caseStudies.ts",
+   "b": "website/src/content/pricing.ts",
+   "pct": 40,
+   "rev": 15
+  },
+  {
+   "a": "website/src/content/hero.ts",
+   "b": "website/src/content/whyUs.ts",
+   "pct": 40,
+   "rev": 27
+  },
+  {
+   "a": "website/public/audit/audit-app.js",
+   "b": "website/public/audit/audit-charts.js",
+   "pct": 40,
+   "rev": 35
+  },
+  {
+   "a": "website/functions/audit/_commerce.js",
+   "b": "website/public/audit/audit-charts.js",
+   "pct": 38,
+   "rev": 13
+  },
+  {
+   "a": "website/functions/audit/[[path]].js",
+   "b": "website/functions/audit/_shell.js",
+   "pct": 38,
+   "rev": 13
+  },
+  {
+   "a": "website/src/content/pricing.ts",
+   "b": "website/src/content/whyUs.ts",
+   "pct": 38,
+   "rev": 21
+  },
+  {
+   "a": "engine/scripts/qualify-and-queue.js",
+   "b": "engine/src/lib/enrich/lead-quality.js",
+   "pct": 37,
+   "rev": 14
+  },
+  {
+   "a": "website/src/content/faq.ts",
+   "b": "website/src/content/sectors.ts",
+   "pct": 37,
+   "rev": 14
+  },
+  {
+   "a": "engine/src/lib/enrich/lead-quality.js",
+   "b": "engine/src/lib/sourcing/enrich.js",
+   "pct": 37,
+   "rev": 19
+  },
+  {
+   "a": "website/src/content/contact.ts",
+   "b": "website/src/content/pricing.ts",
+   "pct": 36,
+   "rev": 17
+  },
+  {
+   "a": "engine/scripts/push-to-mystrika.js",
+   "b": "engine/src/lib/enrich/lead-quality.js",
+   "pct": 35,
+   "rev": 20
+  },
+  {
+   "a": "website/functions/api/health.js",
+   "b": "website/patch-dist.js",
+   "pct": 34,
+   "rev": 15
+  },
+  {
+   "a": "website/src/content/howWeWork.ts",
+   "b": "website/src/content/pricing.ts",
+   "pct": 34,
+   "rev": 15
+  },
+  {
+   "a": "engine/src/lib/enrich/lead-quality.js",
+   "b": "engine/src/lib/sourcing/icp.js",
+   "pct": 34,
+   "rev": 15
+  },
+  {
+   "a": "website/src/content/pricing.ts",
+   "b": "website/src/content/sectors.ts",
+   "pct": 34,
+   "rev": 18
+  },
+  {
+   "a": "website/src/content/sectors.ts",
+   "b": "website/src/content/whyUs.ts",
+   "pct": 34,
+   "rev": 18
+  },
+  {
+   "a": "engine/src/skills/S064-touch-cadence/scripts/render.js",
+   "b": "engine/src/skills/S065-touch-scheduler/scripts/send-due.js",
+   "pct": 32,
+   "rev": 16
+  },
+  {
+   "a": "website/src/content/footer.ts",
+   "b": "website/src/content/hero.ts",
+   "pct": 32,
+   "rev": 25
+  },
+  {
+   "a": "engine/scanners/compliance.js",
+   "b": "engine/S025/scripts/build.js",
+   "pct": 32,
+   "rev": 108
+  },
+  {
+   "a": "website/functions/audit/_adapter.js",
+   "b": "website/public/audit/audit-charts.js",
+   "pct": 31,
+   "rev": 39
+  },
+  {
+   "a": "website/astro.config.mjs",
+   "b": "website/patch-dist.js",
+   "pct": 30,
+   "rev": 17
+  },
+  {
+   "a": "website/src/content/contact.ts",
+   "b": "website/src/content/whyUs.ts",
+   "pct": 30,
+   "rev": 17
+  },
+  {
+   "a": "engine/src/lib/audit/extra-scanners.js",
+   "b": "engine/src/lib/audit/site-scan.js",
+   "pct": 30,
+   "rev": 20
+  },
+  {
+   "a": "website/functions/api/audit.js",
+   "b": "website/patch-dist.js",
+   "pct": 30,
+   "rev": 20
+  },
+  {
+   "a": "website/src/content/faq.ts",
+   "b": "website/src/content/hero.ts",
+   "pct": 30,
+   "rev": 23
+  },
+  {
+   "a": "website/src/content/hero.ts",
+   "b": "website/src/content/pricing.ts",
+   "pct": 29,
+   "rev": 27
+  },
+  {
+   "a": "website/functions/audit/_commerce.js",
+   "b": "website/public/audit/audit-app.js",
+   "pct": 29,
+   "rev": 31
+  },
+  {
+   "a": "website/functions/api/cal-webhook.js",
+   "b": "website/patch-dist.js",
+   "pct": 27,
+   "rev": 18
+  },
+  {
+   "a": "website/src/content/footer.ts",
+   "b": "website/src/content/pricing.ts",
+   "pct": 26,
+   "rev": 19
+  },
+  {
+   "a": "website/src/content/contact.ts",
+   "b": "website/src/content/hero.ts",
+   "pct": 26,
+   "rev": 23
+  },
+  {
+   "a": "website/functions/audit/_adapter.js",
+   "b": "website/functions/audit/_commerce.js",
+   "pct": 26,
+   "rev": 35
+  },
+  {
+   "a": "website/src/content/hero.ts",
+   "b": "website/src/content/sectors.ts",
+   "pct": 25,
+   "rev": 24
+  },
+  {
+   "a": "engine/scripts/push-to-mystrika.js",
+   "b": "engine/S065/scripts/send-due.js",
+   "pct": 24,
+   "rev": 21
+  },
+  {
+   "a": "website/src/content/hero.ts",
+   "b": "website/src/content/howWeWork.ts",
+   "pct": 24,
+   "rev": 21
+  },
+  {
+   "a": "engine/scripts/push-to-mystrika.js",
+   "b": "engine/src/lib/sourcing/enrich.js",
+   "pct": 24,
+   "rev": 21
+  },
+  {
+   "a": "website/patch-dist.js",
+   "b": "website/src/content/whyUs.ts",
+   "pct": 22,
+   "rev": 22
+  },
+  {
+   "a": "engine/src/lib/compliance/connect.js",
+   "b": "engine/src/lib/compliance/signals.js",
+   "pct": 21,
+   "rev": 24
+  },
+  {
+   "a": "website/patch-dist.js",
+   "b": "website/src/content/hero.ts",
+   "pct": 21,
+   "rev": 28
+  },
+  {
+   "a": "website/functions/api/audit.js",
+   "b": "website/src/content/hero.ts",
+   "pct": 20,
+   "rev": 25
+  },
+  {
+   "a": "website/functions/api/stripe/checkout.js",
+   "b": "website/public/audit/audit-app.js",
+   "pct": 20,
+   "rev": 30
+  }
+ ],
+ "pr_gate_first_run": {
+  "pr": 342,
+  "check": "CodeScene Code Health Review (main)",
+  "result": "FAILURE",
+  "gates_failed": [
+   "New code is healthy \u2014 3 new files with code health below 10.00",
+   "Enforce critical code health rules \u2014 2 files with Bumpy Road Ahead, Deep Nested Complexity",
+   "Enforce advisory code health rules \u2014 3 files with Complex Method, Complex Conditional, Overall Code Complexity, Excess Number of Function Arguments"
+  ],
+  "gates_passed": 1,
+  "files": [
+   {
+    "f": "tools/sweep/normalise.js",
+    "health": 7.61,
+    "rules": 4
+   },
+   {
+    "f": "tools/sweep/collect-local.js",
+    "health": 8.1,
+    "rules": 4
+   },
+   {
+    "f": "tools/sweep/report.js",
+    "health": 9.1,
+    "rules": 3
+   }
+  ]
+ },
+ "config": {
+  "quality_gates_profile": "Clean Code Collective (Minimal Safety Net + Quality Guardians)",
+  "gates_enabled": [
+   "Prevent Hotspot Decline",
+   "New Code is Healthy",
+   "Enforce Critical Code Health Rules",
+   "Enforce Advisory Code Health Rules",
+   "Tag Reviewer for Critical Code"
+  ],
+  "gates_disabled": [
+   "Enforce Refactoring Goals",
+   "Enforce Supervise Goals"
+  ],
+  "exclude_source_branches": "^(main|full-tree-base|empty-base)$",
+  "only_prs_targeting_default_branch": true,
+  "always_comment_on_all_prs": true,
+  "post_findings_as": "Create a review in the Pull Request",
+  "github_app": "CodeScene Delta Analysis \u2014 installed, scoped to 2 repos, read code / write checks+PRs only",
+  "repos_ref": "both pinned to main"
+ },
+ "declining_files": [
+  {
+   "file": "functions/audit/_adapter.js",
+   "repo": "website",
+   "loc": 1995,
+   "commits": 60,
+   "y2025": 2.23,
+   "now": 1.3,
+   "drop": 0.93,
+   "markers": "Modularity Issue; Bumpy Road; Deep Nested Complexity; Overall Code Complexity"
+  },
+  {
+   "file": "src/skills/S025-audit-page-builder/scripts/build.js",
+   "repo": "engine",
+   "loc": 1046,
+   "commits": 106,
+   "y2025": 2.49,
+   "now": 1.76,
+   "drop": 0.73,
+   "markers": "Bumpy Road; Overall Code Complexity; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "src/skills/S008-personalisation-engine/scanners/compliance.js",
+   "repo": "engine",
+   "loc": 1134,
+   "commits": 112,
+   "y2025": 3.03,
+   "now": 2.08,
+   "drop": 0.95,
+   "markers": "Bumpy Road; Deep Nested Complexity; Overall Code Complexity; Complex Method"
+  },
+  {
+   "file": "src/lib/audit/site-scan.js",
+   "repo": "engine",
+   "loc": 527,
+   "commits": 33,
+   "y2025": 3.53,
+   "now": 3.23,
+   "drop": 0.3,
+   "markers": "Bumpy Road; Deep Nested Complexity; Overall Code Complexity; Complex Method"
+  },
+  {
+   "file": "public/audit/audit-app.js",
+   "repo": "website",
+   "loc": 1296,
+   "commits": 53,
+   "y2025": 5.12,
+   "now": 3.39,
+   "drop": 1.73,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "dist/audit/audit-app.js",
+   "repo": "website",
+   "loc": 1296,
+   "commits": 2,
+   "y2025": 5.12,
+   "now": 3.39,
+   "drop": 1.73,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "src/lib/enrich/lead-quality.js",
+   "repo": "engine",
+   "loc": 336,
+   "commits": 19,
+   "y2025": 4.16,
+   "now": 3.46,
+   "drop": 0.7,
+   "markers": "Bumpy Road; Overall Code Complexity; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "public/admin/cockpit-v2/app.js",
+   "repo": "website",
+   "loc": 5,
+   "commits": 8,
+   "y2025": 4.58,
+   "now": 4.05,
+   "drop": 0.53,
+   "markers": "Overall Code Complexity; Complex Method; Excess Function Arguments; Complexity Trend Growth"
+  },
+  {
+   "file": "dist/admin/cockpit-v2/app.js",
+   "repo": "website",
+   "loc": 5,
+   "commits": 1,
+   "y2025": 4.58,
+   "now": 4.05,
+   "drop": 0.53,
+   "markers": "Overall Code Complexity; Complex Method; Excess Function Arguments; Complexity Trend Growth"
+  },
+  {
+   "file": "src/lib/compliance/connect.js",
+   "repo": "engine",
+   "loc": 206,
+   "commits": 36,
+   "y2025": 7.44,
+   "now": 4.62,
+   "drop": 2.82,
+   "markers": "Bumpy Road; Deep Nested Complexity; Many Conditionals; Complex Method"
+  },
+  {
+   "file": "src/.../sources/adapters.js",
+   "repo": "engine",
+   "loc": 207,
+   "commits": 9,
+   "y2025": 4.97,
+   "now": 4.76,
+   "drop": 0.21,
+   "markers": "Bumpy Road; Deep Nested Complexity; Many Conditionals; Complex Method"
+  },
+  {
+   "file": "mcp/tamazia-ops/server.py",
+   "repo": "engine",
+   "loc": 1997,
+   "commits": 9,
+   "y2025": 8.12,
+   "now": 4.8,
+   "drop": 3.32,
+   "markers": "Potentially Low Cohesion; File Size Issue; Bumpy Road; Deep Nested Complexity"
+  },
+  {
+   "file": "src/lib/sourcing/markets.js",
+   "repo": "engine",
+   "loc": 303,
+   "commits": 9,
+   "y2025": 7.57,
+   "now": 4.9,
+   "drop": 2.67,
+   "markers": "Bumpy Road; Deep Nested Complexity; Many Conditionals; Complex Method"
+  },
+  {
+   "file": "functions/api/cal-webhook.js",
+   "repo": "website",
+   "loc": 276,
+   "commits": 13,
+   "y2025": 6.35,
+   "now": 5.12,
+   "drop": 1.23,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "src/lib/audit/firm-profile.js",
+   "repo": "engine",
+   "loc": 237,
+   "commits": 26,
+   "y2025": 8.52,
+   "now": 5.24,
+   "drop": 3.28,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "scripts/source-leads.js",
+   "repo": "engine",
+   "loc": 250,
+   "commits": 14,
+   "y2025": 7.32,
+   "now": 5.3,
+   "drop": 2.02,
+   "markers": "Bumpy Road; Complex Method; Complex Conditional; Large Method"
+  },
+  {
+   "file": "src/lib/sourcing/resolve-name.js",
+   "repo": "engine",
+   "loc": 303,
+   "commits": 3,
+   "y2025": 5.87,
+   "now": 5.62,
+   "drop": 0.25,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "src/lib/llm/router.js",
+   "repo": "engine",
+   "loc": 294,
+   "commits": 10,
+   "y2025": 7.22,
+   "now": 6.14,
+   "drop": 1.08,
+   "markers": "Many Conditionals; Complex Method; Complex Conditional; High Degree of Code Duplication"
+  },
+  {
+   "file": "src/lib/audit/finding-trust.js",
+   "repo": "engine",
+   "loc": 80,
+   "commits": 6,
+   "y2025": 6.9,
+   "now": 6.49,
+   "drop": 0.41,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "src/lib/audit/extra-scanners.js",
+   "repo": "engine",
+   "loc": 159,
+   "commits": 7,
+   "y2025": 7.0,
+   "now": 6.55,
+   "drop": 0.45,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "scripts/source-registers.js",
+   "repo": "engine",
+   "loc": 162,
+   "commits": 2,
+   "y2025": 7.32,
+   "now": 6.56,
+   "drop": 0.76,
+   "markers": "Bumpy Road; Complex Method; Complex Conditional; Large Method"
+  },
+  {
+   "file": "src/lib/compliance/resolver.js",
+   "repo": "engine",
+   "loc": 104,
+   "commits": 6,
+   "y2025": 7.2,
+   "now": 6.88,
+   "drop": 0.32,
+   "markers": "Many Conditionals; Complex Method; Complex Conditional; Complexity Trend Growth"
+  },
+  {
+   "file": "src/.../scripts/run.js",
+   "repo": "engine",
+   "loc": 311,
+   "commits": 5,
+   "y2025": 8.02,
+   "now": 6.94,
+   "drop": 1.08,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "src/lib/compliance/jurisdiction-router.js",
+   "repo": "engine",
+   "loc": 201,
+   "commits": 15,
+   "y2025": 8.02,
+   "now": 7.0,
+   "drop": 1.02,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "functions/api/contact.js",
+   "repo": "website",
+   "loc": 231,
+   "commits": 15,
+   "y2025": 8.98,
+   "now": 7.41,
+   "drop": 1.57,
+   "markers": "Many Conditionals; Complex Method; Complex Conditional; Large Method"
+  },
+  {
+   "file": "src/lib/sourcing/icp.js",
+   "repo": "engine",
+   "loc": 137,
+   "commits": 11,
+   "y2025": 7.77,
+   "now": 7.5,
+   "drop": 0.27,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "src/.../scripts/send-due.js",
+   "repo": "engine",
+   "loc": 190,
+   "commits": 20,
+   "y2025": 8.08,
+   "now": 7.66,
+   "drop": 0.42,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "admin-v2-src/app.jsx",
+   "repo": "website",
+   "loc": 349,
+   "commits": 5,
+   "y2025": 7.91,
+   "now": 7.78,
+   "drop": 0.13,
+   "markers": "Many Conditionals; Complex Method; Complex Conditional; Complexity Trend Growth"
+  },
+  {
+   "file": "src/lib/scraping/google-sponsored.js",
+   "repo": "engine",
+   "loc": 129,
+   "commits": 4,
+   "y2025": 10.0,
+   "now": 7.83,
+   "drop": 2.17,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complexity Trend Growth"
+  },
+  {
+   "file": "src/lib/sourcing/bulk-sourcer.js",
+   "repo": "engine",
+   "loc": 127,
+   "commits": 4,
+   "y2025": 8.41,
+   "now": 7.92,
+   "drop": 0.49,
+   "markers": "Bumpy Road; Deep Nested Complexity; Many Conditionals; Complex Method"
+  },
+  {
+   "file": "functions/_lib/notify.js",
+   "repo": "website",
+   "loc": 125,
+   "commits": 4,
+   "y2025": 9.03,
+   "now": 7.96,
+   "drop": 1.07,
+   "markers": "Many Conditionals; Complex Method; Complex Conditional; Complexity Trend Growth"
+  },
+  {
+   "file": "src/lib/sourcing/companies-house.js",
+   "repo": "engine",
+   "loc": 164,
+   "commits": 4,
+   "y2025": 8.42,
+   "now": 7.96,
+   "drop": 0.46,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "src/lib/sourcing/firmographics.js",
+   "repo": "engine",
+   "loc": 92,
+   "commits": 5,
+   "y2025": 8.14,
+   "now": 8.01,
+   "drop": 0.13,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complexity Trend Growth"
+  },
+  {
+   "file": "src/lib/compliance/signals.js",
+   "repo": "engine",
+   "loc": 159,
+   "commits": 11,
+   "y2025": 10.0,
+   "now": 8.07,
+   "drop": 1.93,
+   "markers": "Many Conditionals; Complex Method; Complex Conditional; Complexity Trend Growth"
+  },
+  {
+   "file": "functions/_lib/neon-sync.js",
+   "repo": "website",
+   "loc": 78,
+   "commits": 5,
+   "y2025": 9.47,
+   "now": 8.07,
+   "drop": 1.4,
+   "markers": "Complex Method; Complex Conditional; Excess Function Arguments; Complexity Trend Growth"
+  },
+  {
+   "file": "src/lib/audit/llm.js",
+   "repo": "engine",
+   "loc": 81,
+   "commits": 6,
+   "y2025": 8.71,
+   "now": 8.09,
+   "drop": 0.62,
+   "markers": "Bumpy Road; Complex Method; Excess Function Arguments; Complexity Trend Growth"
+  },
+  {
+   "file": "scripts/mint-worker.js",
+   "repo": "engine",
+   "loc": 233,
+   "commits": 17,
+   "y2025": 9.66,
+   "now": 8.09,
+   "drop": 1.57,
+   "markers": "Many Conditionals; Complex Method; Complex Conditional; Complexity Trend Growth"
+  },
+  {
+   "file": "src/lib/scraping/serp-engine.js",
+   "repo": "engine",
+   "loc": 196,
+   "commits": 8,
+   "y2025": 8.53,
+   "now": 8.11,
+   "drop": 0.42,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "src/.../scripts/render.js",
+   "repo": "engine",
+   "loc": 201,
+   "commits": 13,
+   "y2025": 8.34,
+   "now": 8.23,
+   "drop": 0.11,
+   "markers": "Many Conditionals; Complex Method; Complexity Trend Growth; Code Health Degradations"
+  },
+  {
+   "file": "src/.../scanners/corpus-index.js",
+   "repo": "engine",
+   "loc": 67,
+   "commits": 8,
+   "y2025": 8.82,
+   "now": 8.28,
+   "drop": 0.54,
+   "markers": "Many Conditionals; Complex Method; Complex Conditional; Code Health Degradations"
+  },
+  {
+   "file": "scripts/ensure-schema.js",
+   "repo": "engine",
+   "loc": 76,
+   "commits": 4,
+   "y2025": 8.48,
+   "now": 8.32,
+   "drop": 0.16,
+   "markers": "Bumpy Road; Complex Method; Complex Conditional; Code Health Degradations"
+  },
+  {
+   "file": "public/audit/audit-charts.js",
+   "repo": "website",
+   "loc": 307,
+   "commits": 17,
+   "y2025": 8.68,
+   "now": 8.32,
+   "drop": 0.36,
+   "markers": "Many Conditionals; Complex Method; Complex Conditional; Code Health Degradations"
+  },
+  {
+   "file": "dist/audit/audit-charts.js",
+   "repo": "website",
+   "loc": 307,
+   "commits": 2,
+   "y2025": 8.68,
+   "now": 8.32,
+   "drop": 0.36,
+   "markers": "Many Conditionals; Complex Method; Complex Conditional; Code Health Degradations"
+  },
+  {
+   "file": "functions/api/stripe/webhook.js",
+   "repo": "website",
+   "loc": 115,
+   "commits": 5,
+   "y2025": 8.58,
+   "now": 8.37,
+   "drop": 0.21,
+   "markers": "Complex Method; Large Method; Excess Function Arguments; Code Health Degradations"
+  },
+  {
+   "file": "functions/api/briefings.js",
+   "repo": "website",
+   "loc": 174,
+   "commits": 11,
+   "y2025": 8.95,
+   "now": 8.42,
+   "drop": 0.53,
+   "markers": "Complex Method; Complex Conditional; Large Method; Complexity Trend Growth"
+  },
+  {
+   "file": "scripts/enrich-worker.js",
+   "repo": "engine",
+   "loc": 132,
+   "commits": 7,
+   "y2025": 9.55,
+   "now": 8.43,
+   "drop": 1.12,
+   "markers": "Bumpy Road; Complex Method; Complex Conditional; Large Method"
+  },
+  {
+   "file": "scripts/verify-audits.js",
+   "repo": "engine",
+   "loc": 74,
+   "commits": 3,
+   "y2025": 9.24,
+   "now": 8.59,
+   "drop": 0.65,
+   "markers": "Bumpy Road; Deep Nested Complexity; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "src/lib/sourcing/charity-commission.js",
+   "repo": "engine",
+   "loc": 89,
+   "commits": 2,
+   "y2025": 9.39,
+   "now": 8.66,
+   "drop": 0.73,
+   "markers": "Complex Method; Complexity Trend Growth; Code Health Degradations"
+  },
+  {
+   "file": "src/.../scripts/ingest.js",
+   "repo": "engine",
+   "loc": 92,
+   "commits": 2,
+   "y2025": 9.24,
+   "now": 8.68,
+   "drop": 0.56,
+   "markers": "Bumpy Road; Many Conditionals; Complex Method; Complex Conditional"
+  },
+  {
+   "file": "functions/api/erase.js",
+   "repo": "website",
+   "loc": 180,
+   "commits": 6,
+   "y2025": 8.91,
+   "now": 8.69,
+   "drop": 0.22,
+   "markers": "Bumpy Road; Complex Method; Large Method; Code Health Degradations"
+  },
+  {
+   "file": "functions/.../audits/mint.js",
+   "repo": "website",
+   "loc": 103,
+   "commits": 4,
+   "y2025": 9.53,
+   "now": 8.71,
+   "drop": 0.82,
+   "markers": "Bumpy Road; Complex Method; Large Method; Complexity Trend Growth"
+  },
+  {
+   "file": "scripts/refresh-enforcement-news.js",
+   "repo": "engine",
+   "loc": 89,
+   "commits": 3,
+   "y2025": 9.07,
+   "now": 8.82,
+   "drop": 0.25,
+   "markers": "Many Conditionals; Complex Method; Code Health Degradations"
+  },
+  {
+   "file": "scripts/health-check.js",
+   "repo": "engine",
+   "loc": 103,
+   "commits": 4,
+   "y2025": 9.03,
+   "now": 8.97,
+   "drop": 0.06,
+   "markers": "Complex Method; Excess Function Arguments; Code Health Degradations"
+  },
+  {
+   "file": "src/lib/send-pacing.js",
+   "repo": "engine",
+   "loc": 48,
+   "commits": 4,
+   "y2025": 9.69,
+   "now": 9.1,
+   "drop": 0.59,
+   "markers": "Many Conditionals; Complex Method; Code Health Degradations"
+  },
+  {
+   "file": "src/lib/compose-extensions.js",
+   "repo": "engine",
+   "loc": 134,
+   "commits": 2,
+   "y2025": 9.39,
+   "now": 9.1,
+   "drop": 0.29,
+   "markers": "Many Conditionals; Complex Method; Code Health Degradations"
+  },
+  {
+   "file": "functions/api/admin/audits.js",
+   "repo": "website",
+   "loc": 50,
+   "commits": 5,
+   "y2025": 9.23,
+   "now": 9.13,
+   "drop": 0.1,
+   "markers": "Complex Method; Code Health Degradations"
+  },
+  {
+   "file": "functions/api/admin/now.js",
+   "repo": "website",
+   "loc": 51,
+   "commits": 5,
+   "y2025": 9.26,
+   "now": 9.16,
+   "drop": 0.1,
+   "markers": "Complex Method; Code Health Degradations"
+  },
+  {
+   "file": "src/lib/sourcing/conversion.js",
+   "repo": "engine",
+   "loc": 28,
+   "commits": 3,
+   "y2025": 9.39,
+   "now": 9.22,
+   "drop": 0.17,
+   "markers": "Bumpy Road; Complex Method; Code Health Degradations; Code Health Improvements"
+  },
+  {
+   "file": "src/lib/audit/verify-audit-url.js",
+   "repo": "engine",
+   "loc": 25,
+   "commits": 2,
+   "y2025": 9.61,
+   "now": 9.39,
+   "drop": 0.22,
+   "markers": "Complex Method; Complex Conditional; Code Health Degradations; Code Health Improvements"
+  },
+  {
+   "file": "functions/api/portability.js",
+   "repo": "website",
+   "loc": 85,
+   "commits": 6,
+   "y2025": 9.64,
+   "now": 9.39,
+   "drop": 0.25,
+   "markers": "Complex Method; Code Health Degradations"
+  },
+  {
+   "file": "scripts/check-stuck-jobs.js",
+   "repo": "engine",
+   "loc": 64,
+   "commits": 6,
+   "y2025": 9.69,
+   "now": 9.46,
+   "drop": 0.23,
+   "markers": "Bumpy Road; Complex Method; Code Health Degradations"
+  },
+  {
+   "file": "functions/api/dsar.js",
+   "repo": "website",
+   "loc": 115,
+   "commits": 6,
+   "y2025": 9.69,
+   "now": 9.47,
+   "drop": 0.22,
+   "markers": "Complex Method; Code Health Degradations"
+  },
+  {
+   "file": "scripts/gen-state.js",
+   "repo": "engine",
+   "loc": 63,
+   "commits": 6,
+   "y2025": 10.0,
+   "now": 9.66,
+   "drop": 0.34,
+   "markers": "Complex Method; Code Health Degradations"
+  },
+  {
+   "file": "src/lib/enrich/verify-status.js",
+   "repo": "engine",
+   "loc": 25,
+   "commits": 2,
+   "y2025": 10.0,
+   "now": 9.66,
+   "drop": 0.34,
+   "markers": "Complex Method; Complexity Trend Growth; Code Health Degradations"
+  },
+  {
+   "file": "functions/audit/[[path]].js",
+   "repo": "website",
+   "loc": 107,
+   "commits": 9,
+   "y2025": 10.0,
+   "now": 9.69,
+   "drop": 0.31,
+   "markers": "Complex Method; Code Health Degradations"
+  },
+  {
+   "file": "scripts/push-to-mystrika.js",
+   "repo": "engine",
+   "loc": 270,
+   "commits": 22,
+   "y2025": 10.0,
+   "now": 9.69,
+   "drop": 0.31,
+   "markers": "Complex Method; Code Health Degradations"
+  }
+ ]
+}

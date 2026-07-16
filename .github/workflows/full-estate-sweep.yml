@@ -1,0 +1,73 @@
+name: Full-estate sweep (all tools -> one ledger)
+
+# ONE ENTRY POINT: every tool converges on sarif/.
+# ONE EXIT POINT:  sweep-findings.json -> AUDIT-ENGINE-FINDINGS-LEDGER.md.
+#
+# The gate: a finding corroborated by >=2 INDEPENDENT tools is a FACT (ACT). One tool is a LEAD (REVIEW).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'          # weekly, Monday 03:00
+
+permissions:
+  contents: read
+  security-events: read
+  pull-requests: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }        # CodeScene-style history analysis needs the full log
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: install
+        run: |
+          npm ci || npm install
+          npm install --no-save acorn
+          pip install semgrep
+
+      # ── Semgrep, full tree, native SARIF ──────────────────────────────────────────────────────────────────
+      - name: semgrep (full tree)
+        run: |
+          mkdir -p sarif
+          semgrep scan --config=p/default --config=p/security-audit --config=p/javascript \
+            --sarif -o sarif/semgrep.sarif --metrics=off -q . || true
+
+      # ── CodeQL + uploaded Semgrep: HARVEST the alerts GitHub already holds. Re-running CodeQL to recompute
+      #    what GitHub is already storing would cost 20 minutes per repo for the same answer.
+      - name: harvest code-scanning alerts (CodeQL + Semgrep OSS)
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: node tools/sweep/collect-codescanning.js
+
+      # ── HARVEST every AI-review comment ever posted, across every PR, across both repos.
+      #    We do not RE-RUN CodeRabbit on 525 PRs. Its findings are already in the review API.
+      - name: harvest AI-reviewer comments (CodeRabbit, CodeScene, ...)
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: node tools/sweep/collect-reviews.js
+
+      # ── The DOMAIN analysers. No marketplace app can replace these: they encode what THIS engine is.
+      #    madge (a module unreachable from the mint is dead law) · one-door (SEMANTIC duplication — the class
+      #    that has shipped a P0 three times, and which jscpd structurally cannot see) · jscpd · dep-cruiser.
+      - name: local analysers
+        run: node tools/sweep/collect-local.js
+
+      # ── ONE NORMALISER: fingerprint -> dedupe -> Union-Find cluster -> corroborate -> number.
+      - name: normalise + cluster + number
+        run: node tools/sweep/normalise.js sarif
+
+      - name: ledger
+        run: node tools/sweep/ledger.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-estate-sweep
+          path: |
+            sweep-findings.json
+            AUDIT-ENGINE-FINDINGS-LEDGER.md
+            sarif/

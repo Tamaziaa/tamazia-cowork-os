@@ -1,0 +1,935 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeQL",
+          "rules": []
+        }
+      },
+      "results": [
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/properties.test.js"
+                },
+                "region": {
+                  "startLine": 18,
+                  "endLine": 18,
+                  "snippet": {
+                    "text": "Unused variable A."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/trivial-conditional",
+          "level": "warning",
+          "message": {
+            "text": "Useless conditional"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/mint-smoke.test.js"
+                },
+                "region": {
+                  "startLine": 49,
+                  "endLine": 49,
+                  "snippet": {
+                    "text": "This use of variable 'err' always evaluates to true."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/host-anchoring.test.js"
+                },
+                "region": {
+                  "startLine": 19,
+                  "endLine": 19,
+                  "snippet": {
+                    "text": "Unused variable hostOf."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/automatic-semicolon-insertion",
+          "level": "note",
+          "message": {
+            "text": "Semicolon insertion"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib/audit/source-gap.js"
+                },
+                "region": {
+                  "startLine": 16,
+                  "endLine": 16,
+                  "snippet": {
+                    "text": "Avoid automated semicolon insertion (91% of all statements in the enclosing function have an explicit semicolon)."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/regex/missing-regexp-anchor",
+          "level": "warning",
+          "message": {
+            "text": "Missing regular expression anchor"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 36,
+                  "endLine": 36,
+                  "snippet": {
+                    "text": "When this is used as a regular expression on a URL, it may match anywhere, and arbitrary hosts may come before or after it."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/regex/missing-regexp-anchor",
+          "level": "warning",
+          "message": {
+            "text": "Missing regular expression anchor"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 35,
+                  "endLine": 35,
+                  "snippet": {
+                    "text": "When this is used as a regular expression on a URL, it may match anywhere, and arbitrary hosts may come before or after it."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/regex/missing-regexp-anchor",
+          "level": "warning",
+          "message": {
+            "text": "Missing regular expression anchor"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 34,
+                  "endLine": 34,
+                  "snippet": {
+                    "text": "When this is used as a regular expression on a URL, it may match anywhere, and arbitrary hosts may come before or after it."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/regex/missing-regexp-anchor",
+          "level": "warning",
+          "message": {
+            "text": "Missing regular expression anchor"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 33,
+                  "endLine": 33,
+                  "snippet": {
+                    "text": "When this is used as a regular expression on a URL, it may match anywhere, and arbitrary hosts may come before or after it."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/regex/missing-regexp-anchor",
+          "level": "warning",
+          "message": {
+            "text": "Missing regular expression anchor"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 32,
+                  "endLine": 32,
+                  "snippet": {
+                    "text": "When this is used as a regular expression on a URL, it may match anywhere, and arbitrary hosts may come before or after it."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/regex/missing-regexp-anchor",
+          "level": "warning",
+          "message": {
+            "text": "Missing regular expression anchor"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 31,
+                  "endLine": 31,
+                  "snippet": {
+                    "text": "When this is used as a regular expression on a URL, it may match anywhere, and arbitrary hosts may come before or after it."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/regex/missing-regexp-anchor",
+          "level": "warning",
+          "message": {
+            "text": "Missing regular expression anchor"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 30,
+                  "endLine": 30,
+                  "snippet": {
+                    "text": "When this is used as a regular expression on a URL, it may match anywhere, and arbitrary hosts may come before or after it."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/regex/missing-regexp-anchor",
+          "level": "warning",
+          "message": {
+            "text": "Missing regular expression anchor"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 29,
+                  "endLine": 29,
+                  "snippet": {
+                    "text": "When this is used as a regular expression on a URL, it may match anywhere, and arbitrary hosts may come before or after it."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/regex/missing-regexp-anchor",
+          "level": "warning",
+          "message": {
+            "text": "Missing regular expression anchor"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 28,
+                  "endLine": 28,
+                  "snippet": {
+                    "text": "When this is used as a regular expression on a URL, it may match anywhere, and arbitrary hosts may come before or after it."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/regex/missing-regexp-anchor",
+          "level": "warning",
+          "message": {
+            "text": "Missing regular expression anchor"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 27,
+                  "endLine": 27,
+                  "snippet": {
+                    "text": "When this is used as a regular expression on a URL, it may match anywhere, and arbitrary hosts may come before or after it."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/file-access-to-http",
+          "level": "warning",
+          "message": {
+            "text": "File data in outbound network request"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/skills/S025-audit-page-builder/scripts/build.js"
+                },
+                "region": {
+                  "startLine": 218,
+                  "endLine": 218,
+                  "snippet": {
+                    "text": "Outbound network request depends on file data."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/file-access-to-http",
+          "level": "warning",
+          "message": {
+            "text": "File data in outbound network request"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/skills/S025-audit-page-builder/scripts/build.js"
+                },
+                "region": {
+                  "startLine": 199,
+                  "endLine": 199,
+                  "snippet": {
+                    "text": "Outbound network request depends on file data."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/file-access-to-http",
+          "level": "warning",
+          "message": {
+            "text": "File data in outbound network request"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib/audit/llm.js"
+                },
+                "region": {
+                  "startLine": 52,
+                  "endLine": 52,
+                  "snippet": {
+                    "text": "Outbound network request depends on file data."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/http-to-file-access",
+          "level": "warning",
+          "message": {
+            "text": "Network data written to file"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib/audit/geo-probe.js"
+                },
+                "region": {
+                  "startLine": 45,
+                  "endLine": 45,
+                  "snippet": {
+                    "text": "Write to file system depends on Untrusted data."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/http-to-file-access",
+          "level": "warning",
+          "message": {
+            "text": "Network data written to file"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/remint-audits.js"
+                },
+                "region": {
+                  "startLine": 12,
+                  "endLine": 12,
+                  "snippet": {
+                    "text": "Write to file system depends on Untrusted data.\nWrite to file system depends on Untrusted data.\nWrite to file system depends on Untrusted data.\nWrite to file system depends on Untrusted data.\nWrite to file system depends on Untrusted data."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/http-to-file-access",
+          "level": "warning",
+          "message": {
+            "text": "Network data written to file"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "_drv_mint.js"
+                },
+                "region": {
+                  "startLine": 7,
+                  "endLine": 7,
+                  "snippet": {
+                    "text": "Write to file system depends on Untrusted data.\nWrite to file system depends on Untrusted data.\nWrite to file system depends on Untrusted data.\nWrite to file system depends on Untrusted data.\nWrite to file system depends on Untrusted data."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/incomplete-hostname-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Incomplete regular expression for hostnames"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 36,
+                  "endLine": 36,
+                  "snippet": {
+                    "text": "This string, which is used as a regular expression here, has an unescaped '.' before 'co.uk', so it might match more hosts than expected."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/incomplete-hostname-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Incomplete regular expression for hostnames"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 33,
+                  "endLine": 33,
+                  "snippet": {
+                    "text": "This string, which is used as a regular expression here, has an unescaped '.' before 'org.uk', so it might match more hosts than expected."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/incomplete-hostname-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Incomplete regular expression for hostnames"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 31,
+                  "endLine": 31,
+                  "snippet": {
+                    "text": "This string, which is used as a regular expression here, has an unescaped '.' before 'co.uk', so it might match more hosts than expected."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/incomplete-hostname-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Incomplete regular expression for hostnames"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/backtest-personalisation.js"
+                },
+                "region": {
+                  "startLine": 29,
+                  "endLine": 29,
+                  "snippet": {
+                    "text": "This string, which is used as a regular expression here, has an unescaped '.' before 'co.uk', so it might match more hosts than expected."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unneeded-defensive-code",
+          "level": "note",
+          "message": {
+            "text": "Unneeded defensive code"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib/enrich/lead-quality.js"
+                },
+                "region": {
+                  "startLine": 524,
+                  "endLine": 524,
+                  "snippet": {
+                    "text": "This guard always evaluates to true."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/useless-assignment-to-local",
+          "level": "warning",
+          "message": {
+            "text": "Useless assignment to local variable"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib/audit/firm-identity.js"
+                },
+                "region": {
+                  "startLine": 274,
+                  "endLine": 274,
+                  "snippet": {
+                    "text": "The initial value of ch is unused, since it is always overwritten."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/dist/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 833,
+                  "endLine": 833,
+                  "snippet": {
+                    "text": "Unused variable topFix."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/dist/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 590,
+                  "endLine": 590,
+                  "snippet": {
+                    "text": "Unused variable coldSendRule."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/dist/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 836,
+                  "endLine": 836,
+                  "snippet": {
+                    "text": "Unused variable crit2."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/functions/audit/_adapter.js"
+                },
+                "region": {
+                  "startLine": 2504,
+                  "endLine": 2504,
+                  "snippet": {
+                    "text": "Unused variable catalogueFrameworks."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/public/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 833,
+                  "endLine": 833,
+                  "snippet": {
+                    "text": "Unused variable topFix."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/public/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 590,
+                  "endLine": 590,
+                  "snippet": {
+                    "text": "Unused variable coldSendRule."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/dist/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 228,
+                  "endLine": 228,
+                  "snippet": {
+                    "text": "Unused variable regFixes."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/public/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 836,
+                  "endLine": 836,
+                  "snippet": {
+                    "text": "Unused variable crit2."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/superfluous-trailing-arguments",
+          "level": "warning",
+          "message": {
+            "text": "Superfluous trailing arguments"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/functions/audit/_adapter.js"
+                },
+                "region": {
+                  "startLine": 1922,
+                  "endLine": 1922,
+                  "snippet": {
+                    "text": "Superfluous argument passed to function subjectOf."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/superfluous-trailing-arguments",
+          "level": "warning",
+          "message": {
+            "text": "Superfluous trailing arguments"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/functions/audit/_adapter.js"
+                },
+                "region": {
+                  "startLine": 308,
+                  "endLine": 308,
+                  "snippet": {
+                    "text": "Superfluous argument passed to function subjectOf."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/dist/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 298,
+                  "endLine": 298,
+                  "snippet": {
+                    "text": "Unused variable cwvN."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/dist/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 297,
+                  "endLine": 297,
+                  "snippet": {
+                    "text": "Unused variable cwvFail."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/dist/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 198,
+                  "endLine": 198,
+                  "snippet": {
+                    "text": "Unused function fixSummary."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/unused-local-variable",
+          "level": "note",
+          "message": {
+            "text": "Unused variable, import, function or class"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "website/dist/audit/audit-app.js"
+                },
+                "region": {
+                  "startLine": 134,
+                  "endLine": 134,
+                  "snippet": {
+                    "text": "Unused variable $."
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

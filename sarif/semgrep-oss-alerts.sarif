@@ -1,0 +1,429 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Semgrep OSS",
+          "rules": []
+        }
+      },
+      "results": [
+        {
+          "ruleId": "javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/reachability.test.js"
+                },
+                "region": {
+                  "startLine": 85,
+                  "endLine": 85,
+                  "snippet": {
+                    "text": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files stored in the file system. Instead, be sure to sanitize or validate user input first."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/reachability.test.js"
+                },
+                "region": {
+                  "startLine": 85,
+                  "endLine": 85,
+                  "snippet": {
+                    "text": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files stored in the file system. Instead, be sure to sanitize or validate user input first."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/reachability.test.js"
+                },
+                "region": {
+                  "startLine": 63,
+                  "endLine": 63,
+                  "snippet": {
+                    "text": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files stored in the file system. Instead, be sure to sanitize or validate user input first."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/reachability.test.js"
+                },
+                "region": {
+                  "startLine": 62,
+                  "endLine": 62,
+                  "snippet": {
+                    "text": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files stored in the file system. Instead, be sure to sanitize or validate user input first."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/reachability.test.js"
+                },
+                "region": {
+                  "startLine": 62,
+                  "endLine": 62,
+                  "snippet": {
+                    "text": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files stored in the file system. Instead, be sure to sanitize or validate user input first."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/no-hardcoded-fines.test.js"
+                },
+                "region": {
+                  "startLine": 32,
+                  "endLine": 32,
+                  "snippet": {
+                    "text": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files stored in the file system. Instead, be sure to sanitize or validate user input first."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/no-hardcoded-fines.test.js"
+                },
+                "region": {
+                  "startLine": 32,
+                  "endLine": 32,
+                  "snippet": {
+                    "text": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files stored in the file system. Instead, be sure to sanitize or validate user input first."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "renovate.json"
+                },
+                "region": {
+                  "startLine": 22,
+                  "endLine": 26,
+                  "snippet": {
+                    "text": "This Renovate configuration does not set a minimum release age. Newly published packages can be malicious or unstable. Add `\"minimumReleaseAge\": \"7 days\"` within a `packageRules` entry to wait 7 days before proposing updates to newly published package versions. Set `\"minimumReleaseAge\": false` to set an exception for minimal release age for the package rule. Added in: v42"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/skills/S008-personalisation-engine/scanners/compliance.js"
+                },
+                "region": {
+                  "startLine": 788,
+                  "endLine": 788,
+                  "snippet": {
+                    "text": "RegExp() called with a `rule` function argument, this might allow an attacker to cause a Regular Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-controlled input, consider performing input validation or use a regex checking/sanitization library such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to ReDoS."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/skills/S008-personalisation-engine/scanners/compliance.js"
+                },
+                "region": {
+                  "startLine": 780,
+                  "endLine": 780,
+                  "snippet": {
+                    "text": "RegExp() called with a `rule` function argument, this might allow an attacker to cause a Regular Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-controlled input, consider performing input validation or use a regex checking/sanitization library such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to ReDoS."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/skills/S008-personalisation-engine/scanners/compliance.js"
+                },
+                "region": {
+                  "startLine": 763,
+                  "endLine": 763,
+                  "snippet": {
+                    "text": "RegExp() called with a `rule` function argument, this might allow an attacker to cause a Regular Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-controlled input, consider performing input validation or use a regex checking/sanitization library such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to ReDoS."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/skills/S008-personalisation-engine/scanners/compliance.js"
+                },
+                "region": {
+                  "startLine": 753,
+                  "endLine": 753,
+                  "snippet": {
+                    "text": "RegExp() called with a `rule` function argument, this might allow an attacker to cause a Regular Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-controlled input, consider performing input validation or use a regex checking/sanitization library such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to ReDoS."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/skills/S008-personalisation-engine/scanners/compliance.js"
+                },
+                "region": {
+                  "startLine": 685,
+                  "endLine": 685,
+                  "snippet": {
+                    "text": "RegExp() called with a `scope` function argument, this might allow an attacker to cause a Regular Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-controlled input, consider performing input validation or use a regex checking/sanitization library such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to ReDoS."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/skills/S008-personalisation-engine/scanners/compliance.js"
+                },
+                "region": {
+                  "startLine": 608,
+                  "endLine": 608,
+                  "snippet": {
+                    "text": "RegExp() called with a `re` function argument, this might allow an attacker to cause a Regular Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-controlled input, consider performing input validation or use a regex checking/sanitization library such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to ReDoS."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/coherence-gate.test.js"
+                },
+                "region": {
+                  "startLine": 42,
+                  "endLine": 42,
+                  "snippet": {
+                    "text": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files stored in the file system. Instead, be sure to sanitize or validate user input first."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/one-door.test.js"
+                },
+                "region": {
+                  "startLine": 23,
+                  "endLine": 23,
+                  "snippet": {
+                    "text": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files stored in the file system. Instead, be sure to sanitize or validate user input first."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "eval/one-door.test.js"
+                },
+                "region": {
+                  "startLine": 23,
+                  "endLine": 23,
+                  "snippet": {
+                    "text": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files stored in the file system. Instead, be sure to sanitize or validate user input first."
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp",
+          "level": "warning",
+          "message": {
+            "text": "Semgrep Finding: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib/sourcing/markets.js"
+                },
+                "region": {
+                  "startLine": 68,
+                  "endLine": 68,
+                  "snippet": {
+                    "text": "RegExp() called with a `rx` function argument, this might allow an attacker to cause a Regular Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-controlled input, consider performing input validation or use a regex checking/sanitization library such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to ReDoS."
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
