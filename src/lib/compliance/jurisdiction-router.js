@@ -90,29 +90,101 @@ function normaliseSector(s) {
   return SECTOR_ALIASES[v] || v;
 }
 
+// Country-specific sector frameworks (overlay on top of UK/EU SECTOR_MAP for jurisdictions
+// outside UK + EU). Each cell lists the additional frameworks that apply for that sector in
+// that country, on top of the country's baseline regulators (added in routeJurisdictions).
+const COUNTRY_SECTOR = {
+  // UAE — federal + free zone (DIFC, ADGM) overlay
+  AE: {
+    'law-firms':       ['UAE_FED_ARBITRATION_2018', 'DIFC_DP_LAW_2020', 'ADGM_DP_REGS_2021'],
+    'real-estate':     ['UAE_RERA', 'UAE_TRAKHEESI'],
+    'finance':         ['UAE_DFSA', 'UAE_SCA', 'UAE_CBUAE_AML'],
+    'fintech':         ['UAE_DFSA', 'UAE_SCA', 'UAE_CBUAE_AML', 'UAE_FSRA_ADGM'],
+    'healthcare':      ['UAE_DHA', 'UAE_MOHAP'],
+    'hospitality':     ['UAE_DET_DTCM', 'UAE_FED_CONSUMER_2006'],
+    'ecommerce':       ['UAE_FED_CONSUMER_2006', 'UAE_TDRA'],
+    'media':           ['UAE_NMC']
+  },
+  // Saudi Arabia
+  SA: {
+    'law-firms':       ['SA_MOJ_REGS'],
+    'finance':         ['SA_SAMA', 'SA_CMA_KSA'],
+    'fintech':         ['SA_SAMA', 'SA_CMA_KSA', 'SA_SDAIA_AI'],
+    'real-estate':     ['SA_REGA', 'SA_WAFI'],
+    'healthcare':      ['SA_MOH_KSA', 'SA_SFDA'],
+    'hospitality':     ['SA_MOT_KSA'],
+    'ecommerce':       ['SA_ECOMMERCE_2019']
+  },
+  // Singapore
+  SG: {
+    'law-firms':       ['SG_LAW_SOCIETY', 'SG_LPA_RULES'],
+    'finance':         ['SG_MAS_NOTICE_626', 'SG_FAA', 'SG_SFA'],
+    'fintech':         ['SG_MAS_NOTICE_626', 'SG_PAYMENT_SERVICES_ACT'],
+    'real-estate':     ['SG_CEA', 'SG_HDB_RULES'],
+    'healthcare':      ['SG_MOH_SG', 'SG_HSA'],
+    'hospitality':     ['SG_HCLA'],
+    'saas':            ['SG_CYBERSECURITY_2018'],
+    'ecommerce':       ['SG_CPFTA', 'SG_SPAM_CONTROL']
+  },
+  // India
+  IN: {
+    'law-firms':       ['IN_BAR_COUNCIL_RULES'],
+    'finance':         ['IN_RBI', 'IN_SEBI', 'IN_PMLA_2002'],
+    'fintech':         ['IN_RBI', 'IN_SEBI', 'IN_NPCI'],
+    'real-estate':     ['IN_RERA_2016'],
+    'healthcare':      ['IN_NMC_INDIA', 'IN_CDSCO'],
+    'hospitality':     ['IN_FSSAI'],
+    'ecommerce':       ['IN_CP_ECOMMERCE_2020'],
+    'saas':            ['IN_CERT_IN', 'IN_TRAI']
+  },
+  // Hong Kong
+  HK: {
+    'law-firms':       ['HK_LAW_SOCIETY', 'HK_BAR'],
+    'finance':         ['HK_HKMA', 'HK_SFC_CONDUCT'],
+    'fintech':         ['HK_HKMA', 'HK_SFC_CONDUCT'],
+    'real-estate':     ['HK_EAA'],
+    'healthcare':      ['HK_DEPT_HEALTH', 'HK_MEDICAL_COUNCIL'],
+    'hospitality':     ['HK_TIA'],
+    'ecommerce':       ['HK_TDO_TRADE_DESCRIPTION']
+  }
+};
+
 function routeJurisdictions(opts = {}) {
   const c = String(opts.country || '').toUpperCase().trim();
   const sector = normaliseSector(opts.sector);
   const out = [];
 
   // Universal UK: privacy + cookies + electronic-marketing + AI + EEAT + DMCC + Companies Act
-  // (DMCC, Companies Act apply to ALL UK limited companies regardless of sector)
   if (c === 'UK' || c === 'GB' || c === 'GBR' || !c) {
-    out.push(
-      'UK_GDPR_A13', 'UK_PECR', 'UK_ICO_COOKIES', 'UK_DPA_2018',
-      'EU_AI_ACT', 'GOOGLE_EEAT',
-      'UK_DMCC_2024', 'UK_COMPANIES_ACT'
-    );
+    out.push('UK_GDPR_A13', 'UK_PECR', 'UK_ICO_COOKIES', 'UK_DPA_2018',
+      'EU_AI_ACT', 'GOOGLE_EEAT', 'UK_DMCC_2024', 'UK_COMPANIES_ACT');
+    for (const f of (SECTOR_MAP[sector] || [])) out.push(f);
   } else if (EU_MEMBER_STATES.has(c)) {
-    out.push('EU_GDPR', 'EU_EPRIVACY');
+    out.push('EU_GDPR', 'EU_EPRIVACY', 'EU_AI_ACT', 'GOOGLE_EEAT');
+    for (const f of (SECTOR_MAP[sector] || [])) out.push(f);
   } else if (c === 'US' || c === 'USA') {
-    out.push('US_FTC', 'US_CPRA');
+    out.push('US_FTC', 'US_CPRA', 'GOOGLE_EEAT');
+    for (const f of (SECTOR_MAP[sector] || [])) out.push(f);
   } else if (c === 'AE' || c === 'UAE') {
-    out.push('UAE_PDPL');
+    out.push('UAE_PDPL', 'UAE_FED_CONSUMER_2006', 'GOOGLE_EEAT');
+    for (const f of ((COUNTRY_SECTOR.AE && COUNTRY_SECTOR.AE[sector]) || [])) out.push(f);
+  } else if (c === 'SA' || c === 'KSA' || c === 'SAUDI') {
+    out.push('SA_PDPL', 'SA_CITC', 'GOOGLE_EEAT');
+    for (const f of ((COUNTRY_SECTOR.SA && COUNTRY_SECTOR.SA[sector]) || [])) out.push(f);
+  } else if (c === 'SG' || c === 'SGP' || c === 'SINGAPORE') {
+    out.push('SG_PDPA', 'GOOGLE_EEAT');
+    for (const f of ((COUNTRY_SECTOR.SG && COUNTRY_SECTOR.SG[sector]) || [])) out.push(f);
+  } else if (c === 'IN' || c === 'IND' || c === 'INDIA') {
+    out.push('IN_DPDP_2023', 'IN_IT_2000', 'IN_IT_RULES_2021', 'IN_CONSUMER_2019', 'GOOGLE_EEAT');
+    for (const f of ((COUNTRY_SECTOR.IN && COUNTRY_SECTOR.IN[sector]) || [])) out.push(f);
+  } else if (c === 'HK' || c === 'HKG' || c === 'HONGKONG') {
+    out.push('HK_PDPO', 'HK_COMPANIES_ORDINANCE', 'GOOGLE_EEAT');
+    for (const f of ((COUNTRY_SECTOR.HK && COUNTRY_SECTOR.HK[sector]) || [])) out.push(f);
+  } else {
+    // unknown country — default to UK baseline so the audit still ships
+    out.push('UK_GDPR_A13', 'GOOGLE_EEAT');
+    for (const f of (SECTOR_MAP[sector] || [])) out.push(f);
   }
-
-  // Sector-specific frameworks (only added when sector is recognised)
-  for (const f of (SECTOR_MAP[sector] || [])) out.push(f);
 
   return Array.from(new Set(out));
 }
@@ -128,7 +200,32 @@ function listAllFrameworks() {
   return Array.from(set).sort();
 }
 
-module.exports = { routeJurisdictions, normaliseSector, listAllSectors, listAllFrameworks, EU_MEMBER_STATES, SECTOR_MAP, SECTOR_ALIASES };
+// ============================================================================
+// Phase 1 R23-1: categorical resolver bridge.
+// Re-export resolveCategory from the category-catalog so callers have one
+// import path. Also expose applicabilityCheck for the worker gate.
+// ============================================================================
+const catalog = require('./category-catalog');
+
+function resolveCategoryFor(category, country, sector) {
+  return catalog.resolveCategory(category, country, sector);
+}
+
+// Hard gate: returns true if a framework code is in the applicable list for
+// the (country, sector). The worker uses this to drop any finding whose
+// framework was not produced by routeJurisdictions for that audit.
+function applicabilityCheck(frameworkCode, country, sector) {
+  if (!frameworkCode) return false;
+  const allowed = routeJurisdictions({ country, sector });
+  return allowed.includes(frameworkCode);
+}
+
+module.exports = {
+  routeJurisdictions, normaliseSector, listAllSectors, listAllFrameworks,
+  EU_MEMBER_STATES, SECTOR_MAP, SECTOR_ALIASES, COUNTRY_SECTOR,
+  resolveCategoryFor, applicabilityCheck,
+  CATEGORIES: catalog.CATEGORIES, getCategoryMeta: catalog.getCategoryMeta, listCategories: catalog.listCategories
+};
 
 if (require.main === module) {
   console.log(JSON.stringify({

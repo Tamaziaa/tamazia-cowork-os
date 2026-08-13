@@ -18,6 +18,11 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const { fetchWithRetry } = require('../../skills/S008-personalisation-engine/lib/http.js');
+// MAILBOX POOL · the MailDeck cold-sending fleet (30 lookalike-domain inboxes).
+// Cold 1:1 outreach routes here (relay='maildeck'); the HTTP relays below stay for
+// transactional/warm mail. The pool enforces per-inbox warmup->cold ramp + dedup
+// + the hard "never cold from a real brand domain" rule (see mailbox-pool.js).
+const mailboxPool = require('./mailbox-pool.js');
 
 function pg(sql) {
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
@@ -87,7 +92,9 @@ async function viaMailjet({ to, from, from_name, subject, text, html, messageId 
   const auth = Buffer.from(`${key}:${secret}`).toString('base64');
   const Headers = { 'List-Unsubscribe': listUnsubValue(to, from) };
   if (UNSUB_HTTPS) Headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
-  if (messageId) Headers['Message-ID'] = messageId;
+  // NOTE: Mailjet rejects Message-ID in the Headers collection (send-0011: "Header cannot be
+  // customized using the Headers collection"). Mailjet sets its own Message-ID; reply matching for
+  // Mailjet sends falls back to the returned Mailjet MessageID (relay_email_id) + In-Reply-To/References.
   const r = await fetchWithRetry('https://api.mailjet.com/v3.1/send', {
     method: 'POST', headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ Messages: [{ From: { Email: from, Name: from_name }, To: [{ Email: to }], Subject: subject, TextPart: text, HTMLPart: html || undefined, Headers }] }),
@@ -132,7 +139,21 @@ async function viaMailersend({ to, from, from_name, subject, text, html }) {
   return { ok: r.status === 202 || r.ok, id: id || null, raw: r.status };
 }
 
-const PROVIDERS = { smtp2go: viaSmtp2go, brevo: viaBrevo, mailjet: viaMailjet, sendgrid: viaSendgrid, resend: viaResend, mailersend: viaMailersend };
+// ---- MailDeck mailbox-pool provider (cold fleet) --------------------------------
+// Delegates to the pool: picks a lookalike mailbox (round-robin, ramp-capped, deduped)
+// and sends over raw SMTP. NEVER fails over to an HTTP relay — a cold send must not
+// silently leave from a real brand domain. Returns the actual from-address used.
+async function viaMaildeck(opts) {
+  const r = await mailboxPool.sendCold({
+    to: opts.to, from_name: opts.from_name, subject: opts.subject,
+    text: opts.text, html: opts.html, messageId: opts.messageId,
+    listUnsub: opts.listUnsub, replyTo: opts.replyTo, extraHeaders: opts.extraHeaders,
+  });
+  if (r.ok) return { ok: true, id: r.id, message_id: r.message_id, from_used: r.from_used, mailbox: r.mailbox, domain: r.domain, reused: r.reused, raw: r };
+  return { ok: false, error: r.error, code: r.code, raw: r };
+}
+
+const PROVIDERS = { smtp2go: viaSmtp2go, brevo: viaBrevo, mailjet: viaMailjet, sendgrid: viaSendgrid, resend: viaResend, mailersend: viaMailersend, maildeck: viaMaildeck };
 
 /**
  * Send via the requested relay; on cap/error, fail over through FAILOVER order.
@@ -140,6 +161,14 @@ const PROVIDERS = { smtp2go: viaSmtp2go, brevo: viaBrevo, mailjet: viaMailjet, s
  */
 async function send(opts) {
   const preferred = (opts.relay || 'brevo').toLowerCase();
+  // COLD PATH: route to the MailDeck mailbox pool. No HTTP failover — a cold send must never
+  // fall back to a real-domain relay. The pool mints its own Message-ID anchored to the
+  // lookalike sending domain (do NOT pre-mint one here against opts.from / a real domain).
+  if (preferred === 'maildeck') {
+    const r = await viaMaildeck(opts);
+    if (r.ok) return { ok: true, provider: 'maildeck', id: r.id, message_id: r.message_id, from_used: r.from_used, mailbox: r.mailbox, domain: r.domain, reused: r.reused, raw: r.raw, attempts: [{ relay: 'maildeck' }] };
+    return { ok: false, error: r.error || 'maildeck_failed', provider: 'maildeck', code: r.code, attempts: [{ relay: 'maildeck', error: r.error }] };
+  }
   // Stable RFC Message-ID for bit-perfect reply threading. Caller may pass opts.messageId so it can
   // persist the exact value; otherwise we mint one here. Same ID is reused across failover attempts.
   if (!opts.messageId) { const dom = (opts.from || 'tamazia.in').split('@')[1] || 'tamazia.in'; opts.messageId = `<tz-${Date.now()}-${Math.random().toString(36).slice(2, 10)}@${dom}>`; }
@@ -172,6 +201,17 @@ function capacitySnapshot() {
   }
   out._total_remaining_today = total;
   out._monthly_capacity = '~25k/mo across live transactional relays (50k needs opt-in nurture stream or paid top-up)';
+  // MailDeck cold fleet (separate channel — these are the cold cannon, lookalike domains only)
+  try {
+    const fleet = mailboxPool.fleetSnapshot();
+    out.maildeck = {
+      mailboxes_loaded: fleet.length,
+      cold_remaining_today: fleet.reduce((s, m) => s + (!m.paused && !m.inBackoff ? m.remaining : 0), 0),
+      sending_today: fleet.reduce((s, m) => s + m.used, 0),
+      ramped_inboxes: fleet.filter(m => m.cap > 0).length,
+      warmup_only_inboxes: fleet.filter(m => m.cap === 0).length,
+    };
+  } catch (_e) { out.maildeck = { mailboxes_loaded: 0, error: 'pool_unavailable' }; }
   return out;
 }
 

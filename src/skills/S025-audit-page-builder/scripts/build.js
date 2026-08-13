@@ -18,7 +18,15 @@ function pgPath() { return path.resolve(ROOT, 'scripts', 'psql'); }
 function pg(sql) {
   const url = process.env.NEON_URL || process.env.NEON_CONNECTION_STRING;
   if (!url) return null;
-  try { return execFileSync(pgPath(), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim(); } catch (_e) { return null; }
+  try {
+    if (sql.length > 32000) {
+      const tmp = path.join(require('os').tmpdir(), `s025-${process.pid}-${Date.now()}.sql`);
+      fs.writeFileSync(tmp, sql);
+      try { return execFileSync(pgPath(), [url, '-tA', '-f', tmp], { encoding: 'utf8' }).toString().trim(); }
+      finally { try { fs.unlinkSync(tmp); } catch (_e) {} }
+    }
+    return execFileSync(pgPath(), [url, '-tA', '-c', sql], { encoding: 'utf8' }).toString().trim();
+  } catch (_e) { return null; }
 }
 
 // 5.1.2 · 8-char hash generator. Random + collision-free check.

@@ -22,13 +22,25 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
   const limit = Number(process.argv[2] || 12);
   // Eligible: scraped (sponsored auto, or organic approved) OR aggressive_selected, not yet quality-scored,
   // not wrong-track, has a domain.
+  // ELIGIBILITY (broadened 2026-05-23): the original filter only admitted sponsored / approved-organic /
+  // aggressive streams, which silently excluded EVERY local-search and null-stream prospect (398 real
+  // leads were stuck at status='new', never scored, so the cadence never fired). A genuine prospect is
+  // eligible once it has a domain + a real contact address, regardless of which sourcing stream found it.
+  // Test/seed/investor/institution/internal leads stay excluded; the 10-layer quality gate (score>=60)
+  // and the unfilled-token draft gate below still decide what actually enters the cadence.
   const raw = pg(`
-    SELECT id::text, COALESCE(domain,''), COALESCE(sector,''), COALESCE(contact_email,''), COALESCE(contact_confidence::text,'0'),
+    SELECT id::text, COALESCE(domain,''), COALESCE(sector,''), COALESCE(NULLIF(contact_email,''), NULLIF(email,''), ''), COALESCE(contact_confidence::text,'0'),
            COALESCE(scrape_stream,''), COALESCE(ad_intel::text,'{}'), COALESCE(all_socials::text,'{}'), COALESCE(all_emails::text,'[]')
     FROM leads
     WHERE quality_score IS NULL AND COALESCE(domain,'') <> ''
-      AND ( scrape_stream='sponsored' OR (scrape_stream='organic_top100' AND verify_status='approved') OR aggressive_selected=TRUE )
+      AND ( scrape_stream='sponsored'
+            OR (scrape_stream='organic_top100' AND verify_status='approved')
+            OR aggressive_selected=TRUE
+            OR acquisition_channel ILIKE 'local_search%'
+            OR COALESCE(NULLIF(contact_email,''), NULLIF(email,'')) IS NOT NULL )
       AND COALESCE(lead_type,'') NOT IN ('investor','institution','internal')
+      AND COALESCE(acquisition_channel,'') NOT ILIKE '%test%'
+      AND COALESCE(acquisition_channel,'') NOT ILIKE '%seed%'
     ORDER BY priority_score DESC NULLS LAST, id DESC LIMIT ${limit}`);
   if (!raw) { console.log('[qualify] no eligible leads to score.'); return; }
   const leads = raw.split('\n').filter(Boolean).map(l => { const [id, domain, sector, contact_email, cc, scrape_stream, ad_intel, all_socials, all_emails] = l.split('\t'); return { id: Number(id), domain, sector, contact_email, contact_confidence: Number(cc), scrape_stream, ad_intel, all_socials, all_emails }; });
@@ -42,7 +54,8 @@ const esc = v => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
     if (q.pass) {
       passed++;
       // If a Touch-0 draft exists, enter the auto-send cadence
-      const hasDraft = pg(`SELECT 1 FROM outreach_drafts WHERE lead_id=${lead.id} AND draft_metadata->>'touch'='0' AND send_status='pending' LIMIT 1`);
+      // B6 gate: never queue a draft that still contains an unfilled token ({firm}, [Decision Maker Name], etc.)
+      const hasDraft = pg(`SELECT 1 FROM outreach_drafts WHERE lead_id=${lead.id} AND draft_metadata->>'touch'='0' AND send_status='pending' AND draft_body !~ '\\{[a-zA-Z_]+\\}' AND draft_body !~ '\\[[A-Za-z ]+\\]' LIMIT 1`);
       if (hasDraft) { pg(`UPDATE leads SET status='touch_0_queued', next_touch_date=CURRENT_DATE WHERE id=${lead.id}`); queued++; }
     } else { failed++; }
     console.log(`  ${lead.domain.padEnd(30)} score=${q.score} ${q.pass ? 'PASS' : 'fail'}${q.fit ? ' [FIT]' : ''}`);

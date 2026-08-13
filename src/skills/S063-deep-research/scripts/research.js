@@ -129,27 +129,33 @@ WRITING RULES:
 DEEP RESEARCH:
 ${JSON.stringify(profile, null, 2).slice(0, 8000)}
 
-Return JSON: { subject, body }`;
+GREETING: The recipient's first name is "${(lead.contact_first || lead.first_name || '').trim()}". If that is non-empty, open with "Hi <firstname>,". If it is empty, open with "Hi there,". NEVER write a bracketed or templated placeholder such as [Decision Maker Name], {name}, {firm} or similar — write the real word or a clean generic greeting.
 
-  // Generate with bigger budget then parse
-  const gen = await generate({ prompt: prompt + '\n\nReturn ONLY JSON: { "subject": "...", "body": "..." }', max_tokens: 2200, temperature: 0.4 });
+Return the email in EXACTLY this plain-text format and NOTHING else (no JSON, no code fences):
+SUBJECT: <subject line, max 8 words>
+===BODY===
+<the full email body, plain text, real line breaks>`;
+
+  // Generate, then parse by delimiter. Plain-text + delimiter is robust to the newlines, quotes and
+  // truncation that made JSON-from-LLM parsing fail; no fragile JSON.parse.
+  const gen = await generate({ prompt, max_tokens: 2200, temperature: 0.4 });
   if (!gen.ok) return { error: gen.error };
   let txt = (gen.text || '').trim();
-  if (txt.startsWith('```')) txt = txt.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-  // Slice between { ... last } even if truncated mid-string
-  const first = txt.indexOf('{');
-  const last = txt.lastIndexOf('}');
-  if (first !== -1 && last > first) txt = txt.slice(first, last + 1);
-  let r;
-  try { r = { ok: true, data: JSON.parse(txt) }; }
-  catch (_e) {
-    // Salvage: regex out subject + body even if JSON truncated
-    const sM = txt.match(/"subject"\s*:\s*"([^"]+)"/);
-    const bM = txt.match(/"body"\s*:\s*"([\s\S]+?)"\s*[},]/);
-    if (sM && bM) r = { ok: true, data: { subject: sM[1], body: bM[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') } };
-    else r = { ok: false, error: 'json_parse_failed', raw_text: txt.slice(0, 500) };
+  if (txt.startsWith('```')) txt = txt.replace(/^```(?:json|text)?\s*/, '').replace(/\s*```$/, '').trim();
+  const sm = txt.match(/SUBJECT:\s*(.+)/i);
+  const bi = txt.indexOf('===BODY===');
+  const subject = sm ? sm[1].trim().replace(/^["']|["']$/g, '') : '';
+  let body = bi !== -1 ? txt.slice(bi + '===BODY==='.length).trim() : '';
+  // Fallback if the model omitted the delimiter: first non-empty line = subject, remainder = body.
+  if (subject && !body) {
+    const lines = txt.split('\n').filter(l => l.trim());
+    if (lines.length > 1) body = lines.slice(1).join('\n').trim();
   }
-  return r.ok ? r.data : { error: r.error, raw: r.raw_text };
+  // Guard: refuse drafts that still contain an unfilled bracket/curly placeholder.
+  if (subject && body && !/\[[A-Za-z][A-Za-z ]+\]|\{[a-zA-Z_]+\}/.test(subject + ' ' + body)) {
+    return { subject, body };
+  }
+  return { error: 'compose_parse_or_placeholder_failed', raw: txt.slice(0, 500) };
 }
 
 async function runForLead(lead) {

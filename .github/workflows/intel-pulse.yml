@@ -1,0 +1,24 @@
+name: Tamazia hourly intel pulse
+# PhD-level analysis of the live pipeline every hour -> Slack + Telegram (summary + improvements + critical flags).
+on:
+  schedule:
+    - cron: "0 * * * *"   # top of every hour
+  workflow_dispatch: {}
+concurrency:
+  group: intel-pulse
+  cancel-in-progress: false
+jobs:
+  pulse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install deps
+        run: npm install --omit=dev || true
+      - name: Materialise .env from secret
+        run: echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+      - name: Run intel pulse
+        run: node scripts/intel-pulse.js

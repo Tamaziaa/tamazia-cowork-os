@@ -14,3 +14,8 @@ uploads/
 .DS_Store
 INFRASTRUCTURE-INVENTORY.md
 confirmations/
+config/maildeck-mailboxes.csv
+config/maildeck-mailboxes.json
+config/maildeck-roster.json
+secrets/
+exports/

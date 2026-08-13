@@ -1,0 +1,23 @@
+# MailDeck mailbox export — SAMPLE / TEMPLATE (safe to commit; contains NO real creds)
+# ---------------------------------------------------------------------------------
+# When you export the 30 SMTP/IMAP creds from MailDeck (Sidebar → Exports / SMTP),
+# save the file as: config/maildeck-mailboxes.csv   (that real file is gitignored)
+# then run:  node scripts/load-maildeck-creds.js
+#
+# The loader is tolerant of MailDeck's exact column names. It will recognise common
+# aliases (email/address/username, password/smtp_pass/app_password, smtp_server/smtp_host,
+# etc.). At minimum it needs: an email/address column and a password column.
+#
+# COLUMN NOTES
+#   address           the lookalike from-address (cold only). MUST be a lookalike domain
+#                     (tamazia.uk/.store/.info/.online, tamaziagroup.uk/.co.uk) — NEVER a
+#                     real brand domain (tamazia.co.uk / tamazia.in). The loader refuses real domains.
+#   persona_name      display name shown to recipients (keep consistent per inbox for reputation)
+#   smtp_host/port    usually smtp.gmail.com / 587 for Google Workspace inboxes
+#   smtp_pass         the app password / SMTP password from MailDeck
+#   imap_host/port    usually imap.gmail.com / 993 (used later for per-inbox reply reads if needed)
+#   added_at          (optional) ISO date the inbox started warmup. If blank, load time is used
+#                     as the ramp clock start. Leave blank unless you know the real warmup-start date.
+address,persona_name,first_name,smtp_host,smtp_port,smtp_user,smtp_pass,imap_host,imap_port,imap_user,imap_pass,added_at
+john@tamazia.uk,John Avery,John,smtp.gmail.com,587,john@tamazia.uk,APP_PASSWORD_HERE,imap.gmail.com,993,john@tamazia.uk,APP_PASSWORD_HERE,2026-05-23
+sara@tamazia.store,Sara N.,Sara,smtp.gmail.com,587,sara@tamazia.store,APP_PASSWORD_HERE,imap.gmail.com,993,sara@tamazia.store,APP_PASSWORD_HERE,2026-05-23

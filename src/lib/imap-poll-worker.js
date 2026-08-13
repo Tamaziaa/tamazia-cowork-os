@@ -83,6 +83,13 @@ function handleInbound({ mailbox, uid, from_email, to_email, subject, in_reply_t
     const a = pg(`SELECT id FROM aliases WHERE LOWER(email)=${esc(String(to_email).toLowerCase())} LIMIT 1`);
     if (a) matched_alias_id = Number(a) || null;
   }
+  // Precise sender match: covers MailDeck cold replies where the client stripped In-Reply-To — the
+  // prospect replies FROM the exact address we cold-mailed, so match it straight to that lead.
+  if (!matched_lead_id && from_email) {
+    const fe = String(from_email).toLowerCase();
+    const r = pg(`SELECT id FROM leads WHERE LOWER(COALESCE(NULLIF(email,''), contact_email, ''))=${esc(fe)} ORDER BY id DESC LIMIT 1`);
+    if (r) matched_lead_id = Number(r) || null;
+  }
   // Fall back to FROM domain matching for replies that broke the In-Reply-To chain
   if (!matched_lead_id) {
     const dom = (from_email || '').split('@').pop()?.toLowerCase();
@@ -125,6 +132,9 @@ function handleInbound({ mailbox, uid, from_email, to_email, subject, in_reply_t
       pg(`UPDATE email_sequence_state SET next_due_at = NOW() + INTERVAL '7 days', paused_reason='OOO detected', updated_at=NOW() WHERE lead_id=${matched_lead_id}`);
     } else {
       pg(`UPDATE email_sequence_state SET status='replied', paused_reason=${esc(classification)}, updated_at=NOW() WHERE lead_id=${matched_lead_id}`);
+      // mark the lead replied so the cadence stops touching them (belt-and-suspenders with the send gate)
+      pg(`UPDATE leads SET replied=TRUE, last_reply_received_at=NOW(), updated_at=NOW() WHERE id=${matched_lead_id}`);
+      pg(`UPDATE sends SET replied_at=NOW() WHERE lead_id=${matched_lead_id} AND replied_at IS NULL`);
     }
   }
 
