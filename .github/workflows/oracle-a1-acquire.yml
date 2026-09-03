@@ -59,7 +59,7 @@ jobs:
         run: |
           mkdir -p ~/.oci
           printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
-            "$OCI_CLI_USER" "$OCI_CLI_FINGERPRINT" "$OCI_CLI_TENANCY" "$OCI_CLI_REGION" "~/.oci/key.pem" > ~/.oci/config
+            "$OCI_CLI_USER" "$OCI_CLI_FINGERPRINT" "$OCI_CLI_TENANCY" "$OCI_CLI_REGION" "$HOME/.oci/key.pem" > ~/.oci/config
           printf '%s' "$OCI_CLI_KEY_CONTENT" > ~/.oci/key.pem
           chmod 600 ~/.oci/key.pem
           EXISTING=$(oci compute instance list \
@@ -91,7 +91,7 @@ jobs:
         run: |
           mkdir -p ~/.oci
           printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
-            "$OCI_CLI_USER" "$OCI_CLI_FINGERPRINT" "$OCI_CLI_TENANCY" "$OCI_CLI_REGION" "~/.oci/key.pem" > ~/.oci/config
+            "$OCI_CLI_USER" "$OCI_CLI_FINGERPRINT" "$OCI_CLI_TENANCY" "$OCI_CLI_REGION" "$HOME/.oci/key.pem" > ~/.oci/config
           printf '%s' "$OCI_CLI_KEY_CONTENT" > ~/.oci/key.pem
           chmod 600 ~/.oci/key.pem
 
