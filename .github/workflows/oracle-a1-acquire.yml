@@ -1,0 +1,275 @@
+name: Oracle A1 Ampere auto-acquire (retry until capacity)
+# Polls on a schedule until VM.Standard.A1.Flex becomes available in uk-london-1, at the
+# post-2026-06-15 Always-Free ceiling of 2 OCPU / 12 GB (Oracle halved the old 4 OCPU / 24 GB
+# allowance with no public announcement; see A1-STATUS.md section 6 and DECISIONS D52.1).
+#
+# Revived per founder decision D52.2 from the version deleted in commit 7fa36c2d (2026-06-19).
+# Two defects in the original are fixed here:
+#   1. The OCI CLI response was logged via `head -c 300`. That truncated every single one of the
+#      25 original runs' error text mid sentence, inside Oracle's own key-security warning
+#      banner, before the real error (LimitExceeded vs Out-of-capacity vs auth) ever reached the
+#      log (A1-STATUS.md section 3). Fixed: the full response goes to the log and to an uploaded
+#      artifact, uncapped.
+#   2. The original asked for 4 OCPU / 24 GB, which stopped being an Always-Free-eligible ask on
+#      2026-06-15, four days before the workflow itself was deleted. Every one of its 25 runs was
+#      requesting a shape it could structurally never get. Fixed: default ask is 2 OCPU / 12 GB.
+#
+# On success it posts a Telegram notice and leaves itself enabled (idempotent: once the instance
+# is RUNNING, the "already exists" check makes every later tick a fast no-op).
+#
+# REQUIRED GITHUB SECRETS. All of these already exist on this repo today, confirmed live via
+# `gh api repos/Tamaziaa/tamazia-cowork-os/actions/secrets` on 2026-09-06. Nothing new to add:
+#   OCI_CLI_USER, OCI_CLI_FINGERPRINT, OCI_CLI_TENANCY, OCI_CLI_REGION, OCI_CLI_KEY_CONTENT,
+#   OCI_SUBNET_ID, OCI_IMAGE_ID   the OCI API identity plus the target subnet and image.
+#   ENV_B64   decoded to .env for TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID. There is no standalone
+#     TELEGRAM_* repo secret (checked live; not present). Every other Telegram-sending workflow in
+#     this repo (enforcement-news.yml is the clearest example) sources them the same way, from the
+#     decoded ENV_B64 file, not from secrets.TELEGRAM_*. The original 2026-06 version of this
+#     workflow read secrets.TELEGRAM_BOT_TOKEN directly; that name was never populated as a
+#     standalone secret, so its notify step could never have fired even on a successful launch.
+#     This revival fixes that too.
+#   GH_ACTIONS_PAT   a classic PAT already used elsewhere in this repo (env-rebuild-v5.yml,
+#     rebuild-env-b64.yml, update-env-secret.yml) for API writes the default GITHUB_TOKEN cannot
+#     do. Used here only to persist the attempt counter as a repo variable and to disable this
+#     workflow if OCI_A1_MAX_ATTEMPTS is ever exceeded.
+#
+# REPO VARIABLES (Settings, Actions, Variables). None exist on this repo today; the workflow
+# creates them on its first run:
+#   OCI_A1_ATTEMPTS       running count of capacity_exhausted ticks. Resets to 0 automatically on
+#                         a success; the founder can also reset it manually at any time.
+#   OCI_A1_MAX_ATTEMPTS   ceiling before the workflow disables itself. Defaults to 500 if unset;
+#                         change it in Settings, Variables, no PR needed.
+#   OCI_A1_LAST_OUTCOME   last tick's classification. Used only so a sustained limit_exceeded or
+#                         auth_error condition pages once, not on every tick.
+#
+# DISABLE MANUALLY: gh workflow disable oracle-a1-acquire.yml --repo Tamaziaa/tamazia-cowork-os
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # every 15 minutes, nominal. GitHub throttles schedule triggers on
+                             # low-activity default branches to whatever interval it chooses.
+                             # A1-STATUS.md measured the deleted */10 version actually firing every
+                             # 1h29m to 5h14m (median about 2h30m), roughly 8 runs a day against a
+                             # nominal 144 a day. Treat this cron line as intent, not a guarantee.
+  workflow_dispatch:
+    inputs:
+      ocpus:
+        description: 'OCPUs to request (Always-Free ceiling is 2 as of 2026-06-15, see D52.1)'
+        default: '2'
+      memory_gb:
+        description: 'Memory in GB to request (Always-Free ceiling is 12 as of 2026-06-15)'
+        default: '12'
+
+concurrency:
+  group: oracle-a1-acquire
+  cancel-in-progress: false   # never run two attempts against the same tenancy/subnet at once
+
+permissions:
+  contents: read
+
+jobs:
+  acquire-a1:
+    runs-on: ubuntu-latest
+    name: Try to acquire A1.Flex instance
+    timeout-minutes: 10
+    steps:
+      - name: Install OCI CLI
+        run: pip install oci-cli --quiet 2>&1 | tail -3 || true
+
+      - name: Check if instance already exists
+        id: check
+        env:
+          OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+          OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+          OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
+          OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.oci
+          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
+            "$OCI_CLI_USER" "$OCI_CLI_FINGERPRINT" "$OCI_CLI_TENANCY" "$OCI_CLI_REGION" "$HOME/.oci/key.pem" > ~/.oci/config
+          printf '%s' "$OCI_CLI_KEY_CONTENT" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+          EXISTING=$(oci compute instance list \
+            --compartment-id "$OCI_CLI_TENANCY" \
+            --display-name "tamazia-engine-a1" \
+            --lifecycle-state RUNNING \
+            --query "data[0].\"public-ip\"" \
+            --raw-output 2>/dev/null || echo "")
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            echo "Instance already RUNNING at $EXISTING"
+            echo "ALREADY_EXISTS=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ALREADY_EXISTS=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The capacity branch. Every non-success outcome from Oracle on this step is expected
+      # traffic (Always-Free A1 is a spot-capacity poll, not a reservation), so this step itself
+      # always exits 0 no matter which of the three ADs it stops on or why. continue-on-error is
+      # kept here anyway as a defensive backstop for that same reason: this is the one step in the
+      # workflow whose job is to absorb OCI's routine "no" and try again later, so it is the only
+      # step in the file carrying continue-on-error. limit_exceeded and auth_error are NOT routine
+      # and are made to fail the job for real, two steps down, on a step that carries none.
+      - name: Try each Availability Domain
+        id: attempt
+        if: steps.check.outputs.ALREADY_EXISTS == 'false'
+        continue-on-error: true
+        env:
+          OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+          OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+          OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
+          OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+          OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
+          OCI_IMAGE_ID: ${{ secrets.OCI_IMAGE_ID }}
+          OCPUS: ${{ github.event.inputs.ocpus || '2' }}
+          MEMORY_GB: ${{ github.event.inputs.memory_gb || '12' }}
+        run: |
+          set +e   # classify the OCI CLI's exit code ourselves below; non-zero here is routine
+          mkdir -p ~/.oci oci-logs
+          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
+            "$OCI_CLI_USER" "$OCI_CLI_FINGERPRINT" "$OCI_CLI_TENANCY" "$OCI_CLI_REGION" "$HOME/.oci/key.pem" > ~/.oci/config
+          printf '%s' "$OCI_CLI_KEY_CONTENT" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+
+          OUTCOME="capacity_exhausted"
+          for AD in "HzzF:UK-LONDON-1-AD-1" "HzzF:UK-LONDON-1-AD-2" "HzzF:UK-LONDON-1-AD-3"; do
+            echo "Trying $AD ..."
+            LOGFILE="oci-logs/attempt-$(echo "$AD" | tr ':' '-').log"
+            RESULT=$(oci compute instance launch \
+              --availability-domain "$AD" \
+              --compartment-id "$OCI_CLI_TENANCY" \
+              --shape "VM.Standard.A1.Flex" \
+              --shape-config "{\"ocpus\": $OCPUS, \"memoryInGBs\": $MEMORY_GB}" \
+              --image-id "$OCI_IMAGE_ID" \
+              --subnet-id "$OCI_SUBNET_ID" \
+              --display-name "tamazia-engine-a1" \
+              --assign-public-ip true \
+              --metadata '{"ssh_authorized_keys":""}' \
+              2>&1)
+            EXIT_CODE=$?
+            printf '%s\n' "$RESULT" > "$LOGFILE"   # full response, uncapped. No head -c.
+            echo "Exit code: $EXIT_CODE"
+            echo "--- full OCI response ($LOGFILE) ---"
+            cat "$LOGFILE"
+            echo "--- end response ---"
+
+            if echo "$RESULT" | grep -q '"lifecycle-state": "PROVISIONING"'; then
+              PUBLIC_IP=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('public-ip','pending'))" 2>/dev/null || echo "pending")
+              echo "SUCCESS on $AD. IP: $PUBLIC_IP"
+              echo "INSTANCE_AD=$AD" >> "$GITHUB_ENV"
+              echo "INSTANCE_IP=$PUBLIC_IP" >> "$GITHUB_ENV"
+              OUTCOME="success"
+              break
+            elif echo "$RESULT" | grep -qiE '"code"[[:space:]]*:[[:space:]]*"(LimitExceeded|QuotaExceeded)"|limit.{0,20}exceed'; then
+              echo "LimitExceeded/quota on $AD. This is tenancy-wide, not per-AD. Stopping this run."
+              OUTCOME="limit_exceeded"
+              break
+            elif echo "$RESULT" | grep -qiE '"code"[[:space:]]*:[[:space:]]*"(NotAuthenticated|NotAuthorized|InvalidParameter)"|authorization failed|authentication failed|could not parse.*key|invalid.*private.*key'; then
+              echo "Auth error on $AD. Check OCI_CLI_USER, OCI_CLI_FINGERPRINT, OCI_CLI_TENANCY, OCI_CLI_KEY_CONTENT. Stopping this run."
+              OUTCOME="auth_error"
+              break
+            else
+              echo "No capacity on $AD (or an unclassified error). Trying next."
+            fi
+          done
+
+          echo "OUTCOME=$OUTCOME" >> "$GITHUB_OUTPUT"
+          if [ "$OUTCOME" = "capacity_exhausted" ]; then
+            echo "All three ADs at capacity. Will retry on the next scheduled tick."
+          fi
+          exit 0   # this step always succeeds; downstream steps decide pass/fail from OUTCOME
+
+      - name: Upload full OCI responses
+        if: always() && steps.check.outputs.ALREADY_EXISTS == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oci-a1-attempt-logs-${{ github.run_id }}
+          path: oci-logs/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # Bookkeeping only. This step always succeeds; it decides what the NEXT step and the notify
+      # step do, and is where the max-attempts counter lives (as a repo variable, per D52 PR ask,
+      # so the retry loop cannot run forever even though GitHub's own cron throttling already caps
+      # the realistic rate far below */15).
+      - name: Track attempt count and classify the tick
+        id: counter
+        if: steps.check.outputs.ALREADY_EXISTS == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GH_ACTIONS_PAT }}
+          OUTCOME: ${{ steps.attempt.outputs.OUTCOME }}
+        run: |
+          REPO="Tamaziaa/tamazia-cowork-os"
+          MAX_ATTEMPTS="${{ vars.OCI_A1_MAX_ATTEMPTS }}"
+          [ -z "$MAX_ATTEMPTS" ] && MAX_ATTEMPTS=500
+          COUNT="${{ vars.OCI_A1_ATTEMPTS }}"
+          [ -z "$COUNT" ] && COUNT=0
+          LAST_OUTCOME="${{ vars.OCI_A1_LAST_OUTCOME }}"
+          GIVE_UP="false"
+
+          case "$OUTCOME" in
+            success)
+              gh variable set OCI_A1_ATTEMPTS --body "0" --repo "$REPO" || true
+              gh variable set OCI_A1_LAST_OUTCOME --body "success" --repo "$REPO" || true
+              echo "SEND_NOTIFY=success" >> "$GITHUB_ENV"
+              ;;
+            capacity_exhausted)
+              COUNT=$((COUNT + 1))
+              gh variable set OCI_A1_ATTEMPTS --body "$COUNT" --repo "$REPO" || true
+              gh variable set OCI_A1_LAST_OUTCOME --body "capacity_exhausted" --repo "$REPO" || true
+              echo "Attempt $COUNT of $MAX_ATTEMPTS max."
+              if [ "$COUNT" -ge "$MAX_ATTEMPTS" ]; then
+                GIVE_UP="true"
+                echo "MAX_ATTEMPTS=$MAX_ATTEMPTS" >> "$GITHUB_ENV"
+                echo "SEND_NOTIFY=max_attempts" >> "$GITHUB_ENV"
+                echo "::warning::Reached $MAX_ATTEMPTS capacity_exhausted attempts with no free capacity. Disabling this workflow."
+                gh workflow disable oracle-a1-acquire.yml --repo "$REPO" || true
+              fi
+              ;;
+            limit_exceeded|auth_error)
+              gh variable set OCI_A1_LAST_OUTCOME --body "$OUTCOME" --repo "$REPO" || true
+              if [ "$LAST_OUTCOME" != "$OUTCOME" ]; then
+                echo "SEND_NOTIFY=$OUTCOME" >> "$GITHUB_ENV"
+              else
+                echo "Outcome unchanged since last tick ($OUTCOME). Already notified once, staying quiet."
+              fi
+              ;;
+          esac
+          echo "GIVE_UP=$GIVE_UP" >> "$GITHUB_OUTPUT"
+
+      # The failure branch. No continue-on-error anywhere on this step: limit_exceeded, auth_error
+      # and the give-up-after-max-attempts case are all real problems the founder needs to see as
+      # a red check, not routine capacity noise.
+      - name: Fail loudly on a non-capacity problem
+        if: steps.attempt.outputs.OUTCOME == 'limit_exceeded' || steps.attempt.outputs.OUTCOME == 'auth_error' || steps.counter.outputs.GIVE_UP == 'true'
+        run: |
+          echo "::error::Oracle A1 acquire stopped on a non-capacity problem (OUTCOME=${{ steps.attempt.outputs.OUTCOME }}, give_up=${{ steps.counter.outputs.GIVE_UP }}). See the Notify step and the uploaded oci-a1-attempt-logs artifact for the full OCI response."
+          exit 1
+
+      - name: Notify
+        if: always() && env.SEND_NOTIFY != ''
+        run: |
+          echo "${{ secrets.ENV_B64 }}" | base64 -d > .env
+          set +e
+          source .env 2>/dev/null
+          case "$SEND_NOTIFY" in
+            success)
+              MSG="Oracle A1 Ampere CREATED on $INSTANCE_AD. IP: $INSTANCE_IP (2 OCPU / 12GB, the post-2026-06-15 Always-Free ceiling). Post-acquire checklist: confirm the OS image, create the pikachu user, install Node, Playwright deps and Chromium, poppler-utils (pdftotext) and tesseract-ocr, add the ssh key by name, and mind the queue's MemAvailable claim threshold (at least 1,700 MB) before this box takes a mint job. See ORACLE-HEADROOM.md."
+              ;;
+            limit_exceeded)
+              MSG="Oracle A1 acquire: LimitExceeded/quota on the OCI tenancy. The Always-Free A1 allowance looks already used (an existing instance, a stuck reservation, or a prior manual create). The workflow keeps running but will not page again until this changes. Check the OCI console."
+              ;;
+            auth_error)
+              MSG="Oracle A1 acquire: auth error against OCI. Check OCI_CLI_USER, OCI_CLI_FINGERPRINT, OCI_CLI_TENANCY, OCI_CLI_KEY_CONTENT (the key may be revoked or rotated). The workflow keeps running but will not page again until this changes."
+              ;;
+            max_attempts)
+              MSG="Oracle A1 acquire: gave up after $MAX_ATTEMPTS capacity_exhausted attempts with no free capacity found in uk-london-1. The workflow disabled itself. Re-enable with: gh workflow enable oracle-a1-acquire.yml --repo Tamaziaa/tamazia-cowork-os. The attempt counter resets on its own the next time a launch succeeds."
+              ;;
+          esac
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            curl -s --max-time 15 -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TELEGRAM_CHAT_ID}" --data-urlencode text="$MSG" >/dev/null || true
+          fi
+          echo "## Oracle A1 acquire: $SEND_NOTIFY" >> "$GITHUB_STEP_SUMMARY"
+          echo "$MSG" >> "$GITHUB_STEP_SUMMARY"
