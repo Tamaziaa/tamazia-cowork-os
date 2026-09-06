@@ -43,6 +43,9 @@ name: Oracle A1 Ampere auto-acquire (retry until capacity)
 #                         auth_error condition pages once, not on every tick.
 #
 # DISABLE MANUALLY: gh workflow disable oracle-a1-acquire.yml --repo Tamaziaa/tamazia-cowork-os
+#
+# 2026-09-07 (D85, A1-FIX): fixed AD-3's NotAuthorizedOrNotFound misclassifying as auth_error via
+#   an unanchored match; it is now a per-AD ad_skipped (loop continues); all-ADs-skipped stops as config_error.
 
 on:
   schedule:
@@ -108,8 +111,12 @@ jobs:
       # always exits 0 no matter which of the three ADs it stops on or why. continue-on-error is
       # kept here anyway as a defensive backstop for that same reason: this is the one step in the
       # workflow whose job is to absorb OCI's routine "no" and try again later, so it is the only
-      # step in the file carrying continue-on-error. limit_exceeded and auth_error are NOT routine
-      # and are made to fail the job for real, two steps down, on a step that carries none.
+      # step in the file carrying continue-on-error. limit_exceeded, auth_error and config_error
+      # are NOT routine and are made to fail the job for real, two steps down, on a step that
+      # carries none. A per-AD NotAuthorizedOrNotFound (the AD/subnet/image not visible from that
+      # AD) is its own ad_skipped class: it is not a credential fault, so the loop tries the next
+      # AD rather than stopping the run; only when every AD is ad_skipped does the run stop, as
+      # config_error (a visibility/configuration problem, not capacity or credentials).
       - name: Try each Availability Domain
         id: attempt
         if: steps.check.outputs.ALREADY_EXISTS == 'false'
@@ -133,6 +140,8 @@ jobs:
           chmod 600 ~/.oci/key.pem
 
           OUTCOME="capacity_exhausted"
+          AD_SKIPPED_COUNT=0
+          TOTAL_ADS=3
           for AD in "HzzF:UK-LONDON-1-AD-1" "HzzF:UK-LONDON-1-AD-2" "HzzF:UK-LONDON-1-AD-3"; do
             echo "Trying $AD ..."
             LOGFILE="oci-logs/attempt-$(echo "$AD" | tr ':' '-').log"
@@ -165,7 +174,10 @@ jobs:
               echo "LimitExceeded/quota on $AD. This is tenancy-wide, not per-AD. Stopping this run."
               OUTCOME="limit_exceeded"
               break
-            elif echo "$RESULT" | grep -qiE '"code"[[:space:]]*:[[:space:]]*"(NotAuthenticated|NotAuthorized|InvalidParameter)"|authorization failed|authentication failed|could not parse.*key|invalid.*private.*key'; then
+            elif echo "$RESULT" | grep -qiE '"code"[[:space:]]*:[[:space:]]*"NotAuthorizedOrNotFound"'; then
+              echo "AD/subnet/image not visible from $AD (NotAuthorizedOrNotFound). This is a per-AD visibility gap, not a credential fault (D85: confirmed by the same run's own successful auth on the earlier ADs). Skipping to the next AD."
+              AD_SKIPPED_COUNT=$((AD_SKIPPED_COUNT + 1))
+            elif echo "$RESULT" | grep -qiE '"code"[[:space:]]*:[[:space:]]*"(NotAuthenticated|NotAuthorized)"|could not parse.*key|invalid.*private.*key'; then
               echo "Auth error on $AD. Check OCI_CLI_USER, OCI_CLI_FINGERPRINT, OCI_CLI_TENANCY, OCI_CLI_KEY_CONTENT. Stopping this run."
               OUTCOME="auth_error"
               break
@@ -174,9 +186,14 @@ jobs:
             fi
           done
 
+          if [ "$OUTCOME" = "capacity_exhausted" ] && [ "$AD_SKIPPED_COUNT" -ge "$TOTAL_ADS" ]; then
+            OUTCOME="config_error"
+            echo "All $TOTAL_ADS ADs returned NotAuthorizedOrNotFound: no AD in this tenancy is visible for the pinned subnet/image. This is a configuration problem, not a capacity signal or a credential fault."
+          fi
+
           echo "OUTCOME=$OUTCOME" >> "$GITHUB_OUTPUT"
           if [ "$OUTCOME" = "capacity_exhausted" ]; then
-            echo "All three ADs at capacity. Will retry on the next scheduled tick."
+            echo "All three ADs at capacity (or skipped as not visible). Will retry on the next scheduled tick."
           fi
           exit 0   # this step always succeeds; downstream steps decide pass/fail from OUTCOME
 
@@ -227,7 +244,7 @@ jobs:
                 gh workflow disable oracle-a1-acquire.yml --repo "$REPO" || true
               fi
               ;;
-            limit_exceeded|auth_error)
+            limit_exceeded|auth_error|config_error)
               gh variable set OCI_A1_LAST_OUTCOME --body "$OUTCOME" --repo "$REPO" || true
               if [ "$LAST_OUTCOME" != "$OUTCOME" ]; then
                 echo "SEND_NOTIFY=$OUTCOME" >> "$GITHUB_ENV"
@@ -238,11 +255,11 @@ jobs:
           esac
           echo "GIVE_UP=$GIVE_UP" >> "$GITHUB_OUTPUT"
 
-      # The failure branch. No continue-on-error anywhere on this step: limit_exceeded, auth_error
-      # and the give-up-after-max-attempts case are all real problems the founder needs to see as
-      # a red check, not routine capacity noise.
+      # The failure branch. No continue-on-error anywhere on this step: limit_exceeded, auth_error,
+      # config_error and the give-up-after-max-attempts case are all real problems the founder
+      # needs to see as a red check, not routine capacity noise.
       - name: Fail loudly on a non-capacity problem
-        if: steps.attempt.outputs.OUTCOME == 'limit_exceeded' || steps.attempt.outputs.OUTCOME == 'auth_error' || steps.counter.outputs.GIVE_UP == 'true'
+        if: steps.attempt.outputs.OUTCOME == 'limit_exceeded' || steps.attempt.outputs.OUTCOME == 'auth_error' || steps.attempt.outputs.OUTCOME == 'config_error' || steps.counter.outputs.GIVE_UP == 'true'
         run: |
           echo "::error::Oracle A1 acquire stopped on a non-capacity problem (OUTCOME=${{ steps.attempt.outputs.OUTCOME }}, give_up=${{ steps.counter.outputs.GIVE_UP }}). See the Notify step and the uploaded oci-a1-attempt-logs artifact for the full OCI response."
           exit 1
@@ -262,6 +279,9 @@ jobs:
               ;;
             auth_error)
               MSG="Oracle A1 acquire: auth error against OCI. Check OCI_CLI_USER, OCI_CLI_FINGERPRINT, OCI_CLI_TENANCY, OCI_CLI_KEY_CONTENT (the key may be revoked or rotated). The workflow keeps running but will not page again until this changes."
+              ;;
+            config_error)
+              MSG="Oracle A1 acquire: every availability domain in uk-london-1 returned NotAuthorizedOrNotFound. Credentials are fine (auth already succeeded earlier in this run); the pinned OCI_SUBNET_ID or OCI_IMAGE_ID is not visible in any AD this tenancy has. Check the subnet/image ids in the OCI console. The workflow keeps running but will not page again until this changes."
               ;;
             max_attempts)
               MSG="Oracle A1 acquire: gave up after $MAX_ATTEMPTS capacity_exhausted attempts with no free capacity found in uk-london-1. The workflow disabled itself. Re-enable with: gh workflow enable oracle-a1-acquire.yml --repo Tamaziaa/tamazia-cowork-os. The attempt counter resets on its own the next time a launch succeeds."
