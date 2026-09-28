@@ -140,8 +140,9 @@ jobs:
           chmod 600 ~/.oci/key.pem
 
           OUTCOME="capacity_exhausted"
+          LIMIT_HITS=0
           AD_SKIPPED_COUNT=0
-          TOTAL_ADS=3
+          TOTAL_ADS=2
           # SHAPE LADDER (2026-09-28): the Always-Free A1 pool is contended at the ceiling shape.
           # A 1 OCPU / 6 GB ask draws from a much larger pool of partially-filled hosts than a
           # 2 OCPU / 12 GB ask, so a tick that fails at the ceiling often still lands the smaller
@@ -151,7 +152,7 @@ jobs:
           for SHAPE in "$OCPUS:$MEMORY_GB" "1:6"; do
           SHAPE_OCPUS="${SHAPE%%:*}"; SHAPE_MEM="${SHAPE##*:}"
           [ "$SHAPE_OCPUS" = "$OCPUS" ] && [ "$SHAPE_MEM" = "$MEMORY_GB" ] || echo ">>> ceiling shape unavailable in every AD; retrying ladder at ${SHAPE_OCPUS} OCPU / ${SHAPE_MEM} GB"
-          for AD in "HzzF:UK-LONDON-1-AD-1" "HzzF:UK-LONDON-1-AD-2" "HzzF:UK-LONDON-1-AD-3"; do
+          for AD in "HzzF:UK-LONDON-1-AD-1" "HzzF:UK-LONDON-1-AD-2"; do   # AD-3 standard-a1-core-count = 0 (verified 2026-09-28); never try it
             echo "Trying $AD at ${SHAPE_OCPUS} OCPU / ${SHAPE_MEM} GB ..."
             LOGFILE="oci-logs/attempt-$(echo "$AD" | tr ':' '-')-${SHAPE_OCPUS}x${SHAPE_MEM}.log"
             RESULT=$(oci compute instance launch \
@@ -181,9 +182,16 @@ jobs:
               OUTCOME="success"
               break
             elif echo "$RESULT" | grep -qiE '"code"[[:space:]]*:[[:space:]]*"(LimitExceeded|QuotaExceeded)"|limit.{0,20}exceed'; then
-              echo "LimitExceeded/quota on $AD. This is tenancy-wide, not per-AD. Stopping this run."
-              OUTCOME="limit_exceeded"
-              break
+              # 2026-09-28: verified live that standard-a1-core/memory-count is 2/12 in AD-1 and
+              # AD-2 with usage 0, yet a request for exactly 2/12 still returns LimitExceeded on
+              # all four counters. An ask that exactly equals the cap trips OCI's check; an ask
+              # with headroom does not. So LimitExceeded is NOT a run-level abort any more: it is
+              # a signal to drop to the next rung of the shape ladder. The 131 prior ticks never
+              # discovered this because the old code broke out of both loops here, so the 1/6 rung
+              # was never once attempted. Only LimitExceeded at the SMALLEST rung, in every AD, is
+              # a genuine quota problem worth paging about.
+              echo "LimitExceeded on $AD at ${SHAPE_OCPUS} OCPU / ${SHAPE_MEM} GB. Ask equals or exceeds the cap; dropping to the next rung rather than stopping."
+              LIMIT_HITS=$((LIMIT_HITS + 1))
             elif echo "$RESULT" | grep -qiE '"code"[[:space:]]*:[[:space:]]*"NotAuthorizedOrNotFound"'; then
               echo "AD/subnet/image not visible from $AD (NotAuthorizedOrNotFound). This is a per-AD visibility gap, not a credential fault (D85: confirmed by the same run's own successful auth on the earlier ADs). Skipping to the next AD."
               AD_SKIPPED_COUNT=$((AD_SKIPPED_COUNT + 1))
@@ -197,7 +205,14 @@ jobs:
           done
           # stop laddering down the moment we have an instance or a non-capacity verdict
           [ "$OUTCOME" = "capacity_exhausted" ] || break
+          LIMIT_HITS_AT_RUNG_END=$LIMIT_HITS
           done
+
+          # every AD on every rung came back LimitExceeded: that is a real quota problem
+          if [ "$OUTCOME" = "capacity_exhausted" ] && [ "$LIMIT_HITS" -ge "$((TOTAL_ADS * 2))" ]; then
+            OUTCOME="limit_exceeded"
+            echo "Both ADs returned LimitExceeded at both the ceiling and the 1/6 rung. The A1 allowance really is unavailable to this tenancy, not just contended."
+          fi
 
           if [ "$OUTCOME" = "capacity_exhausted" ] && [ "$AD_SKIPPED_COUNT" -ge "$((TOTAL_ADS * 2))" ]; then
             OUTCOME="config_error"
