@@ -142,14 +142,23 @@ jobs:
           OUTCOME="capacity_exhausted"
           AD_SKIPPED_COUNT=0
           TOTAL_ADS=3
+          # SHAPE LADDER (2026-09-28): the Always-Free A1 pool is contended at the ceiling shape.
+          # A 1 OCPU / 6 GB ask draws from a much larger pool of partially-filled hosts than a
+          # 2 OCPU / 12 GB ask, so a tick that fails at the ceiling often still lands the smaller
+          # shape. Owning 1/6 beats owning nothing: A1.Flex is resizable in place (stop, change
+          # shape-config, start) up to the same 2/12 free ceiling once the instance exists, so the
+          # small catch is a foothold, not a compromise. Ladder runs largest-first per AD.
+          for SHAPE in "$OCPUS:$MEMORY_GB" "1:6"; do
+          SHAPE_OCPUS="${SHAPE%%:*}"; SHAPE_MEM="${SHAPE##*:}"
+          [ "$SHAPE_OCPUS" = "$OCPUS" ] && [ "$SHAPE_MEM" = "$MEMORY_GB" ] || echo ">>> ceiling shape unavailable in every AD; retrying ladder at ${SHAPE_OCPUS} OCPU / ${SHAPE_MEM} GB"
           for AD in "HzzF:UK-LONDON-1-AD-1" "HzzF:UK-LONDON-1-AD-2" "HzzF:UK-LONDON-1-AD-3"; do
-            echo "Trying $AD ..."
-            LOGFILE="oci-logs/attempt-$(echo "$AD" | tr ':' '-').log"
+            echo "Trying $AD at ${SHAPE_OCPUS} OCPU / ${SHAPE_MEM} GB ..."
+            LOGFILE="oci-logs/attempt-$(echo "$AD" | tr ':' '-')-${SHAPE_OCPUS}x${SHAPE_MEM}.log"
             RESULT=$(oci compute instance launch \
               --availability-domain "$AD" \
               --compartment-id "$OCI_CLI_TENANCY" \
               --shape "VM.Standard.A1.Flex" \
-              --shape-config "{\"ocpus\": $OCPUS, \"memoryInGBs\": $MEMORY_GB}" \
+              --shape-config "{\"ocpus\": $SHAPE_OCPUS, \"memoryInGBs\": $SHAPE_MEM}" \
               --image-id "$OCI_IMAGE_ID" \
               --subnet-id "$OCI_SUBNET_ID" \
               --display-name "tamazia-engine-a1" \
@@ -165,7 +174,8 @@ jobs:
 
             if echo "$RESULT" | grep -q '"lifecycle-state": "PROVISIONING"'; then
               PUBLIC_IP=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('public-ip','pending'))" 2>/dev/null || echo "pending")
-              echo "SUCCESS on $AD. IP: $PUBLIC_IP"
+              echo "SUCCESS on $AD at ${SHAPE_OCPUS} OCPU / ${SHAPE_MEM} GB. IP: $PUBLIC_IP"
+              echo "INSTANCE_SHAPE=${SHAPE_OCPUS} OCPU / ${SHAPE_MEM} GB" >> "$GITHUB_ENV"
               echo "INSTANCE_AD=$AD" >> "$GITHUB_ENV"
               echo "INSTANCE_IP=$PUBLIC_IP" >> "$GITHUB_ENV"
               OUTCOME="success"
@@ -182,13 +192,16 @@ jobs:
               OUTCOME="auth_error"
               break
             else
-              echo "No capacity on $AD (or an unclassified error). Trying next."
+              echo "No capacity on $AD at this shape (or an unclassified error). Trying next."
             fi
           done
+          # stop laddering down the moment we have an instance or a non-capacity verdict
+          [ "$OUTCOME" = "capacity_exhausted" ] || break
+          done
 
-          if [ "$OUTCOME" = "capacity_exhausted" ] && [ "$AD_SKIPPED_COUNT" -ge "$TOTAL_ADS" ]; then
+          if [ "$OUTCOME" = "capacity_exhausted" ] && [ "$AD_SKIPPED_COUNT" -ge "$((TOTAL_ADS * 2))" ]; then
             OUTCOME="config_error"
-            echo "All $TOTAL_ADS ADs returned NotAuthorizedOrNotFound: no AD in this tenancy is visible for the pinned subnet/image. This is a configuration problem, not a capacity signal or a credential fault."
+            echo "Every AD at every shape returned NotAuthorizedOrNotFound: no AD in this tenancy is visible for the pinned subnet/image. This is a configuration problem, not a capacity signal or a credential fault."
           fi
 
           echo "OUTCOME=$OUTCOME" >> "$GITHUB_OUTPUT"
@@ -272,7 +285,7 @@ jobs:
           source .env 2>/dev/null
           case "$SEND_NOTIFY" in
             success)
-              MSG="Oracle A1 Ampere CREATED on $INSTANCE_AD. IP: $INSTANCE_IP (2 OCPU / 12GB, the post-2026-06-15 Always-Free ceiling). Post-acquire checklist: confirm the OS image, create the pikachu user, install Node, Playwright deps and Chromium, poppler-utils (pdftotext) and tesseract-ocr, add the ssh key by name, and mind the queue's MemAvailable claim threshold (at least 1,700 MB) before this box takes a mint job. See ORACLE-HEADROOM.md."
+              MSG="Oracle A1 Ampere CREATED on $INSTANCE_AD at $INSTANCE_SHAPE. IP: $INSTANCE_IP. If this landed below 2 OCPU / 12 GB, resize it up in place (stop, edit shape-config, start) now that the instance exists. Post-acquire checklist: confirm the OS image, create the pikachu user, install Node, Playwright deps and Chromium, poppler-utils (pdftotext) and tesseract-ocr, add the ssh key by name, and mind the queue's MemAvailable claim threshold (at least 1,700 MB) before this box takes a mint job. See ORACLE-HEADROOM.md."
               ;;
             limit_exceeded)
               MSG="Oracle A1 acquire: LimitExceeded/quota on the OCI tenancy. The Always-Free A1 allowance looks already used (an existing instance, a stuck reservation, or a prior manual create). The workflow keeps running but will not page again until this changes. Check the OCI console."
