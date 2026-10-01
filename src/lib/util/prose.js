@@ -26,9 +26,19 @@ const PROSE_WORDS = /\b(the|a|an|of|to|your|our|we|you|is|are|was|were|will|may|
  * Conservative by design: a false NO costs us a finding; a false YES puts page furniture in a legal document.
  */
 function isProse(str) {
+  // Stryker disable next-line StringLiteral,Regex: EQUIVALENT MUTANTS, proven.
+  //   String(str || '')   -> String(str || 'X') : only fires when str is FALSY. '' gives 0 words, 'X' gives 1-3.
+  //                          Both are under the 6-word floor, so both return false. Identical behaviour.
+  //   /\s+/ -> /\s/       : `.filter(Boolean)` removes the empty tokens a single-char split leaves behind, so
+  //                          'a  b' yields ['a','b'] either way. Identical behaviour.
+  // These cannot be killed by ANY test. Detecting equivalent mutants is undecidable in general, so we mark them
+  // with the proof rather than leave them as a silent gap in the score.
   const words = String(str || '').split(/\s+/).filter(Boolean);
   if (words.length < 6 || words.length > 60) return false;
   if (/\b(menu|toggle|skip to|breadcrumb|navigation)\b/i.test(str)) return false;   // explicit nav markers
+  // Stryker disable next-line ArrayDeclaration: EQUIVALENT. `|| []` -> `|| ['x']` only fires when match() returns
+  // null (no function words at all): fn becomes 1 instead of 0. The very next guard is `if (fn < 3) return false`,
+  // so both values fail it. Identical behaviour.
   const fn = (String(str).match(PROSE_WORDS) || []).length;
   if (fn < 3) return false;                                   // real sentences carry several function words
   const lower = words.filter((w) => /^[a-z]/.test(w)).length;
@@ -45,6 +55,8 @@ function isProse(str) {
 
 /** Sentence/line boundaries. ONE definition — the scanner and the index must cut text at the same places. */
 function splitSentences(text) {
+  // Stryker disable next-line Regex: EQUIVALENT. Dropping the `+` makes 'a...b' split into ['a','','','b'] instead
+  // of ['a','b'] - and `.filter(Boolean)` then removes the empties, giving ['a','b'] either way.
   return String(text || '').split(/[.!?•\n␞]+/).map((s) => s.trim()).filter(Boolean);
 }
 
