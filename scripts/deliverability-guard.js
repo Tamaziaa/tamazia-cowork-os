@@ -119,6 +119,15 @@ async function notifyEvent(kind, msg) {
   if (REPORT) { console.log('[deliverability-guard] (report mode) would alert: ' + title); return; }
   // write to the digest ("Deliverability + domains" group matches /dns|spf|dmarc|deliver/) + realtime alert
   pg(`INSERT INTO notifications (kind, severity, title, realtime) VALUES ('deliverability_dns_guard','warning',${esc(title.slice(0, 600))},FALSE)`);
-  await notifyEvent('stuck', title.slice(0, 500));
-  console.log('[deliverability-guard] flagged ' + flagged.length + ' domain(s) -> digest + realtime alert.');
+  // N1 (14 Nov 2026) · while the send gate is closed nothing is sent from these domains, so a DNS gap
+  // is not urgent: it goes to the digest only. The realtime "STUCK" ping returns the day SEND_ENABLED
+  // opens, which is exactly when a broken SPF/DKIM/DMARC would start costing replies.
+  const gateRow = (pg(`SELECT value FROM system_state WHERE key='SEND_ENABLED' LIMIT 1`) || '').trim();
+  const gateOpen = /^(1|true|on|open|yes)$/i.test(String(process.env.SEND_ENABLED || '')) || /^(1|true|on|open|yes)$/i.test(gateRow);
+  if (gateOpen) {
+    await notifyEvent('stuck', title.slice(0, 500));
+    console.log('[deliverability-guard] flagged ' + flagged.length + ' domain(s) -> digest + realtime alert.');
+  } else {
+    console.log('[deliverability-guard] flagged ' + flagged.length + ' domain(s) -> digest only (send gate closed, no realtime ping).');
+  }
 })().catch(e => { console.error('[deliverability-guard] fatal (fail-open):', e.message); process.exit(0); });
