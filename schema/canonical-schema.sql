@@ -541,6 +541,47 @@ CREATE TABLE IF NOT EXISTS framework_versions (
   PRIMARY KEY (id)
 );
 
+-- form_submissions: raw log of every website form submission, written by the website's
+-- functions/_lib/neon-sync.js (tamazia repo). Added to the spec 14 Nov 2026 so ensure-schema
+-- provisions its capture columns as the owning role; the website's own role cannot ALTER it.
+CREATE TABLE IF NOT EXISTS form_submissions (
+  id bigserial NOT NULL,
+  form_type text,
+  name text,
+  email text,
+  company text,
+  message text,
+  page_url text,
+  audit_slug text,
+  utm jsonb DEFAULT '{}'::jsonb,
+  ip_hash text,
+  request_id text,
+  turnstile text,
+  created_at timestamptz DEFAULT now(),
+  site text,
+  referrer text,
+  landing_page text,
+  user_agent text,
+  device text,
+  browser text,
+  os text,
+  country text,
+  email_domain text,
+  phone text,
+  sector text,
+  jurisdiction text,
+  posthog_id text,
+  payload jsonb DEFAULT '{}'::jsonb,
+  PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_created_at ON form_submissions (created_at);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_form_type ON form_submissions (form_type);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_turnstile ON form_submissions (turnstile);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_site ON form_submissions (site);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_country ON form_submissions (country);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_email_domain ON form_submissions (email_domain);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_request_id ON form_submissions (request_id);
+
 CREATE TABLE IF NOT EXISTS generic_local_parts (
   local_part text NOT NULL,
   PRIMARY KEY (local_part)
@@ -1803,6 +1844,32 @@ ALTER TABLE framework_versions ADD COLUMN IF NOT EXISTS notes text;
 ALTER TABLE framework_versions ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
 ALTER TABLE framework_versions ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 ALTER TABLE framework_versions ADD COLUMN IF NOT EXISTS sector_news text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS form_type text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS name text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS company text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS message text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS page_url text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS audit_slug text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS utm jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS ip_hash text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS request_id text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS turnstile text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS site text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS referrer text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS landing_page text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS user_agent text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS device text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS browser text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS os text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS country text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS email_domain text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS sector text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS jurisdiction text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS posthog_id text;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS payload jsonb DEFAULT '{}'::jsonb;
 ALTER TABLE generic_local_parts ADD COLUMN IF NOT EXISTS local_part text;
 ALTER TABLE health_check ADD COLUMN IF NOT EXISTS domain varchar(64);
 ALTER TABLE health_check ADD COLUMN IF NOT EXISTS postmaster_data_json jsonb;
