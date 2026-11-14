@@ -8893,5 +8893,184 @@
         "identity": false
       }
     }
+  },
+  "form_submissions": {
+    "columns": {
+      "id": {
+        "type": "bigint",
+        "default": "nextval('form_submissions_id_seq'::regclass)",
+        "notnull": true,
+        "identity": false
+      },
+      "form_type": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "name": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "email": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "company": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "message": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "page_url": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "audit_slug": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "utm": {
+        "type": "jsonb",
+        "default": "'{}'::jsonb",
+        "notnull": false,
+        "identity": false
+      },
+      "ip_hash": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "request_id": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "turnstile": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "created_at": {
+        "type": "timestamptz",
+        "default": "now()",
+        "notnull": false,
+        "identity": false
+      },
+      "site": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "referrer": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "landing_page": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "user_agent": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "device": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "browser": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "os": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "country": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "email_domain": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "phone": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "sector": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "jurisdiction": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "posthog_id": {
+        "type": "text",
+        "default": null,
+        "notnull": false,
+        "identity": false
+      },
+      "payload": {
+        "type": "jsonb",
+        "default": "'{}'::jsonb",
+        "notnull": false,
+        "identity": false
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "indexes": [
+      "CREATE INDEX IF NOT EXISTS idx_form_submissions_created_at ON form_submissions (created_at)",
+      "CREATE INDEX IF NOT EXISTS idx_form_submissions_form_type ON form_submissions (form_type)",
+      "CREATE INDEX IF NOT EXISTS idx_form_submissions_turnstile ON form_submissions (turnstile)",
+      "CREATE INDEX IF NOT EXISTS idx_form_submissions_site ON form_submissions (site)",
+      "CREATE INDEX IF NOT EXISTS idx_form_submissions_country ON form_submissions (country)",
+      "CREATE INDEX IF NOT EXISTS idx_form_submissions_email_domain ON form_submissions (email_domain)",
+      "CREATE INDEX IF NOT EXISTS idx_form_submissions_request_id ON form_submissions (request_id)"
+    ],
+    "create": "CREATE TABLE IF NOT EXISTS form_submissions (\n  id bigserial NOT NULL,\n  form_type text,\n  name text,\n  email text,\n  company text,\n  message text,\n  page_url text,\n  audit_slug text,\n  utm jsonb DEFAULT '{}'::jsonb,\n  ip_hash text,\n  request_id text,\n  turnstile text,\n  created_at timestamptz DEFAULT now(),\n  site text,\n  referrer text,\n  landing_page text,\n  user_agent text,\n  device text,\n  browser text,\n  os text,\n  country text,\n  email_domain text,\n  phone text,\n  sector text,\n  jurisdiction text,\n  posthog_id text,\n  payload jsonb DEFAULT '{}'::jsonb,\n  PRIMARY KEY (id)\n)"
   }
 }
